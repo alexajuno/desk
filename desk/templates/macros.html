@@ -50,12 +50,8 @@
 </ul>
 {%- endmacro %}
 
-{% macro add_form(parent, label) -%}
-<form method="post" action="/issues" class="create">
-  {% if parent %}<input type="hidden" name="parent" value="{{ parent }}">{% endif %}
-  <input type="hidden" name="priority" value="none">
-  <input type="text" name="title" placeholder="{{ label }}" required autocomplete="off">
-</form>
+{% macro plus() -%}
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>
 {%- endmacro %}
 
 {% macro read_toggle() -%}

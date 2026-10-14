@@ -146,13 +146,6 @@ def search_rows(q: str = ""):
     return templates.get_template("search_rows.html").render(q=q, hits=find(store.load_all(), q))
 
 
-@app.post("/issues")
-def add(title: str = Form(...), priority: str = Form("none"), parent: str | None = Form(None)):
-    issue = store.Issue(slug=store.new_slug(title), title=title.strip(), priority=priority, parent=parent or None)
-    store.save(issue)
-    return RedirectResponse(f"/issue/{parent}" if parent else "/backlog", status_code=303)
-
-
 @app.get("/issue/{slug}")
 def show(request: Request, slug: str):
     all_issues = store.load_all()
@@ -234,9 +227,10 @@ def restore(slug: str):
         raise HTTPException(409, f"Cannot restore: {clash} exists again.")
 
 
-@app.get("/api/issues")
+@app.get("/api/parents")
 def parent_choices(exclude: str = ""):
-    """Open issues an issue can move under: not itself, nor any of its sub-issues."""
+    """Open issues an issue can move under: not itself, nor any of its sub-issues. Not under /api/issues,
+    whose GET is api.py's list and would shadow this one."""
     all_issues = store.load_all()
     skip = {exclude, *store.descendants(all_issues, exclude)} if exclude else set()
     choices = sorted((i for i in all_issues.values() if i.state not in CLOSED and i.slug not in skip), key=lambda i: i.rank)

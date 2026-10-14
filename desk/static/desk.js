@@ -1,7 +1,7 @@
-// Linear-style menus, row actions, inline edits, delete with undo, and a full-screen diagram viewer.
-// Shortcuts: S status, P priority, C create, J/K or arrows to move, Enter to open, right-click for a
-// row's actions, Ctrl+Delete to delete and Ctrl+Z to undo it, / search, G then B backlog, ? help, Esc to close
-// (on an issue, Esc goes back). G then I and ? are from Linear's guide
+// Linear-style menus, row actions, inline edits, the new issue panel, delete with undo, and a full-screen
+// diagram viewer. Shortcuts: S status, P priority, C a new issue, J/K or arrows to move, Enter to open,
+// right-click for a row's actions, Ctrl+Delete to delete and Ctrl+Z to undo it, / search, G then B backlog,
+// ? help, Esc to close (on an issue, Esc goes back). G then I and ? are from Linear's guide
 // (linear.app/enablement/guide/navigating-linear); S, P and C follow Linear, and the S menu's
 // shape (filter on top, numbered rows, a tick on the current one) was copied from linear.app.
 // Delete, its undo toast and Ctrl+Z follow linear.app/docs/delete-archive-issues.
@@ -48,7 +48,7 @@ function keyOf(e) {
 }
 
 // --- one menu for every menu ---------------------------------------------------------------------
-// openMenu({ anchor | x, y, filter, placeholder, kbd, items, empty, onEnter, onTab, className })
+// openMenu({ anchor | x, y, filter, placeholder, kbd, items, empty, onEnter, onTab, onClose, className })
 // items(query) returns, or resolves to, rows of { label, icon, hint, num, key, current, more, group, run }.
 // filter "keys": typing filters, but nothing editable takes focus, so no input method stands between
 //   the keys and the menu (the S that opened it gets through for the same reason);
@@ -60,10 +60,12 @@ let menu = null, justClosed = null;
 
 function closeMenu() {
   if (!menu) return;
+  const { onClose } = menu;
   removeEventListener("keydown", menu.onKey, true);
   removeEventListener("keyup", menu.onKey, true);
   menu.el.remove();
   menu = null;
+  onClose?.();
 }
 
 function openMenu(o) {
@@ -166,7 +168,7 @@ function openMenu(o) {
     if (handled || o.filter !== "input") e.stopImmediatePropagation();
   }
 
-  menu = { el, anchor: o.anchor, onKey };
+  menu = { el, anchor: o.anchor, onKey, onClose: o.onClose };
   addEventListener("keydown", onKey, true);
   addEventListener("keyup", onKey, true);
   list.addEventListener("mousemove", (e) => {
@@ -198,16 +200,19 @@ document.addEventListener("mousedown", (e) => {
 }, true);
 
 // --- the menus -----------------------------------------------------------------------------------
-// Linear numbers priority 0 for none, then 1 urgent to 4 low; statuses count from 1.
 function fieldMenu(slug, field, current, where) {
+  valueMenu(field, current, where, (v) => { if (v !== current) setField(slug, field, v); });
+}
+
+// Linear numbers priority 0 for none, then 1 urgent to 4 low; statuses count from 1.
+function valueMenu(field, current, where, choose) {
   const values = field === "priority" ? ["none", "urgent", "high", "medium", "low"] : DESK.states;
   const num = (v) => values.indexOf(v) + (field === "priority" ? 0 : 1);
   openMenu({
     ...where, filter: "keys", kbd: field === "state" ? "S" : "P",
     placeholder: `Change ${field === "state" ? "status" : "priority"}…`,
     items: (q) => values.filter((v) => nameOf(field, v).toLowerCase().includes(q.toLowerCase())).map((v) => ({
-      icon: icon(field, v), label: nameOf(field, v), hint: num(v), num: num(v), current: v === current,
-      run: () => { if (v !== current) setField(slug, field, v); },
+      icon: icon(field, v), label: nameOf(field, v), hint: num(v), num: num(v), current: v === current, run: () => choose(v),
     })),
   });
 }
@@ -222,7 +227,7 @@ function actionsMenu(issue, where) {
       { group: 0, icon: icon("priority", issue.priority), label: "Priority", hint: "P", key: "p", more: true,
         run: () => fieldMenu(issue.slug, "priority", issue.priority, where) },
       { group: 0, icon: GLYPH.parent, label: "Set parent…", more: true, run: () => parentMenu(issue, where) },
-      { group: 0, icon: GLYPH.plus, label: "Add sub-issue", run: () => addSubIssue(issue.slug, where) },
+      { group: 0, icon: GLYPH.plus, label: "Add sub-issue", run: () => openCreator({ parent: issue.slug, parentTitle: titleOf(issue.slug) }) },
       { group: 1, icon: GLYPH.link, label: "Copy link", run: () => copy(`${location.origin}/issue/${issue.slug}`, "Link copied") },
       { group: 1, icon: GLYPH.id, label: "Copy ID", run: () => copy(issue.slug, "ID copied") },
       { group: 2, icon: GLYPH.trash, label: "Delete", hint: "Ctrl ⌫", run: () => remove(issue.slug) },
@@ -230,36 +235,26 @@ function actionsMenu(issue, where) {
   });
 }
 
-// Open issues to move under, from the server, which leaves out the issue and its own sub-issues.
 function parentMenu(issue, where) {
-  const choices = fetch(`/api/issues?exclude=${encodeURIComponent(issue.slug)}`).then((res) => res.json());
-  const move = (to) => () => { if (to !== (issue.parent || "")) setField(issue.slug, "parent", to); };
+  parentPicker(issue.parent, issue.slug, where, (to) => { if (to !== (issue.parent || "")) setField(issue.slug, "parent", to); });
+}
+
+// Open issues to sit under, from the server, which leaves out `exclude` and its own sub-issues.
+// choose(slug, title) gets "" for No parent.
+function parentPicker(current, exclude, where, choose) {
+  const choices = fetch(`/api/parents?exclude=${encodeURIComponent(exclude)}`).then((res) => res.json());
   openMenu({
     ...where, filter: "input", className: "wide", placeholder: "Set parent…", empty: "No open issue matches",
     items: async (q) => {
       const phrase = fold(q).trim(), words = phrase.split(/\s+/).filter(Boolean);
       const text = (item) => fold(item.slug ? `${item.label} ${item.slug}` : item.label);
-      const none = { icon: GLYPH.none, label: "No parent", current: !issue.parent, run: move("") };
+      const none = { icon: GLYPH.none, label: "No parent", current: !current, run: () => choose("", "") };
       const all = [none, ...(await choices).map((i) => ({ icon: icon("state", i.state), label: i.title, slug: i.slug,
-        current: i.slug === issue.parent, run: move(i.slug) }))];
+        current: i.slug === current, run: () => choose(i.slug, i.title) }))];
       // Every word must match; the whole phrase matching puts an issue first.
       return all.filter((item) => words.every((w) => text(item).includes(w)))
         .sort((a, b) => !text(a).includes(phrase) - !text(b).includes(phrase));
     },
-  });
-}
-
-// On the issue's own page the sub-issue box is right there; elsewhere a small box asks for the title.
-function addSubIssue(slug, where) {
-  if (page()?.slug === slug) {
-    const box = $(".issue .create input[name=title]");
-    box.scrollIntoView({ block: "center", behavior: "instant" });
-    box.focus();
-    return;
-  }
-  openMenu({
-    ...where, filter: "input", className: "wide", placeholder: "New sub-issue title…", empty: "Type its title, then Enter",
-    items: (q) => (q.trim() ? [{ icon: GLYPH.plus, label: `Create “${q.trim()}”`, run: () => create(slug, q.trim()) }] : []),
   });
 }
 
@@ -289,12 +284,6 @@ async function setField(slug, field, value) {
   if (field === "state" || field === "priority") paint(slug, field, value);
   const res = await post(`/issue/${slug}/set`, { field, value });
   if (!res.ok) toast(await reason(res));
-  await refresh();
-}
-
-async function create(parent, title) {
-  const res = await post("/issues", { title, parent, priority: "none" });
-  toast(res.ok ? "Sub-issue created" : await reason(res));
   await refresh();
 }
 
@@ -350,7 +339,7 @@ function toast(text, action) {
   el.className = "toast";
   el.setAttribute("role", "status");
   el.innerHTML = `<span>${esc(text)}</span>` +
-    (action ? `<span class="dot">·</span><button class="undo">${esc(action.label)}</button><kbd>${action.kbd}</kbd>` : "");
+    (action ? `<span class="dot">·</span><button class="undo">${esc(action.label)}</button>${action.kbd ? `<kbd>${action.kbd}</kbd>` : ""}` : "");
   el.querySelector("button")?.addEventListener("click", () => { el.remove(); action.run(); });
   document.body.append(el);
   toastTimer = setTimeout(() => el.remove(), action ? 8000 : 3000);
@@ -541,6 +530,10 @@ document.addEventListener("click", (e) => {
   if (folder) { if (!toggled(folder)) folderMenu(folder); return; }
   const more = t.closest(".bar .more");
   if (more && page()) { if (!toggled(more)) actionsMenu({ ...page() }, { anchor: more }); return; }
+  if (t.closest(".side .new-issue")) { openCreator(); return; }
+  const groupAdd = t.closest(".group-add");
+  if (groupAdd) { openCreator({ priority: groupAdd.dataset.priority }); return; }
+  if (t.closest(".issue .add-sub")) { openCreator({ parent: page().slug, parentTitle: raw().title }); return; }
   const d2 = t.closest(".d2");
   if (d2) { openViewer(d2.querySelector("svg")); return; }
   const title = t.closest(".issue h1.title");
@@ -549,18 +542,144 @@ document.addEventListener("click", (e) => {
   if (text && !t.closest("a, button, input, textarea") && !getSelection().toString()) editBody(text, e);
 });
 
-// The create box adds the issue without a reload, and stays ready for the next one.
-document.addEventListener("submit", async (e) => {
-  const form = e.target.closest("form.create");
-  if (!form) return;
-  e.preventDefault();
-  const fields = new URLSearchParams(new FormData(form)), parent = fields.get("parent") ?? "";
-  if (!fields.get("title").trim()) return;
-  const res = await fetch(form.action, { method: "POST", body: fields });
-  if (!res.ok) toast(await reason(res));
-  await refresh();
-  [...document.querySelectorAll("form.create")].find((f) => (f.elements.parent?.value ?? "") === parent)?.elements.title.focus();
-});
+// --- the new issue panel -------------------------------------------------------------------------
+// Linear's create panel, measured on linear.app on 2026-10-14: a title, a description, chips that open
+// the same status, priority and parent menus as the rest of desk, and a Create more switch beside the
+// Create issue button. C, the sidebar's pencil and a group's + open it; Add sub-issue opens it with the
+// parent set. Enter in the title moves to the description, Ctrl+Enter creates, Esc closes, and what
+// you typed waits in localStorage as a draft until it is created, as Linear keeps its drafts.
+// Its keys are read on the window in the capture phase, ahead of the Agent tab's Esc and the page's
+// shortcuts; an open menu still gets its keys first, since the panel steps aside while one is open.
+let creator = null;
+const BLANK = { title: "", body: "", state: "backlog", priority: "none", parent: "", parentTitle: "" };
+const CLOSE = svg('<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>');
+
+// An issue's title from the page, for the parent chip; the slug when the page does not show it.
+function titleOf(slug) {
+  if (page()?.slug === slug) return raw().title;
+  return document.querySelector(`.item[data-slug="${CSS.escape(slug)}"] .title`)?.textContent ?? slug;
+}
+
+function openCreator(preset = {}) {
+  closeMenu();
+  creator?.close();
+  const draft = { ...BLANK, ...JSON.parse(localStorage.newIssueDraft ?? "{}"), ...preset };
+  const el = document.createElement("div");
+  el.className = "creator";
+  el.innerHTML = `<form class="create-panel" role="dialog" aria-modal="true" aria-label="New issue">
+    <header><span>New issue</span><button type="button" class="close" title="Close  Esc">${CLOSE}</button></header>
+    <textarea class="create-title" rows="1" placeholder="Issue title" aria-label="Issue title"></textarea>
+    <textarea class="create-body" placeholder="Add description…" aria-label="Issue description"></textarea>
+    <div class="create-fields">
+      <button type="button" class="field-chip" data-field="state" title="Change status"></button>
+      <button type="button" class="field-chip" data-field="priority" title="Change priority"></button>
+      <button type="button" class="field-chip" data-field="parent" title="Set parent"></button>
+    </div>
+    <footer><label class="switch"><input type="checkbox" role="switch">Create more</label>
+      <button class="primary" title="Create issue  Ctrl Enter">Create issue</button></footer>
+  </form>`;
+  document.body.append(el);
+  const form = el.querySelector("form"), title = form.querySelector(".create-title"), body = form.querySelector(".create-body");
+  const more = form.querySelector(".switch input"), chip = (field) => form.querySelector(`.field-chip[data-field=${field}]`);
+  const fit = (box) => { box.style.height = "auto"; box.style.height = `${box.scrollHeight}px`; };
+  let box = title, composing = false, escDown = false, sending = false;
+
+  function paint() {
+    const unset = { priority: draft.priority === "none", parent: !draft.parent };
+    chip("state").innerHTML = `${icon("state", draft.state)}<span>${esc(nameOf("state", draft.state))}</span>`;
+    chip("priority").innerHTML = `${icon("priority", draft.priority)}<span>${unset.priority ? "Priority" : esc(nameOf("priority", draft.priority))}</span>`;
+    chip("parent").innerHTML = `${GLYPH.parent}<span>${unset.parent ? "Parent" : esc(draft.parentTitle || draft.parent)}</span>`;
+    for (const field in unset) chip(field).classList.toggle("unset", unset[field]);
+  }
+
+  // A chip's menu is desk's own; when it closes, the caret goes back to the box it left.
+  function choose(field) {
+    const where = { anchor: chip(field), onClose: () => { if (creator?.el === el) box.focus(); } };
+    const set = (changes) => { Object.assign(draft, changes); paint(); };
+    if (field === "parent") parentPicker(draft.parent, "", where, (slug, name) => set({ parent: slug, parentTitle: name }));
+    else valueMenu(field, draft[field], where, (value) => set({ [field]: value }));
+  }
+
+  function close(keep = true) {
+    if (keep && (title.value.trim() || body.value.trim())) {
+      localStorage.newIssueDraft = JSON.stringify({ ...draft, title: title.value, body: body.value });
+    } else localStorage.removeItem("newIssueDraft");
+    if (menu) closeMenu();
+    el.remove();
+    if (creator?.el === el) creator = null;
+  }
+
+  async function submit() {
+    const name = title.value.trim().replace(/\s+/g, " ");
+    if (!name) { toast("Give the issue a title first"); title.focus(); return; }
+    if (sending) return;
+    sending = true;
+    const res = await fetch("/api/issues", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: name, body: body.value, state: draft.state, priority: draft.priority, parent: draft.parent || null }),
+    });
+    sending = false;
+    if (!res.ok) { toast(await reason(res)); return; }
+    const made = await res.json();
+    if (more.checked) {
+      localStorage.removeItem("newIssueDraft");
+      title.value = body.value = "";
+      fit(title); fit(body);
+      title.focus();
+    } else close(false);
+    toast(made.parent ? "Sub-issue created" : "Issue created", { label: "View issue", run: () => go(made.url) });
+    await refresh();
+  }
+
+  // Esc's keyup closes too, for when an input method kept its keydown; Tab stays inside the panel.
+  function onKey(e) {
+    const k = keyOf(e);
+    if (e.type === "keyup") {
+      if (k === "Escape" && !escDown && !menu) close();
+      if (k === "Escape") escDown = false;
+      return;
+    }
+    if (k === "Escape") escDown = true;
+    if (menu || e.isComposing || composing) return;
+    if (k === "Escape") close();
+    else if (k === "Enter" && (e.ctrlKey || e.metaKey)) submit();
+    else if (k === "Enter" && e.target === title) body.focus();
+    else if (k === "Tab") {
+      const stops = [...form.querySelectorAll("textarea, button, input")], i = stops.indexOf(document.activeElement);
+      stops[(i + (e.shiftKey ? -1 : 1) + stops.length) % stops.length].focus();
+    }
+    else return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+
+  title.value = draft.title;
+  body.value = draft.body;
+  more.checked = localStorage.createMore === "1";
+  paint();
+  fit(title); fit(body);
+  el.addEventListener("compositionstart", () => { composing = true; });
+  el.addEventListener("compositionend", () => { composing = false; });
+  form.addEventListener("focusin", (e) => { if (e.target.matches("textarea")) box = e.target; });
+  // A title is one line: a pasted line break becomes a space.
+  title.addEventListener("input", () => { if (title.value.includes("\n")) title.value = title.value.replace(/\s*\n\s*/g, " "); fit(title); });
+  body.addEventListener("input", () => fit(body));
+  more.addEventListener("change", () => { if (more.checked) localStorage.createMore = "1"; else delete localStorage.createMore; });
+  form.addEventListener("submit", (e) => { e.preventDefault(); submit(); });
+  form.addEventListener("click", (e) => {
+    const c = e.target.closest(".field-chip");
+    if (c) { if (justClosed !== c) choose(c.dataset.field); return; }
+    if (e.target.closest(".close")) close();
+  });
+  // A press on the dimmed page closes the panel, unless it only closed a chip's menu.
+  el.addEventListener("mousedown", (e) => { if (e.target === el && !justClosed) close(); });
+  creator = { el, onKey, close };
+  title.focus();
+  title.setSelectionRange(title.value.length, title.value.length);
+}
+
+addEventListener("keydown", (e) => creator?.onKey(e), true);
+addEventListener("keyup", (e) => creator?.onKey(e), true);
 
 // --- diagram viewer: click to open full screen, wheel to zoom, drag to move ----------------------
 let viewer = null;
@@ -605,7 +724,7 @@ const target = () => focused?.dataset.slug ?? page()?.slug; // what S, P and Ctr
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && viewer) { closeViewer(); return; }
-  if (menu || viewer || editing) return;
+  if (menu || viewer || editing || creator) return;
   if (typing(e.target)) { if (e.key === "Escape") e.target.blur(); return; }
   const key = e.key.toLowerCase();
 
@@ -627,7 +746,7 @@ document.addEventListener("keydown", (e) => {
   if (key === "j" || e.key === "ArrowDown") { moveFocus(1); e.preventDefault(); }
   else if (key === "k" || e.key === "ArrowUp") { moveFocus(-1); e.preventDefault(); }
   else if (e.key === "Enter" && focused) { location.href = focused.getAttribute("href"); }
-  else if (key === "c") { const add = $(".create input[name=title]"); if (add) { add.focus(); e.preventDefault(); } }
+  else if (key === "c") { openCreator(); e.preventDefault(); }
   else if (key === "s" || key === "p") {
     const field = key === "s" ? "state" : "priority";
     const row = focused, pick = $(`.pick[data-field=${field}]`);

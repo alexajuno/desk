@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% from "macros.html" import tree, add_form, prio %}
+{% from "macros.html" import tree, prio, plus %}
 {% block title %}Backlog · desk{% endblock %}
 {% block crumb %}<span>Backlog</span>{% endblock %}
 {% block main %}
 <div class="page">
-  {{ add_form(None, "New issue…   (C)") }}
   {% for level in priorities %}
     {%- set group = top | selectattr("priority", "equalto", level) | list %}
     {%- if group %}
-    <div class="group">{{ prio(level) }}{{ prio_names[level] }}<span class="count">{{ group | length }}</span></div>
+    <div class="group">{{ prio(level) }}{{ prio_names[level] }}<span class="count">{{ group | length }}</span>
+      <button class="group-add" type="button" data-priority="{{ level }}" title="New issue">{{ plus() }}</button></div>
     {{ tree(group, kids_of) }}
     {%- endif %}
   {% else %}<p class="muted" style="padding: 16px">Nothing in the backlog.</p>{% endfor %}

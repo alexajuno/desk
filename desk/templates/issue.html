@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import tree, add_form, prio, state %}
+{% from "macros.html" import tree, prio, state, plus %}
 {% block title %}{{ p.title }} · desk{% endblock %}
 {% block crumb %}<a href="/backlog">Backlog</a>{% for a in trail %}<span class="sep">›</span><a href="/issue/{{ a.slug }}">{{ a.title }}</a>{% endfor %}<span class="sep">›</span><span>{{ p.title }}</span>{% endblock %}
 {% block tools %}<button class="more" title="Actions">
@@ -28,9 +28,9 @@
     <div class="section-label">{{ "Saved questions" if name == "questions.md" else "Result" }} <span class="muted">from the agent · {{ name }}</span></div>
     <div class="body">{{ html | safe }}</div>
     {%- endfor %}
-    <div class="section-label">Sub-issues{% if progress[1] %}<span class="pill">{{ progress[0] }}/{{ progress[1] }} done</span>{% endif %}</div>
+    <div class="section-label">Sub-issues{% if progress[1] %}<span class="pill">{{ progress[0] }}/{{ progress[1] }} done</span>{% endif %}
+      <button class="add-sub" type="button" title="Add sub-issue">{{ plus() }}</button></div>
     {% if kids %}{{ tree(kids, kids_of) }}{% endif %}
-    {{ add_form(p.slug, "New sub-issue…") }}
   </div>
 
   <aside class="props">
