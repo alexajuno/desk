@@ -33,7 +33,7 @@ def as_json(i: store.Issue, full: bool = False) -> dict:
 
 
 def _load(slug: str) -> store.Issue:
-    if not (store.folder(slug) / store.MAIN).is_file():
+    if not store.exists(slug):
         raise HTTPException(404, f"No issue {slug}. List them with GET /api/issues?q=<words>.")
     return store.load(slug)
 
@@ -54,14 +54,12 @@ def _apply(i: store.Issue, fields: Fields) -> None:
             raise HTTPException(422, f"{name} must be one of: {', '.join(allowed)}")
     if "title" in given and not given["title"]:
         raise HTTPException(422, "title cannot be empty")
-    if given.get("parent"):
-        all_issues, up = store.load_all(), given["parent"]
-        if up not in all_issues:
-            raise HTTPException(422, f"No issue {up} to be the parent.")
-        while up:
-            if up == i.slug:
-                raise HTTPException(422, f"{given['parent']} is {i.slug} or under it, so it cannot be its parent.")
-            up = all_issues[up].parent if up in all_issues else None
+    if parent := given.get("parent"):
+        all_issues = store.load_all()
+        if parent not in all_issues:
+            raise HTTPException(422, f"No issue {parent} to be the parent.")
+        if parent == i.slug or parent in store.descendants(all_issues, i.slug):
+            raise HTTPException(422, f"{parent} is {i.slug} or under it, so it cannot be its parent.")
     if given.get("folder") and not os.path.isdir(os.path.expanduser(given["folder"])):
         raise HTTPException(422, f"No folder {given['folder']}. Find one with GET /api/folders?q=<name>.")
     if "body" in given:
