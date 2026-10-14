@@ -1,35 +1,41 @@
-"""Claude Code sessions for a problem: the planning chat you talk in, and background agents.
+"""The one Claude Code session bound to an issue, from planning to done.
 
-Both start in the problem's work folder (its `folder:`, usually a repo), so the repo's own
-CLAUDE.md, .claude/rules, skills and MCP servers load. The problem file itself is only passed
-by its full path. Facts checked on Claude Code 2.1.285 (2026-10-14): `claude --bg` prints
-"backgrounded · <id> · <name>"; `claude agents --json --all` reports state "working" while a
-turn runs, "done" when it ended, "stopped" when stopped; `--session-id` takes a UUID we pick.
+    Plan with Claude  claude --bg -w desk-<slug> in the issue's folder, then `claude attach` in a
+                      terminal: you talk, and the plan gets written into the issue.
+    Hand off          the same session keeps going in the background: `claude stop`, then
+                      `claude --bg --resume <id> "<carry out>"`, with no other flags.
+    Jump back         `claude attach` while the session lives, else `claude --resume` in a terminal.
+
+Facts checked on Claude Code 2.1.285 (2026-10-14): `claude --bg` prints "backgrounded · <id> · <name>",
+and the short id is the start of the session id; states seen: working, done, blocked (waiting for the user),
+stopped, failed; a background job ignores --session-id and picks its
+own; a finished background session stays alive and idle ("done"), so resuming it starts a copy; after
+`claude stop`, `claude --bg --resume <id>` with no other flags "woke session <id> with its saved options"
+and kept its worktree and memory, while adding flags such as -w "started a copy".
+
+Sessions start in the issue's folder (usually a repo), so its CLAUDE.md, .claude/rules, skills and MCP
+servers load; the issue file is only passed by its full path.
 """
 
 import json
 import os
 import re
 import subprocess
-import uuid
 from pathlib import Path
 
-PLAN_PROMPT = """We are planning one problem from desk, the user's workspace.
+PLAN_PROMPT = """We are planning one issue from desk, the user's workspace.
 
-Problem: {title}
-Problem file: {file}. Read it first. Its other files are in {dir}.
+Issue: {title}
+Issue file: {file}. Read it first. Its other files are in {dir}.
 
-Help the user understand the problem, then plan it with them: a few directions, pick one together, note why.
-Write the plan into the "## Plan" section of the problem file, in three short parts: Direction, Done when, and What the agent may decide alone.
-Keep it short. A longer design goes into its own file in {dir}."""
+Help the user understand the issue, then plan it with them: a few directions, pick one together, note why.
+Write the plan into the "## Plan" section of the issue file, in three short parts: Direction, Done when, and What you may decide alone. Write it with the Write or Edit tool.
+Keep it short. A longer design goes into its own file in {dir}.
+When the plan is written, tell the user they can press Hand off in desk, and that you will carry it out in the background."""
 
-AGENT_PROMPT = """You are carrying out one problem from desk, the user's workspace.
+HANDOFF_PROMPT = """The user handed this issue off: carry out the plan now, on your own, in the background.
 
-Problem: {title}
-Problem file: {file}. Its "## Plan" section is your brief. Its other files are in {dir}.
-
-Plan:
-{plan}
+Issue file: {file}. Its "## Plan" section is your brief. Its other files are in {dir}.
 
 How to work:
 - You are in your own git worktree, on its own branch. Commit there. Push or open a PR only if the plan says so.
@@ -37,7 +43,7 @@ How to work:
 - Don't ask the user mid-way. Write each question to {dir}/questions.md and carry on with your best default.
 - Stop only when the answer would change the direction, or when the next step leaves the system: money, messages to people, deleted data, production. Then write the question there and stop.
 - When you finish, write {dir}/result.md: what changed and where (branch, commits, PR links), and how you checked it, marking what you verified and what you assumed.
-- Never edit {file}. The user and desk own it; your files are questions.md and result.md. Write them with the Write tool: the worktree guard refuses shell writes outside the worktree."""
+- From now on, never edit {file}; the user and desk own it. Your files are questions.md and result.md. Write them with the Write tool: the worktree guard refuses shell writes outside the worktree."""
 
 # A repo's .claude/ is often kept out of git, so a new worktree starts with no rules, and an agent
 # there loads none (checked 2026-10-14: an agent in a `claude -w` worktree did not see the repo's
@@ -81,8 +87,8 @@ def rules_follow(cwd: str) -> None:
             exclude.write_text("\n".join([*lines, ".worktreeinclude"]) + "\n")
 
 
-def workdir(problem) -> str:
-    return os.path.expanduser(problem.folder) if problem.folder else str(Path.home())
+def workdir(issue) -> str:
+    return os.path.expanduser(issue.folder) if issue.folder else str(Path.home())
 
 
 def live() -> dict[str, dict]:
@@ -100,40 +106,53 @@ def _terminal(cwd: str, title: str, *command: str) -> None:
                      start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def _paths(problem, folder: Path) -> dict:
-    return {"title": problem.title, "file": folder / "problem.md", "dir": folder}
+def _paths(issue, folder: Path) -> dict:
+    return {"title": issue.title, "file": folder / "issue.md", "dir": folder}
 
 
-def start_chat(problem, folder: Path) -> str:
-    """Open the planning chat in a terminal; returns its session id so it can be reopened."""
-    session = str(uuid.uuid4())
-    _terminal(workdir(problem), problem.title, "claude", "--session-id", session, "-n", problem.title[:40],
-              PLAN_PROMPT.format(**_paths(problem, folder)))
-    return session
-
-
-def resume_chat(problem, session: str) -> None:
-    _terminal(workdir(problem), problem.title, "claude", "--resume", session)
-
-
-def start_agent(problem, folder: Path) -> tuple[str, str | None]:
-    """Start a background agent on the problem's plan, in its own worktree when the folder is a git
-    repo; returns its short id and a warning, if any."""
-    cwd = workdir(problem)
-    prompt = AGENT_PROMPT.format(plan=problem.section("Plan"), **_paths(problem, folder))
-    command = ["claude", "--bg", "-n", problem.title[:40]]
-    warning = None
-    if _git(cwd, "rev-parse", "--show-toplevel"):
-        rules_follow(cwd)
-        command += ["-w", f"desk-{problem.slug[:30]}-{len(problem.sessions) + 1}"]
-    else:
-        warning = "Not a git repo, so the agent works in the folder itself, with no worktree"
-    run = subprocess.run([*command, prompt], cwd=cwd, capture_output=True, text=True, timeout=60)
+def _background(cwd: str, command: list[str]) -> str:
+    run = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=60)
     match = re.search(r"backgrounded · ([0-9a-f]{8})", run.stdout)
     if not match:
         raise RuntimeError((run.stdout + run.stderr).strip() or "claude --bg printed no id")
-    return match.group(1), warning
+    return match.group(1)
 
 
-def attach(problem, short_id: str) -> None:
-    _terminal(workdir(problem), problem.title, "claude", "attach", short_id)
+def start(issue, folder: Path) -> str:
+    """Start the issue's session for planning and open it in a terminal; returns its session id."""
+    cwd = workdir(issue)
+    command = ["claude", "--bg", "-n", issue.title[:40]]
+    if _git(cwd, "rev-parse", "--show-toplevel"):
+        rules_follow(cwd)
+        command += ["-w", f"desk-{issue.slug[:40]}"]
+    short = _background(cwd, [*command, PLAN_PROMPT.format(**_paths(issue, folder))])
+    _terminal(cwd, issue.title, "claude", "attach", short)
+    row = live().get(short, {})
+    return row.get("sessionId") or short
+
+
+def hand_off(issue, folder: Path) -> None:
+    """Let the issue's session carry out its plan in the background, as the same session."""
+    row = live().get(issue.session, {})
+    if row.get("kind") == "interactive":
+        raise RuntimeError("This session is open in a terminal. Close that window, then press Hand off.")
+    if row.get("state") == "working":
+        raise RuntimeError("The session is still working. Wait until it is done, then press Hand off.")
+    if row:
+        subprocess.run(["claude", "stop", row["id"]], capture_output=True, timeout=30)
+    short = _background(workdir(issue), ["claude", "--bg", "--resume", issue.session,
+                                         HANDOFF_PROMPT.format(**_paths(issue, folder))])
+    if not issue.session.startswith(short):
+        raise RuntimeError(f"Claude Code started a copy ({short}) instead of continuing the session.")
+
+
+def jump_back(issue) -> None:
+    """Open the issue's session in a terminal."""
+    row = live().get(issue.session, {})
+    if row.get("kind") == "background" and row.get("state") in ("working", "done"):
+        _terminal(row.get("cwd") or workdir(issue), issue.title, "claude", "attach", row["id"])
+    elif row.get("kind") == "interactive":
+        raise RuntimeError("This session is already open in a terminal.")
+    else:
+        worktree = Path(workdir(issue), ".claude", "worktrees", f"desk-{issue.slug[:40]}")
+        _terminal(str(worktree if worktree.is_dir() else workdir(issue)), issue.title, "claude", "--resume", issue.session)

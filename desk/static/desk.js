@@ -71,7 +71,7 @@ function openMenu(anchor, field, current, onPick) {
 document.addEventListener("mousedown", (e) => { if (menu && !menu.contains(e.target)) closeMenu(); });
 
 async function setField(slug, field, value) {
-  await fetch(`/p/${slug}/set`, { method: "POST", body: new URLSearchParams({ field, value }) });
+  await fetch(`/issue/${slug}/set`, { method: "POST", body: new URLSearchParams({ field, value }) });
   sessionStorage.y = scroller().scrollTop;
   location.reload();
 }
@@ -117,7 +117,7 @@ function openFolderPicker(anchor, slug, current) {
   list.addEventListener("mousedown", (e) => { const li = e.target.closest("li[data-v]"); if (li) { pick(li.dataset.v); e.preventDefault(); } });
   async function pick(folder) {
     closeMenu();
-    await fetch(`/p/${slug}/folder`, { method: "POST", body: new URLSearchParams({ folder }) });
+    await fetch(`/issue/${slug}/folder`, { method: "POST", body: new URLSearchParams({ folder }) });
     location.reload();
   }
 }

@@ -30,7 +30,7 @@
   {%- for p in items %}
   {%- set kids = kids_of(p.slug) %}
   <li>
-    <a class="item" href="/p/{{ p.slug }}" data-slug="{{ p.slug }}" data-state="{{ p.state }}" data-priority="{{ p.priority }}">
+    <a class="item" href="/issue/{{ p.slug }}" data-slug="{{ p.slug }}" data-state="{{ p.state }}" data-priority="{{ p.priority }}">
       {{- prio(p.priority) }}{{ state(p.state) }}<span class="title">{{ p.title }}</span>
       {%- if kids %}<span class="pill">{{ kids | length }} open</span>{% endif %}
       <span class="spacer"></span><span class="date">{{ p.created | short_date }}</span></a>
@@ -41,7 +41,7 @@
 {%- endmacro %}
 
 {% macro add_form(parent, label) -%}
-<form method="post" action="/problems" class="create">
+<form method="post" action="/issues" class="create">
   {% if parent %}<input type="hidden" name="parent" value="{{ parent }}">{% endif %}
   <input type="hidden" name="priority" value="none">
   <input type="text" name="title" placeholder="{{ label }}" required autocomplete="off">

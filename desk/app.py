@@ -1,22 +1,23 @@
-"""desk: one place to park, plan, run and review problems with Claude.
+"""desk: one place to park, plan, run and review issues with Claude.
 
-Design: ~/notes/canvas/effective-work.md. Run: uv run uvicorn desk.app:app --port 8790
+Design: the design doc in the desk issue's files. Run: uv run uvicorn desk.app:app --port 8790
+(DESK_DATA picks the data folder; default ~/.local/share/desk).
 """
 
 import os
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, Form, Request
-from fastapi import HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import agents
-from . import problems as store
+from . import issues as store
 from .render import to_html, to_html_with_toc
 
 HERE = Path(__file__).resolve().parent
@@ -28,9 +29,9 @@ app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
 def sidebar(request: Request) -> dict:
     """Counts and the running list for the sidebar on every page."""
-    all_problems = store.load_all().values()
-    running = sorted((p for p in all_problems if p.state == "running" and p.parent is None), key=lambda p: p.rank)
-    return {"sidebar": {"backlog": sum(p.state == "backlog" for p in all_problems), "running": running}}
+    all_issues = store.load_all().values()
+    running = sorted((i for i in all_issues if i.state == "running" and i.parent is None), key=lambda i: i.rank)
+    return {"sidebar": {"backlog": sum(i.state == "backlog" for i in all_issues), "running": running}}
 
 
 templates = Jinja2Templates(directory=HERE / "templates", context_processors=[sidebar])
@@ -43,8 +44,12 @@ templates.env.globals.update(
 templates.env.filters["short_date"] = lambda iso: datetime.fromisoformat(str(iso)).strftime("%b %-d") if iso else ""
 
 
-def open_kids(all_problems: dict[str, store.Problem]):
-    return lambda slug: [p for p in store.children(all_problems, slug) if p.state not in CLOSED]
+def open_kids(all_issues: dict[str, store.Issue]):
+    return lambda slug: [i for i in store.children(all_issues, slug) if i.state not in CLOSED]
+
+
+def back(slug: str, message: str | None = None) -> RedirectResponse:
+    return RedirectResponse(f"/issue/{slug}" + (f"?msg={quote(message[:300])}" if message else ""), status_code=303)
 
 
 @app.get("/")
@@ -53,50 +58,58 @@ def home():
     return RedirectResponse("/backlog")
 
 
+@app.get("/p/{rest:path}")
+def old_link(rest: str):
+    """Pages were /p/<slug> before issues were called issues."""
+    return RedirectResponse(f"/issue/{rest}")
+
+
 @app.get("/version", response_class=PlainTextResponse)
 def version():
-    """Changes whenever a problem file is added, removed or edited; pages poll it to reload."""
-    files = [f for f in store.PROBLEMS_DIR.rglob("*") if f.is_file()]
+    """Changes whenever an issue's file is added, removed or edited; pages poll it to reload."""
+    files = [f for f in store.ISSUES_DIR.rglob("*") if f.is_file()]
     return f"{len(files)}:{max((f.stat().st_mtime_ns for f in files), default=0)}"
 
 
 @app.get("/backlog")
 def backlog(request: Request):
-    all_problems = store.load_all()
-    kids_of = open_kids(all_problems)
+    all_issues = store.load_all()
+    kids_of = open_kids(all_issues)
     return templates.TemplateResponse(request, "backlog.html", {"top": kids_of(None), "kids_of": kids_of})
 
 
-@app.post("/problems")
+@app.post("/issues")
 def add(title: str = Form(...), priority: str = Form("none"), parent: str | None = Form(None)):
-    problem = store.Problem(slug=store.new_slug(title), title=title.strip(), priority=priority, parent=parent or None)
-    store.save(problem)
-    return RedirectResponse(f"/p/{parent}" if parent else "/backlog", status_code=303)
+    issue = store.Issue(slug=store.new_slug(title), title=title.strip(), priority=priority, parent=parent or None)
+    store.save(issue)
+    return RedirectResponse(f"/issue/{parent}" if parent else "/backlog", status_code=303)
 
 
-@app.get("/p/{slug}")
+@app.get("/issue/{slug}")
 def show(request: Request, slug: str):
-    all_problems = store.load_all()
-    p = all_problems[slug]
-    trail, up = [], p.parent
-    while up in all_problems and len(trail) < 50:
-        trail.insert(0, all_problems[up])
-        up = all_problems[up].parent
-    kids_of = open_kids(all_problems)
-    live = agents.live()
+    all_issues = store.load_all()
+    if slug not in all_issues:
+        raise HTTPException(404)
+    i = all_issues[slug]
+    trail, up = [], i.parent
+    while up in all_issues and len(trail) < 50:
+        trail.insert(0, all_issues[up])
+        up = all_issues[up].parent
+    kids_of = open_kids(all_issues)
     agent_files = {name: to_html(path.read_text(encoding="utf-8"))
                    for name in ("questions.md", "result.md") if (path := store.folder(slug) / name).is_file()}
-    all_kids = store.children(all_problems, slug)
+    all_kids = store.children(all_issues, slug)
     progress = (sum(k.state == "done" for k in all_kids), sum(k.state != "dropped" for k in all_kids))
-    context = {"p": p, "trail": trail, "kids": kids_of(slug), "kids_of": kids_of, "body": to_html(p.body),
-               "files": store.files(slug), "live": live, "msg": request.query_params.get("msg"), "progress": progress,
-               "agent_files": agent_files}
-    return templates.TemplateResponse(request, "problem.html", context)
+    session = agents.live().get(i.session, {}) if i.session else {}
+    context = {"p": i, "trail": trail, "kids": kids_of(slug), "kids_of": kids_of, "body": to_html(i.body),
+               "files": store.files(slug), "session": session, "msg": request.query_params.get("msg"),
+               "progress": progress, "agent_files": agent_files}
+    return templates.TemplateResponse(request, "issue.html", context)
 
 
-@app.get("/p/{slug}/f/{name}")
-def problem_file(request: Request, slug: str, name: str):
-    """A problem's own file: Markdown and D2 render in the reading style, anything else is served as is."""
+@app.get("/issue/{slug}/f/{name}")
+def issue_file(request: Request, slug: str, name: str):
+    """An issue's own file: Markdown and D2 render in the reading style, anything else is served as is."""
     path = (store.folder(slug) / name).resolve()
     if path.parent != store.folder(slug).resolve() or not path.is_file():
         raise HTTPException(404)
@@ -107,61 +120,69 @@ def problem_file(request: Request, slug: str, name: str):
     return templates.TemplateResponse(request, "file.html", {"p": store.load(slug), "name": name, "body": body, "toc": toc})
 
 
-@app.post("/p/{slug}/set")
+@app.post("/issue/{slug}/set")
 def set_field(slug: str, field: str = Form(...), value: str = Form(...)):
     allowed = {"priority": store.PRIORITIES, "state": store.STATES}
     if value not in allowed.get(field, []):
         raise HTTPException(422, f"{field} cannot be {value}")
-    p = store.load(slug)
-    setattr(p, field, value)
-    store.save(p)
+    i = store.load(slug)
+    setattr(i, field, value)
+    store.save(i)
     return PlainTextResponse("ok")
 
 
-@app.post("/p/{slug}/folder")
+@app.post("/issue/{slug}/folder")
 def set_folder(slug: str, folder: str = Form("")):
-    p = store.load(slug)
-    p.folder = folder.strip() or None
-    store.save(p)
-    return RedirectResponse(f"/p/{slug}", status_code=303)
+    i = store.load(slug)
+    i.folder = folder.strip() or None
+    store.save(i)
+    return back(slug)
 
 
-@app.post("/p/{slug}/chat")
-def chat(slug: str):
-    """Open the planning chat: a new one, or the one this problem already has."""
-    p = store.load(slug)
-    if p.chat:
-        agents.resume_chat(p, p.chat)
-    else:
-        p.chat = agents.start_chat(p, store.folder(slug))
-        if p.state == "backlog":
-            p.state = "planning"
-        store.save(p)
-    return RedirectResponse(f"/p/{slug}", status_code=303)
+# --- the issue's one session ---------------------------------------------------------------
 
-
-@app.post("/p/{slug}/agent")
-def start_agent(slug: str):
-    p = store.load(slug)
-    if not p.section("Plan"):
-        return RedirectResponse(f"/p/{slug}?msg=Write+a+plan+first", status_code=303)
+@app.post("/issue/{slug}/plan")
+def plan(slug: str):
+    i = store.load(slug)
+    if i.session:
+        return jump(slug)
     try:
-        short_id, warning = agents.start_agent(p, store.folder(slug))
+        i.session = agents.start(i, store.folder(slug))
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
-        return RedirectResponse(f"/p/{slug}?msg={quote(str(error)[:300])}", status_code=303)
-    p.sessions.append(short_id)
-    p.state = "running"
-    store.save(p)
-    return RedirectResponse(f"/p/{slug}" + (f"?msg={quote(warning)}" if warning else ""), status_code=303)
+        return back(slug, str(error))
+    if i.state == "backlog":
+        i.state = "planning"
+    store.save(i)
+    return back(slug)
 
 
-@app.post("/p/{slug}/attach/{short_id}")
-def attach(slug: str, short_id: str):
-    p = store.load(slug)
-    if short_id in p.sessions:
-        agents.attach(p, short_id)
-    return RedirectResponse(f"/p/{slug}", status_code=303)
+@app.post("/issue/{slug}/handoff")
+def hand_off(slug: str):
+    i = store.load(slug)
+    if not i.session or not i.section("Plan"):
+        return back(slug, "Plan first: the session carries out the plan written in this issue.")
+    try:
+        agents.hand_off(i, store.folder(slug))
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+        return back(slug, str(error))
+    i.state = "running"
+    store.save(i)
+    return back(slug)
 
+
+@app.post("/issue/{slug}/jump")
+def jump(slug: str):
+    i = store.load(slug)
+    if not i.session:
+        return back(slug)
+    try:
+        agents.jump_back(i)
+    except (RuntimeError, OSError) as error:
+        return back(slug, str(error))
+    return back(slug)
+
+
+# --- Works in: your repos, and path completion -----------------------------------------------
 
 HOME = Path.home()
 SKIP = {"node_modules", "vendor", ".venv", "venv", "__pycache__", "dist", "build", ".git"}
@@ -171,7 +192,6 @@ _repos_cache: tuple[float, list[str]] = (0.0, [])
 def _repos() -> list[str]:
     """Git repos under ~/projects, three levels deep, cached for a minute."""
     global _repos_cache
-    import time
     if time.time() - _repos_cache[0] < 60:
         return _repos_cache[1]
     found, stack = [], [(HOME / "projects", 0)]
@@ -206,7 +226,7 @@ def folders(q: str = ""):
         except OSError:
             names = []
         return JSONResponse([_tilde(os.path.join(parent, n)) for n in names[:30]])
-    used = {p.folder for p in store.load_all().values() if p.folder}
+    used = {i.folder for i in store.load_all().values() if i.folder}
     paths = sorted({_tilde(r) for r in _repos()} | used)
     words = q.lower().split()
     return JSONResponse([p for p in paths if all(w in p.lower() for w in words)][:30])

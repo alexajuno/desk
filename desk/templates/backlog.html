@@ -4,7 +4,7 @@
 {% block crumb %}<span>Backlog</span>{% endblock %}
 {% block main %}
 <div class="page">
-  {{ add_form(None, "New problem…   (C)") }}
+  {{ add_form(None, "New issue…   (C)") }}
   {% for level in priorities %}
     {%- set group = top | selectattr("priority", "equalto", level) | list %}
     {%- if group %}

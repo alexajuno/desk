@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "macros.html" import tree, add_form, prio, state %}
+{% block title %}{{ p.title }} · desk{% endblock %}
+{% block crumb %}<a href="/backlog">Backlog</a>{% for a in trail %}<span class="sep">›</span><a href="/issue/{{ a.slug }}">{{ a.title }}</a>{% endfor %}<span class="sep">›</span><span>{{ p.title }}</span>{% endblock %}
+{% block main %}
+<div class="issue">
+  <div>
+    <h1>{{ p.title }}</h1>
+    {% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
+    <div class="body">{{ body | safe }}</div>
+    {%- for name, html in agent_files.items() %}
+    <div class="section-label">{{ "Saved questions" if name == "questions.md" else "Result" }} <span class="muted">from the agent · {{ name }}</span></div>
+    <div class="body">{{ html | safe }}</div>
+    {%- endfor %}
+    <div class="section-label">Sub-issues{% if progress[1] %}<span class="pill">{{ progress[0] }}/{{ progress[1] }} done</span>{% endif %}</div>
+    {% if kids %}{{ tree(kids, kids_of) }}{% endif %}
+    {{ add_form(p.slug, "New sub-issue…") }}
+  </div>
+
+  <aside class="props">
+    <div class="label">Properties</div>
+    <button class="prop pick" data-slug="{{ p.slug }}" data-field="state" data-value="{{ p.state }}" title="Change status (S)">{{ state(p.state) }}{{ state_names[p.state] }}</button>
+    <button class="prop pick" data-slug="{{ p.slug }}" data-field="priority" data-value="{{ p.priority }}" title="Change priority (P)">{{ prio(p.priority) }}{{ prio_names[p.priority] }}</button>
+
+    <div class="label">Works in</div>
+    <button class="prop folder-pick" data-slug="{{ p.slug }}" data-value="{{ p.folder or '' }}" title="Pick the folder chats and agents start in">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z" stroke="lch(70% 1.2 272)" stroke-width="1.2"/></svg>
+      <span class="{{ '' if p.folder else 'muted' }}">{{ p.folder or "Pick a folder…" }}</span></button>
+    {% if p.link %}<div class="label">Link</div><div class="prop static"><a href="{{ p.link }}">{{ p.link.split('/')[-1] }}</a></div>{% endif %}
+    {% if files %}<div class="label">Files</div>
+      {%- for f in files %}<div class="prop static"><a href="/issue/{{ p.slug }}/f/{{ f }}">{{ f }}</a></div>{% endfor %}{% endif %}
+
+    <div class="label">Session</div>
+    {%- set where = session.get("kind") %}{% set live = session.get("state") %}
+    {% if not p.folder %}<p class="notice">Pick "Works in" first. The session starts there, with that repo's rules.</p>{% endif %}
+    {%- if not p.session %}
+    <form method="post" action="/issue/{{ p.slug }}/plan" style="margin: 0 0 4px"><button class="primary">Plan with Claude</button></form>
+    <p class="hint">Starts this issue's session in the repo, in its own worktree, and opens it in a terminal. You and Claude write the plan.</p>
+    {%- elif p.state in ("backlog", "planning") and not p.section("Plan") %}
+    <form method="post" action="/issue/{{ p.slug }}/jump" style="margin: 0 0 4px"><button class="primary">Back to the plan chat</button></form>
+    <p class="hint">Write the plan together in that chat. Then the same session can carry it out.</p>
+    {%- elif p.state in ("backlog", "planning") %}
+    <form method="post" action="/issue/{{ p.slug }}/handoff" style="margin: 0 0 4px"><button class="primary">Hand off</button></form>
+    <p class="hint">The same session carries out the plan in the background, remembering your talk. Close its terminal window first.
+      <a href="#" onclick="this.nextElementSibling.submit(); return false">Back to the chat</a><form method="post" action="/issue/{{ p.slug }}/jump" hidden></form></p>
+    {%- else %}
+    <form method="post" action="/issue/{{ p.slug }}/jump" style="margin: 0 0 4px"><button class="primary">Jump back</button></form>
+    <p class="hint">Opens the session in a terminal: watch it, answer it, ask a follow-up.</p>
+    {%- endif %}
+    {%- if p.session %}
+    <div class="prop static"><span class="key">Session</span><code>{{ p.session[:8] }}</code>
+      <span class="live {{ live }}">{{ "open in a terminal" if where == "interactive" else {"working": "working", "done": "done", "blocked": "needs you", "stopped": "stopped", "failed": "failed"}.get(live, "not running") }}</span></div>
+    {%- endif %}
+  </aside>
+</div>
+{% endblock %}

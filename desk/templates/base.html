@@ -25,7 +25,7 @@
   {%- if sidebar.running %}
   <div class="nav-label">Running</div>
   {%- for p in sidebar.running %}
-  <a class="nav-item {{ 'here' if here == '/p/' ~ p.slug }}" href="/p/{{ p.slug }}">{{ state("running") }}<span class="nav-title">{{ p.title }}</span></a>
+  <a class="nav-item {{ 'here' if here == '/issue/' ~ p.slug }}" href="/issue/{{ p.slug }}">{{ state("running") }}<span class="nav-title">{{ p.title }}</span></a>
   {%- endfor %}
   {%- endif %}
 </aside>
@@ -37,10 +37,10 @@
 
 <div id="keys"><div class="keys-box"><h2>Keyboard shortcuts</h2>
   <dl><dt>J / K</dt><dd>Move down / up</dd><dt>Enter</dt><dd>Open</dd><dt>S</dt><dd>Change status</dd><dt>P</dt><dd>Change priority</dd>
-  <dt>C</dt><dd>Create a problem</dd><dt>G then B</dt><dd>Go to Backlog</dd><dt>?</dt><dd>Show or hide this</dd><dt>Esc</dt><dd>Close</dd></dl></div></div>
+  <dt>C</dt><dd>Create an issue</dd><dt>G then B</dt><dd>Go to Backlog</dd><dt>?</dt><dd>Show or hide this</dd><dt>Esc</dt><dd>Close</dd></dl></div></div>
 
 <script>
-// Reload when any problem file changes, keeping the scroll position.
+// Reload when any issue file changes, keeping the scroll position.
 let seen = null;
 setInterval(async () => {
   try {
