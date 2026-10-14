@@ -22,7 +22,7 @@ An issue's fields:
 - `parent`: the slug of the issue it belongs under, or null
 - `folder`: where its session works, usually a repo, such as `~/projects/desk`
 
-List the open issues, or search them by words in the title or body (title matches come first). Add `&state=all` to include done and dropped ones, or pick states with a list such as `state=running,review`:
+List the open issues, or search them by the words in their title or body, best match first. Add `&state=all` to include done and dropped ones, or pick states with a list such as `state=running,review`:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues?q=login+redirect"

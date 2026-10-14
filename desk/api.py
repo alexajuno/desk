@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from . import agents
 from . import issues as store
+from .search import find
 
 router = APIRouter(prefix="/api")
 OPEN = [s for s in store.STATES if s not in ("done", "dropped")]
@@ -71,13 +72,11 @@ def _apply(i: store.Issue, fields: Fields) -> None:
 
 @router.get("/issues")
 def list_issues(q: str = "", state: str = ""):
-    """Open issues unless state says otherwise (state=all, or a list such as state=running,review). q keeps
-    the issues whose title or body holds every word, title matches first."""
+    """Open issues unless state says otherwise (state=all, or a list such as state=running,review), in the
+    backlog's order; with q, the ones desk's search finds, best match first."""
     states = store.STATES if state == "all" else state.split(",") if state else OPEN
-    words = q.lower().split()
-    found = [i for i in store.load_all().values()
-             if i.state in states and all(w in f"{i.title}\n{i.body}".lower() for w in words)]
-    found.sort(key=lambda i: (not all(w in i.title.lower() for w in words), i.rank))
+    issues = {slug: i for slug, i in store.load_all().items() if i.state in states}
+    found = [hit.issue for hit in find(issues, q)] if q.strip() else sorted(issues.values(), key=lambda i: i.rank)
     return [as_json(i) for i in found[:50]]
 
 
