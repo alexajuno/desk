@@ -57,7 +57,7 @@ curl -s "http://127.0.0.1:8790/api/folders?q=site"
 Start one only when the user asks. Starting writes the plan into the issue's `## Plan` section, then starts the issue's own session with `claude --bg` in its folder, in a new git worktree when the folder is a repo, with no terminal. The session carries out the plan on its own, and the issue shows Running until its result is ready for review. If the issue already has a session, from planning it with the user, that same session carries on instead of a new one.
 
 ```bash
-curl -s "http://127.0.0.1:8790/api/issues/<slug>/start" --json '{"plan": "Direction:\n- Send the user back to the page they came from after login.\n\nDone when: logging in from /pricing lands on /pricing.\n\nWhat you may decide alone: where the return address is kept."}'
+curl -s "http://127.0.0.1:8790/api/issues/<slug>/start" --json '{"plan": "Direction:\n\n- Send the user back to the page they came from after login.\n\nDone when: logging in from /pricing lands on /pricing.\n\nWhat you may decide alone: where the return address is kept."}'
 ```
 
 The plan has three short parts: Direction (what to do, and which way), Done when (how to tell it worked), and What you may decide alone. Only a backlog or planning issue can start. A plan already in the issue is used when the call sends none.

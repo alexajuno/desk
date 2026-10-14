@@ -149,9 +149,12 @@ def _paths(issue, folder: Path) -> dict:
 
 def _background(cwd: str, command: list[str]) -> str:
     run = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=60)
-    match = re.search(r"backgrounded · ([0-9a-f]{8})", run.stdout)
+    # With FORCE_COLOR set, as in the kitty shell desk runs from, the id comes wrapped in colour codes:
+    # "backgrounded · \x1b[36mf72e9ccb\x1b[39m · <name>" (seen 2026-10-14).
+    out = re.sub(r"\x1b\[[0-9;]*m", "", run.stdout + run.stderr)
+    match = re.search(r"backgrounded · ([0-9a-f]{8})", out)
     if not match:
-        raise RuntimeError((run.stdout + run.stderr).strip() or "claude --bg printed no id")
+        raise RuntimeError(out.strip() or "claude --bg printed no id")
     return match.group(1)
 
 
