@@ -195,6 +195,7 @@ document.addEventListener("keydown", (e) => {
   if (gPressed && Date.now() - gPressed < 1500) {
     gPressed = 0;
     if (key === "b") location.href = "/backlog";
+    if (key === "i") location.href = "/inbox";
     return;
   }
   if (key === "g") { gPressed = Date.now(); return; }

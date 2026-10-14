@@ -131,17 +131,33 @@ def start(issue, folder: Path) -> str:
     return row.get("sessionId") or short
 
 
+SEND_BACK_PROMPT = """The user reviewed your result and sends it back with this note:
+
+{note}
+
+Fix what the note asks, in the same worktree. Then rewrite {dir}/result.md, and add a short "## Changed after review" part saying what you changed."""
+
+
 def hand_off(issue, folder: Path) -> None:
     """Let the issue's session carry out its plan in the background, as the same session."""
+    _continue(issue, HANDOFF_PROMPT.format(**_paths(issue, folder)))
+
+
+def send_back(issue, folder: Path, note: str) -> None:
+    """Return a reviewed result to the same session, with the user's note."""
+    _continue(issue, SEND_BACK_PROMPT.format(note=note.strip(), **_paths(issue, folder)))
+
+
+def _continue(issue, prompt: str) -> None:
+    """Give the issue's own session its next message, in the background, as the same session."""
     row = live().get(issue.session, {})
     if row.get("kind") == "interactive":
-        raise RuntimeError("This session is open in a terminal. Close that window, then press Hand off.")
+        raise RuntimeError("This session is open in a terminal. Close that window, then try again.")
     if row.get("state") == "working":
-        raise RuntimeError("The session is still working. Wait until it is done, then press Hand off.")
+        raise RuntimeError("The session is still working. Wait until it is done, then try again.")
     if row:
         subprocess.run(["claude", "stop", row["id"]], capture_output=True, timeout=30)
-    short = _background(workdir(issue), ["claude", "--bg", "--resume", issue.session,
-                                         HANDOFF_PROMPT.format(**_paths(issue, folder))])
+    short = _background(workdir(issue), ["claude", "--bg", "--resume", issue.session, prompt])
     if not issue.session.startswith(short):
         raise RuntimeError(f"Claude Code started a copy ({short}) instead of continuing the session.")
 

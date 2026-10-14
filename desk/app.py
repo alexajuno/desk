@@ -27,11 +27,38 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
 
+def has_questions(issue: store.Issue) -> bool:
+    path = store.folder(issue.slug) / "questions.md"
+    return path.is_file() and path.read_text(encoding="utf-8").strip() != ""
+
+
+def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, list]:
+    """What needs you and what waits for your review. A running issue whose session finished and
+    wrote result.md moves to review here; desk owns issue.md, so it may write the state."""
+    needs, review = [], []
+    for issue in all_issues.values():
+        row = live.get(issue.session, {}) if issue.session else {}
+        if issue.state == "running" and (store.folder(issue.slug) / "result.md").is_file() \
+                and row.get("state") not in ("working", "blocked"):
+            issue.state = "review"
+            store.save(issue)
+        if issue.state == "review":
+            review.append((issue, "result ready" if (store.folder(issue.slug) / "result.md").is_file() else "check it"))
+        elif row.get("state") == "blocked":
+            needs.append((issue, "waiting for you"))
+        elif issue.state == "running" and has_questions(issue):
+            needs.append((issue, "has questions"))
+    by_rank = lambda pair: pair[0].rank
+    return sorted(needs, key=by_rank), sorted(review, key=by_rank)
+
+
 def sidebar(request: Request) -> dict:
     """Counts and the running list for the sidebar on every page."""
-    all_issues = store.load_all().values()
-    running = sorted((i for i in all_issues if i.state == "running" and i.parent is None), key=lambda i: i.rank)
-    return {"sidebar": {"backlog": sum(i.state == "backlog" for i in all_issues), "running": running}}
+    all_issues = store.load_all()
+    needs, review = inbox_items(all_issues, agents.live())
+    running = sorted((i for i in all_issues.values() if i.state == "running" and i.parent is None), key=lambda i: i.rank)
+    return {"sidebar": {"backlog": sum(i.state == "backlog" for i in all_issues.values()), "running": running,
+                        "inbox": len(needs) + len(review)}}
 
 
 templates = Jinja2Templates(directory=HERE / "templates", context_processors=[sidebar])
@@ -76,6 +103,12 @@ def backlog(request: Request):
     all_issues = store.load_all()
     kids_of = open_kids(all_issues)
     return templates.TemplateResponse(request, "backlog.html", {"top": kids_of(None), "kids_of": kids_of})
+
+
+@app.get("/inbox")
+def inbox(request: Request):
+    needs, review = inbox_items(store.load_all(), agents.live())
+    return templates.TemplateResponse(request, "inbox.html", {"needs": needs, "review": review})
 
 
 @app.post("/issues")
@@ -163,6 +196,32 @@ def hand_off(slug: str):
         return back(slug, "Plan first: the session carries out the plan written in this issue.")
     try:
         agents.hand_off(i, store.folder(slug))
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+        return back(slug, str(error))
+    i.state = "running"
+    store.save(i)
+    return back(slug)
+
+
+@app.post("/issue/{slug}/review")
+def review(slug: str, action: str = Form(...), note: str = Form("")):
+    """Done keeps your look back in the issue; Send back returns the result to the same session."""
+    i = store.load(slug)
+    if action == "done":
+        if note.strip():
+            i.set_section("Look back", f"{note.strip()} *({datetime.now():%-d %b})*")
+        i.state = "done"
+        store.save(i)
+        return RedirectResponse("/inbox", status_code=303)
+    if not note.strip():
+        return back(slug, "Say what to change, in the box, then Send back.")
+    if not i.session:
+        i.set_section("Resume", f"Sent back on {datetime.now():%-d %b}: {note.strip()}\n\n{i.section('Resume')}".strip())
+        i.state = "backlog"
+        store.save(i)
+        return back(slug)
+    try:
+        agents.send_back(i, store.folder(slug), note)
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         return back(slug, str(error))
     i.state = "running"

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "macros.html" import prio, state %}
+{% block title %}Inbox · desk{% endblock %}
+{% block crumb %}<span>Inbox</span>{% endblock %}
+{% block main %}
+<div class="page">
+  {% for label, items in [("Needs you", needs), ("To review", review)] %}
+    {%- if items %}
+    <div class="group">{{ label }}<span class="count">{{ items | length }}</span></div>
+    <ul class="tree">
+      {%- for i, why in items %}
+      <li><a class="item" href="/issue/{{ i.slug }}" data-slug="{{ i.slug }}" data-state="{{ i.state }}" data-priority="{{ i.priority }}">
+        {{- prio(i.priority) }}{{ state(i.state) }}<span class="title">{{ i.title }}</span>
+        <span class="spacer"></span><span class="pill">{{ why }}</span></a></li>
+      {%- endfor %}
+    </ul>
+    {%- endif %}
+  {% endfor %}
+  {% if not needs and not review %}<p class="muted" style="padding: 24px 16px">Nothing needs you. Agents are working, or the backlog is waiting.</p>{% endif %}
+</div>
+{% endblock %}
