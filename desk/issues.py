@@ -20,7 +20,6 @@ import yaml
 
 DATA_DIR = Path(os.environ.get("DESK_DATA", "~/.local/share/desk")).expanduser()
 ISSUES_DIR = DATA_DIR / "issues"
-YOU_FILE = DATA_DIR / "you.md"  # the page about you
 MAIN = "issue.md"
 
 # Linear's priority levels, most urgent first.

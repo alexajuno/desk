@@ -1,7 +1,7 @@
 /* desk's look is Linear's dark theme, measured from linear.app on 2026-10-14 (getComputedStyle on
    the issue list, an issue page and the status menu): Inter Variable at weight 450 and 500, 13px for
    lists and the sidebar, 28px sidebar rows, 44px list rows, an inset panel with 12px corners, and
-   Linear's own lch() colours. Documents opened from an issue and the You page (.doc) open at the app's
+   Linear's own lch() colours. Documents opened from an issue (.doc) open at the app's
    own size, an issue description's 15px on 24px. Read mode, the top bar's toggle, switches them to the
    reading rules from the design doc: about 66 characters per line (Baymard: 50-75; WCAG 1.4.8: at most
    80), line spacing of at least 1.5, left-aligned, big text. */
@@ -148,13 +148,6 @@ button.primary:hover { background: #6e78db; }
 
 .review { border: 1px solid var(--border-3); border-radius: 10px; padding: 14px 16px; background: var(--bg-raised); margin: 0 0 24px; }
 .review .body { margin-bottom: 12px; }
-
-.you-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 24px; font-size: 13px; line-height: 1.5; letter-spacing: normal;
-           color: var(--text-3); }
-.you-bar .on { color: #4cb782; font-weight: 600; }
-.you-edit { max-width: 80ch; margin: 0 auto; padding: 32px 24px; }
-.you-edit textarea { width: 100%; min-height: 60vh; box-sizing: border-box; font: 450 14px/1.6 ui-monospace, monospace; color: var(--text-1);
-                     background: var(--bg-raised); border: 1px solid var(--border-3); border-radius: 8px; padding: 12px; }
 
 /* documents: normal mode, at the app's size; --col is the column, about 75 characters of 15px Inter */
 .doc { --col: 560px; max-width: var(--col); margin: 0 auto; padding: 32px 24px 120px; font-size: 15px; line-height: 24px;
