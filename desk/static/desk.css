@@ -47,9 +47,9 @@ kbd { font: 500 11px var(--font); color: var(--text-3); border: 1px solid var(--
 .brand { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 6px; font-weight: 500;
          text-decoration: none; }
 .side-head { display: flex; align-items: center; gap: 2px; margin-bottom: 12px; } .side-head .brand { flex: 1; }
-.side-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; color: var(--text-3); }
-.side-icon svg { width: 16px; height: 16px; }
-.side-icon:hover { background: var(--bg-raised); color: var(--text-2); }
+/* Linear's sidebar icon buttons, measured 2026-10-14: a 28px circle (radius 9999px) around a 14px filled icon */
+.side-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9999px; color: var(--text-3); }
+.side-icon:hover { background: lch(10.149% 0.689 272); color: var(--text-1); }
 .side-icon.here { background: var(--bg-active); color: var(--text-1); }
 .logo { width: 20px; height: 20px; border-radius: 5px; background: var(--accent); color: #fff; display: grid; place-items: center;
         font-size: 12px; font-weight: 600; }
