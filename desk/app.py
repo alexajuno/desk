@@ -142,7 +142,7 @@ def show(request: Request, slug: str):
 
 @app.get("/issue/{slug}/f/{name}")
 def issue_file(request: Request, slug: str, name: str):
-    """An issue's own file: Markdown and D2 render in the reading style, anything else is served as is."""
+    """An issue's own file: Markdown and D2 render as a document, anything else is served as is."""
     path = (store.folder(slug) / name).resolve()
     if path.parent != store.folder(slug).resolve() or not path.is_file():
         raise HTTPException(404)

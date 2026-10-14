@@ -1,9 +1,10 @@
 /* desk's look is Linear's dark theme, measured from linear.app on 2026-10-14 (getComputedStyle on
    the issue list, an issue page and the status menu): Inter Variable at weight 450 and 500, 13px for
    lists and the sidebar, 28px sidebar rows, 44px list rows, an inset panel with 12px corners, and
-   Linear's own lch() colours. Documents opened from a problem (.read) keep the reading rules from
-   the design doc: about 66 characters per line (Baymard: 50-75; WCAG 1.4.8: at most 80), line
-   spacing of at least 1.5, left-aligned, big text. */
+   Linear's own lch() colours. Documents opened from an issue and the You page (.doc) open at the app's
+   own size, an issue description's 15px on 24px. Read mode, the top bar's toggle, switches them to the
+   reading rules from the design doc: about 66 characters per line (Baymard: 50-75; WCAG 1.4.8: at most
+   80), line spacing of at least 1.5, left-aligned, big text. */
 
 /* Linear serves its own "Inter Variable" web font (document.fonts showed it loaded, 2026-10-14) with
    -webkit-font-smoothing: antialiased and text-rendering: optimizeLegibility. desk serves Inter too, so
@@ -136,24 +137,41 @@ button.primary:hover { background: #6e78db; }
 .review { border: 1px solid var(--border-3); border-radius: 10px; padding: 14px 16px; background: var(--bg-raised); margin: 0 0 24px; }
 .review .body { margin-bottom: 12px; }
 
-.you-bar { display: flex; align-items: center; gap: 10px; max-width: 66ch; margin: 24px auto 0; padding: 0 24px; font-size: 13px; color: var(--text-3); }
+.you-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 24px; font-size: 13px; line-height: 1.5; letter-spacing: normal;
+           color: var(--text-3); }
 .you-bar .on { color: #4cb782; font-weight: 600; }
-.you-edit { max-width: 80ch; margin: 24px auto; padding: 0 24px; }
+.you-edit { max-width: 80ch; margin: 0 auto; padding: 32px 24px; }
 .you-edit textarea { width: 100%; min-height: 60vh; box-sizing: border-box; font: 450 14px/1.6 ui-monospace, monospace; color: var(--text-1);
                      background: var(--bg-raised); border: 1px solid var(--border-3); border-radius: 8px; padding: 12px; }
 
-/* reading mode: documents */
-.read { max-width: 66ch; margin: 0 auto; padding: 32px 24px 0; font-size: 20px; line-height: 1.6; color: var(--text-2); }
-.read h1 { font-size: 32px; line-height: 1.25; color: var(--text-1); font-weight: 600; margin: 0 0 8px; }
-.read h2 { font-size: 25px; font-weight: 600; color: var(--text-1); margin: 2em 0 0.6em; padding-bottom: 6px; border-bottom: 1px solid var(--border-2); }
-.read h3 { font-size: 21px; font-weight: 600; color: var(--text-1); margin: 1.6em 0 0.4em; }
-.read p, .read ul, .read ol, .read table, .read blockquote { margin: 0 0 1.2em; }
-.read li { margin-bottom: 0.35em; }
-.read a { color: var(--accent); }
-.read strong { color: var(--text-1); }
-.read table { border-collapse: collapse; font-size: 16px; } .read td, .read th { border: 1px solid var(--border-3); padding: 6px 10px; vertical-align: top; }
-.read blockquote { background: var(--bg-raised); border-left: 4px solid var(--accent); padding: 8px 18px; border-radius: 0 8px 8px 0; }
-.read .trail { font-size: 14px; }
+/* documents: normal mode, at the app's size; --col is the column, about 75 characters of 15px Inter */
+.doc { --col: 560px; max-width: var(--col); margin: 0 auto; padding: 32px 24px 120px; font-size: 15px; line-height: 24px;
+       color: var(--text-2); letter-spacing: -0.1px; }
+.doc h1 { font-size: 24px; line-height: 1.3; color: var(--text-1); font-weight: 600; margin: 0 0 16px; letter-spacing: -0.2px; }
+.doc h2 { font-size: 18px; line-height: 1.4; font-weight: 600; color: var(--text-1); margin: 32px 0 8px; }
+.doc h3 { font-size: 15px; font-weight: 600; color: var(--text-1); margin: 24px 0 4px; }
+.doc p, .doc ul, .doc ol, .doc table, .doc blockquote { margin: 0 0 12px; }
+.doc li { margin-bottom: 4px; }
+.doc a { color: var(--accent); }
+.doc strong { color: var(--text-1); }
+.doc table { border-collapse: collapse; font-size: 13px; line-height: 20px; }
+.doc td, .doc th { border: 1px solid var(--border-3); padding: 4px 8px; vertical-align: top; }
+.doc blockquote { background: var(--bg-raised); border-left: 3px solid var(--accent); padding: 6px 14px; border-radius: 0 8px 8px 0; }
+
+/* documents in read mode: the big reading style */
+.read-mode .doc { --col: 66ch; font-size: 20px; line-height: 1.6; letter-spacing: normal; }
+.read-mode .doc h1 { font-size: 32px; line-height: 1.25; margin: 0 0 8px; letter-spacing: normal; }
+.read-mode .doc h2 { font-size: 25px; line-height: inherit; margin: 2em 0 0.6em; padding-bottom: 6px; border-bottom: 1px solid var(--border-2); }
+.read-mode .doc h3 { font-size: 21px; margin: 1.6em 0 0.4em; }
+.read-mode .doc p, .read-mode .doc ul, .read-mode .doc ol, .read-mode .doc table, .read-mode .doc blockquote { margin: 0 0 1.2em; }
+.read-mode .doc li { margin-bottom: 0.35em; }
+.read-mode .doc table { font-size: 16px; line-height: inherit; } .read-mode .doc td, .read-mode .doc th { padding: 6px 10px; }
+.read-mode .doc blockquote { border-left-width: 4px; padding: 8px 18px; }
+
+/* the top bar's Read mode toggle: quiet when off, raised when on */
+.mode-toggle { background: none; border-color: transparent; color: var(--text-3); }
+.mode-toggle:hover { background: var(--bg-raised); color: var(--text-1); }
+.read-mode .mode-toggle { background: var(--bg-active); border-color: var(--border-3); color: var(--text-1); }
 
 /* a document's section list */
 .onpage { font-size: 13px; line-height: 1.5; margin: 0 0 32px; } .onpage ul { list-style: none; padding-left: 0; margin: 0; }
@@ -162,7 +180,7 @@ button.primary:hover { background: #6e78db; }
 .onpage-label { font-size: 12px; font-weight: 500; color: var(--text-3); margin-bottom: 6px; }
 @media (min-width: 1300px) {
   .onpage { position: fixed; top: 64px; right: 28px; width: 210px; max-height: calc(100vh - 100px); overflow: auto; }
-  .scroll:has(.onpage) .read { margin-right: 250px; margin-left: max(24px, calc((100% - 66ch - 250px) / 2)); }
+  .scroll:has(.onpage) .doc { margin-right: 250px; margin-left: max(24px, calc((100% - var(--col) - 250px) / 2)); }
 }
 
 /* diagrams */

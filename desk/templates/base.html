@@ -3,6 +3,17 @@
 <meta charset="utf-8">
 <title>{% block title %}desk{% endblock %}</title>
 <link rel="stylesheet" href="/static/desk.css">
+<script>
+// Read mode: documents in the big reading style, remembered in this browser. Set before the page draws.
+if (localStorage.readMode) document.documentElement.classList.add("read-mode");
+function toggleReadMode(button) {
+  const scroll = document.querySelector(".scroll"), room = () => scroll.scrollHeight - scroll.clientHeight || 1;
+  const at = scroll.scrollTop / room(), on = document.documentElement.classList.toggle("read-mode");
+  if (on) localStorage.readMode = "1"; else delete localStorage.readMode;
+  button.setAttribute("aria-pressed", on);
+  scroll.scrollTop = at * room();
+}
+</script>
 <script id="desk-data" type="application/json">{{ {"states": states, "priorities": priorities, "state_names": state_names, "prio_names": prio_names} | tojson }}</script>
 <script src="/static/desk.js" defer></script>
 <template id="icons">
@@ -31,7 +42,7 @@
 </aside>
 
 <div class="panel">
-  <header class="bar">{% block crumb %}{% endblock %}<span class="right"><kbd title="Keyboard shortcuts">?</kbd></span></header>
+  <header class="bar">{% block crumb %}{% endblock %}<span class="right">{% block tools %}{% endblock %}<kbd title="Keyboard shortcuts">?</kbd></span></header>
   <div class="scroll">{% block main %}{% endblock %}</div>
 </div>
 

@@ -35,19 +35,18 @@
     <button class="prop pick" data-slug="{{ p.slug }}" data-field="priority" data-value="{{ p.priority }}" title="Change priority (P)">{{ prio(p.priority) }}{{ prio_names[p.priority] }}</button>
 
     <div class="label">Works in</div>
-    <button class="prop folder-pick" data-slug="{{ p.slug }}" data-value="{{ p.folder or '' }}" title="Pick the folder chats and agents start in">
+    <button class="prop folder-pick" data-slug="{{ p.slug }}" data-value="{{ p.folder or '' }}" title="Pick the folder chats and agents start in; ~ until you pick one">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z" stroke="lch(70% 1.2 272)" stroke-width="1.2"/></svg>
-      <span class="{{ '' if p.folder else 'muted' }}">{{ p.folder or "Pick a folder…" }}</span></button>
+      <span>{{ p.folder or "~" }}</span></button>
     {% if p.link %}<div class="label">Link</div><div class="prop static"><a href="{{ p.link }}">{{ p.link.split('/')[-1] }}</a></div>{% endif %}
     {% if files %}<div class="label">Files</div>
       {%- for f in files %}<div class="prop static"><a href="/issue/{{ p.slug }}/f/{{ f }}">{{ f }}</a></div>{% endfor %}{% endif %}
 
     <div class="label">Session</div>
     {%- set where = session.get("kind") %}{% set live = session.get("state") %}
-    {% if not p.folder %}<p class="notice">Pick "Works in" first. The session starts there, with that repo's rules.</p>{% endif %}
     {%- if not p.session and p.state in ("backlog", "planning") %}
     <form method="post" action="/issue/{{ p.slug }}/plan" style="margin: 0 0 4px"><button class="primary">Plan with Claude</button></form>
-    <p class="hint">Starts this issue's session in the repo, in its own worktree, and opens it in a terminal. You and Claude write the plan.</p>
+    <p class="hint">Starts this issue's session in Works in, in its own worktree if that folder is a git repo, and opens it in a terminal. You and Claude write the plan.</p>
     {%- elif p.state in ("backlog", "planning") and not p.section("Plan") %}
     <form method="post" action="/issue/{{ p.slug }}/jump" style="margin: 0 0 4px"><button class="primary">Back to the plan chat</button></form>
     <p class="hint">Write the plan together in that chat. Then the same session can carry it out.</p>

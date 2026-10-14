@@ -47,3 +47,11 @@
   <input type="text" name="title" placeholder="{{ label }}" required autocomplete="off">
 </form>
 {%- endmacro %}
+
+{% macro read_toggle() -%}
+<button class="mode-toggle" type="button" aria-pressed="false" title="Big text for reading, remembered in this browser"
+  onclick="toggleReadMode(this)">
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M8 4.2C6.6 3.2 4.6 2.8 2 3v9c2.6-.2 4.6.2 6 1.2 1.4-1 3.4-1.4 6-1.2V3c-2.6-.2-4.6.2-6 1.2zM8 4.2v9"/></svg>
+  Read mode</button>
+<script>document.currentScript.previousElementSibling.setAttribute("aria-pressed", document.documentElement.classList.contains("read-mode"))</script>
+{%- endmacro %}
