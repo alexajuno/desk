@@ -15,13 +15,34 @@
   </select>
 </form>
 <dl class="facts">
-  {% if p.folder %}<dt>Folder</dt><dd><code>{{ p.folder }}</code></dd>{% endif %}
+  <dt>Works in</dt><dd><form method="post" action="/p/{{ p.slug }}/folder" class="row" style="margin: 0">
+    <input type="text" name="folder" value="{{ p.folder or '' }}" placeholder="~/projects/..." autocomplete="off">
+    <button class="small">Save</button></form></dd>
   {% if p.link %}<dt>Link</dt><dd><a href="{{ p.link }}">{{ p.link }}</a></dd>{% endif %}
   <dt>Stored in</dt><dd><code>problems/{{ p.slug }}/</code></dd>
   {%- if files %}
   <dt>Files</dt><dd>{% for f in files %}<a href="/p/{{ p.slug }}/f/{{ f }}">{{ f }}</a>{{ ", " if not loop.last }}{% endfor %}</dd>
   {%- endif %}
 </dl>
+<h2>Work</h2>
+{% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
+{% if not p.folder %}<p class="notice">Set "Works in" first. Chats and agents start there, with that repo's rules.</p>{% endif %}
+<div class="row" style="margin-bottom: 8px">
+  <form method="post" action="/p/{{ p.slug }}/chat" style="margin: 0">
+    <button class="{{ 'primary' if not p.section('Plan') }}">{{ 'Back to the plan chat' if p.chat else 'Plan with Claude' }}</button></form>
+  <form method="post" action="/p/{{ p.slug }}/agent" style="margin: 0">
+    <button class="{{ 'primary' if p.section('Plan') }}" {{ 'disabled' if not p.section('Plan') }} title="Runs in the background from the plan">Start agent</button></form>
+</div>
+{% if p.sessions %}
+<ul class="sessions">
+  {%- for sid in p.sessions | reverse %}
+  {%- set row = live.get(sid, {}) %}
+  <li><span class="what">Agent <code>{{ sid }}</code></span>
+    <span class="live {{ row.state }}">{{ row.state or "gone" }}</span>
+    <form method="post" action="/p/{{ p.slug }}/attach/{{ sid }}" style="margin: 0"><button class="small">Jump back</button></form></li>
+  {%- endfor %}
+</ul>
+{% endif %}
 {{ body | safe }}
 <h2>Subproblems</h2>
 {% if kids %}{{ tree(kids, kids_of) }}{% else %}<p class="muted">None yet.</p>{% endif %}

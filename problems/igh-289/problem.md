@@ -9,4 +9,4 @@ created: '2026-10-14T20:40:12'
 
 ## Resume
 
-#669 is the whole job now: the patch alone, price 2 as the PO said. Tell Teeinblue's team before it ships.
+PR #669 is the whole job now: the patch alone, price 2 as the PO said. Tell Teeinblue's team before it ships.

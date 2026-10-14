@@ -8,4 +8,4 @@ created: '2026-10-14T20:40:10'
 
 ## Resume
 
-#663 (refuse `..` keys) and #664 (public image id) are drafts. The ownership check is not built.
+PR #663 (refuse `..` keys) and #664 (public image id) are drafts. The ownership check is not built.

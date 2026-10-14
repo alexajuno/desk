@@ -33,7 +33,8 @@ class Problem:
     parent: str | None = None
     folder: str | None = None
     link: str | None = None
-    sessions: list[str] = field(default_factory=list)
+    chat: str | None = None  # the planning chat's session id
+    sessions: list[str] = field(default_factory=list)  # background agents' short ids
     created: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     body: str = ""
 

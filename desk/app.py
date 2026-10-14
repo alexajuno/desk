@@ -3,7 +3,9 @@
 Design: ~/notes/canvas/effective-work.md. Run: uv run uvicorn desk.app:app --port 8790
 """
 
+import subprocess
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
 from fastapi import HTTPException
@@ -11,6 +13,7 @@ from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from . import agents
 from . import problems as store
 from .render import to_html, to_html_with_toc
 
@@ -72,8 +75,9 @@ def show(request: Request, slug: str):
         trail.insert(0, all_problems[up])
         up = all_problems[up].parent
     kids_of = open_kids(all_problems)
+    live = agents.live()
     context = {"p": p, "trail": trail, "kids": kids_of(slug), "kids_of": kids_of, "body": to_html(p.body),
-               "files": store.files(slug)}
+               "files": store.files(slug), "live": live, "msg": request.query_params.get("msg")}
     return templates.TemplateResponse(request, "problem.html", context)
 
 
@@ -95,4 +99,49 @@ def update(slug: str, priority: str = Form(...), state: str = Form(...)):
     p = store.load(slug)
     p.priority, p.state = priority, state
     store.save(p)
+    return RedirectResponse(f"/p/{slug}", status_code=303)
+
+
+@app.post("/p/{slug}/folder")
+def set_folder(slug: str, folder: str = Form("")):
+    p = store.load(slug)
+    p.folder = folder.strip() or None
+    store.save(p)
+    return RedirectResponse(f"/p/{slug}", status_code=303)
+
+
+@app.post("/p/{slug}/chat")
+def chat(slug: str):
+    """Open the planning chat: a new one, or the one this problem already has."""
+    p = store.load(slug)
+    if p.chat:
+        agents.resume_chat(p, p.chat)
+    else:
+        p.chat = agents.start_chat(p, store.folder(slug))
+        if p.state == "backlog":
+            p.state = "planning"
+        store.save(p)
+    return RedirectResponse(f"/p/{slug}", status_code=303)
+
+
+@app.post("/p/{slug}/agent")
+def start_agent(slug: str):
+    p = store.load(slug)
+    if not p.section("Plan"):
+        return RedirectResponse(f"/p/{slug}?msg=Write+a+plan+first", status_code=303)
+    try:
+        short_id = agents.start_agent(p, store.folder(slug))
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+        return RedirectResponse(f"/p/{slug}?msg={quote(str(error)[:300])}", status_code=303)
+    p.sessions.append(short_id)
+    p.state = "running"
+    store.save(p)
+    return RedirectResponse(f"/p/{slug}", status_code=303)
+
+
+@app.post("/p/{slug}/attach/{short_id}")
+def attach(slug: str, short_id: str):
+    p = store.load(slug)
+    if short_id in p.sessions:
+        agents.attach(p, short_id)
     return RedirectResponse(f"/p/{slug}", status_code=303)

@@ -9,4 +9,4 @@ created: '2026-10-14T20:40:11'
 
 ## Resume
 
-#666 still has its patch test and no body. Ship #669 first. The run that deletes patch tests across open PRs was stopped part way; check which PRs it reached.
+PR #666 still has its patch test and no body. Ship #669 first. The run that deletes patch tests across open PRs was stopped part way; check which PRs it reached.
