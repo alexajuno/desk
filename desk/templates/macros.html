@@ -28,6 +28,6 @@
   <select name="priority" aria-label="Priority">
     {%- for level in priorities %}<option value="{{ level }}" {{ 'selected' if level == 'none' }}>{{ level | title }}</option>{% endfor %}
   </select>
-  <button class="primary">Park</button>
+  <button class="primary">Add</button>
 </form>
 {%- endmacro %}

@@ -1,7 +1,7 @@
 ---
 title: 'Talotrace: wait for their reply'
 priority: medium
-state: parked
+state: backlog
 created: '2026-10-14T20:40:14'
 ---
 

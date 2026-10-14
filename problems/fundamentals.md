@@ -1,7 +1,7 @@
 ---
 title: 'Fundamentals: Postgres transactions through Hermitage'
 priority: medium
-state: parked
+state: backlog
 folder: ~/projects/fundamentals
 created: '2026-10-14T20:40:15'
 ---

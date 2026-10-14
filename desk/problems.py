@@ -17,7 +17,7 @@ PROBLEMS_DIR = Path(__file__).resolve().parent.parent / "problems"
 
 # Linear's priority levels, most urgent first.
 PRIORITIES = ["urgent", "high", "medium", "low", "none"]
-STATES = ["parked", "planning", "running", "review", "done", "dropped"]
+STATES = ["backlog", "planning", "running", "review", "done", "dropped"]
 SECTIONS = ["Resume", "Plan", "Saved questions", "Result", "Look back"]
 
 FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
@@ -28,7 +28,7 @@ class Problem:
     slug: str
     title: str
     priority: str = "none"
-    state: str = "parked"
+    state: str = "backlog"
     parent: str | None = None
     folder: str | None = None
     link: str | None = None

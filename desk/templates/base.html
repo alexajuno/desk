@@ -2,13 +2,26 @@
 <meta charset="utf-8">
 <title>{% block title %}desk{% endblock %}</title>
 <link rel="stylesheet" href="/static/reading.css">
-<nav>
-  <div class="brand">desk</div>
-  {% for path, label in [("/park", "Park")] %}
-  <a href="{{ path }}" class="{{ 'here' if request.url.path == path }}">{{ label }}</a>
-  {% endfor %}
+<nav class="side">
+  <a class="brand" href="/backlog"><span class="logo">d</span>desk</a>
+  {%- set here = request.url.path %}
+  <a class="nav-item soon" title="Coming with the review step">
+    <svg viewBox="0 0 16 16"><path d="M2 9h3l1 2h4l1-2h3M3 3h10l1 6v4H2V9z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+    Inbox<span class="count">soon</span></a>
+  <a class="nav-item soon" title="Coming with the board step">
+    <svg viewBox="0 0 16 16"><rect x="2" y="3" width="3.5" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="6.25" y="3" width="3.5" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="10.5" y="3" width="3.5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+    Board<span class="count">soon</span></a>
+  <a class="nav-item {{ 'here' if here == '/backlog' }}" href="/backlog">
+    <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2.2 1.8"/></svg>
+    Backlog<span class="count">{{ sidebar.backlog }}</span></a>
+  {%- if sidebar.running %}
+  <div class="nav-label">Running</div>
+  {%- for p in sidebar.running %}
+  <a class="nav-item {{ 'here' if here == '/p/' ~ p.slug }}" href="/p/{{ p.slug }}"><span class="state running"></span><span class="nav-title">{{ p.title }}</span></a>
+  {%- endfor %}
+  {%- endif %}
 </nav>
-<main>{% block main %}{% endblock %}</main>
+<main><div class="page {% block width %}{% endblock %}">{% block main %}{% endblock %}</div></main>
 <script>
 // Reload when any problem file changes, keeping the scroll position.
 let seen = null;

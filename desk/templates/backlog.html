@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% from "macros.html" import tree, add_form, legend %}
-{% block title %}Park · desk{% endblock %}
+{% block title %}Backlog · desk{% endblock %}
+{% block width %}wide{% endblock %}
 {% block main %}
-<h1 style="margin-bottom: 24px">Park</h1>
+<h1 style="margin-bottom: 24px">Backlog</h1>
 {{ add_form(None, priorities, "New problem, in one line") }}
 {{ legend(states[:5]) }}
 {% for level in priorities %}
@@ -11,5 +12,5 @@
   <div class="group">{{ level | title }} · {{ group | length }}</div>
   {{ tree(group, kids_of) }}
   {%- endif %}
-{% else %}<p>Nothing parked.</p>{% endfor %}
+{% else %}<p>Nothing in the backlog.</p>{% endfor %}
 {% endblock %}

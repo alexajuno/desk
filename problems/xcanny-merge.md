@@ -1,7 +1,7 @@
 ---
 title: 'xcanny: merge posts in the API and the MCP'
 priority: medium
-state: parked
+state: backlog
 folder: ~/projects/xcanny
 created: '2026-10-14T20:40:13'
 ---
