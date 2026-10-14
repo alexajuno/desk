@@ -10,7 +10,8 @@ D2_BLOCK = re.compile(r"^```d2\n(.*?)^```", re.S | re.M)
 
 
 def _draw(source: str) -> str:
-    run = subprocess.run(["d2", "--pad=10", "-", "-"], input=source.encode(), capture_output=True)
+    # Theme 200 is D2's "Dark Mauve", to sit on desk's dark panel.
+    run = subprocess.run(["d2", "--pad=16", "--theme=200", "-", "-"], input=source.encode(), capture_output=True)
     if run.returncode:
         return f'<pre class="err">{html.escape(run.stderr.decode())}</pre>'
     return f'<div class="d2">{run.stdout.decode()}</div>'

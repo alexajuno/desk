@@ -4,6 +4,7 @@ Design: ~/notes/canvas/effective-work.md. Run: uv run uvicorn desk.app:app --por
 """
 
 import subprocess
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
@@ -32,7 +33,13 @@ def sidebar(request: Request) -> dict:
 
 
 templates = Jinja2Templates(directory=HERE / "templates", context_processors=[sidebar])
-templates.env.globals.update(priorities=store.PRIORITIES, states=store.STATES)
+templates.env.globals.update(
+    priorities=store.PRIORITIES, states=store.STATES,
+    state_names={"backlog": "Backlog", "planning": "Planning", "running": "Running", "review": "In review",
+                 "done": "Done", "dropped": "Dropped"},
+    prio_names={"urgent": "Urgent", "high": "High", "medium": "Medium", "low": "Low", "none": "No priority"},
+)
+templates.env.filters["short_date"] = lambda iso: datetime.fromisoformat(str(iso)).strftime("%b %-d") if iso else ""
 
 
 def open_kids(all_problems: dict[str, store.Problem]):
@@ -76,8 +83,10 @@ def show(request: Request, slug: str):
         up = all_problems[up].parent
     kids_of = open_kids(all_problems)
     live = agents.live()
+    all_kids = store.children(all_problems, slug)
+    progress = (sum(k.state == "done" for k in all_kids), sum(k.state != "dropped" for k in all_kids))
     context = {"p": p, "trail": trail, "kids": kids_of(slug), "kids_of": kids_of, "body": to_html(p.body),
-               "files": store.files(slug), "live": live, "msg": request.query_params.get("msg")}
+               "files": store.files(slug), "live": live, "msg": request.query_params.get("msg"), "progress": progress}
     return templates.TemplateResponse(request, "problem.html", context)
 
 
@@ -94,12 +103,15 @@ def problem_file(request: Request, slug: str, name: str):
     return templates.TemplateResponse(request, "file.html", {"p": store.load(slug), "name": name, "body": body, "toc": toc})
 
 
-@app.post("/p/{slug}")
-def update(slug: str, priority: str = Form(...), state: str = Form(...)):
+@app.post("/p/{slug}/set")
+def set_field(slug: str, field: str = Form(...), value: str = Form(...)):
+    allowed = {"priority": store.PRIORITIES, "state": store.STATES}
+    if value not in allowed.get(field, []):
+        raise HTTPException(422, f"{field} cannot be {value}")
     p = store.load(slug)
-    p.priority, p.state = priority, state
+    setattr(p, field, value)
     store.save(p)
-    return RedirectResponse(f"/p/{slug}", status_code=303)
+    return PlainTextResponse("ok")
 
 
 @app.post("/p/{slug}/folder")

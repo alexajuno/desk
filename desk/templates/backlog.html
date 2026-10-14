@@ -1,15 +1,16 @@
 {% extends "base.html" %}
-{% from "macros.html" import tree, add_form, legend %}
+{% from "macros.html" import tree, add_form, prio %}
 {% block title %}Backlog · desk{% endblock %}
+{% block crumb %}<span>Backlog</span>{% endblock %}
 {% block main %}
-<h1 style="margin-bottom: 16px">Backlog</h1>
-{{ add_form(None, priorities, "New problem, in one line") }}
-{{ legend(states[:5]) }}
-{% for level in priorities %}
-  {%- set group = top | selectattr("priority", "equalto", level) | list %}
-  {%- if group %}
-  <div class="group">{{ level | title }} · {{ group | length }}</div>
-  {{ tree(group, kids_of) }}
-  {%- endif %}
-{% else %}<p>Nothing in the backlog.</p>{% endfor %}
+<div class="page">
+  {{ add_form(None, "New problem…   (C)") }}
+  {% for level in priorities %}
+    {%- set group = top | selectattr("priority", "equalto", level) | list %}
+    {%- if group %}
+    <div class="group">{{ prio(level) }}{{ prio_names[level] }}<span class="count">{{ group | length }}</span></div>
+    {{ tree(group, kids_of) }}
+    {%- endif %}
+  {% else %}<p class="muted" style="padding: 16px">Nothing in the backlog.</p>{% endfor %}
+</div>
 {% endblock %}

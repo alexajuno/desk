@@ -1,50 +1,47 @@
 {% extends "base.html" %}
 {% from "macros.html" import tree, add_form, prio, state %}
 {% block title %}{{ p.title }} · desk{% endblock %}
+{% block crumb %}<a href="/backlog">Backlog</a>{% for a in trail %}<span class="sep">›</span><a href="/p/{{ a.slug }}">{{ a.title }}</a>{% endfor %}<span class="sep">›</span><span>{{ p.title }}</span>{% endblock %}
 {% block main %}
-{% if trail %}<div class="trail">{% for a in trail %}<a href="/p/{{ a.slug }}">{{ a.title }}</a> › {% endfor %}</div>{% endif %}
-<h1>{{ p.title }}</h1>
-<form method="post" action="/p/{{ p.slug }}" class="head">
-  {{ prio(p.priority) }}
-  <select name="priority" onchange="this.form.submit()" aria-label="Priority">
-    {%- for level in priorities %}<option value="{{ level }}" {{ 'selected' if level == p.priority }}>{{ level | title }}</option>{% endfor %}
-  </select>
-  {{ state(p.state) }}
-  <select name="state" onchange="this.form.submit()" aria-label="State">
-    {%- for s in states %}<option value="{{ s }}" {{ 'selected' if s == p.state }}>{{ s }}</option>{% endfor %}
-  </select>
-</form>
-<dl class="facts">
-  <dt>Works in</dt><dd><form method="post" action="/p/{{ p.slug }}/folder" class="row" style="margin: 0">
-    <input type="text" name="folder" value="{{ p.folder or '' }}" placeholder="~/projects/..." autocomplete="off">
-    <button class="small">Save</button></form></dd>
-  {% if p.link %}<dt>Link</dt><dd><a href="{{ p.link }}">{{ p.link }}</a></dd>{% endif %}
-  <dt>Stored in</dt><dd><code>problems/{{ p.slug }}/</code></dd>
-  {%- if files %}
-  <dt>Files</dt><dd>{% for f in files %}<a href="/p/{{ p.slug }}/f/{{ f }}">{{ f }}</a>{{ ", " if not loop.last }}{% endfor %}</dd>
-  {%- endif %}
-</dl>
-<h2>Work</h2>
-{% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
-{% if not p.folder %}<p class="notice">Set "Works in" first. Chats and agents start there, with that repo's rules.</p>{% endif %}
-<div class="row" style="margin-bottom: 8px">
-  <form method="post" action="/p/{{ p.slug }}/chat" style="margin: 0">
-    <button class="{{ 'primary' if not p.section('Plan') }}">{{ 'Back to the plan chat' if p.chat else 'Plan with Claude' }}</button></form>
-  <form method="post" action="/p/{{ p.slug }}/agent" style="margin: 0">
-    <button class="{{ 'primary' if p.section('Plan') }}" {{ 'disabled' if not p.section('Plan') }} title="Runs in the background from the plan">Start agent</button></form>
+<div class="issue">
+  <div>
+    <h1>{{ p.title }}</h1>
+    {% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
+    <div class="body">{{ body | safe }}</div>
+    <div class="section-label">Subproblems{% if progress[1] %}<span class="pill">{{ progress[0] }}/{{ progress[1] }} done</span>{% endif %}</div>
+    {% if kids %}{{ tree(kids, kids_of) }}{% endif %}
+    {{ add_form(p.slug, "New subproblem…") }}
+  </div>
+
+  <aside class="props">
+    <div class="label">Properties</div>
+    <button class="prop pick" data-slug="{{ p.slug }}" data-field="state" data-value="{{ p.state }}" title="Change status (S)">{{ state(p.state) }}{{ state_names[p.state] }}</button>
+    <button class="prop pick" data-slug="{{ p.slug }}" data-field="priority" data-value="{{ p.priority }}" title="Change priority (P)">{{ prio(p.priority) }}{{ prio_names[p.priority] }}</button>
+
+    <div class="label">Works in</div>
+    <form class="folder-form" method="post" action="/p/{{ p.slug }}/folder">
+      <input type="text" name="folder" value="{{ p.folder or '' }}" placeholder="~/projects/… (Enter to save)" autocomplete="off"></form>
+    {% if p.link %}<div class="label">Link</div><div class="prop static"><a href="{{ p.link }}">{{ p.link.split('/')[-1] }}</a></div>{% endif %}
+    {% if files %}<div class="label">Files</div>
+      {%- for f in files %}<div class="prop static"><a href="/p/{{ p.slug }}/f/{{ f }}">{{ f }}</a></div>{% endfor %}{% endif %}
+
+    <div class="label">Agents</div>
+    {% if not p.folder %}<p class="notice">Set "Works in" first. Chats and agents start there, with that repo's rules.</p>{% endif %}
+    <div class="row" style="margin-bottom: 8px">
+      <form method="post" action="/p/{{ p.slug }}/chat" style="margin: 0">
+        <button class="{{ 'primary' if not p.section('Plan') }}">{{ 'Back to the plan chat' if p.chat else 'Plan with Claude' }}</button></form>
+      <form method="post" action="/p/{{ p.slug }}/agent" style="margin: 0">
+        <button class="{{ 'primary' if p.section('Plan') }}" {{ 'disabled' if not p.section('Plan') }} title="Runs in the background from the plan">Start agent</button></form>
+    </div>
+    {% if p.sessions %}
+    <ul class="sessions">
+      {%- for sid in p.sessions | reverse %}{% set row = live.get(sid, {}) %}
+      <li><span class="what">Agent <code>{{ sid }}</code></span><span class="live {{ row.state }}">{{ row.state or "gone" }}</span>
+        <form method="post" action="/p/{{ p.slug }}/attach/{{ sid }}" style="margin: 0"><button>Jump back</button></form></li>
+      {%- endfor %}
+    </ul>
+    {% endif %}
+    <div class="label">Stored in</div><div class="prop static muted">problems/{{ p.slug }}/</div>
+  </aside>
 </div>
-{% if p.sessions %}
-<ul class="sessions">
-  {%- for sid in p.sessions | reverse %}
-  {%- set row = live.get(sid, {}) %}
-  <li><span class="what">Agent <code>{{ sid }}</code></span>
-    <span class="live {{ row.state }}">{{ row.state or "gone" }}</span>
-    <form method="post" action="/p/{{ p.slug }}/attach/{{ sid }}" style="margin: 0"><button class="small">Jump back</button></form></li>
-  {%- endfor %}
-</ul>
-{% endif %}
-{{ body | safe }}
-<h2>Subproblems</h2>
-{% if kids %}{{ tree(kids, kids_of) }}{% else %}<p class="muted">None yet.</p>{% endif %}
-{{ add_form(p.slug, priorities, "New subproblem, in one line") }}
 {% endblock %}
