@@ -1,9 +1,15 @@
 {% extends "base.html" %}
-{% from "macros.html" import tree, add_form %}
+{% from "macros.html" import tree, add_form, legend %}
 {% block title %}Park · desk{% endblock %}
 {% block main %}
-<h1>Park</h1>
-<p class="muted">Everything not finished, most urgent first. Subproblems sit under their parent.</p>
+<h1 style="margin-bottom: 24px">Park</h1>
 {{ add_form(None, priorities, "New problem, in one line") }}
-{% if top %}{{ tree(top, kids_of) }}{% else %}<p>Nothing parked.</p>{% endif %}
+{{ legend(states[:5]) }}
+{% for level in priorities %}
+  {%- set group = top | selectattr("priority", "equalto", level) | list %}
+  {%- if group %}
+  <div class="group">{{ level | title }} · {{ group | length }}</div>
+  {{ tree(group, kids_of) }}
+  {%- endif %}
+{% else %}<p>Nothing parked.</p>{% endfor %}
 {% endblock %}

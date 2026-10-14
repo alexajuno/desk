@@ -13,8 +13,8 @@ nav a { display: block; padding: 5px 0; color: #333; text-decoration: none; }
 nav a.here { font-weight: 700; color: #000; }
 nav a:hover { color: #0b57d0; }
 
-main { margin-left: 200px; max-width: 66ch; padding: 32px 48px 160px; }
-h1 { font-size: 32px; line-height: 1.25; margin-bottom: 0.3em; }
+main { margin-left: 200px; max-width: 66ch; padding: 48px 48px 160px; }
+h1 { font-size: 32px; line-height: 1.25; margin: 0; }
 h2 { font-size: 25px; margin-top: 2em; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
 h3 { font-size: 21px; margin-top: 1.6em; }
 p, ul, ol, table, blockquote, form { margin: 0 0 1.2em; }
@@ -27,27 +27,64 @@ blockquote { background: #FFF8E1; border-left: 5px solid #f0c040; padding: 8px 1
 .err { color: #b00; }
 .muted { color: #6b6b6b; font-size: 17px; }
 
-/* problems */
-.tree { list-style: none; padding-left: 0; }
-.tree .tree { padding-left: 1.4em; border-left: 2px solid #e6e6df; margin: 0.3em 0 0.3em 0.3em; }
-.tree li { margin: 0.25em 0; }
-.tree a { text-decoration: none; color: #1d1d1f; }
-.tree a:hover { color: #0b57d0; }
-.prio, .state { font-size: 14px; padding: 1px 7px; border-radius: 10px; margin-left: 6px; white-space: nowrap; }
-.prio.urgent { background: #fde2e1; color: #a1170f; }
-.prio.high { background: #fdebd3; color: #8a4b00; }
-.prio.medium { background: #e9eefc; color: #2b4a9b; }
-.prio.low { background: #eef0ee; color: #4f5a4f; }
-.prio.none { display: none; }
-.state { background: #efefea; color: #555; }
-.state.running { background: #e3f4e7; color: #1b6b33; }
-.state.review { background: #f3e8fd; color: #6a2b9b; }
+/* Design: weight and colour carry importance, not extra font sizes; one spacing scale
+   (4, 8, 12, 16, 24, 32, 48 px); one filled button per page for the main action; priority and
+   state look different from each other (bars for priority, a filling circle for state, as Linear does). */
 
-input[type=text], select { font: inherit; font-size: 18px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
-input[type=text] { width: 100%; box-sizing: border-box; }
-button { font: inherit; font-size: 17px; padding: 6px 14px; border: 1px solid #bbb; border-radius: 6px; background: #fff; cursor: pointer; }
-button:hover { background: #f0f0ea; }
-.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+/* problem rows */
+.tree { list-style: none; padding-left: 0; margin: 0 0 24px; }
+.tree .tree { margin: 0 0 0 20px; padding-left: 12px; border-left: 1px solid #e3e3dc; }
+.tree li { margin: 0; }
+.item { display: flex; align-items: center; gap: 12px; padding: 8px 12px; margin: 0 -12px; border-radius: 8px;
+        text-decoration: none; color: #1d1d1f; }
+.item:hover { background: #efefe8; }
+.item .title { flex: 1; }
+.tree > li > .item .title { font-weight: 600; }
+.tree .tree > li > .item .title { font-weight: 400; color: #333; }
+.item .meta { font-size: 15px; color: #8a8a82; }
+
+/* priority: bars, or a red square for urgent */
+.prio { display: inline-flex; align-items: flex-end; gap: 2px; width: 16px; height: 14px; flex: none; }
+.prio i { width: 4px; background: #d6d6ce; border-radius: 1px; }
+.prio i:nth-child(1) { height: 5px; } .prio i:nth-child(2) { height: 9px; } .prio i:nth-child(3) { height: 14px; }
+.prio.high i { background: #55554f; }
+.prio.medium i:nth-child(-n+2) { background: #55554f; }
+.prio.low i:nth-child(1) { background: #55554f; }
+.prio.urgent { align-items: center; justify-content: center; background: #e5484d; color: #fff; border-radius: 4px;
+               font: 700 11px/1 system-ui, sans-serif; }
+
+/* state: a circle that fills as the problem moves */
+.state { width: 14px; height: 14px; border-radius: 50%; flex: none; box-sizing: border-box; border: 2px solid var(--c);
+         background: conic-gradient(var(--c) var(--f), transparent 0); }
+.state.parked { --c: #a3a39b; --f: 0%; border-style: dashed; }
+.state.planning { --c: #3e63dd; --f: 25%; }
+.state.running { --c: #d18d00; --f: 50%; }
+.state.review { --c: #30a46c; --f: 75%; }
+.state.done { --c: #8e4ec6; --f: 100%; }
+.state.dropped { --c: #a3a39b; --f: 100%; opacity: 0.5; }
+
+.group { font-size: 15px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #8a8a82;
+         margin: 32px 0 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 15px; color: #8a8a82; margin: 0 0 24px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* forms */
+input[type=text], select { font: inherit; font-size: 18px; height: 44px; padding: 0 12px; border: 1px solid #d0d0c8;
+                           border-radius: 8px; background: #fff; color: #1d1d1f; box-sizing: border-box; }
+input[type=text] { width: 100%; }
+input[type=text]:focus, select:focus { outline: none; border-color: #0b57d0; box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.2); }
+button { font: inherit; font-size: 17px; font-weight: 600; height: 44px; padding: 0 18px; border-radius: 8px; cursor: pointer;
+         border: 1px solid #d0d0c8; background: #fff; color: #1d1d1f; }
+button.primary { background: #1d1d1f; border-color: #1d1d1f; color: #fff; }
+button.primary:hover { background: #3a3a37; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.add { padding: 16px; background: #f2f2ed; border-radius: 12px; margin: 0 0 32px; }
+
+/* problem page */
+.head { display: flex; align-items: center; gap: 12px; margin: 16px 0 16px; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 16px; color: #55554f; margin: 0 0 32px; }
+.facts dt { color: #8a8a82; } .facts dd { margin: 0; }
+.trail { font-size: 15px; color: #8a8a82; margin: 0 0 8px; } .trail a { color: #8a8a82; }
 
 @media (max-width: 1000px) {
   nav { position: sticky; top: 0; z-index: 1; width: auto; height: auto; padding: 6px 16px; display: flex; gap: 18px;

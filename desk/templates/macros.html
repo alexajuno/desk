@@ -1,25 +1,33 @@
-{% macro badges(p) -%}
-<span class="prio {{ p.priority }}">{{ p.priority | title }}</span>
-{%- if p.state != "parked" %}<span class="state {{ p.state }}">{{ p.state }}</span>{% endif %}
+{% macro prio(level) -%}
+{%- if level == "urgent" %}<span class="prio urgent" title="Urgent">!</span>
+{%- else %}<span class="prio {{ level }}" title="{{ level | title }}"><i></i><i></i><i></i></span>{% endif -%}
 {%- endmacro %}
+
+{% macro state(s) -%}<span class="state {{ s }}" title="{{ s }}"></span>{%- endmacro %}
 
 {% macro tree(items, kids_of) -%}
 <ul class="tree">
   {%- for p in items %}
-  <li><a href="/p/{{ p.slug }}">{{ p.title }}</a>{{ badges(p) }}
-    {%- set kids = kids_of(p.slug) %}{% if kids %}{{ tree(kids, kids_of) }}{% endif %}
+  <li>
+    <a class="item" href="/p/{{ p.slug }}">{{ prio(p.priority) }}{{ state(p.state) }}<span class="title">{{ p.title }}</span>
+      {%- set kids = kids_of(p.slug) %}{% if kids %}<span class="meta">{{ kids | length }}</span>{% endif %}</a>
+    {%- if kids %}{{ tree(kids, kids_of) }}{% endif %}
   </li>
   {%- endfor %}
 </ul>
 {%- endmacro %}
 
+{% macro legend(states) -%}
+<div class="legend">{% for s in states %}<span>{{ state(s) }}{{ s }}</span>{% endfor %}</div>
+{%- endmacro %}
+
 {% macro add_form(parent, priorities, label) -%}
-<form method="post" action="/problems" class="row">
+<form method="post" action="/problems" class="row add">
   {% if parent %}<input type="hidden" name="parent" value="{{ parent }}">{% endif %}
   <input type="text" name="title" placeholder="{{ label }}" required autocomplete="off" style="flex: 1 1 20ch">
-  <select name="priority">
+  <select name="priority" aria-label="Priority">
     {%- for level in priorities %}<option value="{{ level }}" {{ 'selected' if level == 'none' }}>{{ level | title }}</option>{% endfor %}
   </select>
-  <button>Park</button>
+  <button class="primary">Park</button>
 </form>
 {%- endmacro %}

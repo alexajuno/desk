@@ -1,22 +1,24 @@
 {% extends "base.html" %}
-{% from "macros.html" import tree, add_form, badges %}
+{% from "macros.html" import tree, add_form, prio, state %}
 {% block title %}{{ p.title }} · desk{% endblock %}
 {% block main %}
-{% if trail %}<p class="muted">{% for a in trail %}<a href="/p/{{ a.slug }}">{{ a.title }}</a> › {% endfor %}</p>{% endif %}
+{% if trail %}<div class="trail">{% for a in trail %}<a href="/p/{{ a.slug }}">{{ a.title }}</a> › {% endfor %}</div>{% endif %}
 <h1>{{ p.title }}</h1>
-<form method="post" action="/p/{{ p.slug }}" class="row">
-  <select name="priority" onchange="this.form.submit()">
+<form method="post" action="/p/{{ p.slug }}" class="head">
+  {{ prio(p.priority) }}
+  <select name="priority" onchange="this.form.submit()" aria-label="Priority">
     {%- for level in priorities %}<option value="{{ level }}" {{ 'selected' if level == p.priority }}>{{ level | title }}</option>{% endfor %}
   </select>
-  <select name="state" onchange="this.form.submit()">
+  {{ state(p.state) }}
+  <select name="state" onchange="this.form.submit()" aria-label="State">
     {%- for s in states %}<option value="{{ s }}" {{ 'selected' if s == p.state }}>{{ s }}</option>{% endfor %}
   </select>
 </form>
-<p class="muted">
-  {% if p.folder %}Folder: <code>{{ p.folder }}</code>{% endif %}
-  {% if p.link %}<br>Link: <a href="{{ p.link }}">{{ p.link }}</a>{% endif %}
-  <br>File: <code>problems/{{ p.slug }}.md</code>
-</p>
+<dl class="facts">
+  {% if p.folder %}<dt>Folder</dt><dd><code>{{ p.folder }}</code></dd>{% endif %}
+  {% if p.link %}<dt>Link</dt><dd><a href="{{ p.link }}">{{ p.link }}</a></dd>{% endif %}
+  <dt>File</dt><dd><code>problems/{{ p.slug }}.md</code></dd>
+</dl>
 {{ body | safe }}
 <h2>Subproblems</h2>
 {% if kids %}{{ tree(kids, kids_of) }}{% else %}<p class="muted">None yet.</p>{% endif %}
