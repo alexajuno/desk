@@ -83,10 +83,13 @@ def show(request: Request, slug: str):
         up = all_problems[up].parent
     kids_of = open_kids(all_problems)
     live = agents.live()
+    agent_files = {name: to_html(path.read_text(encoding="utf-8"))
+                   for name in ("questions.md", "result.md") if (path := store.folder(slug) / name).is_file()}
     all_kids = store.children(all_problems, slug)
     progress = (sum(k.state == "done" for k in all_kids), sum(k.state != "dropped" for k in all_kids))
     context = {"p": p, "trail": trail, "kids": kids_of(slug), "kids_of": kids_of, "body": to_html(p.body),
-               "files": store.files(slug), "live": live, "msg": request.query_params.get("msg"), "progress": progress}
+               "files": store.files(slug), "live": live, "msg": request.query_params.get("msg"), "progress": progress,
+               "agent_files": agent_files}
     return templates.TemplateResponse(request, "problem.html", context)
 
 
@@ -142,13 +145,13 @@ def start_agent(slug: str):
     if not p.section("Plan"):
         return RedirectResponse(f"/p/{slug}?msg=Write+a+plan+first", status_code=303)
     try:
-        short_id = agents.start_agent(p, store.folder(slug))
+        short_id, warning = agents.start_agent(p, store.folder(slug))
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         return RedirectResponse(f"/p/{slug}?msg={quote(str(error)[:300])}", status_code=303)
     p.sessions.append(short_id)
     p.state = "running"
     store.save(p)
-    return RedirectResponse(f"/p/{slug}", status_code=303)
+    return RedirectResponse(f"/p/{slug}" + (f"?msg={quote(warning)}" if warning else ""), status_code=303)
 
 
 @app.post("/p/{slug}/attach/{short_id}")

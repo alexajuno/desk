@@ -8,6 +8,10 @@
     <h1>{{ p.title }}</h1>
     {% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
     <div class="body">{{ body | safe }}</div>
+    {%- for name, html in agent_files.items() %}
+    <div class="section-label">{{ "Saved questions" if name == "questions.md" else "Result" }} <span class="muted">from the agent · {{ name }}</span></div>
+    <div class="body">{{ html | safe }}</div>
+    {%- endfor %}
     <div class="section-label">Subproblems{% if progress[1] %}<span class="pill">{{ progress[0] }}/{{ progress[1] }} done</span>{% endif %}</div>
     {% if kids %}{{ tree(kids, kids_of) }}{% endif %}
     {{ add_form(p.slug, "New subproblem…") }}
@@ -27,12 +31,15 @@
 
     <div class="label">Agents</div>
     {% if not p.folder %}<p class="notice">Set "Works in" first. Chats and agents start there, with that repo's rules.</p>{% endif %}
-    <div class="row" style="margin-bottom: 8px">
-      <form method="post" action="/p/{{ p.slug }}/chat" style="margin: 0">
-        <button class="{{ 'primary' if not p.section('Plan') }}">{{ 'Back to the plan chat' if p.chat else 'Plan with Claude' }}</button></form>
-      <form method="post" action="/p/{{ p.slug }}/agent" style="margin: 0">
-        <button class="{{ 'primary' if p.section('Plan') }}" {{ 'disabled' if not p.section('Plan') }} title="Runs in the background from the plan">Start agent</button></form>
-    </div>
+    {%- if not p.section("Plan") %}
+    <form method="post" action="/p/{{ p.slug }}/chat" style="margin: 0 0 4px">
+      <button class="primary">{{ "Back to the plan chat" if p.chat else "Plan with Claude" }}</button></form>
+    <p class="hint">Opens a chat in the repo. You and Claude write the plan; then the next step is an agent.</p>
+    {%- else %}
+    <form method="post" action="/p/{{ p.slug }}/agent" style="margin: 0 0 4px"><button class="primary">Start agent</button></form>
+    <p class="hint">Runs in the background, in its own worktree, from the plan.
+      {%- if p.chat %} <a href="#" onclick="this.nextElementSibling.submit(); return false">Back to the plan chat</a><form method="post" action="/p/{{ p.slug }}/chat" hidden></form>{% endif %}</p>
+    {%- endif %}
     {% if p.sessions %}
     <ul class="sessions">
       {%- for sid in p.sessions | reverse %}{% set row = live.get(sid, {}) %}

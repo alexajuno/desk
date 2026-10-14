@@ -5,6 +5,12 @@
    the design doc: about 66 characters per line (Baymard: 50-75; WCAG 1.4.8: at most 80), line
    spacing of at least 1.5, left-aligned, big text. */
 
+/* Linear serves its own "Inter Variable" web font (document.fonts showed it loaded, 2026-10-14) with
+   -webkit-font-smoothing: antialiased and text-rendering: optimizeLegibility. desk serves Inter too, so
+   no browser falls back to another font. InterVariable.ttf is from Arch's inter-font, under the SIL OFL. */
+@font-face { font-family: "Inter Variable"; src: url("/static/fonts/InterVariable.ttf") format("truetype");
+             font-weight: 100 900; font-style: normal; font-display: block; }
+
 :root {
   --bg-app: lch(2.595% 0.4 272);
   --bg-panel: lch(5.52% 0.4 272);
@@ -24,7 +30,8 @@
 }
 
 html { background: var(--bg-app); scroll-behavior: smooth; }
-body { margin: 0; font: 450 13px/1.5 var(--font); color: var(--text-1); text-align: left; }
+body { margin: 0; font: 450 13px/1.5 var(--font); color: var(--text-1); text-align: left;
+       -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 a { color: inherit; }
 code { background: var(--bg-raised); border: 1px solid var(--border-2); padding: 0 4px; border-radius: 4px; font-size: 0.92em; }
 p, ul, ol, table, blockquote, form { margin: 0 0 12px; }
@@ -115,6 +122,7 @@ button.primary:hover { background: #6e78db; }
 .prop a { color: var(--text-1); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prop a:hover { color: var(--accent); }
 .folder-form input { height: 28px; font-size: 12px; }
+.hint { font-size: 12px; color: var(--text-3); margin: 0 0 8px; } .hint a { color: var(--text-2); }
 .sessions { list-style: none; padding: 0; margin: 0; }
 .sessions li { display: flex; align-items: center; gap: 8px; height: 32px; }
 .sessions .what { flex: 1; color: var(--text-2); }
