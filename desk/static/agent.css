@@ -5,23 +5,27 @@
 
 .panel { bottom: 36px; }  /* Linear leaves a 36px row under the panel for the Agent buttons */
 
+/* The Agent page's own colours; the rest are desk.css's. Light ones measured as desk.css says. */
+:root { --composer: lch(7.32% 0.85 272); --composer-chat: lch(11.033% 1.3 272); --bubble: lch(13.861% 1.043 272); }
+:root[data-theme=light] { --composer: lch(100% 0.5 282); --composer-chat: lch(100% 0 282); --bubble: lch(96.5% 0 282); }
+
 /* the box you write in */
 .composer { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 12px; border-radius: 10px;
-            background: lch(7.32% 0.85 272); box-shadow: lch(0 0 0 / 0.3) 0 0.5px 1px 1px; }
+            background: var(--composer); box-shadow: var(--shadow-panel); }
 .composer textarea { display: block; width: 100%; min-height: 44px; max-height: 40vh; box-sizing: border-box; padding: 2px 6px;
-                     resize: none; border: 0; outline: none; background: none; color: lch(90.826% 1.425 272);
+                     resize: none; border: 0; outline: none; background: none; color: var(--text-2);
                      font: 450 15px/24px var(--font); }
 .composer textarea::placeholder { color: var(--text-3); }
 .composer-row { display: flex; align-items: center; gap: 8px; height: 24px; }
-.composer .model { font-size: 12px; font-weight: 500; color: lch(63.304% 1.425 272); padding: 0 6px; }
+.composer .model { font-size: 12px; font-weight: 500; color: var(--text-3); padding: 0 6px; }
 .composer .send { margin-left: auto; width: 24px; height: 24px; padding: 0; justify-content: center; border-radius: 12px;
-                  border: 0.5px solid transparent; background: lch(47.918% 59.303 288.421); color: lch(100% 5 288.421);
-                  box-shadow: lch(0 0 0 / 0.3) 0 0.5px 1px 1px; }
-.composer .send:hover { background: lch(52% 59.303 288.421); }
+                  border: 0.5px solid transparent; background: var(--accent); color: var(--on-accent);
+                  box-shadow: var(--shadow-panel); }
+.composer .send:hover { background: var(--accent-hover); }
 .composer .send:disabled { background: var(--bg-active); color: var(--text-3); box-shadow: none; }
 .composer .send .stop, .composer.busy .send .arrow { display: none; }
 .composer.busy .send .stop { display: block; }
-.composer.busy .send:disabled { background: lch(47.918% 59.303 288.421); color: lch(100% 5 288.421); }
+.composer.busy .send:disabled { background: var(--accent); color: var(--on-accent); }
 
 /* a new chat: the box, examples and recent chats in one column */
 .agent.home { width: 712px; max-width: calc(100% - 48px); margin: 0 auto; padding: max(48px, calc(50vh - 160px)) 0 48px; }
@@ -33,7 +37,7 @@
 .examples-head .dismiss:hover { color: var(--text-1); }
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .card { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; height: 135px; padding: 16px 16px 12px;
-        border: 0.5px solid lch(13.08% 1.48 272); border-radius: 8px; background: none; white-space: normal; text-align: left; }
+        border: 0.5px solid var(--border-2); border-radius: 8px; background: none; white-space: normal; text-align: left; }
 .card:hover { background: var(--bg-raised); }
 .card svg { color: var(--text-2); margin-bottom: auto; }
 .card-title { font-size: 13px; font-weight: 500; color: var(--text-1); }
@@ -54,17 +58,17 @@
 /* a chat: messages in one column, the box pinned under them */
 .agent.chat { display: flex; flex-direction: column; min-height: 100%; width: 821px; max-width: calc(100% - 48px); margin: 0 auto; }
 .thread { flex: 1; padding: 32px 10px 24px; }
-.msg { margin-bottom: 32px; font-size: 15px; line-height: 24px; color: lch(90.826% 1.425 272); }
+.msg { margin-bottom: 32px; font-size: 15px; line-height: 24px; color: var(--text-2); }
 .msg.you { display: flex; justify-content: flex-end; }
-.bubble { max-width: 75%; padding: 8px 12px; border-radius: 8px; background: lch(13.861% 1.043 272); white-space: pre-wrap; overflow-wrap: anywhere; }
+.bubble { max-width: 75%; padding: 8px 12px; border-radius: 8px; background: var(--bubble); white-space: pre-wrap; overflow-wrap: anywhere; }
 .answer p, .answer ul, .answer ol { margin: 0 0 16px; }
 .answer > :last-child { margin-bottom: 0; }
 .answer ul, .answer ol { padding-left: 24px; }
 .answer strong { color: var(--text-1); font-weight: 600; }
-.answer a { color: var(--accent); }
+.answer a { color: var(--link); }
 .answer.streaming { white-space: pre-wrap; }
 .worked { margin-bottom: 12px; font-size: 13px; line-height: 20px; }
-.worked summary { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; color: lch(63.304% 1.425 272); cursor: pointer;
+.worked summary { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text-3); cursor: pointer;
                   list-style: none; }
 .worked summary::-webkit-details-marker { display: none; }
 .worked summary::after { content: "▸"; font-size: 10px; }
@@ -72,32 +76,32 @@
 .steps { list-style: none; margin: 8px 0 0; padding: 0 0 0 12px; border-left: 1px solid var(--border-3); color: var(--text-3); }
 .steps li { padding: 2px 0; }
 .steps li.text { color: var(--text-3); white-space: pre-wrap; }
-.steps li.failed { color: lch(66% 60 48); }
+.steps li.failed { color: var(--text-error); }
 .steps li.failed::after { content: " · failed"; }
-.working-label { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; color: lch(63.304% 1.425 272); }
+.working-label { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; color: var(--text-3); }
 .working-label::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor;
                          animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.25; } }
-.msg-error { font-size: 13px; color: lch(70% 50 60); margin: 8px 0 0; }
+.msg-error { font-size: 13px; color: var(--text-error); margin: 8px 0 0; }
 .thread > .msg-error { margin: 0 0 32px; }
 .copy { margin-top: 8px; width: 24px; height: 24px; padding: 0; justify-content: center; border: 0; background: none; color: var(--text-3); }
 .copy:hover { color: var(--text-1); background: var(--bg-raised); }
-.agent.chat .composer { position: sticky; bottom: 0; margin: 0 -10px 12px; background: lch(11.033% 1.3 272); }
+.agent.chat .composer { position: sticky; bottom: 0; margin: 0 -10px 12px; background: var(--composer-chat); }
 .agent.chat .composer::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 24px;
                                 background: linear-gradient(transparent, var(--bg-panel)); pointer-events: none; }
 .agent.chat .composer textarea { min-height: 56px; }
 
 /* the Agent and history buttons at the bottom right of every page */
 .agent-dock { position: fixed; right: 8px; bottom: 4px; z-index: 15; display: flex; gap: 2px; }
-.agent-dock button { height: 28px; border-color: transparent; background: none; color: lch(60.621% 1.2 272); }
-.agent-dock button:hover, .agent-dock button.on { background: lch(10.149% 0.689 272); color: var(--text-1); }
+.agent-dock button { height: 28px; border-color: transparent; background: none; color: var(--text-3); }
+.agent-dock button:hover, .agent-dock button.on { background: var(--bg-icon-hover); color: var(--text-1); }
 .dock-agent { padding: 0 12px 0 10px; gap: 6px; }
 .dock-history { width: 28px; padding: 0; justify-content: center; }
 
 /* the chat panel above them */
 .agent-panel { position: fixed; right: 24px; bottom: 44px; z-index: 15; width: 400px; height: min(600px, calc(100vh - 96px));
-               display: flex; flex-direction: column; overflow: hidden; border: 0.5px solid var(--border-3); border-radius: 12px;
-               background: var(--bg-raised); box-shadow: lch(0 0 0 / 0.4) 0 7px 32px; }
+               display: flex; flex-direction: column; overflow: hidden; border: 0.5px solid var(--border-pop); border-radius: 12px;
+               background: var(--bg-pop); box-shadow: var(--shadow-pop); }
 .agent-panel[hidden] { display: none; }
 .agent-panel header { display: flex; align-items: center; gap: 2px; height: 48px; flex: none; padding: 0 8px 0 16px; }
 .panel-title { flex: 1; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -107,7 +111,7 @@
 .panel-scroll { flex: 1; overflow: auto; display: flex; flex-direction: column; }
 .agent-panel .thread { padding: 8px 16px 0; }
 .agent-panel .msg { font-size: 14px; line-height: 22px; margin-bottom: 24px; }
-.agent-panel .bubble { background: var(--bg-active); }
+.agent-panel .bubble { background: var(--bg-pop-on); }
 .agent-panel:not(.started) .thread, .agent-panel.started .welcome { display: none; }
 .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px;
            padding: 24px 16px 20px; text-align: center; }
@@ -118,6 +122,6 @@
 .chip { height: 30px; padding: 0 12px; border-radius: 9999px; border: 0.5px solid var(--border-3); background: var(--bg-raised);
         font-size: 13px; font-weight: 450; color: var(--text-2); gap: 8px; }
 .chip:hover { background: var(--bg-active); }
-.agent-panel .composer { margin: 0 8px 8px; background: lch(7.32% 0.85 272); }
+.agent-panel .composer { margin: 0 8px 8px; background: var(--composer); }
 .agent-panel .composer textarea { font-size: 14px; line-height: 22px; min-height: 40px; }
 .agent.home .thread { padding: 0 16px; }
