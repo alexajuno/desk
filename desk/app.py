@@ -28,6 +28,24 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
 
+@app.middleware("http")
+async def revalidate_static(request: Request, call_next):
+    """With no Cache-Control a browser may keep desk.js for a while on its own guess, so a tab
+    opened before a merge runs old code; no-cache makes it ask each time (a 304 when unchanged)."""
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+@app.get("/version", response_class=PlainTextResponse)
+def version():
+    """Changes whenever an issue's file is added, removed or edited; pages poll it to refresh.
+    Each page carries the version it was made from, so a change right after it shows too."""
+    files = [f for f in store.ISSUES_DIR.rglob("*") if f.is_file()]
+    return f"{len(files)}:{max((f.stat().st_mtime_ns for f in files), default=0)}"
+
+
 def has_questions(issue: store.Issue) -> bool:
     path = store.folder(issue.slug) / "questions.md"
     return path.is_file() and path.read_text(encoding="utf-8").strip() != ""
@@ -59,7 +77,7 @@ def sidebar(request: Request) -> dict:
     needs, review = inbox_items(all_issues, agents.live())
     running = sorted((i for i in all_issues.values() if i.state == "running" and i.parent is None), key=lambda i: i.rank)
     return {"sidebar": {"backlog": sum(i.state == "backlog" for i in all_issues.values()), "running": running,
-                        "inbox": len(needs) + len(review)}}
+                        "inbox": len(needs) + len(review)}, "version": version()}
 
 
 templates = Jinja2Templates(directory=HERE / "templates", context_processors=[sidebar])
@@ -69,11 +87,19 @@ templates.env.globals.update(
                  "done": "Done", "dropped": "Dropped"},
     prio_names={"urgent": "Urgent", "high": "High", "medium": "Medium", "low": "Low", "none": "No priority"},
 )
+# desk.css and desk.js carry their file's time in the URL: a tab that cached them before the
+# no-cache header still fetches a changed file, since its URL is new.
+templates.env.globals["asset"] = lambda name: f"/static/{name}?v={(HERE / 'static' / name).stat().st_mtime_ns}"
 templates.env.filters["short_date"] = lambda iso: datetime.fromisoformat(str(iso)).strftime("%b %-d") if iso else ""
 
 
 def open_kids(all_issues: dict[str, store.Issue]):
     return lambda slug: [i for i in store.children(all_issues, slug) if i.state not in CLOSED]
+
+
+def all_kids(all_issues: dict[str, store.Issue]):
+    """Open sub-issues first, then done and dropped ones, as Linear's sub-issue list."""
+    return lambda slug: sorted(store.children(all_issues, slug), key=lambda i: i.state in CLOSED)
 
 
 def back(slug: str, message: str | None = None) -> RedirectResponse:
@@ -90,13 +116,6 @@ def home():
 def old_link(rest: str):
     """Pages were /p/<slug> before issues were called issues."""
     return RedirectResponse(f"/issue/{rest}")
-
-
-@app.get("/version", response_class=PlainTextResponse)
-def version():
-    """Changes whenever an issue's file is added, removed or edited; pages poll it to reload."""
-    files = [f for f in store.ISSUES_DIR.rglob("*") if f.is_file()]
-    return f"{len(files)}:{max((f.stat().st_mtime_ns for f in files), default=0)}"
 
 
 @app.get("/backlog")
@@ -141,11 +160,11 @@ def show(request: Request, slug: str):
     while up in all_issues and len(trail) < 50:
         trail.insert(0, all_issues[up])
         up = all_issues[up].parent
-    kids_of = open_kids(all_issues)
+    kids_of = all_kids(all_issues)
     agent_files = {name: to_html(path.read_text(encoding="utf-8"))
                    for name in ("questions.md", "result.md") if (path := store.folder(slug) / name).is_file()}
-    all_kids = store.children(all_issues, slug)
-    progress = (sum(k.state == "done" for k in all_kids), sum(k.state != "dropped" for k in all_kids))
+    direct = store.children(all_issues, slug)
+    progress = (sum(k.state == "done" for k in direct), sum(k.state != "dropped" for k in direct))
     session = agents.live().get(i.session, {}) if i.session else {}
     context = {"p": i, "trail": trail, "kids": kids_of(slug), "kids_of": kids_of, "body": to_html(i.body),
                "files": store.files(slug), "session": session, "msg": request.query_params.get("msg"),
@@ -167,14 +186,58 @@ def issue_file(request: Request, slug: str, name: str):
 
 
 @app.post("/issue/{slug}/set")
-def set_field(slug: str, field: str = Form(...), value: str = Form(...)):
-    allowed = {"priority": store.PRIORITIES, "state": store.STATES}
-    if value not in allowed.get(field, []):
-        raise HTTPException(422, f"{field} cannot be {value}")
+def set_field(slug: str, field: str = Form(...), value: str = Form("")):
+    if not store.exists(slug):
+        raise HTTPException(404, "That issue is gone.")
     i = store.load(slug)
+    if field in ("priority", "state"):
+        if value not in (store.PRIORITIES if field == "priority" else store.STATES):
+            raise HTTPException(422, f"{field} cannot be {value}")
+    elif field == "title":
+        value = " ".join(value.split())
+        if not value:
+            raise HTTPException(422, "A title cannot be empty.")
+    elif field == "body":
+        value = value.replace("\r\n", "\n")
+    elif field == "parent":
+        value = value or None
+        if value == slug or value in store.descendants(store.load_all(), slug):
+            raise HTTPException(422, "An issue cannot sit under itself or its own sub-issue.")
+        if value and not store.exists(value):
+            raise HTTPException(422, f"No issue {value}.")
+    else:
+        raise HTTPException(422, f"No field {field}.")
     setattr(i, field, value)
     store.save(i)
     return PlainTextResponse("ok")
+
+
+@app.post("/issue/{slug}/delete")
+def delete(slug: str):
+    """Moves the issue and its sub-issues to the trash; POST /trash/<slug>/restore undoes it."""
+    if not store.exists(slug):
+        raise HTTPException(404, "That issue is gone.")
+    parent = store.load(slug).parent
+    return JSONResponse({"deleted": store.trash(slug), "parent": parent})
+
+
+@app.post("/trash/{slug}/restore")
+def restore(slug: str):
+    try:
+        return JSONResponse({"restored": store.restore(slug)})
+    except FileNotFoundError:
+        raise HTTPException(404, "Nothing to restore.")
+    except FileExistsError as clash:
+        raise HTTPException(409, f"Cannot restore: {clash} exists again.")
+
+
+@app.get("/api/issues")
+def parent_choices(exclude: str = ""):
+    """Open issues an issue can move under: not itself, nor any of its sub-issues."""
+    all_issues = store.load_all()
+    skip = {exclude, *store.descendants(all_issues, exclude)} if exclude else set()
+    choices = sorted((i for i in all_issues.values() if i.state not in CLOSED and i.slug not in skip), key=lambda i: i.rank)
+    return JSONResponse([{"slug": i.slug, "title": i.title, "state": i.state} for i in choices])
 
 
 @app.post("/issue/{slug}/folder")

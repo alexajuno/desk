@@ -2,10 +2,13 @@
 {% from "macros.html" import tree, add_form, prio, state %}
 {% block title %}{{ p.title }} · desk{% endblock %}
 {% block crumb %}<a href="/backlog">Backlog</a>{% for a in trail %}<span class="sep">›</span><a href="/issue/{{ a.slug }}">{{ a.title }}</a>{% endfor %}<span class="sep">›</span><span>{{ p.title }}</span>{% endblock %}
+{% block tools %}<button class="more" title="Actions">
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="12.5" cy="8" r="1.25"/></svg></button>{% endblock %}
 {% block main %}
-<div class="issue">
+<div class="issue" data-slug="{{ p.slug }}" data-state="{{ p.state }}" data-priority="{{ p.priority }}" data-parent="{{ p.parent or '' }}">
+  <script id="issue-raw" type="application/json">{{ {"title": p.title, "body": p.body.strip()} | tojson }}</script>
   <div>
-    <h1>{{ p.title }}</h1>
+    <h1 class="title" title="Click to edit">{{ p.title }}</h1>
     {% if msg %}<p class="notice">{{ msg }}</p>{% endif %}
     {%- if p.state == "review" %}
     <div class="review">
@@ -19,7 +22,8 @@
       </form>
     </div>
     {%- endif %}
-    <div class="body">{{ body | safe }}</div>
+    {%- if p.body.strip() %}<div class="body description">{{ body | safe }}</div>
+    {%- else %}<div class="body description empty">Add description…</div>{% endif %}
     {%- for name, html in agent_files.items() if not (p.state == "review" and name == "result.md") %}
     <div class="section-label">{{ "Saved questions" if name == "questions.md" else "Result" }} <span class="muted">from the agent · {{ name }}</span></div>
     <div class="body">{{ html | safe }}</div>
@@ -31,8 +35,10 @@
 
   <aside class="props">
     <div class="label">Properties</div>
-    <button class="prop pick" data-slug="{{ p.slug }}" data-field="state" data-value="{{ p.state }}" title="Change status (S)">{{ state(p.state) }}{{ state_names[p.state] }}</button>
-    <button class="prop pick" data-slug="{{ p.slug }}" data-field="priority" data-value="{{ p.priority }}" title="Change priority (P)">{{ prio(p.priority) }}{{ prio_names[p.priority] }}</button>
+    <button class="prop pick" data-slug="{{ p.slug }}" data-field="state" data-state="{{ p.state }}" title="Change status (S)">
+      <span class="icon" data-field="state">{{ state(p.state) }}</span><span class="field-label" data-field="state">{{ state_names[p.state] }}</span></button>
+    <button class="prop pick" data-slug="{{ p.slug }}" data-field="priority" data-priority="{{ p.priority }}" title="Change priority (P)">
+      <span class="icon" data-field="priority">{{ prio(p.priority) }}</span><span class="field-label" data-field="priority">{{ prio_names[p.priority] }}</span></button>
 
     <div class="label">Works in</div>
     <button class="prop folder-pick" data-slug="{{ p.slug }}" data-value="{{ p.folder or '' }}" title="Pick the folder chats and agents start in; ~ until you pick one">

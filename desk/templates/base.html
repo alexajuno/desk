@@ -2,7 +2,7 @@
 {% from "macros.html" import state, prio %}
 <meta charset="utf-8">
 <title>{% block title %}desk{% endblock %}</title>
-<link rel="stylesheet" href="/static/desk.css">
+<link rel="stylesheet" href="{{ asset('desk.css') }}">
 <script>
 // Read mode: documents in the big reading style, remembered in this browser. Set before the page draws.
 if (localStorage.readMode) document.documentElement.classList.add("read-mode");
@@ -14,8 +14,8 @@ function toggleReadMode(button) {
   scroll.scrollTop = at * room();
 }
 </script>
-<script id="desk-data" type="application/json">{{ {"states": states, "priorities": priorities, "state_names": state_names, "prio_names": prio_names} | tojson }}</script>
-<script src="/static/desk.js" defer></script>
+<script id="desk-data" type="application/json">{{ {"states": states, "priorities": priorities, "state_names": state_names, "prio_names": prio_names, "version": version} | tojson }}</script>
+<script src="{{ asset('desk.js') }}" defer></script>
 <template id="icons">
   {%- for s in states %}<span data-k="state-{{ s }}">{{ state(s) }}</span>{% endfor %}
   {%- for p in priorities %}<span data-k="priority-{{ p }}">{{ prio(p) }}</span>{% endfor %}
@@ -46,23 +46,12 @@ function toggleReadMode(button) {
 </div>
 
 <div id="keys"><div class="keys-box"><h2>Keyboard shortcuts</h2>
-  <dl><dt>J / K</dt><dd>Move down / up</dd><dt>Enter</dt><dd>Open</dd><dt>S</dt><dd>Change status</dd><dt>P</dt><dd>Change priority</dd>
-  <dt>C</dt><dd>Create an issue</dd><dt>/</dt><dd>Search</dd><dt>G then I</dt><dd>Go to Inbox</dd><dt>G then B</dt><dd>Go to Backlog</dd><dt>?</dt><dd>Show or hide this</dd><dt>Esc</dt><dd>Close</dd></dl></div></div>
-
-<script>
-// Reload when any issue file changes, keeping the scroll position.
-let seen = null;
-setInterval(async () => {
-  try {
-    const v = await (await fetch("/version")).text();
-    if (seen === null) seen = v;
-    else if (v !== seen && !document.querySelector(".menu, .viewer")) {
-      if (window.onIssuesChanged) { seen = v; onIssuesChanged(); }  // a page that redraws itself, as search does
-      else { sessionStorage.y = document.querySelector(".scroll").scrollTop; location.reload(); }
-    }
-  } catch (e) {}
-}, 1500);
-addEventListener("load", () => {
-  if (sessionStorage.y) { document.querySelector(".scroll").scrollTop = +sessionStorage.y; delete sessionStorage.y; }
-});
-</script>
+  <dl><dt>J / K</dt><dd>Move down / up</dd><dt>Enter</dt><dd>Open</dd>
+  <dt>S</dt><dd>Change status</dd><dt>P</dt><dd>Change priority</dd><dt>C</dt><dd>Create an issue</dd>
+  <dt>Right-click</dt><dd>Actions on a row</dd><dt>Ctrl Delete</dt><dd>Delete the issue</dd><dt>Ctrl Z</dt><dd>Undo the delete</dd>
+  <dt>/</dt><dd>Search</dd><dt>G then I</dt><dd>Go to Inbox</dd><dt>G then B</dt><dd>Go to Backlog</dd>
+  <dt>?</dt><dd>Show or hide this</dd><dt>Esc</dt><dd>Close; on an issue, go back</dd></dl>
+  <h2>In a menu</h2>
+  <dl><dt>Type</dt><dd>Filter</dd><dt>↑ / ↓</dt><dd>Move</dd><dt>Enter, or a number</dt><dd>Pick</dd><dt>Esc</dt><dd>Close</dd></dl>
+  <h2>On an issue</h2>
+  <dl><dt>Click the title</dt><dd>Edit it; Enter saves</dd><dt>Click the text</dt><dd>Edit it; Ctrl Enter saves</dd></dl></div></div>

@@ -25,15 +25,25 @@
 {%- endif -%}
 {%- endmacro %}
 
+{# A list row. Its two icons open the priority and status menus; right-click opens its actions. #}
+{% macro row(p) -%}
+<a class="item" href="/issue/{{ p.slug }}" data-slug="{{ p.slug }}" data-state="{{ p.state }}" data-priority="{{ p.priority }}"
+   data-parent="{{ p.parent or '' }}">
+  <span class="icon" data-field="priority" title="Change priority (P)">{{ prio(p.priority) }}</span>
+  <span class="icon" data-field="state" title="Change status (S)">{{ state(p.state) }}</span>
+  <span class="title">{{ p.title }}</span>{{ caller() if caller }}</a>
+{%- endmacro %}
+
 {% macro tree(items, kids_of) -%}
 <ul class="tree">
   {%- for p in items %}
   {%- set kids = kids_of(p.slug) %}
+  {%- set open = kids | rejectattr("state", "in", ["done", "dropped"]) | list %}
   <li>
-    <a class="item" href="/issue/{{ p.slug }}" data-slug="{{ p.slug }}" data-state="{{ p.state }}" data-priority="{{ p.priority }}">
-      {{- prio(p.priority) }}{{ state(p.state) }}<span class="title">{{ p.title }}</span>
-      {%- if kids %}<span class="pill">{{ kids | length }} open</span>{% endif %}
-      <span class="spacer"></span><span class="date">{{ p.created | short_date }}</span></a>
+    {% call row(p) %}
+      {%- if open %}<span class="pill">{{ open | length }} open</span>{% endif %}
+      <span class="spacer"></span><span class="date">{{ p.created | short_date }}</span>
+    {%- endcall %}
     {%- if kids %}{{ tree(kids, kids_of) }}{% endif %}
   </li>
   {%- endfor %}

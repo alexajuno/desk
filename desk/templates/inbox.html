@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import prio, state %}
+{% from "macros.html" import row %}
 {% block title %}Inbox · desk{% endblock %}
 {% block crumb %}<span>Inbox</span>{% endblock %}
 {% block main %}
@@ -9,9 +9,7 @@
     <div class="group">{{ label }}<span class="count">{{ items | length }}</span></div>
     <ul class="tree">
       {%- for i, why in items %}
-      <li><a class="item" href="/issue/{{ i.slug }}" data-slug="{{ i.slug }}" data-state="{{ i.state }}" data-priority="{{ i.priority }}">
-        {{- prio(i.priority) }}{{ state(i.state) }}<span class="title">{{ i.title }}</span>
-        <span class="spacer"></span><span class="pill">{{ why }}</span></a></li>
+      <li>{% call row(i) %}<span class="spacer"></span><span class="pill">{{ why }}</span>{% endcall %}</li>
       {%- endfor %}
     </ul>
     {%- endif %}
