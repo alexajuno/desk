@@ -3,6 +3,7 @@
 Design: ~/notes/canvas/effective-work.md. Run: uv run uvicorn desk.app:app --port 8790
 """
 
+import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -10,7 +11,7 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
 from fastapi import HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -160,3 +161,52 @@ def attach(slug: str, short_id: str):
     if short_id in p.sessions:
         agents.attach(p, short_id)
     return RedirectResponse(f"/p/{slug}", status_code=303)
+
+
+HOME = Path.home()
+SKIP = {"node_modules", "vendor", ".venv", "venv", "__pycache__", "dist", "build", ".git"}
+_repos_cache: tuple[float, list[str]] = (0.0, [])
+
+
+def _repos() -> list[str]:
+    """Git repos under ~/projects, three levels deep, cached for a minute."""
+    global _repos_cache
+    import time
+    if time.time() - _repos_cache[0] < 60:
+        return _repos_cache[1]
+    found, stack = [], [(HOME / "projects", 0)]
+    while stack:
+        folder, depth = stack.pop()
+        try:
+            entries = sorted(e for e in folder.iterdir() if e.is_dir() and e.name not in SKIP and not e.name.startswith("."))
+        except OSError:
+            continue
+        for entry in entries:
+            if (entry / ".git").exists():
+                found.append(str(entry))
+            elif depth < 2:
+                stack.append((entry, depth + 1))
+    _repos_cache = (time.time(), sorted(found))
+    return _repos_cache[1]
+
+
+def _tilde(path: str) -> str:
+    return "~" + path[len(str(HOME)):] if path.startswith(str(HOME)) else path
+
+
+@app.get("/api/folders")
+def folders(q: str = ""):
+    """Folders for the Works in picker: your repos filtered by q, or, when q is a path, its subfolders."""
+    if q.startswith(("~", "/")):
+        typed = os.path.expanduser(q)
+        parent, partial = (typed, "") if typed.endswith("/") else os.path.split(typed)
+        try:
+            names = sorted(e.name for e in os.scandir(parent or "/")
+                           if e.is_dir() and e.name.startswith(partial) and (partial.startswith(".") or not e.name.startswith(".")))
+        except OSError:
+            names = []
+        return JSONResponse([_tilde(os.path.join(parent, n)) for n in names[:30]])
+    used = {p.folder for p in store.load_all().values() if p.folder}
+    paths = sorted({_tilde(r) for r in _repos()} | used)
+    words = q.lower().split()
+    return JSONResponse([p for p in paths if all(w in p.lower() for w in words)][:30])

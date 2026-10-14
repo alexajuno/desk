@@ -23,8 +23,9 @@
     <button class="prop pick" data-slug="{{ p.slug }}" data-field="priority" data-value="{{ p.priority }}" title="Change priority (P)">{{ prio(p.priority) }}{{ prio_names[p.priority] }}</button>
 
     <div class="label">Works in</div>
-    <form class="folder-form" method="post" action="/p/{{ p.slug }}/folder">
-      <input type="text" name="folder" value="{{ p.folder or '' }}" placeholder="~/projects/… (Enter to save)" autocomplete="off"></form>
+    <button class="prop folder-pick" data-slug="{{ p.slug }}" data-value="{{ p.folder or '' }}" title="Pick the folder chats and agents start in">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z" stroke="lch(70% 1.2 272)" stroke-width="1.2"/></svg>
+      <span class="{{ '' if p.folder else 'muted' }}">{{ p.folder or "Pick a folder…" }}</span></button>
     {% if p.link %}<div class="label">Link</div><div class="prop static"><a href="{{ p.link }}">{{ p.link.split('/')[-1] }}</a></div>{% endif %}
     {% if files %}<div class="label">Files</div>
       {%- for f in files %}<div class="prop static"><a href="/p/{{ p.slug }}/f/{{ f }}">{{ f }}</a></div>{% endfor %}{% endif %}
@@ -48,7 +49,6 @@
       {%- endfor %}
     </ul>
     {% endif %}
-    <div class="label">Stored in</div><div class="prop static muted">problems/{{ p.slug }}/</div>
   </aside>
 </div>
 {% endblock %}

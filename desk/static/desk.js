@@ -81,6 +81,50 @@ document.querySelectorAll(".pick").forEach((button) => {
     openMenu(button, button.dataset.field, button.dataset.value, (v) => setField(button.dataset.slug, button.dataset.field, v)));
 });
 
+// --- Works in: a folder picker with your repos and path completion ---------------------------
+function openFolderPicker(anchor, slug, current) {
+  closeMenu();
+  menu = document.createElement("div");
+  menu.className = "menu folders";
+  menu.innerHTML = '<div class="menu-head"><input class="menu-filter" type="text" placeholder="Search repos, or type ~/path…" autocomplete="off"></div><ul></ul>';
+  document.body.append(menu);
+  const box = anchor.getBoundingClientRect();
+  Object.assign(menu.style, { position: "fixed", left: `${Math.min(box.left, innerWidth - 380)}px`, top: `${Math.min(box.bottom + 4, innerHeight - 360)}px` });
+  const input = menu.querySelector("input"), list = menu.querySelector("ul");
+  const folderIcon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z" stroke="currentColor" stroke-width="1.2"/></svg>';
+  let shown = [], at = 0, ask = 0;
+  const draw = () => {
+    list.innerHTML = shown.length ? shown.map((p, i) => `<li class="${i === at ? "on" : ""} ${p === current ? "current" : ""}" data-v="${p}">${folderIcon}<span class="name">${p}</span></li>`).join("")
+      : '<li class="empty">No folder matches</li>';
+  };
+  async function load() {
+    const mine = ++ask;
+    const paths = await (await fetch(`/api/folders?q=${encodeURIComponent(input.value)}`)).json();
+    if (mine !== ask) return;
+    shown = paths; at = 0; draw();
+  }
+  input.value = current && current.startsWith("~") ? "" : "";
+  load();
+  input.focus();
+  input.addEventListener("input", load);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { at = Math.min(at + 1, shown.length - 1); draw(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { at = Math.max(at - 1, 0); draw(); e.preventDefault(); }
+    else if (e.key === "Tab" && shown[at]) { input.value = shown[at] + "/"; load(); e.preventDefault(); }
+    else if (e.key === "Enter") { const v = shown[at] || input.value.trim(); if (v) pick(v); e.preventDefault(); }
+    else if (e.key === "Escape") { closeMenu(); }
+  });
+  list.addEventListener("mousedown", (e) => { const li = e.target.closest("li[data-v]"); if (li) { pick(li.dataset.v); e.preventDefault(); } });
+  async function pick(folder) {
+    closeMenu();
+    await fetch(`/p/${slug}/folder`, { method: "POST", body: new URLSearchParams({ folder }) });
+    location.reload();
+  }
+}
+
+document.querySelectorAll(".folder-pick").forEach((button) =>
+  button.addEventListener("click", () => openFolderPicker(button, button.dataset.slug, button.dataset.value)));
+
 // --- rows: hover or J/K focuses one, as in Linear ------------------------------------------
 const rows = () => [...document.querySelectorAll(".item")];
 let focused = null;

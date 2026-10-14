@@ -121,7 +121,9 @@ button.primary:hover { background: #6e78db; }
 .prop .key { color: var(--text-3); min-width: 64px; }
 .prop a { color: var(--text-1); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prop a:hover { color: var(--accent); }
-.folder-form input { height: 28px; font-size: 12px; }
+.menu.folders { width: 360px; } .menu.folders ul { max-height: 300px; overflow: auto; }
+.menu li.empty { color: var(--text-3); cursor: default; }
+.folder-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hint { font-size: 12px; color: var(--text-3); margin: 0 0 8px; } .hint a { color: var(--text-2); }
 .sessions { list-style: none; padding: 0; margin: 0; }
 .sessions li { display: flex; align-items: center; gap: 8px; height: 32px; }
