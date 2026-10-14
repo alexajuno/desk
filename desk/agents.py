@@ -113,8 +113,13 @@ def _kitty(socket: str, *args: str) -> bool:
     """Run a remote control command in one kitty; when it works, bring that kitty to the front."""
     if subprocess.run(["kitty", "@", "--to", f"unix:{socket}", *args], capture_output=True, timeout=10).returncode:
         return False
+    # Hyprland 0.56 takes Lua after `dispatch`; the old `focuswindow pid:<pid>` exits 7 with a syntax error,
+    # which went unseen here until the user found Jump back leaving them on desk's workspace (14 Oct).
     pid = socket.rsplit("-", 1)[1]
-    subprocess.run(["hyprctl", "dispatch", "focuswindow", f"pid:{pid}"], capture_output=True, timeout=10)
+    focus = subprocess.run(["hyprctl", "dispatch", f'hl.dsp.focus({{ window = "pid:{pid}" }})'],
+                           capture_output=True, text=True, timeout=10)
+    if focus.returncode:
+        raise RuntimeError(f"Opened in kitty, but Hyprland did not switch to it: {focus.stdout.strip()}")
     return True
 
 
