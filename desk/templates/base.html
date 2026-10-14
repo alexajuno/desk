@@ -28,6 +28,7 @@ function toggleReadMode(button) {
 <script id="desk-data" type="application/json">{{ {"states": states, "priorities": priorities, "state_names": state_names, "prio_names": prio_names, "version": version} | tojson }}</script>
 <script src="{{ asset('desk.js') }}" defer></script>
 <script src="{{ asset('agent.js') }}" defer></script>
+<script src="{{ asset('terminal.js') }}" defer></script>
 <template id="icons">
   {%- for s in states %}<span data-k="state-{{ s }}">{{ state(s) }}</span>{% endfor %}
   {%- for p in priorities %}<span data-k="priority-{{ p }}">{{ prio(p) }}</span>{% endfor %}

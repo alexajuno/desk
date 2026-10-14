@@ -1,0 +1,36 @@
+/* The session terminal (terminal.js): a column right of the issue, under the top bar, about 85 columns
+   of 13px JetBrains Mono wide at 1436px, and wider or narrower by dragging its left edge. Meanwhile
+   the issue's properties drop under its text. Its colours follow desk's theme: Claude Code asks the
+   terminal for its background (OSC 11) and draws in its light or dark colours to match. terminal.js
+   hands these to xterm.js, as --term-<xterm.js's name for the colour>. */
+
+:root {
+  --term-background: var(--bg-panel); --term-foreground: var(--text-2); --term-cursor: var(--text-2);
+  --term-selection-background: rgb(94 105 209 / 0.4); --term-grip: rgb(94 105 209 / 0.5);
+  --term-black: var(--bg-active); --term-bright-black: var(--text-4); --term-white: var(--text-2); --term-bright-white: var(--text-1);
+  --term-red: #eb5757; --term-bright-red: #f27a7a; --term-green: #4cb782; --term-bright-green: #6fcf97;
+  --term-yellow: #f2c94c; --term-bright-yellow: #f5d77a; --term-blue: var(--accent); --term-bright-blue: #8f97ea;
+  --term-magenta: #b07cd8; --term-bright-magenta: #c9a0e6; --term-cyan: #26b5ce; --term-bright-cyan: #5ccfe0;
+}
+:root[data-theme=light] {
+  --term-selection-background: lch(53% 52.26 286.91 / 0.25); --term-grip: lch(53% 52.26 286.91 / 0.5);
+  --term-black: var(--text-1); --term-bright-black: var(--text-3); --term-white: var(--text-3); --term-bright-white: var(--text-4);
+  --term-red: lch(48% 75 35); --term-bright-red: lch(56% 75 35); --term-green: var(--text-done); --term-bright-green: lch(58% 70 141.95);
+  --term-yellow: var(--text-running); --term-bright-yellow: lch(58% 75 85); --term-bright-blue: lch(60% 50 286.91);
+  --term-magenta: lch(48% 65 320); --term-bright-magenta: lch(56% 60 320); --term-cyan: lch(50% 45 220); --term-bright-cyan: lch(58% 45 220);
+}
+
+.panel.has-term { display: grid; grid-template-rows: auto minmax(0, 1fr);
+                  grid-template-columns: minmax(0, 1fr) var(--term-w, clamp(440px, 58%, calc(100% - 400px))); }
+.panel.has-term .bar { grid-column: 1 / -1; }
+.panel.has-term .issue { grid-template-columns: minmax(0, 1fr); gap: 24px; max-width: 640px; }
+
+.term { position: relative; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--border-2);
+        background: var(--term-background); }
+.term header { display: flex; align-items: center; gap: 8px; height: 36px; flex: none; padding: 0 6px 0 16px;
+               border-bottom: 1px solid var(--border-1); font-size: 12px; font-weight: 500; color: var(--text-2); }
+.term-command { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                font: 450 11px "JetBrains Mono", monospace; color: var(--text-4); }
+.term-screen { flex: 1; min-height: 0; padding: 8px 0 4px 12px; }
+.term-grip { position: absolute; z-index: 1; top: 0; bottom: 0; left: -3px; width: 6px; cursor: col-resize; }
+.term-grip:hover, .term-grip:active { background: var(--term-grip); }

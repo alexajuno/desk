@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import agents, api, chats
+from . import agents, api, chats, terminal
 from . import issues as store
 from .render import to_html, to_html_with_toc
 from .search import find
@@ -94,6 +94,7 @@ templates.env.filters["short_date"] = lambda iso: datetime.fromisoformat(str(iso
 app.state.templates = templates  # the Agent tab's pages (chats.py) render with these too
 app.include_router(api.router)
 app.include_router(chats.router)
+app.include_router(terminal.router)
 
 
 def open_kids(all_issues: dict[str, store.Issue]):

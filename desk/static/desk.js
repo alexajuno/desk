@@ -401,7 +401,8 @@ async function go(url) {
 
 // Agents and the user's editor change issues too: poll /version and refresh, unless a menu, an
 // editor or a text box is in use; the refresh then waits for the next tick after it.
-const busy = () => menu || viewer || editing || typing(document.activeElement);
+// The session terminal's own text box (terminal.js) is no reason to wait: a refresh leaves it alone.
+const busy = () => menu || viewer || editing || (typing(document.activeElement) && !document.activeElement.closest(".term"));
 
 setInterval(async () => {
   try {

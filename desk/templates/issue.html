@@ -54,15 +54,21 @@
     <form method="post" action="/issue/{{ p.slug }}/plan" style="margin: 0 0 4px"><button class="primary">Plan with Claude</button></form>
     <p class="hint">Starts this issue's session in Works in, in its own worktree if that folder is a git repo, and opens it in a terminal. You and Claude write the plan.</p>
     {%- elif p.state in ("backlog", "planning") and not p.section("Plan") %}
-    <form method="post" action="/issue/{{ p.slug }}/jump" style="margin: 0 0 4px"><button class="primary">Back to the plan chat</button></form>
-    <p class="hint">Write the plan together in that chat. Then the same session can carry it out.</p>
+    <div class="row" style="margin: 0 0 4px"><button class="primary term-open" data-slug="{{ p.slug }}" data-short="{{ p.session[:8] }}">Open here</button>
+      <form method="post" action="/issue/{{ p.slug }}/jump" style="margin: 0"><button>Back to the plan chat</button></form></div>
+    <p class="hint">Write the plan together in that chat, here or in kitty. Then the same session can carry it out.</p>
     {%- elif p.state in ("backlog", "planning") %}
     <form method="post" action="/issue/{{ p.slug }}/handoff" style="margin: 0 0 4px"><button class="primary">Hand off</button></form>
-    <p class="hint">The same session carries out the plan in the background, remembering your talk. Close its terminal window first.
-      <a href="#" onclick="this.nextElementSibling.submit(); return false">Back to the chat</a><form method="post" action="/issue/{{ p.slug }}/jump" hidden></form></p>
+    <form method="post" action="/issue/{{ p.slug }}/jump" id="jump" hidden></form>
+    <p class="hint">The same session carries out the plan in the background, remembering your talk. Close its kitty tab first.
+      Back to the chat: <a href="#" class="term-open" data-slug="{{ p.slug }}" data-short="{{ p.session[:8] }}">here</a>
+      or <a href="#" onclick="document.getElementById('jump').requestSubmit(); return false">in kitty</a></p>
     {%- elif p.session %}
-    <form method="post" action="/issue/{{ p.slug }}/jump" style="margin: 0 0 4px"><button class="primary">Jump back</button></form>
-    <p class="hint">Opens the session in a terminal: watch it, answer it, ask a follow-up.</p>
+    {#- The terminal here is primary: it keeps the issue and its session on one page, which is what the user
+        asked for; kitty is one click away. In review, Done is the next step and stays the one primary. #}
+    <div class="row" style="margin: 0 0 4px"><button class="{{ 'primary ' if p.state != 'review' }}term-open" data-slug="{{ p.slug }}" data-short="{{ p.session[:8] }}">Open here</button>
+      <form method="post" action="/issue/{{ p.slug }}/jump" style="margin: 0"><button>Jump back</button></form></div>
+    <p class="hint">Open here shows the session on this page, Jump back in kitty: watch it, answer it, ask a follow-up.</p>
     {%- endif %}
     {%- if p.session %}
     <div class="prop static"><span class="key">Session</span><code>{{ p.session[:8] }}</code>
