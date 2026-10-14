@@ -21,7 +21,7 @@
 <svg width="16" height="16" viewBox="0 0 16 16" fill="lch(61.8% 1.2 272)"><rect x="1.5" y="7.25" width="3" height="1.5" rx=".5"/><rect x="6.5" y="7.25" width="3" height="1.5" rx=".5"/><rect x="11.5" y="7.25" width="3" height="1.5" rx=".5"/></svg>
 {%- else -%}
 {%- set n = {"high": 3, "medium": 2, "low": 1}[level] -%}
-<svg width="16" height="16" viewBox="0 0 16 16" fill="lch(80% 1.2 272)"><rect x="1.5" y="8" width="3" height="6" rx="1"/><rect x="6.5" y="5" width="3" height="9" rx="1"{{ ' fill-opacity=".4"' if n < 2 }}/><rect x="11.5" y="2" width="3" height="12" rx="1"{{ ' fill-opacity=".4"' if n < 3 }}/></svg>
+<svg width="16" height="16" viewBox="0 0 16 16" fill="lch(80% 1.2 272)"><rect x="1.5" y="8" width="3" height="6" rx="1"/><rect x="6.5" y="5" width="3" height="9" rx="1"{% if n < 2 %} fill-opacity=".4"{% endif %}/><rect x="11.5" y="2" width="3" height="12" rx="1"{% if n < 3 %} fill-opacity=".4"{% endif %}/></svg>
 {%- endif -%}
 {%- endmacro %}
 
