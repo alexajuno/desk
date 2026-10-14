@@ -31,6 +31,9 @@ const GLYPH = {
   trash: svg('<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/>'),
   none: svg('<circle cx="8" cy="8" r="5.5"/><path d="M4.2 11.8l7.6-7.6"/>'),
   folder: svg('<path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z"/>'),
+  system: svg('<rect x="2" y="3" width="12" height="8.5" rx="1.5"/><path d="M6 14h4M8 11.5V14"/>'),
+  light: svg('<circle cx="8" cy="8" r="2.75"/><path d="M8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1.05 1.05M11.35 11.35l1.05 1.05M3.6 12.4l1.05-1.05M11.35 4.65l1.05-1.05"/>'),
+  dark: svg('<path d="M13 9.6A5.5 5.5 0 0 1 6.4 3a5.5 5.5 0 1 0 6.6 6.6z"/>'),
 };
 const TICK = '<svg class="tick" viewBox="0 0 14 14" width="14" height="14"><path d="M3 7.5l2.5 2.5L11 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const CHEVRON = '<svg class="chev" viewBox="0 0 16 16" width="12" height="12"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -255,6 +258,21 @@ function parentPicker(current, exclude, where, choose) {
       return all.filter((item) => words.every((w) => text(item).includes(w)))
         .sort((a, b) => !text(a).includes(phrase) - !text(b).includes(phrase));
     },
+  });
+}
+
+// The sidebar foot's theme button: follow the system, as Linear's "System preference", or pin one.
+// base.html's applyTheme reads the choice from localStorage.
+function themeMenu(button) {
+  const pinned = ["light", "dark"].includes(localStorage.theme) ? localStorage.theme : "system";
+  const pick = (theme) => () => {
+    if (theme === "system") delete localStorage.theme; else localStorage.theme = theme;
+    applyTheme();
+  };
+  openMenu({
+    anchor: button, className: "actions",
+    items: () => [["system", "System preference"], ["light", "Light"], ["dark", "Dark"]].map(([theme, label]) =>
+      ({ icon: GLYPH[theme], label, current: theme === pinned, run: pick(theme) })),
   });
 }
 
@@ -534,8 +552,10 @@ document.addEventListener("click", (e) => {
   const groupAdd = t.closest(".group-add");
   if (groupAdd) { openCreator({ priority: groupAdd.dataset.priority }); return; }
   if (t.closest(".issue .add-sub")) { openCreator({ parent: page().slug, parentTitle: raw().title }); return; }
+  const theme = t.closest(".theme-pick");
+  if (theme) { if (!toggled(theme)) themeMenu(theme); return; }
   const d2 = t.closest(".d2");
-  if (d2) { openViewer(d2.querySelector("svg")); return; }
+  if (d2) { openViewer(d2.querySelector(`.for-${document.documentElement.dataset.theme} svg`) ?? d2.querySelector("svg")); return; }
   const title = t.closest(".issue h1.title");
   if (title) { editTitle(title); return; }
   const text = t.closest(".issue .description");

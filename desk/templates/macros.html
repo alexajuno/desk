@@ -1,27 +1,27 @@
 {# Icons are Linear's shapes: the status circle that fills as work moves (its backlog circle uses
-   Linear's own dash pattern, 1.4 1.74), three priority bars, and the orange square for urgent. #}
+   Linear's own dash pattern, 1.4 1.74), three priority bars, and the orange square for urgent. Their
+   colours are desk.css's --state-* and --prio variables, so they follow the theme. #}
 
 {% macro state(s) -%}
 {%- if s == "done" -%}
-<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6.25" fill="#5e6ad2"/><path d="M4.4 7.1l1.8 1.8 3.4-3.6" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<svg width="14" height="14" viewBox="0 0 14 14" style="color: var(--state-done)"><circle cx="7" cy="7" r="6.25" fill="currentColor"/><path d="M4.4 7.1l1.8 1.8 3.4-3.6" fill="none" style="stroke: var(--on-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
 {%- elif s == "dropped" -%}
-<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6.25" fill="#95a2b3"/><path d="M5 5l4 4M9 5l-4 4" stroke="lch(10% 0 0)" stroke-width="1.5" stroke-linecap="round"/></svg>
+<svg width="14" height="14" viewBox="0 0 14 14" style="color: var(--state-dropped)"><circle cx="7" cy="7" r="6.25" fill="currentColor"/><path d="M5 5l4 4M9 5l-4 4" style="stroke: var(--state-cross)" stroke-width="1.5" stroke-linecap="round"/></svg>
 {%- else -%}
-{%- set c = {"backlog": "#bec2c8", "planning": "#e2e2e2", "running": "lch(80% 90 85)", "review": "#4cb782"}[s] -%}
 {%- set f = {"backlog": 0, "planning": 0, "running": 0.5, "review": 0.75}[s] -%}
-<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="{{ c }}" stroke-width="1.5"{% if s == "backlog" %} stroke-dasharray="1.4 1.74" stroke-dashoffset="0.65"{% endif %}/>
-{%- if f %}<circle cx="7" cy="7" r="2" stroke="{{ c }}" stroke-width="4" stroke-dasharray="{{ '%.3f' % (12.566 * f) }} 12.566" transform="rotate(-90 7 7)"/>{% endif %}</svg>
+<svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color: var(--state-{{ s }})"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.5"{% if s == "backlog" %} stroke-dasharray="1.4 1.74" stroke-dashoffset="0.65"{% endif %}/>
+{%- if f %}<circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="4" stroke-dasharray="{{ '%.3f' % (12.566 * f) }} 12.566" transform="rotate(-90 7 7)"/>{% endif %}</svg>
 {%- endif -%}
 {%- endmacro %}
 
 {% macro prio(level) -%}
 {%- if level == "urgent" -%}
-<svg width="16" height="16" viewBox="0 0 16 16" fill="lch(66% 80 48)"><path d="M3 1C1.91 1 1 1.91 1 3v10c0 1.09.91 2 2 2h10c1.09 0 2-.91 2-2V3c0-1.09-.91-2-2-2H3zm4 3h2l-.25 5H7.25L7 4zm2 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/></svg>
+<svg width="16" height="16" viewBox="0 0 16 16" style="fill: var(--urgent)"><path d="M3 1C1.91 1 1 1.91 1 3v10c0 1.09.91 2 2 2h10c1.09 0 2-.91 2-2V3c0-1.09-.91-2-2-2H3zm4 3h2l-.25 5H7.25L7 4zm2 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/></svg>
 {%- elif level == "none" -%}
-<svg width="16" height="16" viewBox="0 0 16 16" fill="lch(61.8% 1.2 272)"><rect x="1.5" y="7.25" width="3" height="1.5" rx=".5"/><rect x="6.5" y="7.25" width="3" height="1.5" rx=".5"/><rect x="11.5" y="7.25" width="3" height="1.5" rx=".5"/></svg>
+<svg width="16" height="16" viewBox="0 0 16 16" style="fill: var(--text-3)"><rect x="1.5" y="7.25" width="3" height="1.5" rx=".5"/><rect x="6.5" y="7.25" width="3" height="1.5" rx=".5"/><rect x="11.5" y="7.25" width="3" height="1.5" rx=".5"/></svg>
 {%- else -%}
 {%- set n = {"high": 3, "medium": 2, "low": 1}[level] -%}
-<svg width="16" height="16" viewBox="0 0 16 16" fill="lch(80% 1.2 272)"><rect x="1.5" y="8" width="3" height="6" rx="1"/><rect x="6.5" y="5" width="3" height="9" rx="1"{% if n < 2 %} fill-opacity=".4"{% endif %}/><rect x="11.5" y="2" width="3" height="12" rx="1"{% if n < 3 %} fill-opacity=".4"{% endif %}/></svg>
+<svg width="16" height="16" viewBox="0 0 16 16" style="fill: var(--prio)"><rect x="1.5" y="8" width="3" height="6" rx="1"/><rect x="6.5" y="5" width="3" height="9" rx="1"{% if n < 2 %} fill-opacity=".4"{% endif %}/><rect x="11.5" y="2" width="3" height="12" rx="1"{% if n < 3 %} fill-opacity=".4"{% endif %}/></svg>
 {%- endif -%}
 {%- endmacro %}
 

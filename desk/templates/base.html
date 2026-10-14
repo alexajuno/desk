@@ -5,6 +5,16 @@
 <link rel="stylesheet" href="{{ asset('desk.css') }}">
 <link rel="stylesheet" href="{{ asset('agent.css') }}">
 <script>
+// Theme: light or dark as the system is, unless pinned to one in this browser (localStorage.theme, from
+// the sidebar's foot). Set before the page draws, and again when the system or another tab changes it.
+const systemLight = matchMedia("(prefers-color-scheme: light)");
+function applyTheme() {
+  document.documentElement.dataset.theme = ["light", "dark"].includes(localStorage.theme) ? localStorage.theme
+    : systemLight.matches ? "light" : "dark";
+}
+applyTheme();
+systemLight.addEventListener("change", applyTheme);
+addEventListener("storage", applyTheme);
 // Read mode: documents in the big reading style, remembered in this browser. Set before the page draws.
 if (localStorage.readMode) document.documentElement.classList.add("read-mode");
 function toggleReadMode(button) {
@@ -46,6 +56,8 @@ function toggleReadMode(button) {
   <a class="nav-item {{ 'here' if here == '/issue/' ~ p.slug }}" href="/issue/{{ p.slug }}">{{ state("running") }}<span class="nav-title">{{ p.title }}</span></a>
   {%- endfor %}
   {%- endif %}
+  <div class="side-foot"><button class="side-icon theme-pick" type="button" title="Theme: follow the system, or pin light or dark">
+    <svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="5.75" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 2.25a5.75 5.75 0 0 1 0 11.5z" fill="currentColor"/></svg></button></div>
 </aside>
 
 <div class="panel">

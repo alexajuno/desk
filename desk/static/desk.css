@@ -6,6 +6,12 @@
    reading rules from the design doc: about 66 characters per line (Baymard: 50-75; WCAG 1.4.8: at most
    80), line spacing of at least 1.5, left-aligned, big text. */
 
+/* The light theme is Linear's too, measured the same way on 2026-10-14 with prefers-color-scheme: light
+   emulated over CDP (Linear follows the system): the same elements' computed colours, and Linear's own
+   theme objects for the colours it sets in JS. Linear gives the sidebar, the content and popovers each
+   their own light palette; the values below say which they come from. desk follows the system, unless
+   a theme is pinned from the sidebar's foot; the script in base.html sets html[data-theme] either way. */
+
 /* Linear serves its own "Inter Variable" web font (document.fonts showed it loaded, 2026-10-14) with
    -webkit-font-smoothing: antialiased and text-rendering: optimizeLegibility. desk serves Inter too, so
    no browser falls back to another font. InterVariable.ttf is from Arch's inter-font, under the SIL OFL. */
@@ -26,8 +32,75 @@
   --text-3: lch(61.803% 1.2 272);
   --text-4: lch(45% 1.2 272);
   --accent: #5e69d1;
+  --accent-hover: #6e78db;
+  --on-accent: #fff;
+  --link: #5e69d1;
+  --bg-side-hover: lch(9.232% 0.85 272);
+  --bg-icon-hover: lch(10.149% 0.689 272);
+  --bg-mark: rgb(94 105 209 / 0.3);
+  --shadow-panel: lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
+  /* popovers: menus, the toast, the shortcut help, the new issue panel */
+  --bg-pop: lch(10% 0.9 272);
+  --bg-pop-on: lch(16.706% 0.979 272);
+  --border-pop: lch(16.32% 1.48 272);
+  --shadow-pop: lch(0 0 0 / 0.4) 0 7px 32px;
+  --overlay: lch(0 0 0 / 0.5);
+  /* status and priority icons, and words in their colours */
+  --state-backlog: #bec2c8;
+  --state-planning: #e2e2e2;
+  --state-running: lch(80% 90 85);
+  --state-review: #4cb782;
+  --state-done: #5e6ad2;
+  --state-dropped: #95a2b3;
+  --state-cross: lch(10% 0 0);
+  --prio: lch(80% 1.2 272);
+  --urgent: lch(66% 80 48);
+  --text-running: lch(80% 90 85);
+  --text-done: #4cb782;
+  --text-blocked: lch(66% 80 48);
+  --text-error: #f2994a;
+  --notice-bg: lch(20% 30 60 / 0.35);
+  --notice-text: lch(85% 40 70);
   --font: "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, sans-serif;
   color-scheme: dark;
+}
+
+:root[data-theme=light] {
+  --bg-app: lch(94.44% 0.5 282);          /* content: bgSub */
+  --bg-panel: lch(97.94% 0.5 282);        /* content: bgBase */
+  --bg-raised: lch(94.44% 0.5 282);       /* the list's group header */
+  --bg-hover: lch(92.94% 0.5 282);        /* content: bgFocus */
+  --bg-active: lch(89.54% 0.5 282);       /* sidebar: the current item */
+  --border-1: lch(95.24% 0 282);
+  --border-2: lch(88.49% 0 282);
+  --border-3: lch(84.44% 0 282);
+  --text-1: lch(9.794% 0 282);
+  --text-2: lch(19.588% 1.25 282);
+  --text-3: lch(39.176% 1.25 282);
+  --text-4: lch(64.64% 1.25 282);
+  --accent: lch(53% 52.26 286.91);        /* controlPrimary, and its hover */
+  --accent-hover: lch(47% 50.26 286.91);
+  --link: lch(44.073% 70 286.91);         /* labelLink */
+  --bg-side-hover: lch(91.64% 0.5 282);   /* sidebar: an item under the mouse */
+  --bg-icon-hover: lch(0% 0 0 / 0.06);    /* the sidebar's round search button */
+  --shadow-panel: lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px;
+  --bg-pop: lch(100% 0 282);              /* popovers: the status menu */
+  --bg-pop-on: lch(95% 0 282);
+  --border-pop: lch(91.9% 0 282);
+  --shadow-pop: lch(0 0 0 / 0.08) 0 9px 48px, lch(0 0 0 / 0.1) 0 6px 24px, lch(0 0 0 / 0.04) 0 1px 1px;
+  --overlay: lch(0% 0 0 / 0.25);          /* bgModalOverlay */
+  --state-backlog: lch(67.969% 3.577 260.65); /* the status menu's icons */
+  --state-planning: lch(67.969% 0 139.088);
+  --state-review: lch(68% 64.37 141.95);
+  --state-cross: lch(100% 0 282);          /* Linear cuts the cross out of the circle; white matches that */
+  --prio: lch(39.176% 1.25 282);          /* a row's priority bars */
+  --text-running: lch(50% 80 85);         /* yellowText, greenText, orangeText */
+  --text-done: lch(50% 80 141.95);
+  --text-blocked: lch(50% 80 48);
+  --text-error: lch(50% 80 48);
+  --notice-bg: lch(94.802% 7.462 80.086); /* yellowTint */
+  --notice-text: lch(50% 80 85);
+  color-scheme: light;
 }
 
 html { background: var(--bg-app); scroll-behavior: smooth; }
@@ -38,16 +111,17 @@ code { background: var(--bg-raised); border: 1px solid var(--border-2); padding:
 p, ul, ol, table, blockquote, form { margin: 0 0 12px; }
 svg { flex: none; }
 .muted { color: var(--text-3); }
-.err { color: #f2994a; white-space: pre-wrap; }
+.err { color: var(--text-error); white-space: pre-wrap; }
 kbd { font: 500 11px var(--font); color: var(--text-3); border: 1px solid var(--border-3); border-radius: 4px; padding: 0 4px; }
 
 /* sidebar */
 .side { position: fixed; top: 0; left: 0; bottom: 0; width: 244px; box-sizing: border-box; padding: 12px 12px 12px 12px;
-        overflow: auto; }
+        overflow: auto; display: flex; flex-direction: column; }
+.side > * { flex: none; }
 .side-head { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-bottom: 12px; }
 /* Linear's sidebar icon buttons, measured 2026-10-14: a 28px circle (radius 9999px) around a 14px filled icon */
 .side-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9999px; color: var(--text-3); }
-.side-icon:hover { background: lch(10.149% 0.689 272); color: var(--text-1); }
+.side-icon:hover { background: var(--bg-icon-hover); color: var(--text-1); }
 .side-icon.here { background: var(--bg-active); color: var(--text-1); }
 /* New issue, Linear's pencil: the one sidebar button drawn raised, with a brighter icon */
 button.side-icon { padding: 0; border: 0; }
@@ -56,17 +130,20 @@ button.side-icon { padding: 0; border: 0; }
 .nav-item { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 9px 0 6px; border-radius: 8px; color: var(--text-3);
             font-weight: 500; text-decoration: none; white-space: nowrap; }
 .nav-item svg { width: 16px; height: 16px; color: var(--text-3); }
-.nav-item:hover { background: var(--bg-raised); color: var(--text-2); }
+.nav-item:hover { background: var(--bg-side-hover); color: var(--text-2); }
 .nav-item.here { background: var(--bg-active); color: var(--text-1); }
 .nav-item.soon { color: var(--text-4); cursor: default; } .nav-item.soon:hover { background: none; }
 .nav-item .count { margin-left: auto; font-size: 12px; font-weight: 450; color: var(--text-3); }
 .nav-label { display: flex; align-items: center; height: 28px; padding: 12px 6px 0; font-size: 12px; font-weight: 500; color: var(--text-3); }
 .nav-title { overflow: hidden; text-overflow: ellipsis; }
+/* the theme button sits at the sidebar's foot, where Linear keeps its help button, level with the Agent button */
+.side-foot { margin: auto 0 -8px; padding-top: 12px; }
+.theme-pick { background: none; }
 
 /* the inset panel and its top bar */
 .panel { position: fixed; top: 8px; right: 8px; bottom: 8px; left: 244px; display: flex; flex-direction: column;
          background: var(--bg-panel); border: 0.5px solid var(--border-2); border-radius: 12px;
-         box-shadow: lch(0 0 0 / 0.3) 0 0.5px 1px 1px; overflow: hidden; }
+         box-shadow: var(--shadow-panel); overflow: hidden; }
 .bar { display: flex; align-items: center; gap: 8px; height: 44px; flex: none; padding: 0 16px; border-bottom: 1px solid var(--border-1);
        font-weight: 500; color: var(--text-2); }
 .bar a { text-decoration: none; color: var(--text-3); } .bar a:hover { color: var(--text-1); }
@@ -105,7 +182,7 @@ button.side-icon { padding: 0; border: 0; }
 .search-box input[type=text] { height: 42px; padding: 0; border: 0; background: transparent; font-size: 14px; }
 .results .item .title { flex: none; max-width: 60%; }
 .item .snippet { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
-.item mark { background: rgb(94 105 209 / 0.3); color: var(--text-1); border-radius: 2px; }
+.item mark { background: var(--bg-mark); color: var(--text-1); border-radius: 2px; }
 
 input[type=text] { font: 450 13px var(--font); height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border-3);
                    background: var(--bg-raised); color: var(--text-1); box-sizing: border-box; width: 100%; }
@@ -117,8 +194,8 @@ button { font: 500 12px var(--font); height: 28px; padding: 0 10px; border-radiu
          background: var(--bg-raised); color: var(--text-1); cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
 button:hover { background: var(--bg-active); }
 button:disabled { color: var(--text-4); cursor: default; } button:disabled:hover { background: var(--bg-raised); }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.primary:hover { background: #6e78db; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
 /* problem page: content on the left, properties and agents on the right, as Linear's issue page */
@@ -134,7 +211,7 @@ button.primary:hover { background: #6e78db; }
 .body { font-size: 15px; line-height: 24px; color: var(--text-2); letter-spacing: -0.1px; }
 .body h2 { font-size: 13px; font-weight: 500; color: var(--text-3); margin: 24px 0 6px; }
 .body h3 { font-size: 15px; font-weight: 600; color: var(--text-1); margin: 16px 0 4px; }
-.body a { color: var(--accent); }
+.body a { color: var(--link); }
 .section-label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; color: var(--text-3); margin: 32px 0 8px; }
 .issue .tree .item { padding-left: 8px; height: 36px; }
 .issue .tree .tree .item { padding-left: 10px; }
@@ -147,7 +224,7 @@ button.primary:hover { background: #6e78db; }
 .prop.static { cursor: default; } .prop.static:hover { background: none; }
 .prop .key { color: var(--text-3); min-width: 64px; }
 .prop a { color: var(--text-1); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.prop a:hover { color: var(--accent); }
+.prop a:hover { color: var(--link); }
 .menu.folders { width: 360px; } .menu.folders ul { max-height: 300px; overflow: auto; }
 .menu li.empty { color: var(--text-3); cursor: default; }
 .folder-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -155,9 +232,9 @@ button.primary:hover { background: #6e78db; }
 .sessions { list-style: none; padding: 0; margin: 0; }
 .sessions li { display: flex; align-items: center; gap: 8px; height: 32px; }
 .sessions .what { flex: 1; color: var(--text-2); }
-.live { font-size: 12px; color: var(--text-3); } .live.working { color: lch(80% 90 85); } .live.done { color: #4cb782; }
-.live.blocked { color: lch(66% 80 48); font-weight: 600; }
-.notice { background: lch(20% 30 60 / 0.35); color: lch(85% 40 70); border-radius: 8px; padding: 6px 10px; font-size: 12px; margin: 0 0 8px; }
+.live { font-size: 12px; color: var(--text-3); } .live.working { color: var(--text-running); } .live.done { color: var(--text-done); }
+.live.blocked { color: var(--text-blocked); font-weight: 600; }
+.notice { background: var(--notice-bg); color: var(--notice-text); border-radius: 8px; padding: 6px 10px; font-size: 12px; margin: 0 0 8px; }
 .trail { font-size: 12px; color: var(--text-3); margin-bottom: 8px; } .trail a { text-decoration: none; } .trail a:hover { color: var(--text-1); }
 
 .review { border: 1px solid var(--border-3); border-radius: 10px; padding: 14px 16px; background: var(--bg-raised); margin: 0 0 24px; }
@@ -171,7 +248,7 @@ button.primary:hover { background: #6e78db; }
 .doc h3 { font-size: 15px; font-weight: 600; color: var(--text-1); margin: 24px 0 4px; }
 .doc p, .doc ul, .doc ol, .doc table, .doc blockquote { margin: 0 0 12px; }
 .doc li { margin-bottom: 4px; }
-.doc a { color: var(--accent); }
+.doc a { color: var(--link); }
 .doc strong { color: var(--text-1); }
 .doc table { border-collapse: collapse; font-size: 13px; line-height: 20px; }
 .doc td, .doc th { border: 1px solid var(--border-3); padding: 4px 8px; vertical-align: top; }
@@ -205,22 +282,24 @@ button.primary:hover { background: #6e78db; }
 /* diagrams */
 .d2 { margin: 0 0 1.2em; cursor: zoom-in; border: 1px solid var(--border-2); border-radius: 8px; overflow: hidden; background: var(--bg-raised); }
 .d2 svg { display: block; width: 100%; height: auto; max-height: 70vh; }
+/* each diagram comes in D2's dark and light theme; the page shows the one for desk's */
+:root:not([data-theme=light]) .d2 .for-light, :root[data-theme=light] .d2 .for-dark { display: none; }
 
 /* menus (S, P), focus, shortcut help */
-.menu { position: absolute; z-index: 10; width: 264px; background: lch(10% 0.9 272); border: 0.5px solid var(--border-3); border-radius: 8px;
-        box-shadow: lch(0 0 0 / 0.4) 0 7px 32px; padding: 0 0 4px; font-size: 13px; }
-.menu-head { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 0.5px solid var(--border-3); margin-bottom: 4px; }
+.menu { position: absolute; z-index: 10; width: 264px; background: var(--bg-pop); border: 0.5px solid var(--border-pop); border-radius: 8px;
+        box-shadow: var(--shadow-pop); padding: 0 0 4px; font-size: 13px; }
+.menu-head { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 0.5px solid var(--border-pop); margin-bottom: 4px; }
 .menu-filter { border: 0 !important; background: transparent !important; height: 38px !important; padding: 0 !important; font-size: 13px !important; }
 .menu ul { list-style: none; margin: 0; padding: 0 4px; }
 .menu li { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 6px; cursor: pointer; margin: 0; color: var(--text-1); }
-.menu li.on { background: var(--bg-active); }
+.menu li.on { background: var(--bg-pop-on); }
 .menu li .name { flex: 1; }
 .menu li .tick { width: 14px; color: var(--text-1); }
 .menu li .shortcut { font-size: 12px; color: var(--text-3); min-width: 10px; text-align: right; }
 .menu li .chev { color: var(--text-3); }
 .menu li .glyph { color: var(--text-3); }
 .menu li .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.menu li.divider { height: 0.5px; padding: 0; margin: 4px -4px; border-radius: 0; background: var(--border-3); cursor: default; }
+.menu li.divider { height: 0.5px; padding: 0; margin: 4px -4px; border-radius: 0; background: var(--border-pop); cursor: default; }
 .menu:focus { outline: none; }
 .menu.actions { width: 224px; } .menu.actions ul { padding-top: 4px; }
 .menu.wide { width: 340px; } .menu.wide ul { max-height: 300px; overflow: auto; }
@@ -233,15 +312,15 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 
 /* a Linear-style toast, bottom left */
 .toast { position: fixed; left: 16px; bottom: 16px; z-index: 40; display: flex; align-items: center; gap: 8px; height: 40px;
-         padding: 0 8px 0 14px; background: lch(10% 0.9 272); border: 0.5px solid var(--border-3); border-radius: 8px;
-         box-shadow: lch(0 0 0 / 0.4) 0 7px 32px; font-size: 13px; color: var(--text-1); }
+         padding: 0 8px 0 14px; background: var(--bg-pop); border: 0.5px solid var(--border-pop); border-radius: 8px;
+         box-shadow: var(--shadow-pop); font-size: 13px; color: var(--text-1); }
 .toast:not(:has(button)) { padding-right: 14px; }
 .toast .dot { color: var(--text-4); }
 .toast button.undo { height: 26px; padding: 0 8px; background: none; border: 0; color: var(--text-1); }
-.toast button.undo:hover { background: var(--bg-active); }
-#keys { display: none; position: fixed; inset: 0; z-index: 20; background: lch(0 0 0 / 0.5); place-items: center; }
+.toast button.undo:hover { background: var(--bg-pop-on); }
+#keys { display: none; position: fixed; inset: 0; z-index: 20; background: var(--overlay); place-items: center; }
 #keys.open { display: grid; }
-.keys-box { background: lch(10% 0.9 272); border: 0.5px solid var(--border-3); border-radius: 12px; padding: 16px 20px; width: 340px; font-size: 13px; }
+.keys-box { background: var(--bg-pop); border: 0.5px solid var(--border-pop); border-radius: 12px; padding: 16px 20px; width: 340px; font-size: 13px; }
 .keys-box h2 { font-size: 13px; margin: 0 0 12px; } .keys-box dl + h2 { margin-top: 18px; } .keys-box dl { display: grid; grid-template-columns: 128px 1fr; gap: 8px 16px; margin: 0; }
 .keys-box dd { margin: 0; color: var(--text-3); }
 
@@ -263,11 +342,11 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
    centred, 112px from the top, 21px corners and a 13px edge; an 18px/600 title over a 15px description,
    24px pill chips with 14px icons and 12px/500 text, then a 22x14 Create more switch and a 28px pill
    Create issue button. Linear's backdrop is lch(0 0 0 / 0.25) in its light theme; dark needs more. */
-.creator { position: fixed; inset: 0; z-index: 25; background: lch(0 0 0 / 0.45); }
+.creator { position: fixed; inset: 0; z-index: 25; background: var(--overlay); }
 .creator ~ .menu { z-index: 26; }
 .create-panel { position: absolute; top: 13vh; left: 50%; transform: translateX(-50%); width: min(750px, calc(100vw - 32px));
                 box-sizing: border-box; display: flex; flex-direction: column; margin: 0; padding: 13px;
-                background: var(--bg-raised); border: 0.5px solid var(--border-3); border-radius: 21px; box-shadow: lch(0 0 0 / 0.4) 0 7px 32px; }
+                background: var(--bg-pop); border: 0.5px solid var(--border-pop); border-radius: 21px; box-shadow: var(--shadow-pop); }
 .create-panel header { display: flex; align-items: center; height: 28px; padding-left: 6px; color: var(--text-2); }
 .create-panel .close { width: 28px; padding: 0; justify-content: center; margin-left: auto; border: 0; border-radius: 9999px;
                        background: none; color: var(--text-3); }
@@ -294,5 +373,5 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%;
                        background: var(--text-3); transition: transform 0.15s, background 0.15s; }
 .switch input:checked { background: var(--accent); }
-.switch input:checked::after { transform: translateX(8px); background: #fff; }
+.switch input:checked::after { transform: translateX(8px); background: var(--on-accent); }
 .switch input:focus-visible, .field-chip:focus-visible, .create-panel button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }

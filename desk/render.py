@@ -3,18 +3,27 @@
 import html
 import re
 import subprocess
+from functools import lru_cache
 
 import markdown
 
 D2_BLOCK = re.compile(r"^```d2\n(.*?)^```", re.S | re.M)
+# D2's theme for each of desk's: 200 is "Dark Mauve", 0 its default light one. Both renders go on the
+# page and desk.css shows the one for the theme in use. D2 names a diagram's ids after its theme as
+# well as its source, so the two never clash.
+D2_THEMES = {"dark": 200, "light": 0}
 
 
+@lru_cache(maxsize=256)
 def _draw(source: str) -> str:
-    # Theme 200 is D2's "Dark Mauve", to sit on desk's dark panel.
-    run = subprocess.run(["d2", "--pad=16", "--theme=200", "-", "-"], input=source.encode(), capture_output=True)
-    if run.returncode:
-        return f'<pre class="err">{html.escape(run.stderr.decode())}</pre>'
-    return f'<div class="d2">{run.stdout.decode()}</div>'
+    """Cached by the diagram's source: a page redraws its diagrams on every soft refresh."""
+    renders = []
+    for name, theme in D2_THEMES.items():
+        run = subprocess.run(["d2", "--pad=16", f"--theme={theme}", "-", "-"], input=source.encode(), capture_output=True)
+        if run.returncode:
+            return f'<pre class="err">{html.escape(run.stderr.decode())}</pre>'
+        renders.append(f'<div class="for-{name}">{run.stdout.decode()}</div>')
+    return f'<div class="d2">{"".join(renders)}</div>'
 
 
 def to_html(text: str) -> str:
