@@ -12,13 +12,14 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import agents
 from . import issues as store
 from .render import to_html, to_html_with_toc
+from .search import find
 
 HERE = Path(__file__).resolve().parent
 CLOSED = {"done", "dropped"}
@@ -109,6 +110,18 @@ def backlog(request: Request):
 def inbox(request: Request):
     needs, review = inbox_items(store.load_all(), agents.live())
     return templates.TemplateResponse(request, "inbox.html", {"needs": needs, "review": review})
+
+
+@app.get("/search")
+def search(request: Request, q: str = ""):
+    return templates.TemplateResponse(request, "search.html", {"q": q, "hits": find(store.load_all(), q)})
+
+
+@app.get("/search/rows", response_class=HTMLResponse)
+def search_rows(q: str = ""):
+    """The results alone, which search.js swaps in as you type. Rendered without the sidebar, whose
+    session list runs `claude agents` and would slow every keystroke."""
+    return templates.get_template("search_rows.html").render(q=q, hits=find(store.load_all(), q))
 
 
 @app.post("/issues")

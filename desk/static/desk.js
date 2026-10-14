@@ -215,6 +215,7 @@ document.addEventListener("keydown", (e) => {
     }
     e.preventDefault();
   }
+  else if (e.key === "/") { const box = document.getElementById("search-q"); if (box) box.focus(); else location.href = "/search"; e.preventDefault(); }
   else if (e.key === "?") { document.getElementById("keys").classList.toggle("open"); }
   else if (e.key === "Escape") { document.getElementById("keys").classList.remove("open"); focusRow(null); }
 });
