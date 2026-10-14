@@ -6,12 +6,13 @@ Design: ~/notes/canvas/effective-work.md. Run: uv run uvicorn desk.app:app --por
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import PlainTextResponse, RedirectResponse
+from fastapi import HTTPException
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import problems as store
-from .render import to_html
+from .render import to_html, to_html_with_toc
 
 HERE = Path(__file__).resolve().parent
 CLOSED = {"done", "dropped"}
@@ -44,7 +45,7 @@ def home():
 @app.get("/version", response_class=PlainTextResponse)
 def version():
     """Changes whenever a problem file is added, removed or edited; pages poll it to reload."""
-    files = list(store.PROBLEMS_DIR.glob("*.md"))
+    files = [f for f in store.PROBLEMS_DIR.rglob("*") if f.is_file()]
     return f"{len(files)}:{max((f.stat().st_mtime_ns for f in files), default=0)}"
 
 
@@ -71,8 +72,22 @@ def show(request: Request, slug: str):
         trail.insert(0, all_problems[up])
         up = all_problems[up].parent
     kids_of = open_kids(all_problems)
-    context = {"p": p, "trail": trail, "kids": kids_of(slug), "kids_of": kids_of, "body": to_html(p.body)}
+    context = {"p": p, "trail": trail, "kids": kids_of(slug), "kids_of": kids_of, "body": to_html(p.body),
+               "files": store.files(slug)}
     return templates.TemplateResponse(request, "problem.html", context)
+
+
+@app.get("/p/{slug}/f/{name}")
+def problem_file(request: Request, slug: str, name: str):
+    """A problem's own file: Markdown and D2 render in the reading style, anything else is served as is."""
+    path = (store.folder(slug) / name).resolve()
+    if path.parent != store.folder(slug).resolve() or not path.is_file():
+        raise HTTPException(404)
+    if path.suffix not in (".md", ".d2"):
+        return FileResponse(path)
+    text = path.read_text(encoding="utf-8")
+    body, toc = to_html_with_toc(f"```d2\n{text}\n```" if path.suffix == ".d2" else text)
+    return templates.TemplateResponse(request, "file.html", {"p": store.load(slug), "name": name, "body": body, "toc": toc})
 
 
 @app.post("/p/{slug}")

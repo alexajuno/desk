@@ -1,7 +1,8 @@
-"""Problems live as Markdown files with YAML front matter, one file per problem.
+"""Each problem is a folder in PROBLEMS_DIR: problem.md holds its YAML front matter and its
+sections, and any other file in the folder (a plan, a design doc, a diagram) belongs to it.
 
-Nesting is a `parent:` slug in the front matter, so a subproblem can have its own
-subproblems to any depth, and moving one means editing one line.
+Nesting is a `parent:` slug in the front matter, not nested folders, so a subproblem can have
+its own subproblems to any depth, and moving one means editing one line.
 """
 
 from __future__ import annotations
@@ -63,25 +64,38 @@ def _parse(slug: str, text: str) -> Problem:
     return Problem(slug=slug, body=body, **meta)
 
 
+MAIN = "problem.md"
+
+
+def folder(slug: str) -> Path:
+    return PROBLEMS_DIR / slug
+
+
 def load(slug: str) -> Problem:
-    return _parse(slug, (PROBLEMS_DIR / f"{slug}.md").read_text(encoding="utf-8"))
+    return _parse(slug, (folder(slug) / MAIN).read_text(encoding="utf-8"))
 
 
 def load_all() -> dict[str, Problem]:
-    return {path.stem: _parse(path.stem, path.read_text(encoding="utf-8")) for path in PROBLEMS_DIR.glob("*.md")}
+    return {path.parent.name: _parse(path.parent.name, path.read_text(encoding="utf-8"))
+            for path in PROBLEMS_DIR.glob(f"*/{MAIN}")}
+
+
+def files(slug: str) -> list[str]:
+    """The problem's own files besides problem.md, by name."""
+    return sorted(p.name for p in folder(slug).iterdir() if p.is_file() and p.name != MAIN)
 
 
 def save(problem: Problem) -> None:
     meta = {k: v for k, v in asdict(problem).items() if k not in ("slug", "body") and v not in (None, [], "")}
     front = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True).strip()
-    PROBLEMS_DIR.mkdir(exist_ok=True)
-    (PROBLEMS_DIR / f"{problem.slug}.md").write_text(f"---\n{front}\n---\n\n{problem.body.strip()}\n", encoding="utf-8")
+    folder(problem.slug).mkdir(parents=True, exist_ok=True)
+    (folder(problem.slug) / MAIN).write_text(f"---\n{front}\n---\n\n{problem.body.strip()}\n", encoding="utf-8")
 
 
 def new_slug(title: str) -> str:
     base = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:50] or "problem"
     slug, n = base, 2
-    while (PROBLEMS_DIR / f"{slug}.md").exists():
+    while folder(slug).exists():
         slug, n = f"{base}-{n}", n + 1
     return slug
 

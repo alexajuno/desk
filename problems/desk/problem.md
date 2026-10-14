@@ -8,10 +8,10 @@ created: '2026-10-14T20:40:00'
 
 ## Resume
 
-Step 1 to 3 running: skeleton, park, problem pages.
+Steps 1 to 3 done, plus the restyle and problem folders. Next: step 4, agents.
 
 ## Plan
 
-Direction, the design doc: `~/notes/canvas/effective-work.md`.
+Direction: [design.md](/p/desk/f/design.md), the design doc in this problem's files.
 
 Done when: you park, plan, run, review and look back in desk, with nothing else.

@@ -17,7 +17,10 @@
 <dl class="facts">
   {% if p.folder %}<dt>Folder</dt><dd><code>{{ p.folder }}</code></dd>{% endif %}
   {% if p.link %}<dt>Link</dt><dd><a href="{{ p.link }}">{{ p.link }}</a></dd>{% endif %}
-  <dt>File</dt><dd><code>problems/{{ p.slug }}.md</code></dd>
+  <dt>Stored in</dt><dd><code>problems/{{ p.slug }}/</code></dd>
+  {%- if files %}
+  <dt>Files</dt><dd>{% for f in files %}<a href="/p/{{ p.slug }}/f/{{ f }}">{{ f }}</a>{{ ", " if not loop.last }}{% endfor %}</dd>
+  {%- endif %}
 </dl>
 {{ body | safe }}
 <h2>Subproblems</h2>

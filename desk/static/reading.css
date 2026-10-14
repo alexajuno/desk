@@ -100,6 +100,16 @@ button.primary:hover { background: #3a3a37; }
 .facts dt { color: #8a8a82; } .facts dd { margin: 0; }
 .trail { font-size: 15px; color: #8a8a82; margin: 0 0 8px; } .trail a { color: #8a8a82; }
 
+/* a long document's section list: a column on the right when there is room, a block on top when not */
+.onpage { font-size: 15px; margin: 0 0 32px; } .onpage ul { list-style: none; padding-left: 0; margin: 0; }
+.onpage ul ul { padding-left: 14px; } .onpage li { margin: 0; }
+.onpage a { display: block; padding: 3px 0; color: #55554f; text-decoration: none; } .onpage a:hover { color: #0b57d0; }
+.onpage-label { font-size: 13px; font-weight: 600; color: #8a8a82; margin-bottom: 6px; }
+@media (min-width: 1300px) {
+  .onpage { position: fixed; top: 48px; right: 24px; width: 220px; max-height: calc(100vh - 96px); overflow: auto; }
+  main:has(.onpage) { padding-right: 268px; }
+}
+
 @media (max-width: 1000px) {
   nav.side { position: sticky; top: 0; z-index: 1; width: auto; height: auto; padding: 6px 12px; display: flex;
              gap: 4px; align-items: center; overflow-x: auto; border-right: 0; border-bottom: 1px solid #e3e3dc; }

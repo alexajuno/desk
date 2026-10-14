@@ -17,13 +17,20 @@ def _draw(source: str) -> str:
 
 
 def to_html(text: str) -> str:
+    return to_html_with_toc(text)[0]
+
+
+def to_html_with_toc(text: str) -> tuple[str, str]:
+    """The page and its table of contents (the h2 and h3 headings), for long documents."""
     diagrams: list[str] = []
 
     def hold(match: re.Match) -> str:
         diagrams.append(_draw(match.group(1)))
         return f"\n\nD2DIAGRAM{len(diagrams) - 1}\n\n"
 
-    body = markdown.markdown(D2_BLOCK.sub(hold, text), extensions=["tables", "fenced_code", "sane_lists"])
+    md = markdown.Markdown(extensions=["tables", "fenced_code", "sane_lists", "toc"],
+                           extension_configs={"toc": {"toc_depth": "2-3"}})
+    body = md.convert(D2_BLOCK.sub(hold, text))
     for i, svg in enumerate(diagrams):
         body = body.replace(f"<p>D2DIAGRAM{i}</p>", svg)
-    return body
+    return body, md.toc
