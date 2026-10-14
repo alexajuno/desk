@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>{% block title %}desk{% endblock %}</title>
+<link rel="stylesheet" href="/static/reading.css">
+<nav>
+  <div class="brand">desk</div>
+  {% for path, label in [("/park", "Park")] %}
+  <a href="{{ path }}" class="{{ 'here' if request.url.path == path }}">{{ label }}</a>
+  {% endfor %}
+</nav>
+<main>{% block main %}{% endblock %}</main>
+<script>
+// Reload when any problem file changes, keeping the scroll position.
+let seen = null;
+setInterval(async () => {
+  try {
+    const v = await (await fetch("/version")).text();
+    if (seen === null) seen = v;
+    else if (v !== seen) { sessionStorage.y = scrollY; location.reload(); }
+  } catch (e) {}
+}, 1500);
+addEventListener("load", () => { if (sessionStorage.y) { scrollTo(0, +sessionStorage.y); delete sessionStorage.y; } });
+</script>

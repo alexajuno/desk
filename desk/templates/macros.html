@@ -1,0 +1,25 @@
+{% macro badges(p) -%}
+<span class="prio {{ p.priority }}">{{ p.priority | title }}</span>
+{%- if p.state != "parked" %}<span class="state {{ p.state }}">{{ p.state }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro tree(items, kids_of) -%}
+<ul class="tree">
+  {%- for p in items %}
+  <li><a href="/p/{{ p.slug }}">{{ p.title }}</a>{{ badges(p) }}
+    {%- set kids = kids_of(p.slug) %}{% if kids %}{{ tree(kids, kids_of) }}{% endif %}
+  </li>
+  {%- endfor %}
+</ul>
+{%- endmacro %}
+
+{% macro add_form(parent, priorities, label) -%}
+<form method="post" action="/problems" class="row">
+  {% if parent %}<input type="hidden" name="parent" value="{{ parent }}">{% endif %}
+  <input type="text" name="title" placeholder="{{ label }}" required autocomplete="off" style="flex: 1 1 20ch">
+  <select name="priority">
+    {%- for level in priorities %}<option value="{{ level }}" {{ 'selected' if level == 'none' }}>{{ level | title }}</option>{% endfor %}
+  </select>
+  <button>Park</button>
+</form>
+{%- endmacro %}

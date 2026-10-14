@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% from "macros.html" import tree, add_form %}
+{% block title %}Park · desk{% endblock %}
+{% block main %}
+<h1>Park</h1>
+<p class="muted">Everything not finished, most urgent first. Subproblems sit under their parent.</p>
+{{ add_form(None, priorities, "New problem, in one line") }}
+{% if top %}{{ tree(top, kids_of) }}{% else %}<p>Nothing parked.</p>{% endif %}
+{% endblock %}

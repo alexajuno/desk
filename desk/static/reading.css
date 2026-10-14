@@ -1,0 +1,58 @@
+/* The reading rules from the design doc (~/notes/canvas/effective-work.md, "The interface"):
+   about 66 characters per line (Baymard: 50-75; WCAG 1.4.8: at most 80), line spacing of at
+   least 1.5, left-aligned, big text, a section list to jump from, diagrams wider than the text. */
+
+html { scroll-behavior: smooth; }
+body { margin: 0; font: 20px/1.6 system-ui, sans-serif; color: #1d1d1f; background: #fbfbf8; text-align: left; }
+a { color: #0b57d0; }
+
+nav { position: fixed; top: 0; left: 0; width: 200px; height: 100vh; box-sizing: border-box; overflow: auto;
+      padding: 28px 18px; font-size: 16px; background: #f2f2ed; border-right: 1px solid #e3e3dc; }
+nav .brand { font-weight: 700; font-size: 20px; margin-bottom: 18px; }
+nav a { display: block; padding: 5px 0; color: #333; text-decoration: none; }
+nav a.here { font-weight: 700; color: #000; }
+nav a:hover { color: #0b57d0; }
+
+main { margin-left: 200px; max-width: 66ch; padding: 32px 48px 160px; }
+h1 { font-size: 32px; line-height: 1.25; margin-bottom: 0.3em; }
+h2 { font-size: 25px; margin-top: 2em; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+h3 { font-size: 21px; margin-top: 1.6em; }
+p, ul, ol, table, blockquote, form { margin: 0 0 1.2em; }
+li { margin-bottom: 0.35em; }
+code { background: #eee; padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+table { border-collapse: collapse; font-size: 17px; }
+td, th { border: 1px solid #ddd; padding: 6px 10px; text-align: left; vertical-align: top; }
+blockquote { background: #FFF8E1; border-left: 5px solid #f0c040; padding: 8px 18px; }
+.d2 { width: min(calc(100vw - 296px), 1200px); } .d2 svg { width: 100%; height: auto; }
+.err { color: #b00; }
+.muted { color: #6b6b6b; font-size: 17px; }
+
+/* problems */
+.tree { list-style: none; padding-left: 0; }
+.tree .tree { padding-left: 1.4em; border-left: 2px solid #e6e6df; margin: 0.3em 0 0.3em 0.3em; }
+.tree li { margin: 0.25em 0; }
+.tree a { text-decoration: none; color: #1d1d1f; }
+.tree a:hover { color: #0b57d0; }
+.prio, .state { font-size: 14px; padding: 1px 7px; border-radius: 10px; margin-left: 6px; white-space: nowrap; }
+.prio.urgent { background: #fde2e1; color: #a1170f; }
+.prio.high { background: #fdebd3; color: #8a4b00; }
+.prio.medium { background: #e9eefc; color: #2b4a9b; }
+.prio.low { background: #eef0ee; color: #4f5a4f; }
+.prio.none { display: none; }
+.state { background: #efefea; color: #555; }
+.state.running { background: #e3f4e7; color: #1b6b33; }
+.state.review { background: #f3e8fd; color: #6a2b9b; }
+
+input[type=text], select { font: inherit; font-size: 18px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
+input[type=text] { width: 100%; box-sizing: border-box; }
+button { font: inherit; font-size: 17px; padding: 6px 14px; border: 1px solid #bbb; border-radius: 6px; background: #fff; cursor: pointer; }
+button:hover { background: #f0f0ea; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+@media (max-width: 1000px) {
+  nav { position: sticky; top: 0; z-index: 1; width: auto; height: auto; padding: 6px 16px; display: flex; gap: 18px;
+        align-items: baseline; border-right: 0; border-bottom: 1px solid #e3e3dc; }
+  nav .brand { margin: 0; font-size: 17px; }
+  main { margin-left: 0; padding: 16px 24px 160px; }
+  .d2 { width: auto; }
+}
