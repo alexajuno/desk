@@ -249,7 +249,7 @@ def jump(slug: str):
         return back(slug)
     try:
         agents.jump_back(i)
-    except (RuntimeError, OSError) as error:
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         return back(slug, str(error))
     return back(slug)
 

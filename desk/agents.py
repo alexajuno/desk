@@ -4,7 +4,8 @@
                       terminal: you talk, and the plan gets written into the issue.
     Hand off          the same session keeps going in the background: `claude stop`, then
                       `claude --bg --resume <id> "<carry out>"`, with no other flags.
-    Jump back         `claude attach` while the session lives, else `claude --resume` in a terminal.
+    Jump back         focus the session's kitty tab if it is open, else open one: `claude attach` while
+                      the session lives, else `claude --resume`.
 
 Facts checked on Claude Code 2.1.285 (2026-10-14): `claude --bg` prints "backgrounded · <id> · <name>",
 and the short id is the start of the session id; states seen: working, done, blocked (waiting for the user),
@@ -17,9 +18,11 @@ Sessions start in the issue's folder (usually a repo), so its CLAUDE.md, .claude
 servers load; the issue file is only passed by its full path.
 """
 
+import glob
 import json
 import os
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -101,9 +104,36 @@ def live() -> dict[str, dict]:
     return {key: row for row in rows for key in (row.get("id"), row.get("sessionId")) if key}
 
 
-def _terminal(cwd: str, title: str, *command: str) -> None:
-    subprocess.Popen(["kitty", "--title", title, "--directory", cwd, *command],
-                     start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+# kitty.conf has `listen_on unix:/tmp/mykitty`, and kitty adds -<its pid> to a unix socket set there
+# (expand_listen_on in kitty/main.py, kitty 0.48.2), so each running kitty answers on one of these.
+KITTY_SOCKETS = "/tmp/mykitty-*"
+
+
+def _kitty(socket: str, *args: str) -> bool:
+    """Run a remote control command in one kitty; when it works, bring that kitty to the front."""
+    if subprocess.run(["kitty", "@", "--to", f"unix:{socket}", *args], capture_output=True, timeout=10).returncode:
+        return False
+    pid = socket.rsplit("-", 1)[1]
+    subprocess.run(["hyprctl", "dispatch", "focuswindow", f"pid:{pid}"], capture_output=True, timeout=10)
+    return True
+
+
+def _focus(issue) -> bool:
+    """Focus the kitty tab desk opened for the issue, if it is still open."""
+    match = f"var:^desk_issue$=^{issue.slug}$"
+    return any(_kitty(socket, "focus-tab", "--match", match) for socket in sorted(glob.glob(KITTY_SOCKETS)))
+
+
+def _terminal(cwd: str, issue, *command: str) -> None:
+    """Run the command in a new tab of the running kitty, marked with the issue's slug so _focus finds
+    it; with no kitty running, in a new kitty window, marked the same way through a session."""
+    launch = ["--tab-title", issue.title, "--cwd", cwd, "--var", f"desk_issue={issue.slug}", *command]
+    if any(_kitty(socket, "launch", "--type=tab", *launch) for socket in sorted(glob.glob(KITTY_SOCKETS))):
+        return
+    kitty = subprocess.Popen(["kitty", "--title", issue.title, "--session", "-"], stdin=subprocess.PIPE, text=True,
+                             start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    kitty.stdin.write(f"launch {shlex.join(launch)}\n")
+    kitty.stdin.close()
 
 
 def _paths(issue, folder: Path) -> dict:
@@ -126,7 +156,7 @@ def start(issue, folder: Path) -> str:
         rules_follow(cwd)
         command += ["-w", f"desk-{issue.slug[:40]}"]
     short = _background(cwd, [*command, PLAN_PROMPT.format(**_paths(issue, folder))])
-    _terminal(cwd, issue.title, "claude", "attach", short)
+    _terminal(cwd, issue, "claude", "attach", short)
     row = live().get(short, {})
     return row.get("sessionId") or short
 
@@ -152,7 +182,7 @@ def _continue(issue, prompt: str) -> None:
     """Give the issue's own session its next message, in the background, as the same session."""
     row = live().get(issue.session, {})
     if row.get("kind") == "interactive":
-        raise RuntimeError("This session is open in a terminal. Close that window, then try again.")
+        raise RuntimeError("This session is open in a terminal. Close that tab, then try again.")
     if row.get("state") == "working":
         raise RuntimeError("The session is still working. Wait until it is done, then try again.")
     if row:
@@ -163,12 +193,14 @@ def _continue(issue, prompt: str) -> None:
 
 
 def jump_back(issue) -> None:
-    """Open the issue's session in a terminal."""
+    """Focus the issue's session in kitty, or open it there."""
+    if _focus(issue):
+        return
     row = live().get(issue.session, {})
     if row.get("kind") == "background" and row.get("state") in ("working", "done"):
-        _terminal(row.get("cwd") or workdir(issue), issue.title, "claude", "attach", row["id"])
+        _terminal(row.get("cwd") or workdir(issue), issue, "claude", "attach", row["id"])
     elif row.get("kind") == "interactive":
         raise RuntimeError("This session is already open in a terminal.")
     else:
         worktree = Path(workdir(issue), ".claude", "worktrees", f"desk-{issue.slug[:40]}")
-        _terminal(str(worktree if worktree.is_dir() else workdir(issue)), issue.title, "claude", "--resume", issue.session)
+        _terminal(str(worktree if worktree.is_dir() else workdir(issue)), issue, "claude", "--resume", issue.session)
