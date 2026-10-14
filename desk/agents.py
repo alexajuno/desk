@@ -4,6 +4,8 @@
                       terminal: you talk, and the plan gets written into the issue.
     Hand off          the same session keeps going in the background: `claude stop`, then
                       `claude --bg --resume <id> "<carry out>"`, with no other flags.
+    Start             the desk agent wrote the plan itself: claude --bg -w desk-<slug> "<carry out>",
+                      with no terminal and no planning chat.
     Jump back         focus the session's kitty tab if it is open, else open one: `claude attach` while
                       the session lives, else `claude --resume`.
 
@@ -153,17 +155,30 @@ def _background(cwd: str, command: list[str]) -> str:
     return match.group(1)
 
 
-def start(issue, folder: Path) -> str:
-    """Start the issue's session for planning and open it in a terminal; returns its session id."""
+def _new_session(issue, prompt: str) -> str:
+    """Start the issue's session in the background, in its own worktree when its folder is a git repo;
+    returns the short id."""
     cwd = workdir(issue)
     command = ["claude", "--bg", "-n", issue.title[:40]]
     if _git(cwd, "rev-parse", "--show-toplevel"):
         rules_follow(cwd)
         command += ["-w", f"desk-{issue.slug[:40]}"]
-    short = _background(cwd, [*command, PLAN_PROMPT.format(**_paths(issue, folder))])
-    _terminal(cwd, issue, "claude", "attach", short)
+    return _background(cwd, [*command, prompt])
+
+
+def start(issue, folder: Path) -> str:
+    """Start the issue's session for planning and open it in a terminal; returns its session id."""
+    short = _new_session(issue, PLAN_PROMPT.format(**_paths(issue, folder)))
+    _terminal(workdir(issue), issue, "claude", "attach", short)
     row = live().get(short, {})
     return row.get("sessionId") or short
+
+
+def run(issue, folder: Path) -> str:
+    """Start the issue's session straight on its written plan, in the background with no terminal, as
+    the desk agent does; returns its session id."""
+    short = _new_session(issue, HANDOFF_PROMPT.format(**_paths(issue, folder)))
+    return live().get(short, {}).get("sessionId") or short
 
 
 SEND_BACK_PROMPT = """The user reviewed your result and sends it back with this note:

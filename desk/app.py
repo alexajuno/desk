@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import agents
+from . import agents, api, chats
 from . import issues as store
 from .render import to_html, to_html_with_toc
 from .search import find
@@ -91,6 +91,9 @@ templates.env.globals.update(
 # no-cache header still fetches a changed file, since its URL is new.
 templates.env.globals["asset"] = lambda name: f"/static/{name}?v={(HERE / 'static' / name).stat().st_mtime_ns}"
 templates.env.filters["short_date"] = lambda iso: datetime.fromisoformat(str(iso)).strftime("%b %-d") if iso else ""
+app.state.templates = templates  # the Agent tab's pages (chats.py) render with these too
+app.include_router(api.router)
+app.include_router(chats.router)
 
 
 def open_kids(all_issues: dict[str, store.Issue]):
