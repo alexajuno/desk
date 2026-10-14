@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}You · desk{% endblock %}
+{% block crumb %}<span>You</span>{% endblock %}
+{% block main %}
+<div class="you-bar">
+  {%- if active %}<span class="on">Given to Claude</span><span>Every session reads it, as <code>{{ rule }}</code>.</span>
+  <form method="post" action="/you/give" style="margin: 0 0 0 auto"><input type="hidden" name="on" value="0"><button>Take back</button></form>
+  {%- else %}<span>Not given to Claude yet. Read it, change what isn't you, then give it.</span>
+  <form method="post" action="/you/give" style="margin: 0 0 0 auto"><input type="hidden" name="on" value="1"><button class="primary">Give to Claude</button></form>
+  {%- endif %}
+  {%- if not editing %}<a href="/you?edit=1"><button>Edit</button></a>{% endif %}
+</div>
+{% if editing %}
+<form class="you-edit" method="post" action="/you">
+  <textarea name="text" autofocus>{{ text }}</textarea>
+  <div class="row" style="margin-top: 8px"><button class="primary">Save</button><a href="/you"><button type="button">Cancel</button></a></div>
+</form>
+{% else %}
+<div class="read">{{ body | safe }}</div>
+{% endif %}
+{% endblock %}

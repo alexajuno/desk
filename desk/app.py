@@ -241,6 +241,49 @@ def jump(slug: str):
     return back(slug)
 
 
+# --- You: the page about you -------------------------------------------------------------------
+# Given to Claude as a user-level rule: files in ~/.claude/rules load in every project with no
+# approval, while an @ import from outside the project needs a per-project dialog that background
+# sessions cannot answer (https://code.claude.com/docs/en/memory). desk writes the copy; you edit here.
+RULE_FILE = Path(os.environ.get("DESK_RULE_FILE", "~/.claude/rules/you.md")).expanduser()  # a dev copy points this elsewhere
+RULE_MARK = "<!-- written by desk from ~/.local/share/desk/you.md; edit it in desk, not here -->"
+
+
+def _rule_active() -> bool:
+    return RULE_FILE.is_file() and RULE_FILE.read_text(encoding="utf-8").startswith(RULE_MARK)
+
+
+def _write_rule(text: str) -> None:
+    RULE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    RULE_FILE.write_text(f"{RULE_MARK}\n\n{text.strip()}\n", encoding="utf-8")
+
+
+@app.get("/you")
+def you(request: Request):
+    text = store.YOU_FILE.read_text(encoding="utf-8") if store.YOU_FILE.is_file() else "# About me\n"
+    editing = request.query_params.get("edit") == "1"
+    return templates.TemplateResponse(request, "you.html", {"text": text, "body": to_html(text), "editing": editing,
+                                                           "active": _rule_active(), "rule": str(RULE_FILE)})
+
+
+@app.post("/you")
+def save_you(text: str = Form(...)):
+    store.YOU_FILE.parent.mkdir(parents=True, exist_ok=True)
+    store.YOU_FILE.write_text(text.replace("\r\n", "\n").strip() + "\n", encoding="utf-8")
+    if _rule_active():
+        _write_rule(text)
+    return RedirectResponse("/you", status_code=303)
+
+
+@app.post("/you/give")
+def give(on: str = Form(...)):
+    if on == "1" and store.YOU_FILE.is_file():
+        _write_rule(store.YOU_FILE.read_text(encoding="utf-8"))
+    elif on == "0" and _rule_active():
+        RULE_FILE.unlink()
+    return RedirectResponse("/you", status_code=303)
+
+
 # --- Works in: your repos, and path completion -----------------------------------------------
 
 HOME = Path.home()
