@@ -467,6 +467,18 @@ setInterval(async () => {
   } catch {}
 }, 1500);
 
+// A session that starts or stops working changes no file, so /version misses it, yet the issue's strip says it and
+// desk moves the issue on it (app.inbox_items): an open issue with a session asks for its state, and refreshes when
+// it changed. `claude agents` takes about 0.15s (15 Oct).
+setInterval(async () => {
+  const strip = $(".strip[data-live]");
+  if (!strip || busy()) return;
+  try {
+    const now = await (await fetch(`/issue/${encodeURIComponent(strip.dataset.slug)}/live`, { cache: "no-store" })).text();
+    if (now !== strip.dataset.live) await refresh();
+  } catch {}
+}, 3000);
+
 // --- the issue page: click the title or the description to edit it -------------------------------
 let editing = null;
 const raw = () => JSON.parse($("#issue-raw").textContent);

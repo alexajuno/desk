@@ -5,6 +5,7 @@
     lives (data-dock, terminal.js), and Open chat then hides. Ctrl+Enter presses the button (desk.js). #}
 {%- set b = strip.button %}
 <div class="strip" data-slug="{{ p.slug }}"
+  {%- if p.session and p.state not in ("done", "dropped") %} data-live="{{ live }}"{% endif %}
   {%- if not in_inbox and p.session and p.state not in ("done", "dropped") and live in ("working", "idle") %} data-dock="{{ p.session[:8] }}"{% endif %}>
   <div class="strip-in">
     <span class="strip-state">{{ state(p.state) }}</span>

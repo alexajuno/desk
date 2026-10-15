@@ -371,6 +371,16 @@ def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: st
     return context
 
 
+@app.get("/issue/{slug}/live", response_class=PlainTextResponse)
+def live_state(slug: str):
+    """Where the issue's session stands (agents.status), which its strip says. A session that starts or stops working
+    changes no file, so /version misses it; the issue's page asks here instead (desk.js)."""
+    if not store.exists(slug):
+        raise HTTPException(404)
+    i = store.load(slug)
+    return agents.status(agents.live().get(i.session, {}) if i.session else {})
+
+
 @app.get("/issue/{slug}/f/{name}")
 def issue_file(request: Request, slug: str, name: str):
     """An issue's own file: Markdown and D2 render as a document, anything else is served as is."""
