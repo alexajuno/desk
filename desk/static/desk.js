@@ -582,7 +582,8 @@ function toggleGroup(group, all = false) {
   if (tip.isConnected) showTip(tipFor);
 }
 
-// Linear's tooltip on the triangle: after about 450 ms, centred 12px under it, naming the keys.
+// Linear's tooltip on the triangle: after about 450 ms, centred 12px under it, naming the keys. With the
+// sidebar hidden the triangle sits near the window's edge, so the tooltip keeps 8px inside the window.
 const tip = Object.assign(document.createElement("div"), { className: "tip" });
 let tipFor = null, tipTimer = 0;
 
@@ -591,7 +592,8 @@ function showTip(toggle) {
   tip.innerHTML = `<div><kbd>T</kbd> to ${verb} group</div><div><kbd>Alt</kbd><kbd>Click</kbd> to ${verb} all</div>`;
   document.body.append(tip);
   const at = toggle.getBoundingClientRect();
-  tip.style.left = `${at.left + at.width / 2 - tip.offsetWidth / 2}px`;
+  const centred = at.left + at.width / 2 - tip.offsetWidth / 2;
+  tip.style.left = `${Math.max(8, Math.min(centred, innerWidth - tip.offsetWidth - 8))}px`;
   tip.style.top = `${at.bottom + 12}px`;
 }
 
