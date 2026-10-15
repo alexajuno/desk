@@ -702,6 +702,8 @@ document.addEventListener("click", (e) => {
   if (head && !t.closest("a, input, textarea, .add-sub") && !getSelection().toString()) { toggleSection(head.parentElement, e.altKey); return; }
   const theme = t.closest(".theme-pick");
   if (theme) { if (!toggled(theme)) themeMenu(theme); return; }
+  const shot = t.closest(".body img");
+  if (shot && !shot.closest("a")) { openViewer(shot); return; }
   const d2 = t.closest(".d2");
   if (d2) { openViewer(d2.querySelector(`.for-${document.documentElement.dataset.theme} svg`) ?? d2.querySelector("svg")); return; }
   const title = t.closest(".issue h1.title");
@@ -852,7 +854,7 @@ function openCreator(preset = {}) {
 addEventListener("keydown", (e) => creator?.onKey(e), true);
 addEventListener("keyup", (e) => creator?.onKey(e), true);
 
-// --- diagram viewer: click to open full screen, wheel to zoom, drag to move ----------------------
+// --- diagram and screenshot viewer: click to open full screen, wheel to zoom, drag to move ----------------------
 let viewer = null;
 
 function openViewer(svgEl) {
@@ -867,8 +869,9 @@ function openViewer(svgEl) {
   let scale = 1, x = 0, y = 0, drag = null;
   const apply = () => { stage.style.transform = `translate(${x}px, ${y}px) scale(${scale})`; };
   const fit = () => {
-    const w = copyOf.viewBox.baseVal?.width || copyOf.getBoundingClientRect().width;
-    const h = copyOf.viewBox.baseVal?.height || copyOf.getBoundingClientRect().height;
+    const picture = copyOf.tagName === "IMG"; // a screenshot opens at its own size, fitted to the window
+    const w = picture ? copyOf.naturalWidth : copyOf.viewBox.baseVal?.width || copyOf.getBoundingClientRect().width;
+    const h = picture ? copyOf.naturalHeight : copyOf.viewBox.baseVal?.height || copyOf.getBoundingClientRect().height;
     copyOf.setAttribute("width", w); copyOf.setAttribute("height", h);
     scale = Math.min((innerWidth - 80) / w, (innerHeight - 80) / h);
     x = (innerWidth - w * scale) / 2; y = (innerHeight - h * scale) / 2; apply();
