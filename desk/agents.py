@@ -18,6 +18,9 @@ and kept its worktree and memory, while adding flags such as -w "started a copy"
 
 Sessions start in the issue's folder (usually a repo), so its CLAUDE.md, .claude/rules, skills and MCP
 servers load; the issue file is only passed by its full path.
+
+A claude desk starts that may start Claude Code's daemon runs in a systemd scope of its own (own_scope), so
+a restart of desk leaves the daemon and its sessions running.
 """
 
 import glob
@@ -25,6 +28,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -94,6 +98,20 @@ def rules_follow(cwd: str) -> None:
             exclude.write_text("\n".join([*lines, ".worktreeinclude"]) + "\n")
 
 
+# `claude --bg` and `claude attach` start Claude Code's daemon as their child when none is running, and every
+# background session then runs under that daemon, in that claude's cgroup (`claude agents`, `claude stop` and
+# `claude -p` start none; checked on 2.1.300, 15 Oct). desk runs as desk.service, whose restart stops
+# everything in its cgroup, so on 15 Oct one restart of desk killed every running session. In a scope of its
+# own the daemon outlives desk.
+# --expand-environment=no: systemd-run otherwise expands "$" in the arguments, the prompt included.
+def own_scope(command: list[str], slice: str = "agents.slice") -> list[str]:
+    """The command, run in a systemd scope of its own in the slice, so what it leaves running outlives desk."""
+    if not shutil.which("systemd-run"):
+        return command
+    return ["systemd-run", "--user", "--scope", f"--slice={slice}", "--collect", "--quiet",
+            "--expand-environment=no", "--", *command]
+
+
 def workdir(issue) -> str:
     return os.path.expanduser(issue.folder) if issue.folder else str(Path.home())
 
@@ -139,8 +157,9 @@ def _terminal(cwd: str, issue, *command: str) -> None:
     launch = ["--tab-title", issue.title, "--cwd", cwd, "--var", f"desk_issue={issue.slug}", *command]
     if any(_kitty(socket, "launch", "--type=tab", *launch) for socket in sorted(glob.glob(KITTY_SOCKETS))):
         return
-    kitty = subprocess.Popen(["kitty", "--title", issue.title, "--session", "-"], stdin=subprocess.PIPE, text=True,
-                             start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    kitty = subprocess.Popen(own_scope(["kitty", "--title", issue.title, "--session", "-"], slice="app.slice"),
+                             stdin=subprocess.PIPE, text=True, start_new_session=True,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     kitty.stdin.write(f"launch {shlex.join(launch)}\n")
     kitty.stdin.close()
 
@@ -175,7 +194,7 @@ def trust(folder: str) -> None:
 
 
 def _background(cwd: str, command: list[str]) -> str:
-    run = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=60)
+    run = subprocess.run(own_scope(command), cwd=cwd, capture_output=True, text=True, timeout=60)
     # With FORCE_COLOR set, as in the kitty shell desk runs from, the id comes wrapped in colour codes:
     # "backgrounded · \x1b[36mf72e9ccb\x1b[39m · <name>" (seen 2026-10-14).
     out = re.sub(r"\x1b\[[0-9;]*m", "", run.stdout + run.stderr)

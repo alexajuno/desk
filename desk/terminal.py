@@ -154,7 +154,7 @@ async def terminal(ws: WebSocket, slug: str, cols: int = 100, rows: int = 30):
         if not store.exists(slug):
             raise RuntimeError("That issue is gone.")
         argv, cwd = await asyncio.to_thread(command, store.load(slug))
-        pty = Pty(argv, cwd, cols, rows)
+        pty = Pty(agents.own_scope(argv), cwd, cols, rows)
     except (RuntimeError, OSError) as error:
         with suppress(Exception):  # the page may be gone already, and Starlette and uvicorn differ in what they raise then
             await ws.send_bytes(f"\x1b[2m{error}\x1b[0m\r\n".encode())
