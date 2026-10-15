@@ -37,7 +37,7 @@
 .item.session-row .date { min-width: 32px; }
 .sessions-empty { padding: 24px 22px; }
 .session-more { height: 1px; }
-.item.session-row .icon { cursor: default; } .item.session-row .icon:hover { background: none; }
+.item.session-row .icon { flex: none; cursor: default; } .item.session-row .icon:hover { background: none; }
 
 /* The buttons at the bottom right of every page (corner.html), where Linear keeps Agent and Chat history, as desk's
    Agent tab measured them on 2026-10-14; the history menu is 349px wide, as Linear's Chat history measured on
