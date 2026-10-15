@@ -19,6 +19,7 @@
       {%- if "result.md" in agent_files %}<div class="body">{{ agent_files["result.md"] | safe }}</div>
       {%- else %}<p class="muted">No result.md: this was done in a chat, so check the work itself.</p>{% endif %}
       <form method="post" action="/issue/{{ p.slug }}/review">
+        {%- if in_inbox %}<input type="hidden" name="src" value="inbox">{% endif %}
         <input type="text" name="note" placeholder="Look back: did it hold? Or, to send back: what to change." autocomplete="off">
         <div class="row" style="margin-top: 8px"><button class="primary" name="action" value="approve" title="Lands as {{ lands }}">Approve · {{ {"merge": "merge", "pr": "open PR", "nothing": "nothing to land"}[lands] }}</button>
           <button name="action" value="back">Send back</button></div>

@@ -10,7 +10,7 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
@@ -136,9 +136,12 @@ def all_kids(all_issues: dict[str, store.Issue]):
     return lambda slug: sorted(store.children(all_issues, slug), key=lambda i: i.state in CLOSED)
 
 
-def back(slug: str, message: str | None = None, trust: bool = False) -> RedirectResponse:
-    query = (f"?msg={quote(message[:300])}" if message else "") + ("&trust=1" if trust and message else "")
-    return RedirectResponse(f"/issue/{slug}{query}", status_code=303)
+def back(slug: str, message: str | None = None, trust: bool = False, inbox: bool = False) -> RedirectResponse:
+    """To the issue, with a message; in the Inbox (inbox=True), to the issue open there."""
+    query = {"msg": message[:300]} | ({"trust": "1"} if trust else {}) if message else {}
+    if inbox:
+        return RedirectResponse(f"/inbox?{urlencode({'i': slug} | query)}", status_code=303)
+    return RedirectResponse(f"/issue/{slug}" + (f"?{urlencode(query)}" if query else ""), status_code=303)
 
 
 @app.get("/")
@@ -223,21 +226,35 @@ NOTICES = {"waiting for you": "is waiting for you", "has questions": "saved ques
            "result ready": "finished: the result is ready", "check it": "finished, with no result.md"}
 
 
-@app.get("/inbox")
-def inbox(request: Request, i: str = ""):
-    """Linear's Inbox: the notifications on the left, newest first, and the one picked (?i=<slug>) on the right."""
-    all_issues = store.load_all()
+def notifications(all_issues: dict[str, store.Issue]) -> list[dict]:
+    """The Inbox's rows, newest first."""
     needs, review = inbox_items(all_issues, agents.live())
 
     def changed(issue: store.Issue) -> float:  # when anything of the issue's last changed: its files are its record
         return max((f.stat().st_mtime for f in store.folder(issue.slug).iterdir() if f.is_file()), default=0)
 
-    items = sorted(({"p": p, "why": why, "says": NOTICES.get(why, why), "kind": "review" if (p, why) in review else "needs",
-                     "at": datetime.fromtimestamp(changed(p))} for p, why in needs + review),
-                   key=lambda item: item["at"], reverse=True)
-    context = {"items": items, "open": None}
+    return sorted(({"p": p, "why": why, "says": NOTICES.get(why, why), "kind": "review" if (p, why) in review else "needs",
+                    "at": datetime.fromtimestamp(changed(p))} for p, why in needs + review),
+                  key=lambda item: item["at"], reverse=True)
+
+
+def onward(before: list[str], slug: str, note: str) -> RedirectResponse:
+    """Back to the Inbox after acting on one of its notifications, as Linear moves on: the next one opens, the one
+    below it, else the one above, and the note says in a toast what happened."""
+    now = {n["p"].slug for n in notifications(store.load_all())}
+    at = before.index(slug) if slug in before else 0
+    following = [s for s in before[at + 1:] + before[:at][::-1] if s in now]
+    return RedirectResponse(f"/inbox?{urlencode(({'i': following[0]} if following else {}) | {'note': note[:300]})}",
+                            status_code=303)
+
+
+@app.get("/inbox")
+def inbox(request: Request, i: str = ""):
+    """Linear's Inbox: the notifications on the left, newest first, and the one picked (?i=<slug>) on the right."""
+    all_issues = store.load_all()
+    context = {"items": notifications(all_issues), "open": None}
     if i in all_issues:
-        context |= issue_context(request, all_issues, i) | {"open": i}
+        context |= issue_context(request, all_issues, i) | {"open": i, "in_inbox": True}
     return templates.TemplateResponse(request, "inbox.html", context)
 
 
@@ -420,10 +437,15 @@ def hand_off(slug: str):
 
 
 @app.post("/issue/{slug}/review")
-def review(slug: str, action: str = Form(...), note: str = Form("")):
+def review(slug: str, action: str = Form(...), note: str = Form(""), src: str = Form("")):
     """Approve keeps your look back in the issue and lands the work by the issue's `lands:` (land.py);
-    Send back returns the result to the same session."""
+    Send back returns the result to the same session. From the Inbox (src=inbox) you stay in the Inbox: when it went
+    through, the next notification opens and a toast says what happened; when it did not, the same one, with why."""
     i = store.load(slug)
+    from_inbox = src == "inbox"
+    before = [n["p"].slug for n in notifications(store.load_all())] if from_inbox else []
+    stay = lambda message=None, trust=False: back(slug, message, trust, inbox=from_inbox)
+    rebase = ""
     if action == "approve":
         how = land.lands(i)
         try:
@@ -436,11 +458,11 @@ def review(slug: str, action: str = Form(...), note: str = Form("")):
                 message = ""
         except land.MainMoved as moved:
             if not i.session:
-                return back(slug, str(moved))
+                return stay(str(moved))
             note = f"{moved} Rebase onto it, check the work again, then rewrite result.md. {note}".strip()
-            action = "back"
+            action, rebase = "back", f"{moved} Sent back to rebase: {i.title}"
         except (land.Blocked, RuntimeError, OSError, subprocess.TimeoutExpired) as error:
-            return back(slug, str(error))
+            return stay(str(error))
     if action == "approve":
         if note.strip():
             i.set_section("Look back", f"{note.strip()} *({datetime.now():%-d %b})*")
@@ -449,23 +471,25 @@ def review(slug: str, action: str = Form(...), note: str = Form("")):
         else:
             i.state = "done"
         store.save(i)
+        if from_inbox:
+            return onward(before, slug, message or f"Approved: {i.title}")
         return back(slug, message) if message else RedirectResponse("/inbox", status_code=303)
     if not note.strip():
-        return back(slug, "Say what to change, in the box, then Send back.")
+        return stay("Say what to change, in the box, then Send back.")
     if not i.session:
         i.set_section("Resume", f"Sent back on {datetime.now():%-d %b}: {note.strip()}\n\n{i.section('Resume')}".strip())
         i.state = "backlog"
         store.save(i)
-        return back(slug)
+        return onward(before, slug, f"Back in the backlog: {i.title}") if from_inbox else back(slug)
     try:
         agents.send_back(i, store.folder(slug), note)
     except agents.TrustError as error:
-        return back(slug, str(error), trust=True)
+        return stay(str(error), trust=True)
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
-        return back(slug, str(error))
+        return stay(str(error))
     i.state = "running"
     store.save(i)
-    return back(slug)
+    return onward(before, slug, rebase or f"Sent back: {i.title}") if from_inbox else back(slug)
 
 
 @app.post("/issue/{slug}/jump")

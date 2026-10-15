@@ -955,3 +955,10 @@ document.addEventListener("change", async (e) => {
   const select = e.target.closest?.(".project-pick select");
   if (select && page()) await setField(page().slug, "project", select.value);
 });
+
+// A page reached after acting elsewhere says what happened in a toast (?note=, as the Inbox's review form leaves
+// it), once: the note leaves the address straight away, so a refresh does not say it again.
+{
+  const url = new URL(location.href), note = url.searchParams.get("note");
+  if (note) { url.searchParams.delete("note"); history.replaceState(null, "", url); toast(note); }
+}
