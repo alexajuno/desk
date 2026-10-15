@@ -75,7 +75,9 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
             store.save(issue)
         if issue.state == "review":
             review.append((issue, "result ready" if (store.folder(issue.slug) / "result.md").is_file() else "check it"))
-        elif row.get("state") == "blocked":
+        elif row.get("state") == "blocked" and issue.state not in CLOSED:
+            # Claude Code keeps listing a session by its last state after it ends: igh-289's and
+            # add-project-concept-to-desk's still said blocked, with no process, long after both were done (15 Oct).
             needs.append((issue, "waiting for you"))
         elif issue.state == "running" and has_questions(issue):
             needs.append((issue, "has questions"))
