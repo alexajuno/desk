@@ -104,22 +104,20 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
         now = agents.status(row)
         result = store.folder(issue.slug) / "result.md"
         if issue.state == "running" and issue.landing:
-            if result.is_file() and now != "working" \
-                    and datetime.fromtimestamp(result.stat().st_mtime) > datetime.fromisoformat(issue.landing):
-                done, pr = landed(result)
-                issue.state, issue.landing = ("done" if done else "review"), None
-                issue.link = issue.link or (pr if done else None)
-                store.save(issue)
+            # A result that says it landed counts however old it is: a session approved again after it landed answers
+            # so and leaves its card as it was, which kept desk-hangs-on-its-own-restart… Landing for good (15 Oct).
+            done, pr = landed(result) if result.is_file() else (False, None)
+            if result.is_file() and now != "working" and (done or
+                    datetime.fromtimestamp(result.stat().st_mtime) > datetime.fromisoformat(issue.landing)):
+                store.move(issue, state="done" if done else "review", landing=None,
+                           link=issue.link or (pr if done else None))
         elif issue.state == "running" and result.is_file() and now != "working":
-            issue.state = "review"
-            store.save(issue)
+            store.move(issue, state="review")
         elif issue.state == "waiting" and result.is_file() and now != "working" and issue.waiting_since \
                 and datetime.fromtimestamp(result.stat().st_mtime) > datetime.fromisoformat(issue.waiting_since):
-            issue.state = "review"
-            store.save(issue)
+            store.move(issue, state="review")
         elif issue.state == "review" and now == "working":
-            issue.state = "running"
-            store.save(issue)
+            store.move(issue, state="running")
         if issue.state == "review":
             review.append((issue, "result ready" if result.is_file() else "check it"))
         elif issue.state == "running" and now == "idle" and issue.landing:

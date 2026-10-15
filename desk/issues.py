@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import threading
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -41,6 +42,7 @@ STATES = ["backlog", "running", "waiting", "review", "done", "dropped"]
 PROTOCOLS = ["quick", "brief", "design"]
 
 FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
+_lock = threading.RLock()  # one save at a time, and move's read and save as one
 
 
 @dataclass
@@ -131,8 +133,25 @@ def save(issue: Issue) -> None:
         issue.waiting_since = datetime.now().isoformat(timespec="seconds")
     meta = {k: v for k, v in asdict(issue).items() if k not in ("slug", "body") and v not in (None, [], "")}
     front = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True).strip()
-    folder(issue.slug).mkdir(parents=True, exist_ok=True)
-    (folder(issue.slug) / MAIN).write_text(f"---\n{front}\n---\n\n{issue.body.strip()}\n", encoding="utf-8")
+    with _lock:
+        folder(issue.slug).mkdir(parents=True, exist_ok=True)
+        (folder(issue.slug) / MAIN).write_text(f"---\n{front}\n---\n\n{issue.body.strip()}\n", encoding="utf-8")
+
+
+def move(issue: Issue, **changes) -> bool:
+    """Set fields on the issue as it is on disk now, if its state and landing are still those of `issue`, a copy read
+    a moment ago; False, and nothing written, when another request changed them since. A page that moved every issue
+    from its own copy wrote back a stale one: Approve saved Landing, and the Inbox, which had read the issue still in
+    review, saved it as running without its landing, so it went back to review and was approved twice (15 Oct)."""
+    with _lock:
+        now = load(issue.slug)
+        if (now.state, now.landing) != (issue.state, issue.landing):
+            return False
+        for name, value in changes.items():
+            setattr(now, name, value)
+            setattr(issue, name, value)
+        save(now)
+        return True
 
 
 def new_slug(title: str) -> str:
