@@ -2,14 +2,15 @@
 (agents.land): merged, or pushed with a pull request. desk then only waits for result.md to say it landed
 (app.inbox_items). A folder that is not a git repo has nothing to land, and the issue is done at once.
 
-Two things stay here for the sessions desk started in a worktree of its own (`claude -w`), as it did until
+One thing stays here for the sessions desk started in a worktree of its own (`claude -w`), as it did until
 15 Oct. Claude Code locks such a session's git to its worktree, so it cannot merge, and desk, a plain process,
 merges for it (merge), rebasing on the way when main moved, with no second review (the user, 15 Oct: "after
-approve, and rebase, should merge immediately"). And the API's try and back-to-main switch the folder's checkout
-to its branch for review (try_branch). Both can go once no session works in a .claude/worktrees/desk-* worktree.
+approve, and rebase, should merge immediately"). It can go once no session works in a .claude/worktrees/desk-*
+worktree.
 
-The sidebar says when desk's own checkout runs anything but a branch (running): desk's CLAUDE.md has a session put
-the desk the user runs on its branch for review.
+The API's try and back-to-main switch a folder's checkout to an issue's branch for review and back (try_branch),
+and note which issue it is. desk's CLAUDE.md has every session put the desk the user runs on its branch that way,
+so the sidebar's Trying names the issue (running); a checkout switched by hand shows only its branch.
 """
 
 import json
@@ -58,11 +59,16 @@ def _trial_file(top: str) -> Path:
 
 def trying(top: str) -> dict | None:
     """The branch desk switched the checkout to, as {"branch", "slug", "back"}, or None. A checkout put back on a
-    branch by hand, such as `git checkout main` after a branch broke desk's start, counts as back."""
+    branch by hand, such as `git checkout main` after a branch broke desk's start, counts as back, and so does one
+    since detached by hand off that branch's line: the note left behind no longer says what runs."""
     path = _trial_file(top)
     if not path.is_file() or agents._git(top, "branch", "--show-current"):
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    now = json.loads(path.read_text(encoding="utf-8"))
+    # HEAD stays on the line while the session commits more on its branch; a branch deleted after landing fails too.
+    if agents._git(top, "merge-base", "--is-ancestor", "HEAD", now["branch"]) is None:
+        return None
+    return now
 
 
 def running(top: str) -> dict | None:
@@ -78,14 +84,20 @@ def running(top: str) -> dict | None:
     return {"branch": names[0] if names else agents._git(top, "rev-parse", "--short", "HEAD") or "a commit", "slug": None}
 
 
-def try_branch(issue) -> str:
+def try_branch(issue, branch: str | None = None) -> str:
     """Switch the folder's checkout to the commit of the issue's branch, detached: the branch itself stays checked
-    out in its worktree, where git allows it only once. desk restarts on it when the folder is desk's own repo."""
-    found, top = worktree(issue), repo(issue)
-    if not found or not top:
-        raise Blocked("No worktree branch to try: a session outside a desk-made worktree switches the checkout "
-                      "itself, as its repo's rules say.")
-    branch = found[1]
+    out in its worktree, where git allows it only once. The branch is the one named, else that of the worktree desk
+    made for the session. desk restarts on it when the folder is desk's own repo."""
+    top = repo(issue)
+    if not top:
+        raise Blocked(f"{issue.folder or 'The issue'} is not in a git repo.")
+    if not branch:
+        found = worktree(issue)
+        if not found:
+            raise Blocked('Name the branch to try: {"branch": "feat/<name>"}.')
+        branch = found[1]
+    elif agents._git(top, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}") is None:
+        raise Blocked(f"{top} has no branch {branch}.")
     now = trying(top)
     if now and now["slug"] != issue.slug:
         raise Blocked(f"{top} runs {now['branch']} now. Put it back on main first.")

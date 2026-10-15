@@ -111,11 +111,12 @@ function showFolded(url = location.pathname) {
   {#- desk's own checkout on no branch, as a session leaves it for your review (land.running), on every page until
       the session puts it back. Read only: the session that switched it puts it back when it lands. #}
   {%- if sidebar.trying %}{% set t = sidebar.trying %}
-  <div class="nav-label">desk runs a branch</div>
+  {%- set why = "desk runs this work instead of main until you approve it or throw it away" %}
+  <div class="nav-label" title="{{ why }}">Trying</div>
   {%- if t.issue %}
-  <a class="nav-item {{ 'here' if here == '/issue/' ~ t.slug }}" href="/issue/{{ t.slug }}" title="{{ t.branch }}">{{ state(t.issue.state) }}<span class="nav-title">{{ t.issue.title }}</span></a>
+  <a class="nav-item {{ 'here' if here == '/issue/' ~ t.slug }}" href="/issue/{{ t.slug }}" title="{{ why }} ({{ t.branch }})">{{ state(t.issue.state) }}<span class="nav-title">{{ t.issue.title }}</span></a>
   {%- else %}
-  <div class="nav-item static" title="~/projects/desk runs this, not main">{{ state("review") }}<span class="nav-title">{{ t.branch }}</span></div>
+  <div class="nav-item static" title="{{ why }}">{{ state("review") }}<span class="nav-title">{{ t.branch }}</span></div>
   {%- endif %}
   {%- endif %}
   <div class="side-foot"><button class="side-icon theme-pick" type="button" title="Theme: follow the system, or pin light or dark">

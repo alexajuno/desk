@@ -7,7 +7,7 @@ documents it for them).
     PATCH  /api/issues/<slug>         set any of those fields
     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
     POST   /api/issues/<slug>/work    the Agent chat works it itself: the chat becomes the issue's session
-    POST   /api/issues/<slug>/try     for a session in a worktree desk made: put the folder's checkout on its branch
+    POST   /api/issues/<slug>/try     run the issue's branch in its folder's checkout, for review: branch
     POST   /api/issues/<slug>/back-to-main   and back
     GET    /api/projects              list projects (state=active|archived|all); /api/issues takes project=<slug>
     GET    /api/projects/<slug>       one project, with its description and issues
@@ -240,13 +240,17 @@ def work_issue(slug: str, work: Work):
     return as_json(i)
 
 
+class Try(BaseModel):
+    branch: str | None = None
+
+
 @router.post("/issues/{slug}/try")
-def try_issue(slug: str):
-    """For a session in a worktree desk made with `claude -w`, which can only work in it: switch the issue's folder
-    checkout to its branch, to test or review it in the one running app. In desk's own repo desk restarts on it, so
-    wait until /version answers again. Any other session switches the checkout itself, as its repo's rules say."""
+def try_issue(slug: str, trial: Try | None = None):
+    """Switch the issue's folder checkout to its branch, to test or review it in the one running app, and note the
+    issue, so the sidebar's Trying names it. The branch is the one in the body, else that of the worktree desk made
+    for the session with `claude -w`. In desk's own repo desk restarts on it, so wait until /version answers again."""
     try:
-        return {"message": land.try_branch(_load(slug))}
+        return {"message": land.try_branch(_load(slug), trial.branch if trial else None)}
     except land.Blocked as error:
         raise HTTPException(409, str(error))
 
