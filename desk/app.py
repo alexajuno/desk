@@ -59,7 +59,10 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
     for issue in all_issues.values():
         row = live.get(issue.session, {}) if issue.session else {}
         result = store.folder(issue.slug) / "result.md"
-        if issue.state == "running" and issue.landing and result.is_file() and row.get("state") not in ("working", "blocked") \
+        # `state` stays working or blocked while a session waits for you between turns, as add-favicon-for-desk's
+        # did after its result, once the user had asked it something (15 Oct); `status` busy is a turn running.
+        busy = row.get("status") == "busy"
+        if issue.state == "running" and issue.landing and result.is_file() and not busy \
                 and datetime.fromtimestamp(result.stat().st_mtime) > datetime.fromisoformat(issue.landing):
             # Approve resumed the session to open a PR: result.md rewritten since, with a PR link, means landed.
             opened = re.search(r"https://github\.com/\S+/pull/\d+", result.read_text(encoding="utf-8"))
@@ -67,8 +70,7 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
             if opened:
                 issue.link = issue.link or opened.group(0)
             store.save(issue)
-        elif issue.state == "running" and not issue.landing and result.is_file() \
-                and row.get("state") not in ("working", "blocked"):
+        elif issue.state == "running" and not issue.landing and result.is_file() and not busy:
             issue.state = "review"
             store.save(issue)
         if issue.state == "review":
