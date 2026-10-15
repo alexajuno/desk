@@ -322,7 +322,7 @@ def split_result(text: str) -> tuple[str, str] | None:
 
 def strip(i: store.Issue, row: dict, has_plan: bool, result: Path) -> dict:
     """The strip pinned at the top of an issue: where it stands, and its one button, the next step (the user,
-    15 Oct: "a single button of action, and it should be somewhere static"). Only Start and Approve are clicks;
+    15 Oct: "a single button of action, and it should be somewhere static"). Only Plan and Approve are clicks;
     everything else, "go", a change, an answer, is said in the issue's chat, which Open chat brings up in a window
     over desk. The button is {"label", "action"} for a form, {"label", "chat": True} to open the chat, or None."""
     now, has_result = agents.status(row), result.is_file()
@@ -331,8 +331,8 @@ def strip(i: store.Issue, row: dict, has_plan: bool, result: Path) -> dict:
     if i.state == "backlog":
         if i.session:
             return {"text": "In the backlog, with its chat.", "button": chat}
-        return {"text": "Start opens the issue's chat, and its session plans it with you.",
-                "button": {"label": "Start", "action": "start"}}
+        return {"text": "Plan opens the issue's chat, and its session plans it with you.",
+                "button": {"label": "Plan", "action": "start"}}
     if i.state == "running" and i.landing:
         text = {"working": "Landing, by the repo's rules.", "idle": "Landing waits for you in the chat."}.get(now, asleep)
         return {"text": text, "button": {"label": "Landing…", "disabled": True} if now in ("working", "idle") else chat}
@@ -479,7 +479,7 @@ def set_folder(slug: str, folder: str = Form("")):
 
 @app.post("/issue/{slug}/start")
 def start(slug: str):
-    """Start: the issue's session starts in its folder and plans it with you, in the chat the page docks beside it."""
+    """Plan: the issue's session starts in its folder and plans it with you, in the chat the page docks beside it."""
     i = store.load(slug)
     if i.session:
         return back(slug)
@@ -506,7 +506,7 @@ def trust_folder(request: Request, slug: str):
         agents.trust(agents.workdir(i))
     except (RuntimeError, OSError, ValueError) as error:
         return back(slug, str(error))
-    return back(slug, f"Trusted {agents.workdir(i)}. Press Start again.")
+    return back(slug, f"Trusted {agents.workdir(i)}. Press Plan again.")
 
 
 @app.post("/issue/{slug}/approve")

@@ -1,7 +1,7 @@
 """The one Claude Code session bound to an issue, from its plan to its landing: one chat, docked beside the issue
 on its page (terminal.py), where the user plans with it, says "go", asks for changes and answers it.
 
-    Start      claude --bg in the issue's folder, with no -w: the repo's own rules (its CLAUDE.md, CONTRIBUTING,
+    Plan       claude --bg in the issue's folder, with no -w: the repo's own rules (its CLAUDE.md, CONTRIBUTING,
                .claude/rules) say where the session works, a branch, a worktree or the checkout (the user, 15 Oct:
                "it's not necessary desk's job"). The session plans with the user and keeps the plan in plan.md.
     "go"       said in the chat: the same session carries out the plan, then writes its review card in result.md.
@@ -236,7 +236,7 @@ def _session_id(short: str) -> str:
 
 
 def start(issue, folder: Path) -> str:
-    """Start: the issue's session plans it with the user, in the chat docked on the issue's page; returns its
+    """Plan: the issue's session plans it with the user, in the chat docked on the issue's page; returns its
     session id."""
     return _session_id(_new_session(issue, PLAN_PROMPT.format(**_paths(issue, folder))))
 

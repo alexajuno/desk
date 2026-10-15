@@ -1,6 +1,6 @@
 // The issue's chat: its session in a terminal on its own page, xterm.js here, a websocket to desk/terminal.py,
 // and there a PTY running the claude command Jump back runs in kitty. It docks right of the issue by itself while
-// the session lives (the strip's data-dock, issue_view.html), since every move but Start and Approve is said in it,
+// the session lives (the strip's data-dock, issue_view.html), since every move but Plan and Approve is said in it,
 // and the strip's Open chat opens it otherwise. Closing it, or the page, hangs up the PTY: `claude attach` ends
 // and the background session keeps running; closed by hand, it stays closed on that issue until the page is left.
 // Kept apart from desk.js and the Agent tab; it uses desk.js's $ and page. xterm.js and the terminal's CSS load
