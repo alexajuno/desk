@@ -282,6 +282,27 @@ def inbox(request: Request, i: str = ""):
     return templates.TemplateResponse(request, "inbox.html", context)
 
 
+@app.get("/api/inbox")
+def inbox_rows():
+    """The Inbox's rows, newest first. Every open tab asks every few seconds (desk.js), since a session that goes idle
+    with its plan or blocks changes no file and /version misses it; a row no tab saw before becomes a desktop
+    notification. It lives here, not in api.py, beside the notifications it serves, which api.py cannot import."""
+    return [{"slug": n["p"].slug, "title": n["p"].title, "why": n["why"], "says": n["says"], "url": f"/inbox?i={n['p'].slug}"}
+            for n in notifications(store.load_all())]
+
+
+@app.post("/raise")
+def raise_browser(title: str = Form()):
+    """A desktop notification was clicked: bring forward the browser window showing the tab, found by the tab's
+    title, since Hyprland leaves the page's own window.focus() unanswered (misc:focus_on_activate is off, 15 Oct)."""
+    try:
+        if not window.raise_titled(title):
+            raise HTTPException(404, f"No window shows {title}.")
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+    return {"ok": True}
+
+
 @app.get("/search")
 def search(request: Request, q: str = ""):
     return templates.TemplateResponse(request, "search.html", {"q": q, "hits": find(store.load_all(), q)})

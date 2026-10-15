@@ -473,6 +473,12 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .inbox-row .sub { height: 15px; font: 450 12px var(--font); color: var(--text-3); }
 .inbox-row .says { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inbox-row .age { flex: none; margin-left: 4px; }
+/* The line offering desktop notifications (desk.js), above the rows, until Chrome has your answer. */
+.notify-ask { display: flex; align-items: center; gap: 8px; margin: 0 10px 8px; padding: 6px 6px 6px 10px;
+              border: 1px solid var(--border-2); border-radius: 8px; font: 500 13px var(--font); color: var(--text-2); }
+.notify-ask[hidden] { display: none; }
+.notify-ask svg { flex: none; color: var(--text-3); }
+.notify-ask span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inbox-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; height: 100%;
                font: 500 13px var(--font); color: var(--text-3); }
 @media (max-width: 900px) { .bar .inbox-head { width: calc(var(--inbox-list) - 36px); } }

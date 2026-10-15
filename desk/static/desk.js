@@ -452,6 +452,7 @@ async function refresh(url = location.pathname + location.search) {
     showCollapsed(url);
     showFolded(url);
     showSeen();
+    showNotifyAsk();
     if (redraws) { onIssuesChanged(); return true; }
     document.title = fresh.title;
     $(".scroll").scrollTop = same ? y : 0;
@@ -490,6 +491,73 @@ setInterval(async () => {
     if (now !== strip.dataset.live) await refresh();
   } catch {}
 }, 3000);
+
+// --- desktop notifications for the Inbox ----------------------------------------------------------
+// Every tab asks for the Inbox's rows every 3s (/api/inbox, which sees a session go idle with its plan, as /version
+// cannot) and refreshes when they changed, so the sidebar's count is current. A row no desk tab has seen becomes a
+// desktop notification, unless a desk tab has the focus, where the count shows it. The tabs share what they have seen
+// in localStorage.inboxNotified as "<slug>:<why>" keys, with the time of the last ask: one event notifies once, and a
+// tab that finds no other asked lately (desk was closed) takes the rows it finds as seen. The timer ticks in a worker,
+// since Chrome checks a page's own timers once a minute once it has been hidden for 5 minutes
+// (developer.chrome.com/blog/timer-throttling-in-chrome-88), and desk waits in the background by design.
+const INBOX_EVERY = 3000;
+let inboxKeys = null, asking = false; // the rows this tab last showed
+
+addEventListener("focus", () => { localStorage.deskFocus = Date.now(); });
+addEventListener("blur", () => { localStorage.deskFocus = 0; });
+
+async function checkInbox() {
+  if (asking) return;
+  asking = true;
+  try {
+    const rows = await (await fetch("/api/inbox", { cache: "no-store" })).json();
+    const keys = rows.map((row) => `${row.slug}:${row.why}`);
+    const shared = JSON.parse(localStorage.inboxNotified ?? "null");
+    const known = new Set(shared && Date.now() - shared.at < 4 * INBOX_EVERY ? shared.keys : keys);
+    localStorage.inboxNotified = JSON.stringify({ at: Date.now(), keys });
+    if (document.hasFocus()) localStorage.deskFocus = Date.now();
+    const watched = Date.now() - Number(localStorage.deskFocus ?? 0) < 2 * INBOX_EVERY;
+    if (!watched && window.Notification?.permission === "granted")
+      for (const row of rows) if (!known.has(`${row.slug}:${row.why}`)) notify(row);
+    if (inboxKeys && String(keys) !== String(inboxKeys)) {
+      if (busy()) return; // the refresh waits for the next tick, as /version's does
+      await refresh();
+    }
+    inboxKeys = keys;
+  } catch {
+  } finally {
+    asking = false;
+  }
+}
+
+// The notification reads as the Inbox's row: the issue's title, then what its session did. A newer one for the same
+// issue takes the older's place. A click opens it in the Inbox and asks desk to bring this window forward.
+function notify(row) {
+  const note = new Notification(row.title, { body: `Session ${row.says}`, tag: row.slug, renotify: true });
+  note.onclick = async () => {
+    note.close();
+    window.focus();
+    await go(row.url);
+    post("/raise", { title: document.title });
+  };
+}
+
+// The Inbox's line offering to turn them on (inbox.html), shown until Chrome has your answer.
+function showNotifyAsk() {
+  const ask = $(".notify-ask");
+  if (ask) ask.hidden = window.Notification?.permission !== "default";
+}
+
+document.addEventListener("click", async (e) => {
+  if (!e.target.closest(".notify-ask button")) return;
+  await Notification.requestPermission();
+  showNotifyAsk();
+});
+
+const ticker = new Worker(URL.createObjectURL(new Blob([`setInterval(() => postMessage(0), ${INBOX_EVERY})`])));
+ticker.onmessage = checkInbox;
+checkInbox();
+showNotifyAsk();
 
 // --- the issue page: click the title or the description to edit it -------------------------------
 let editing = null;

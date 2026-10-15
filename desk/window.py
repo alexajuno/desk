@@ -18,6 +18,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import time
 
 from . import agents
 from . import issues as store
@@ -48,6 +49,19 @@ def focus(name: str) -> bool:
                 _dispatch(f'hl.dsp.window.move({{ workspace = "{here}", window = "{window}" }})')
             _dispatch(f'hl.dsp.focus({{ window = "{window}" }})')
             return True
+    return False
+
+
+def raise_titled(title: str) -> bool:
+    """Go to the window whose title starts with the page's ("Inbox · desk - Google Chrome"), on its own workspace,
+    and focus it; False when there is none. The browser renames its window a moment after the tab changes, so this
+    looks again for up to a second."""
+    for _ in range(10):
+        for client in json.loads(_hyprctl("clients", "-j")):
+            if title and client["title"].startswith(title):
+                _dispatch(f'hl.dsp.focus({{ window = "address:{client["address"]}" }})')
+                return True
+        time.sleep(0.1)
     return False
 
 

@@ -13,6 +13,7 @@ documents it for them).
     GET    /api/projects/<slug>       one project, with its description and issues
     POST   /api/projects              create one: title, body        (issues join it with project=<slug>)
     PATCH  /api/projects/<slug>       set title, body, state (active or archived)
+    GET    /api/inbox                 the Inbox's rows, newest first: slug, title, why (served by app.py)
 
 Issues stay files: this reads and writes them through issues.py, as the pages do.
 """

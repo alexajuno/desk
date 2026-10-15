@@ -11,6 +11,12 @@
     showSeen), the issue's title and status, then what the session did and how long ago. #}
 <div class="inbox">
   <div class="inbox-list" data-keep-scroll="always">
+    {#- Shown by desk.js while Chrome has no answer about desktop notifications #}
+    <div class="notify-ask" hidden>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V7.5a4 4 0 0 1 8 0V11l1.25 1.5H2.75L4 11Z"/><path d="M6.5 14.25h3"/></svg>
+      <span>Desktop notifications are off</span>
+      <button type="button" class="small">Turn on</button>
+    </div>
     {%- for n in items %}
     <a class="item inbox-row{{ ' selected' if n.p.slug == open }}" href="/inbox?i={{ n.p.slug }}" title="{{ n.p.title }}"
        data-slug="{{ n.p.slug }}" data-state="{{ n.p.state }}" data-priority="{{ n.p.priority }}" data-parent="{{ n.p.parent or '' }}"
