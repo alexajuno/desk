@@ -1,10 +1,12 @@
 // Linear-style menus, row actions, inline edits, the new issue panel, delete with undo, and a full-screen
-// diagram viewer. Shortcuts: S status, P priority, C a new issue, J/K or arrows to move, Enter to open,
-// right-click for a row's actions, Ctrl+Delete to delete and Ctrl+Z to undo it, / search, G then B backlog,
-// [ the sidebar, ? help, Esc to close (on an issue, Esc goes back). G then I and ? are from Linear's guide
+// diagram viewer. Shortcuts: S status, P priority, C a new issue, T collapse a group, J/K or arrows to move,
+// Enter to open, right-click for a row's actions, Ctrl+Delete to delete and Ctrl+Z to undo it, / search,
+// G then B backlog, [ the sidebar, ? help, Esc to close (on an issue, Esc goes back). G then I and ? are
+// from Linear's guide
 // (linear.app/enablement/guide/navigating-linear); S, P and C follow Linear, and the S menu's
 // shape (filter on top, numbered rows, a tick on the current one) was copied from linear.app.
-// Delete, its undo toast and Ctrl+Z follow linear.app/docs/delete-archive-issues.
+// Delete, its undo toast and Ctrl+Z follow linear.app/docs/delete-archive-issues. T and the group
+// triangle were copied from linear.app on 2026-10-15.
 //
 // Every handler is delegated to the document, so a soft refresh can swap the page's content
 // without rebinding anything.
@@ -415,6 +417,7 @@ async function refresh(url = location.pathname + location.search) {
       const from = fresh.querySelector(part);
       if (from) $(part).innerHTML = from.innerHTML;
     }
+    showCollapsed(url);
     if (redraws) { onIssuesChanged(); return true; }
     document.title = fresh.title;
     $(".scroll").scrollTop = same ? y : 0;
@@ -523,7 +526,8 @@ function goBack() {
 }
 
 // --- rows: hover or J/K focuses one, as in Linear ------------------------------------------------
-const rows = () => [...document.querySelectorAll(".item")];
+// J/K skip the rows of a collapsed group.
+const rows = () => [...document.querySelectorAll(".item")].filter((row) => row.checkVisibility());
 let focused = null, byMouse = false;
 
 function focusRow(row, scroll = true) {
@@ -560,6 +564,47 @@ document.addEventListener("contextmenu", (e) => {
   actionsMenu({ ...row.dataset }, { x: e.clientX, y: e.clientY });
 });
 
+// --- collapsed groups, as Linear's list collapses them (measured on linear.app on 2026-10-15) -------
+// The triangle on a group header folds or unfolds the group, and Alt+click on it every group on the
+// page. T does it to the group under the mouse: its header's, or the focused row's. A click elsewhere
+// on the header does nothing, as in Linear. base.html's showCollapsed draws what is remembered.
+const groups = () => [...document.querySelectorAll(".group[data-group]")];
+const groupOf = (row) => groups().find((group) => group.nextElementSibling?.contains(row));
+
+function toggleGroup(group, all = false) {
+  const closing = !group.classList.contains("collapsed"), here = location.pathname + location.search;
+  const remembered = JSON.parse(localStorage.collapsed ?? "{}"), shut = new Set(remembered[here]);
+  for (const g of all ? groups() : [group]) closing ? shut.add(g.dataset.group) : shut.delete(g.dataset.group);
+  if (shut.size) remembered[here] = [...shut]; else delete remembered[here];
+  localStorage.collapsed = JSON.stringify(remembered);
+  showCollapsed();
+  if (focused && !focused.checkVisibility()) focusRow(null);
+  if (tip.isConnected) showTip(tipFor);
+}
+
+// Linear's tooltip on the triangle: after about 450 ms, centred 12px under it, naming the keys.
+const tip = Object.assign(document.createElement("div"), { className: "tip" });
+let tipFor = null, tipTimer = 0;
+
+function showTip(toggle) {
+  const verb = toggle.closest(".group").classList.contains("collapsed") ? "expand" : "collapse";
+  tip.innerHTML = `<div><kbd>T</kbd> to ${verb} group</div><div><kbd>Alt</kbd><kbd>Click</kbd> to ${verb} all</div>`;
+  document.body.append(tip);
+  const at = toggle.getBoundingClientRect();
+  tip.style.left = `${at.left + at.width / 2 - tip.offsetWidth / 2}px`;
+  tip.style.top = `${at.bottom + 12}px`;
+}
+
+document.addEventListener("mouseover", (e) => {
+  const toggle = e.target.closest?.(".group-toggle") ?? null;
+  if (toggle === tipFor) return;
+  clearTimeout(tipTimer);
+  tip.remove();
+  tipFor = toggle;
+  if (toggle) tipTimer = setTimeout(() => showTip(toggle), 450);
+});
+document.addEventListener("scroll", () => tip.remove(), true);
+
 document.addEventListener("click", (e) => {
   const t = e.target, closed = justClosed;
   const toggled = (anchor) => anchor === closed;
@@ -584,6 +629,8 @@ document.addEventListener("click", (e) => {
   const more = t.closest(".bar .more");
   if (more && page()) { if (!toggled(more)) actionsMenu({ ...page() }, { anchor: more }); return; }
   if (t.closest(".side .new-issue")) { openCreator(); return; }
+  const groupToggle = t.closest(".group-toggle");
+  if (groupToggle) { toggleGroup(groupToggle.closest(".group"), e.altKey); return; }
   const groupAdd = t.closest(".group-add");
   if (groupAdd) { openCreator({ priority: groupAdd.dataset.priority }); return; }
   const projectAdd = t.closest(".project-add");
@@ -808,6 +855,10 @@ document.addEventListener("keydown", (e) => {
   else if (key === "k" || e.key === "ArrowUp") { moveFocus(-1); e.preventDefault(); }
   else if (e.key === "Enter" && focused) { location.href = focused.getAttribute("href"); }
   else if (key === "c") { openCreator(); e.preventDefault(); }
+  else if (key === "t") {
+    const group = $(".group[data-group]:hover") ?? (focused && groupOf(focused));
+    if (group) toggleGroup(group);
+  }
   else if (key === "s" || key === "p") {
     const field = key === "s" ? "state" : "priority";
     const row = focused, pick = $(`.pick[data-field=${field}]`);

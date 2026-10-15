@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import tree, prio, plus %}
+{% from "macros.html" import tree, prio, plus, toggle %}
 {% block title %}Backlog · desk{% endblock %}
 {% block crumb %}{% if project %}<a href="/backlog">Backlog</a><span class="sep">›</span><a href="/project/{{ project.slug }}">{{ project.title }}</a>{% else %}<span>Backlog</span>{% endif %}{% endblock %}
 {% block main %}
@@ -7,7 +7,7 @@
   {% for level in priorities %}
     {%- set group = top | selectattr("priority", "equalto", level) | list %}
     {%- if group %}
-    <div class="group">{{ prio(level) }}{{ prio_names[level] }}<span class="count">{{ group | length }}</span>
+    <div class="group" data-group="{{ level }}">{{ toggle() }}{{ prio(level) }}{{ prio_names[level] }}<span class="count">{{ group | length }}</span>
       <button class="group-add" type="button" data-priority="{{ level }}" title="New issue">{{ plus() }}</button></div>
     {{ tree(group, kids_of) }}
     {%- endif %}

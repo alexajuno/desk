@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import tree, state, plus %}
+{% from "macros.html" import tree, state, plus, toggle %}
 {% block title %}{{ pr.title }} · desk{% endblock %}
 {% block crumb %}<a href="/projects">Projects</a><span class="sep">›</span><span>{{ pr.title }}</span>{% endblock %}
 {% block main %}
@@ -15,7 +15,7 @@
     </details>
     <div class="section-label">Issues<button class="project-add add-sub" type="button" title="New issue in this project">{{ plus() }}</button></div>
     {%- for s, group in groups %}
-    <div class="group">{{ state(s) }}{{ state_names[s] }}<span class="count">{{ group | length }}</span></div>
+    <div class="group" data-group="{{ s }}">{{ toggle() }}{{ state(s) }}{{ state_names[s] }}<span class="count">{{ group | length }}</span></div>
     {{ tree(group, kids_of) }}
     {%- else %}<p class="muted">No issues yet. A project never ends; its issues do.</p>{% endfor %}
   </div>

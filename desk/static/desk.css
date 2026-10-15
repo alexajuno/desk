@@ -45,6 +45,13 @@
   --border-pop: lch(16.32% 1.48 272);
   --shadow-pop: lch(0 0 0 / 0.4) 0 7px 32px;
   --overlay: lch(0 0 0 / 0.5);
+  /* a group's triangle at rest (--text-2 under the mouse), and Linear's tooltip with its key caps */
+  --group-toggle: lch(20.032% 7 270.292);
+  --bg-tip: lch(16.433% 1.3 272);
+  --border-tip: lch(29.393% 2.38 272);
+  --text-tip: lch(91.554% 1.65 272);
+  --border-tip-key: lch(23.992% 2.38 272);
+  --text-tip-key: lch(66.215% 1.65 272);
   /* status and priority icons, and words in their colours */
   --state-backlog: #bec2c8;
   --state-planning: #e2e2e2;
@@ -89,6 +96,12 @@
   --border-pop: lch(91.9% 0 282);
   --shadow-pop: lch(0 0 0 / 0.08) 0 9px 48px, lch(0 0 0 / 0.1) 0 6px 24px, lch(0 0 0 / 0.04) 0 1px 1px;
   --overlay: lch(0% 0 0 / 0.25);          /* bgModalOverlay */
+  --group-toggle: lch(80.94% 12 279.067); /* the list's group triangle and its tooltip, measured 2026-10-15 */
+  --bg-tip: lch(100% 0 282);
+  --border-tip: lch(91.9% 0 282);
+  --text-tip: lch(20% 1 282);
+  --border-tip-key: lch(91.9% 0 282);
+  --text-tip-key: lch(40% 1 282);
   --state-backlog: lch(67.969% 3.577 260.65); /* the status menu's icons */
   --state-planning: lch(67.969% 0 139.088);
   --state-review: lch(68% 64.37 141.95);
@@ -166,9 +179,17 @@ a.nav-label { text-decoration: none; } a.nav-label:hover, a.nav-label.here { col
 .page { padding: 12px 8px 120px; }
 
 /* list: group headers and 44px rows, as Linear's list view */
-.group { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; margin: 8px 0 0; border-radius: 8px;
+.group { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px 0 8px; margin: 8px 0 0; border-radius: 8px;
          background: var(--bg-raised); font-size: 12px; font-weight: 500; }
 .group .count { color: var(--text-3); font-weight: 450; }
+/* Linear's collapse triangle at a group's left, measured on linear.app on 2026-10-15: a 16px triangle in a
+   20px circle, faint until the mouse is on it, turned down while the group is open, in 0.15s */
+.group-toggle { box-sizing: border-box; width: 20px; height: 20px; padding: 2px; margin-right: -2px; justify-content: center;
+                border: 0; border-radius: 9999px; background: none; color: var(--group-toggle); }
+.group-toggle:hover { background: none; color: var(--text-2); }
+.group-toggle svg { fill: currentColor; transform: rotate(90deg); transition: transform 0.15s; }
+.group.collapsed .group-toggle svg { transform: none; }
+.group.collapsed + .tree { display: none; }
 /* Linear's + at the right of a group, and of the Sub-issues label: a new issue that starts in that group, or under this issue */
 .group-add, .add-sub { width: 24px; height: 24px; padding: 0; justify-content: center; margin-left: auto; border: 0; border-radius: 6px;
                        background: none; color: var(--text-3); }
@@ -329,6 +350,13 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .toast .dot { color: var(--text-4); }
 .toast button.undo { height: 26px; padding: 0 8px; background: none; border: 0; color: var(--text-1); }
 .toast button.undo:hover { background: var(--bg-pop-on); }
+/* Linear's tooltip, measured on the group triangle's on linear.app on 2026-10-15: 11px text, a line per key */
+.tip { position: fixed; z-index: 50; display: flex; flex-direction: column; gap: 6px; padding: 5px 8px; border-radius: 8px;
+       background: var(--bg-tip); border: 0.5px solid var(--border-tip); box-shadow: var(--shadow-panel);
+       font-size: 11px; line-height: 16.5px; color: var(--text-tip); white-space: nowrap; pointer-events: none; }
+.tip kbd { display: inline-block; box-sizing: border-box; min-width: 18px; padding: 2px; border: 0.5px solid var(--border-tip-key);
+           border-radius: 4px; font: 450 11px/1.1 var(--font); color: var(--text-tip-key); text-align: center; }
+.tip kbd + kbd { margin-left: 3px; }
 #keys { display: none; position: fixed; inset: 0; z-index: 20; background: var(--overlay); place-items: center; }
 #keys.open { display: grid; }
 .keys-box { background: var(--bg-pop); border: 0.5px solid var(--border-pop); border-radius: 12px; padding: 16px 20px; width: 340px; font-size: 13px; }

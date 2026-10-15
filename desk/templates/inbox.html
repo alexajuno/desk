@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% from "macros.html" import row %}
+{% from "macros.html" import row, toggle %}
 {% block title %}Inbox · desk{% endblock %}
 {% block crumb %}<span>Inbox</span>{% endblock %}
 {% block main %}
 <div class="page">
   {% for label, items in [("Needs you", needs), ("To review", review)] %}
     {%- if items %}
-    <div class="group">{{ label }}<span class="count">{{ items | length }}</span></div>
+    <div class="group" data-group="{{ label }}">{{ toggle() }}{{ label }}<span class="count">{{ items | length }}</span></div>
     <ul class="tree">
       {%- for i, why in items %}
       <li>{% call row(i) %}<span class="spacer"></span><span class="pill">{{ why }}</span>{% endcall %}</li>

@@ -26,6 +26,16 @@ function toggleReadMode(button) {
   button.setAttribute("aria-pressed", on);
   scroll.scrollTop = at * room();
 }
+// Collapsed groups: the list groups folded on each page, remembered in this browser (localStorage.collapsed,
+// { "/backlog": ["low"], ... }). Set before the page draws, and again when a soft refresh redraws the list.
+function showCollapsed(url = location.pathname + location.search) {
+  const shut = JSON.parse(localStorage.collapsed ?? "{}")[url] ?? [];
+  for (const group of document.querySelectorAll(".group[data-group]")) {
+    const folded = shut.includes(group.dataset.group);
+    group.classList.toggle("collapsed", folded);
+    group.querySelector(".group-toggle").setAttribute("aria-expanded", !folded);
+  }
+}
 </script>
 <script id="desk-data" type="application/json">{{ {"states": states, "priorities": priorities, "state_names": state_names, "prio_names": prio_names, "version": version} | tojson }}</script>
 <script src="{{ asset('desk.js') }}" defer></script>
@@ -75,12 +85,14 @@ function toggleReadMode(button) {
   <header class="bar"><button class="side-icon side-toggle" type="button" title="Show sidebar  [">{{ side_icon }}</button>{% block crumb %}{% endblock %}<span class="right">{% block tools %}{% endblock %}<kbd title="Keyboard shortcuts">?</kbd></span></header>
   <div class="scroll">{% block main %}{% endblock %}</div>
 </div>
+<script>showCollapsed()</script>
 
 {% include "agent_panel.html" %}
 
 <div id="keys"><div class="keys-box"><h2>Keyboard shortcuts</h2>
   <dl><dt>J / K</dt><dd>Move down / up</dd><dt>Enter</dt><dd>Open</dd>
   <dt>S</dt><dd>Change status</dd><dt>P</dt><dd>Change priority</dd><dt>C</dt><dd>Create an issue</dd>
+  <dt>T</dt><dd>Collapse or expand the group</dd><dt>Alt-click a triangle</dt><dd>Collapse or expand all groups</dd>
   <dt>Right-click</dt><dd>Actions on a row</dd><dt>Ctrl Delete</dt><dd>Delete the issue</dd><dt>Ctrl Z</dt><dd>Undo the delete</dd>
   <dt>/</dt><dd>Search</dd><dt>G then I</dt><dd>Go to Inbox</dd><dt>G then B</dt><dd>Go to Backlog</dd>
   <dt>[</dt><dd>Show or hide the sidebar</dd>
