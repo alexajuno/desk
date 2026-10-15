@@ -58,7 +58,7 @@ function keyOf(e) {
 }
 
 // --- one menu for every menu ---------------------------------------------------------------------
-// openMenu({ anchor | x, y, filter, placeholder, kbd, items, empty, onEnter, onTab, onClose, className })
+// openMenu({ anchor | x, y, filter, placeholder, query, kbd, items, empty, onEnter, onTab, onClose, className })
 // items(query) returns, or resolves to, rows of { label, icon, hint, num, key, current, more, group, run }.
 // filter "keys": typing filters, but nothing editable takes focus, so no input method stands between
 //   the keys and the menu (the S that opened it gets through for the same reason);
@@ -88,7 +88,8 @@ function openMenu(o) {
   el.innerHTML = (filter ? `<div class="menu-head">${filter}${o.kbd ? `<kbd>${o.kbd}</kbd>` : ""}</div>` : "") + "<ul></ul>";
   document.body.append(el);
   const input = el.querySelector(".menu-filter"), list = el.querySelector("ul");
-  let query = "", shown = [], at = 0, asked = 0, composing = false, escDown = false;
+  let query = o.query ?? "", shown = [], at = 0, asked = 0, composing = false, escDown = false;
+  if (o.filter === "input") input.value = query;
 
   function place() {
     const w = el.offsetWidth, h = el.offsetHeight;
@@ -212,7 +213,22 @@ document.addEventListener("mousedown", (e) => {
 
 // --- the menus -----------------------------------------------------------------------------------
 function fieldMenu(slug, field, current, where) {
-  valueMenu(field, current, where, (v) => { if (v !== current) setField(slug, field, v); });
+  valueMenu(field, current, where, async (v) => {
+    if (v === current) return;
+    // The refresh may swap the anchor out, so the next menu opens where it was.
+    const box = where.anchor?.getBoundingClientRect(), at = box ? { x: box.left, y: box.bottom + 4 } : where;
+    await setField(slug, field, v);
+    if (field === "state" && v === "waiting") waitingMenu(slug, "", at); // a wait says on whom
+  });
+}
+
+// Who or what a waiting issue waits on, typed in any language; Enter saves it, an empty one clears it.
+function waitingMenu(slug, current, where) {
+  openMenu({
+    ...where, filter: "input", className: "folders", query: current, placeholder: "Waiting on whom, for what…",
+    items: () => [], empty: "Enter saves it, such as QA on #570",
+    onEnter: (typed) => setField(slug, "waiting_on", typed.trim()),
+  });
 }
 
 // Linear numbers priority 0 for none, then 1 urgent to 4 low; statuses count from 1, and so do protocols, each with
@@ -770,6 +786,8 @@ document.addEventListener("click", (e) => {
   }
   const folder = t.closest(".folder-pick");
   if (folder) { if (!toggled(folder)) folderMenu(folder); return; }
+  const waiting = t.closest(".waiting-pick");
+  if (waiting) { if (!toggled(waiting)) waitingMenu(waiting.dataset.slug, waiting.dataset.value, { anchor: waiting }); return; }
   const projectChip = t.closest(".project-chip");
   if (projectChip) {
     const slug = projectChip.dataset.slug;

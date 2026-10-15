@@ -1,12 +1,15 @@
 {# Icons are Linear's shapes: the status circle that fills as work moves (its backlog circle uses
    Linear's own dash pattern, 1.4 1.74), three priority bars, and the orange square for urgent. Their
-   colours are desk.css's --state-* and --prio variables, so they follow the theme. #}
+   colours are desk.css's --state-* and --prio variables, so they follow the theme. Waiting, which Linear
+   has no state for, is the circle paused. #}
 
 {% macro state(s) -%}
 {%- if s == "done" -%}
 <svg width="14" height="14" viewBox="0 0 14 14" style="color: var(--state-done)"><circle cx="7" cy="7" r="6.25" fill="currentColor"/><path d="M4.4 7.1l1.8 1.8 3.4-3.6" fill="none" style="stroke: var(--on-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
 {%- elif s == "dropped" -%}
 <svg width="14" height="14" viewBox="0 0 14 14" style="color: var(--state-dropped)"><circle cx="7" cy="7" r="6.25" fill="currentColor"/><path d="M5 5l4 4M9 5l-4 4" style="stroke: var(--state-cross)" stroke-width="1.5" stroke-linecap="round"/></svg>
+{%- elif s == "waiting" -%}
+<svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color: var(--state-waiting)"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.6 4.9v4.2M8.4 4.9v4.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
 {%- else -%}
 {%- set f = {"backlog": 0, "running": 0.5, "review": 0.75}[s] -%}
 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color: var(--state-{{ s }})"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.5"{% if s == "backlog" %} stroke-dasharray="1.4 1.74" stroke-dashoffset="0.65"{% endif %}/>
@@ -39,7 +42,9 @@
    data-parent="{{ p.parent or '' }}">
   <span class="icon" data-field="priority" title="Change priority (P)">{{ prio(p.priority) }}</span>
   <span class="icon" data-field="state" title="Change status (S)">{{ state(p.state) }}</span>
-  <span class="title">{{ p.title }}</span>{{ caller() if caller }}</a>
+  <span class="title">{{ p.title }}</span>
+  {%- if p.state == "waiting" %}<span class="waiting-on" title="Waiting since {{ p.waiting_since | short_date }}">{{ p.waiting_on or "Waiting" }} · {{ p.waiting_since | since }}</span>{% endif %}
+  {{- caller() if caller }}</a>
 {%- endmacro %}
 
 {% macro tree(items, kids_of) -%}

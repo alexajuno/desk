@@ -36,6 +36,8 @@ OPEN = [s for s in store.STATES if s not in ("done", "dropped")]
 def as_json(i: store.Issue, full: bool = False) -> dict:
     data = {"slug": i.slug, "title": i.title, "state": i.state, "priority": i.priority, "parent": i.parent,
             "project": i.project, "folder": i.folder, "protocol": i.runs, "session": i.session, "created": i.created, "url": f"/issue/{i.slug}"}
+    if i.state == "waiting":
+        data |= {"waiting_on": i.waiting_on, "waiting_since": i.waiting_since}
     if full:
         data |= {"file": str(store.folder(i.slug) / store.MAIN), "files": store.files(i.slug), "body": i.body}
     return data
@@ -56,6 +58,7 @@ class Fields(BaseModel):
     project: str | None = None
     folder: str | None = None
     protocol: str | None = None
+    waiting_on: str | None = None
 
 
 def _apply(i: store.Issue, fields: Fields) -> None:
@@ -65,6 +68,8 @@ def _apply(i: store.Issue, fields: Fields) -> None:
     for name, allowed in (("priority", store.PRIORITIES), ("state", store.STATES), ("protocol", store.PROTOCOLS)):
         if name in given and given[name] not in allowed:
             raise HTTPException(422, f"{name} must be one of: {', '.join(allowed)}")
+    if given.get("waiting_on") and given.get("state", i.state) != "waiting":
+        raise HTTPException(422, "waiting_on is for an issue in waiting: send \"state\": \"waiting\" with it")
     if "title" in given and not given["title"]:
         raise HTTPException(422, "title cannot be empty")
     if parent := given.get("parent"):
@@ -80,7 +85,7 @@ def _apply(i: store.Issue, fields: Fields) -> None:
     if "body" in given:
         given["body"] = given["body"] or ""
     for name, value in given.items():
-        setattr(i, name, value or None if name in ("parent", "project", "folder") else value)
+        setattr(i, name, value or None if name in ("parent", "project", "folder", "waiting_on") else value)
 
 
 @router.get("/issues")

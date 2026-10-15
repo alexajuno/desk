@@ -65,7 +65,8 @@ def landed(result: Path) -> tuple[bool, str | None]:
 def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, list]:
     """What needs you and what waits for your review. desk owns issue.md, so it moves the state here, from the
     session: In progress to In review once it wrote result.md and stopped working, back to In progress when you
-    ask it for a change in its chat and it works again, and from Landing to Done once result.md says it landed."""
+    ask it for a change in its chat and it works again, and from Landing to Done once result.md says it landed.
+    Waiting is yours to move, as it waits on someone else; only a result its session wrote since moves it on."""
     needs, review = [], []
     for issue in all_issues.values():
         row = live.get(issue.session, {}) if issue.session else {}
@@ -79,6 +80,10 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
                 issue.link = issue.link or (pr if done else None)
                 store.save(issue)
         elif issue.state == "running" and result.is_file() and now != "working":
+            issue.state = "review"
+            store.save(issue)
+        elif issue.state == "waiting" and result.is_file() and now != "working" and issue.waiting_since \
+                and datetime.fromtimestamp(result.stat().st_mtime) > datetime.fromisoformat(issue.waiting_since):
             issue.state = "review"
             store.save(issue)
         elif issue.state == "review" and now == "working":
@@ -103,15 +108,16 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
 
 
 def sidebar(request: Request) -> dict:
-    """Counts and the In progress list for the sidebar on every page."""
+    """Counts, and the In progress and Waiting lists, for the sidebar on every page."""
     all_issues = store.load_all()
     needs, review = inbox_items(all_issues, agents.live())
     # Sub-issues too: a session runs whether or not its issue sits under another (15 Oct, one handed off as a
     # sub-issue never showed here).
     running = sorted((i for i in all_issues.values() if i.state == "running"), key=lambda i: i.rank)
+    waiting = sorted((i for i in all_issues.values() if i.state == "waiting"), key=lambda i: i.rank)
     now = land.running(str(land.DESK_REPO))
     return {"sidebar": {"backlog": sum(i.state == "backlog" for i in all_issues.values()), "running": running,
-                        "trying": now and {**now, "issue": all_issues.get(now["slug"])},
+                        "waiting": waiting, "trying": now and {**now, "issue": all_issues.get(now["slug"])},
                         "inbox": len(needs) + len(review),
                         "projects": sorted((p for p in projects.load_all().values() if p.state == "active"),
                                            key=lambda p: p.created)}, "version": version()}
@@ -120,7 +126,7 @@ def sidebar(request: Request) -> dict:
 templates = Jinja2Templates(directory=HERE / "templates", context_processors=[sidebar])
 templates.env.globals.update(
     priorities=store.PRIORITIES, states=store.STATES,
-    state_names={"backlog": "Backlog", "running": "In progress", "review": "In review",
+    state_names={"backlog": "Backlog", "running": "In progress", "waiting": "Waiting", "review": "In review",
                  "done": "Done", "dropped": "Dropped"},
     prio_names={"urgent": "Urgent", "high": "High", "medium": "Medium", "low": "Low", "none": "No priority"},
     protocols=store.PROTOCOLS, proto_names={"quick": "Quick", "brief": "Brief", "design": "Design"},
@@ -144,6 +150,7 @@ def ago(when: datetime) -> str:
 
 
 templates.env.filters["ago"] = ago
+templates.env.filters["since"] = lambda iso: ago(datetime.fromisoformat(iso)) if iso else ""
 app.state.templates = templates  # the Agent tab's pages (chats.py) render with these too
 @app.on_event("startup")
 async def _remember_loop():
@@ -378,6 +385,10 @@ def strip(i: store.Issue, row: dict, has_plan: bool, result: Path) -> dict:
             return {"text": "Plan ready: read it, then say go in the chat." if ready else "Your turn in the chat.",
                     "button": chat}
         return {"text": asleep, "button": chat}
+    if i.state == "waiting":
+        since = datetime.fromisoformat(i.waiting_since) if i.waiting_since else datetime.now()
+        who = i.waiting_on or "someone else. Say who under Waiting on"
+        return {"text": f"Waiting on {who}, since {since:%b %-d} ({ago(since)}).", "button": chat if i.session else None}
     if i.state == "review":
         ask = "Not yet? Say what to change in the chat." if i.session else ""
         return {"text": f"In review: {'read the card' if has_result else 'check the work'}. {ask}".strip(),
@@ -453,6 +464,10 @@ def set_field(slug: str, field: str = Form(...), value: str = Form("")):
             raise HTTPException(422, "A title cannot be empty.")
     elif field == "body":
         value = value.replace("\r\n", "\n")
+    elif field == "waiting_on":
+        value = " ".join(value.split()) or None
+        if i.state != "waiting":
+            raise HTTPException(422, "Only a waiting issue says who it waits on.")
     elif field == "project":
         value = value or None
         if value and not projects.exists(value):

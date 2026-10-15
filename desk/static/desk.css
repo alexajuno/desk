@@ -66,6 +66,7 @@
   --state-running: lch(80% 90 85);
   --state-review: #4cb782;
   --state-done: #5e6ad2;
+  --state-waiting: #f2994a;  /* Linear's orange, from its status colours */
   --state-dropped: #95a2b3;
   --state-cross: lch(10% 0 0);
   --prio: lch(80% 1.2 272);
@@ -222,6 +223,8 @@ a.nav-label { text-decoration: none; } a.nav-label:hover, a.nav-label.here { col
 .item .icon { width: 22px; height: 22px; margin: 0 -3px; border-radius: 4px; cursor: pointer; }
 .item .icon:hover { background: var(--bg-active); }
 .item .spacer { flex: 1; }
+/* A waiting issue's row says who it waits on, and for how long: the list to chase */
+.item .waiting-on { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-3); }
 .item .date { font-size: 12px; color: var(--text-3); min-width: 44px; text-align: right; }
 .pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 48px; border: 1px solid var(--border-3);
         background: var(--bg-panel); color: var(--text-3); font-size: 12px; white-space: nowrap; }
@@ -319,7 +322,7 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .prop a:hover { color: var(--link); }
 .menu.folders { width: 360px; } .menu.folders ul { max-height: 300px; overflow: auto; }
 .menu li.empty { color: var(--text-3); cursor: default; }
-.folder-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-pick span, .waiting-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hint { font-size: 12px; color: var(--text-3); margin: 0 0 8px; } .hint a { color: var(--text-2); }
 .sessions { list-style: none; padding: 0; margin: 0; }
 .sessions li { display: flex; align-items: center; gap: 8px; height: 32px; }

@@ -30,8 +30,10 @@ PLAN = "plan.md"  # the plan, kept by the issue's session while the user plans w
 # Linear's priority levels, most urgent first.
 PRIORITIES = ["urgent", "high", "medium", "low", "none"]
 # "running" shows as In progress: one chat plans the issue and carries it out, so planning is no state of its own
-# (the user, 15 Oct). An issue saved as planning before then reads as running.
-STATES = ["backlog", "running", "review", "done", "dropped"]
+# (the user, 15 Oct). An issue saved as planning before then reads as running. waiting: someone else's move, such as
+# QA's ("it's blocked by qa, by others, so i'm not sure what's its status anymore", the user, 15 Oct); it carries
+# who it waits on and since when.
+STATES = ["backlog", "running", "waiting", "review", "done", "dropped"]
 # How much plan an issue gets, and whether its session waits for "go" (agents.PROTOCOL_PROMPTS). quick: a three-line
 # brief, then the work at once; brief: the same brief, then "go"; design: a design doc talked through, then "go". The
 # user, 15 Oct: "some tasks i just want it to fire and fix without me looking at the detail plan". An issue with none,
@@ -54,6 +56,8 @@ class Issue:
     link: str | None = None
     landing: str | None = None  # when Approve told the session to land its work; set until it reports
     session: str | None = None  # the one Claude Code session bound to this issue, from planning to done
+    waiting_on: str | None = None  # in waiting, who or what it waits on, such as "QA on #570"
+    waiting_since: str | None = None  # in waiting, when it began to; save() keeps both
     created: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     body: str = ""
 
@@ -120,6 +124,11 @@ def has_plan(issue: Issue) -> bool:
 
 
 def save(issue: Issue) -> None:
+    # The wait's note belongs to the wait: one that ends drops it, so a later wait starts afresh.
+    if issue.state != "waiting":
+        issue.waiting_on = issue.waiting_since = None
+    elif not issue.waiting_since:
+        issue.waiting_since = datetime.now().isoformat(timespec="seconds")
     meta = {k: v for k, v in asdict(issue).items() if k not in ("slug", "body") and v not in (None, [], "")}
     front = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True).strip()
     folder(issue.slug).mkdir(parents=True, exist_ok=True)

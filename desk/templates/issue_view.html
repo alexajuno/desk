@@ -42,6 +42,11 @@
         <span class="icon" data-field="priority">{{ prio(p.priority) }}</span><span class="field-label" data-field="priority">{{ "Priority" if p.priority == "none" else prio_names[p.priority] }}</span></button>
       <button class="field-chip pick" type="button" data-slug="{{ p.slug }}" data-field="protocol" data-protocol="{{ p.runs }}" title="Change protocol: how much plan, and whether it waits for go">
         <span class="icon" data-field="protocol">{{ proto(p.runs) }}</span><span class="field-label" data-field="protocol">{{ proto_names[p.runs] }}</span></button>
+      {%- if p.state == "waiting" %}
+      <button class="field-chip waiting-pick{{ ' unset' if not p.waiting_on }}" type="button" data-slug="{{ p.slug }}" data-value="{{ p.waiting_on or '' }}" title="Who or what it waits on">
+        <svg class="glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="8" cy="8" r="5.75"/><path d="M8 5v3l2 1.25"/></svg>
+        <span>{{ p.waiting_on or "Waiting on" }}</span></button>
+      {%- endif %}
       <button class="field-chip project-chip{{ ' unset' if not p.project }}" type="button" data-slug="{{ p.slug }}" data-value="{{ p.project or '' }}" title="Set project">
         <svg class="glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M8 2l5.5 3v6L8 14l-5.5-3V5z"/></svg>
         <span>{{ project.title if project else p.project or "Project" }}</span></button>
@@ -85,6 +90,15 @@
       <span class="icon" data-field="state">{{ state(p.state) }}</span><span class="field-label" data-field="state">{{ state_names[p.state] }}</span></button>
     <button class="prop pick" data-slug="{{ p.slug }}" data-field="priority" data-priority="{{ p.priority }}" title="Change priority (P)">
       <span class="icon" data-field="priority">{{ prio(p.priority) }}</span><span class="field-label" data-field="priority">{{ prio_names[p.priority] }}</span></button>
+    {%- if p.state == "waiting" %}
+
+    {#- Who or what the issue waits on, and since when (issues.STATES). #}
+    <div class="label">Waiting on</div>
+    <button class="prop waiting-pick" data-slug="{{ p.slug }}" data-value="{{ p.waiting_on or '' }}" title="Who or what it waits on">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="color: var(--text-3)" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="8" cy="8" r="5.75"/><path d="M8 5v3l2 1.25"/></svg>
+      <span{% if not p.waiting_on %} class="muted"{% endif %}>{{ p.waiting_on or "Who or what?" }}</span></button>
+    <div class="prop static muted">since {{ p.waiting_since | short_date }} · {{ p.waiting_since | since }}</div>
+    {%- endif %}
 
     {#- How much plan the issue gets, and whether its session waits for go (issues.PROTOCOLS). #}
     <div class="label">Protocol</div>
@@ -111,7 +125,7 @@
     {#- What the strip's button acts on. Opening it in kitty instead is in the … menu. #}
     <div class="label">Session</div>
     <div class="prop static"><code>{{ p.session[:8] }}</code>
-      <span class="live {{ live }}">{{ "open in a terminal" if session.get("kind") == "interactive" else {"working": "working", "idle": "idle" if p.state in ("done", "dropped") else "your turn", "stopped": "stopped"}.get(live, "not running") }}</span></div>
+      <span class="live {{ live }}">{{ "open in a terminal" if session.get("kind") == "interactive" else {"working": "working", "idle": "idle" if p.state in ("done", "dropped", "waiting") else "your turn", "stopped": "stopped"}.get(live, "not running") }}</span></div>
     {%- endif %}
   </aside>
 </div>
