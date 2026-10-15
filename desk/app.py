@@ -10,7 +10,7 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
@@ -345,6 +345,21 @@ def plan(slug: str):
         i.state = "planning"
     store.save(i)
     return back(slug)
+
+
+@app.post("/issue/{slug}/trust")
+def trust_folder(request: Request, slug: str):
+    """Trust the issue's folder in Claude Code. Only desk's own page may ask: the Origin must be the page's
+    own address on a loopback name, so the agent's curl, which sends none, cannot trust a folder."""
+    host = request.headers.get("host", "")
+    if not (urlsplit(f"//{host}").hostname in terminal.LOOPBACK and request.headers.get("origin") == f"http://{host}"):
+        raise HTTPException(403, "Trust a folder from its issue page in desk.")
+    i = store.load(slug)
+    try:
+        agents.trust(agents.workdir(i))
+    except (RuntimeError, OSError, ValueError) as error:
+        return back(slug, str(error))
+    return back(slug, f"Trusted {agents.workdir(i)}. Press Plan with Claude or Hand off again.")
 
 
 @app.post("/issue/{slug}/handoff")

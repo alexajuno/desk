@@ -10,8 +10,9 @@
   <div>
     <h1 class="title" title="Click to edit">{{ p.title }}</h1>
     {% if msg %}<p class="notice">{{ msg }}
-      {%- if trust %} <button type="button" class="primary term-open" data-slug="{{ p.slug }}" data-short="trust" data-trust="1">Trust folder</button>
-      <span class="hint">Opens claude in that folder. Accept its prompt, quit it, then press Plan with Claude or Hand off again.</span>{% endif %}</p>{% endif %}
+      {%- if trust %}
+      <form method="post" action="/issue/{{ p.slug }}/trust" style="display: inline"><button class="primary">Trust folder</button></form>
+      <span class="hint">Tells Claude Code to trust this folder, as accepting its prompt does.</span>{% endif %}</p>{% endif %}
     {%- if p.state == "review" %}
     <div class="review">
       <div class="section-label" style="margin-top: 0">Review</div>

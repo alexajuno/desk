@@ -153,6 +153,26 @@ class TrustError(RuntimeError):
     """Claude Code refused to start a session because nobody accepted its trust prompt in the folder."""
 
 
+CLAUDE_JSON = Path.home() / ".claude.json"
+
+
+def trust(folder: str) -> None:
+    """Mark the folder trusted in Claude Code's own state, as accepting its trust prompt does:
+    projects[<path>].hasTrustDialogAccepted (seen in ~/.claude.json on 2026-10-15). Running sessions rewrite
+    that file too, so it is read and replaced in one go (atomically), then read back to check it stuck."""
+    path = str(Path(folder).expanduser().resolve())
+    if not Path(path).is_dir():
+        raise RuntimeError(f"{path} is not a folder.")
+    state = json.loads(CLAUDE_JSON.read_text(encoding="utf-8"))
+    state.setdefault("projects", {}).setdefault(path, {})["hasTrustDialogAccepted"] = True
+    temp = CLAUDE_JSON.with_name(f".claude.json.desk-{os.getpid()}")
+    temp.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    temp.chmod(CLAUDE_JSON.stat().st_mode & 0o777)
+    os.replace(temp, CLAUDE_JSON)
+    if not json.loads(CLAUDE_JSON.read_text(encoding="utf-8")).get("projects", {}).get(path, {}).get("hasTrustDialogAccepted"):
+        raise RuntimeError("Claude Code rewrote its settings at the same moment and dropped the change. Press Trust folder again.")
+
+
 def _background(cwd: str, command: list[str]) -> str:
     run = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=60)
     # With FORCE_COLOR set, as in the kitty shell desk runs from, the id comes wrapped in colour codes:
