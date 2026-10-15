@@ -64,8 +64,8 @@ How to work:
 RESULT_CARD = """{dir}/result.md opens with a review card, which the user decides from at a glance. Keep it under 120 words, with no title above it:
 **What you'll see:** one or two sentences in the user's terms, with no file names, branches or commit ids.
 **Try it:** one action, such as "open /backlog and press T". In review, Try it here runs your branch in the user's own checkout.
-**Done when:** each line of the plan's Done when, marked ✓ (checked), ✗ (not met) or ? (not checked), each with its evidence in a few words.
-**Needs you:** one line for each default you picked that the user might reverse, or each thing you could not check, with what you chose. Or "Nothing".
+**Done when:** each line of the plan's Done when, marked ✓ (checked), ✗ (not met) or ? (not checked), each with its evidence in a few words. A line only Approve can meet, such as the merge, is ? with "on Approve".
+**Needs you:** one line for each default you picked that the user might reverse, or each thing you could not check, with what you chose; only those that bear on Approve, the rest go under Details. Or "Nothing".
 A change with a UI adds one or two screenshots of the result, saved as {dir}/review-1.png and review-2.png (Playwright's screenshot takes a full path) and shown in the card: ![what it shows](review-1.png).
 Then a "## Details" heading, and under it the whole write-up: what changed and where (branch, commits, PR links), and how you checked it, marking what you verified and what you assumed. desk folds the details away."""
 

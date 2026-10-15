@@ -75,7 +75,7 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
             store.save(issue)
         if issue.state == "review":
             review.append((issue, "result ready" if (store.folder(issue.slug) / "result.md").is_file() else "check it"))
-        elif issue.state == "planning" and row.get("kind") == "background" and not busy and issue.section("Plan"):
+        elif issue.state == "planning" and row.get("kind") == "background" and not busy and store.has_plan(issue):
             # A session the Agent started plans in the background; idle with a Plan written, it waits for you.
             needs.append((issue, "plan ready"))
         elif row.get("state") == "blocked" and issue.state not in CLOSED:
@@ -286,11 +286,16 @@ def show(request: Request, slug: str):
 DETAILS = re.compile(r"^## Details[ \t]*$", re.M)
 
 
+# Python-Markdown starts a list only after a blank line, and a card's list often sits right under its label
+# ("**Done when:**", 15 Oct: it ran together into one line).
+LIST_UNDER_LINE = re.compile(r"^(?![-*+] |\d+\. )(\S.*)\n(?=[-*+] |\d+\. )", re.M)
+
+
 def split_result(text: str) -> tuple[str, str] | None:
     """A result written as a review card (agents.RESULT_CARD): the card above its "## Details" heading, the
     write-up under it. A result without one, as every one written before the card, is None and shows whole."""
     match = DETAILS.search(text)
-    return (text[:match.start()], text[match.end():]) if match else None
+    return (LIST_UNDER_LINE.sub(r"\1\n\n", text[:match.start()]), text[match.end():]) if match else None
 
 
 def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: str) -> dict:
