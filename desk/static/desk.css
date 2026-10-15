@@ -429,7 +429,8 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
    unread dot, the 13px title and the 14px status icon; the second, in 12px, who did what and how long ago.
    The list is 400px, or half the panel when that is less. With the sidebar showing on a window of 890 to 1029px,
    Linear narrows it to 240px so the notification keeps its room; under 770px only one of them shows. */
-.panel { --inbox-list: min(400px, 50%); }
+/* Half is the panel's width (cqw), so the list, the bar's line and "Inbox" over the list all measure the same. */
+.panel { container-type: inline-size; --inbox-list: min(400px, 50cqw); }
 @media (min-width: 901px) and (max-width: 1029px) { .panel { --inbox-list: 240px; } }
 .scroll:has(> .inbox) { overflow: hidden; }
 .inbox { display: grid; grid-template-columns: var(--inbox-list) minmax(0, 1fr); height: 100%; }
