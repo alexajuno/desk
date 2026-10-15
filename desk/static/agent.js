@@ -132,7 +132,8 @@
     setBusy(on) {
       this.busy = on;
       this.form.classList.toggle("busy", on);
-      this.button.title = on ? "Stop" : "Send (Enter)";
+      this.button.ariaLabel = on ? "Stop" : "Send";
+      this.button.dataset.tip = on ? "Stop" : "Send  Enter";
       this.fit();
     }
 
@@ -207,7 +208,7 @@
   // Copying a reply.
   document.addEventListener("click", (e) => {
     const copy = e.target.closest(".copy");
-    if (copy) navigator.clipboard.writeText(copy.dataset.text).then(() => { copy.title = "Copied"; });
+    if (copy) navigator.clipboard.writeText(copy.dataset.text).then(() => { copy.dataset.tip = "Copied"; });
   });
 
   // The chats, in desk's menu, under the header's switcher or above the history button. A click on

@@ -711,7 +711,7 @@ function toggleGroup(group, all = false) {
   localStorage.collapsed = JSON.stringify(remembered);
   showCollapsed();
   if (focused && !focused.checkVisibility()) focusRow(null);
-  if (tip.isConnected) showTip(tipFor);
+  if (tipFor?.matches(".group-toggle:hover")) showTip(tipFor); // the key or click hid it: show the new verb
 }
 
 // --- folded sections: a click on a section's heading or its triangle folds or unfolds it, and Alt+click every
@@ -733,30 +733,76 @@ function unfoldTo(target) {
 }
 if (location.hash) unfoldTo(document.getElementById(decodeURIComponent(location.hash.slice(1))));
 
-// Linear's tooltip on the triangle: after about 450 ms, centred 12px under it, naming the keys. With the
-// sidebar hidden the triangle sits near the window's edge, so the tooltip keeps 8px inside the window.
-const tip = Object.assign(document.createElement("div"), { className: "tip" });
-let tipFor = null, tipTimer = 0;
+// --- Linear's tooltip, in place of the browser's, for every element with a title (measured on linear.app,
+// 2026-10-15). A title reads "Label  Keys": two spaces, then the keys, each drawn as a cap. The title moves into
+// data-tip on the first hover, so the browser never shows its own; an icon-only button keeps the label as its name.
+// It shows after 450 ms, centred 8px under the element (12px under the list's triangle), or above when the window
+// has no room below, and keeps 8px inside the window. From one tooltip to the next it shows at once, as Linear's
+// does; desk lets that last 300 ms after one hides. A click, a key or a scroll hides it.
+const tip = Object.assign(document.createElement("div"), { className: "tip", role: "tooltip" });
+let tipFor = null, tipTimer = 0, tipHidden = 0;
 
-function showTip(toggle) {
-  const verb = toggle.closest(".group").classList.contains("collapsed") ? "expand" : "collapse";
-  tip.innerHTML = `<div><kbd>T</kbd> to ${verb} group</div><div><kbd>Alt</kbd><kbd>Click</kbd> to ${verb} all</div>`;
-  document.body.append(tip);
-  const at = toggle.getBoundingClientRect();
+function tipText(el) {
+  if (el.hasAttribute("title")) {
+    el.dataset.tip = el.title;
+    if (!el.hasAttribute("aria-label") && !el.textContent.trim()) el.setAttribute("aria-label", el.title.split(/\s{2,}/)[0]);
+    el.removeAttribute("title");
+  }
+  return el.dataset.tip;
+}
+
+function keyCaps(keys) {
+  const caps = Object.assign(document.createElement("span"), { className: "caps" });
+  for (const key of keys.split(" ")) caps.append(Object.assign(document.createElement("kbd"), { textContent: key }));
+  return caps;
+}
+
+function fillTip(el) {
+  if (el.matches(".group-toggle")) {
+    const verb = el.closest(".group").classList.contains("collapsed") ? "expand" : "collapse";
+    const line = (keys, text) => { const div = document.createElement("div"); div.append(keyCaps(keys), ` to ${text}`); return div; };
+    const lines = Object.assign(document.createElement("div"), { className: "lines" });
+    lines.append(line("T", `${verb} group`), line("Alt Click", `${verb} all`));
+    tip.replaceChildren(lines);
+    return;
+  }
+  const [label, keys] = el.dataset.tip.split(/\s{2,}/);
+  tip.replaceChildren(label);
+  if (keys) tip.append(keyCaps(keys));
+}
+
+function showTip(el) {
+  if (!el.isConnected) return;
+  fillTip(el);
+  tip.className = el.closest(".group") ? "tip raised" : "tip";
+  tip.remove();
+  document.body.append(tip); // anew, so it fades in again
+  const at = el.getBoundingClientRect(), gap = el.matches(".group-toggle") ? 12 : 8;
+  const below = at.bottom + gap + tip.offsetHeight <= innerHeight - 8;
+  tip.classList.toggle("above", !below);
+  tip.style.top = `${below ? at.bottom + gap : Math.max(8, at.top - gap - tip.offsetHeight)}px`;
   const centred = at.left + at.width / 2 - tip.offsetWidth / 2;
   tip.style.left = `${Math.max(8, Math.min(centred, innerWidth - tip.offsetWidth - 8))}px`;
-  tip.style.top = `${at.bottom + 12}px`;
+}
+
+function hideTip(fade = true) {
+  clearTimeout(tipTimer);
+  if (!tip.isConnected || tip.classList.contains("out")) return;
+  tipHidden = Date.now();
+  if (!fade) { tip.remove(); return; }
+  tip.classList.add("out");
+  setTimeout(() => { if (tip.classList.contains("out")) tip.remove(); }, 200);
 }
 
 document.addEventListener("mouseover", (e) => {
-  const toggle = e.target.closest?.(".group-toggle") ?? null;
-  if (toggle === tipFor) return;
-  clearTimeout(tipTimer);
-  tip.remove();
-  tipFor = toggle;
-  if (toggle) tipTimer = setTimeout(() => showTip(toggle), 450);
+  const el = e.target.closest?.("[title], [data-tip], .group-toggle") ?? null;
+  if (el === tipFor) return;
+  tipFor = el;
+  const warm = (tip.isConnected && !tip.classList.contains("out")) || Date.now() - tipHidden < 300;
+  hideTip();
+  if (el && (el.matches(".group-toggle") || tipText(el))) tipTimer = setTimeout(() => showTip(el), warm ? 0 : 450);
 });
-document.addEventListener("scroll", () => tip.remove(), true);
+for (const type of ["mousedown", "keydown", "scroll"]) document.addEventListener(type, () => hideTip(false), true);
 
 document.addEventListener("click", (e) => {
   const t = e.target, closed = justClosed;

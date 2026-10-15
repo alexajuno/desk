@@ -36,9 +36,9 @@
     {#- Linear's Inbox has no room for the Properties column in a pane under 820px, so it shows them as chips here
         instead (desk.css); each opens the same picker as its row in the column. #}
     <div class="chips">
-      <button class="field-chip pick" type="button" data-slug="{{ p.slug }}" data-field="state" data-state="{{ p.state }}" title="Change status (S)">
+      <button class="field-chip pick" type="button" data-slug="{{ p.slug }}" data-field="state" data-state="{{ p.state }}" title="Change status  S">
         <span class="icon" data-field="state">{{ state(p.state) }}</span><span class="field-label" data-field="state">{{ state_names[p.state] }}</span></button>
-      <button class="field-chip pick{{ ' unset' if p.priority == 'none' }}" type="button" data-slug="{{ p.slug }}" data-field="priority" data-priority="{{ p.priority }}" title="Change priority (P)">
+      <button class="field-chip pick{{ ' unset' if p.priority == 'none' }}" type="button" data-slug="{{ p.slug }}" data-field="priority" data-priority="{{ p.priority }}" title="Change priority  P">
         <span class="icon" data-field="priority">{{ prio(p.priority) }}</span><span class="field-label" data-field="priority">{{ "Priority" if p.priority == "none" else prio_names[p.priority] }}</span></button>
       <button class="field-chip pick" type="button" data-slug="{{ p.slug }}" data-field="protocol" data-protocol="{{ p.runs }}" title="Change protocol: how much plan, and whether it waits for go">
         <span class="icon" data-field="protocol">{{ proto(p.runs) }}</span><span class="field-label" data-field="protocol">{{ proto_names[p.runs] }}</span></button>
@@ -86,9 +86,9 @@
 
   <aside class="props">
     <div class="label">Properties</div>
-    <button class="prop pick" data-slug="{{ p.slug }}" data-field="state" data-state="{{ p.state }}" title="Change status (S)">
+    <button class="prop pick" data-slug="{{ p.slug }}" data-field="state" data-state="{{ p.state }}" title="Change status  S">
       <span class="icon" data-field="state">{{ state(p.state) }}</span><span class="field-label" data-field="state">{{ state_names[p.state] }}</span></button>
-    <button class="prop pick" data-slug="{{ p.slug }}" data-field="priority" data-priority="{{ p.priority }}" title="Change priority (P)">
+    <button class="prop pick" data-slug="{{ p.slug }}" data-field="priority" data-priority="{{ p.priority }}" title="Change priority  P">
       <span class="icon" data-field="priority">{{ prio(p.priority) }}</span><span class="field-label" data-field="priority">{{ prio_names[p.priority] }}</span></button>
     {%- if p.state == "waiting" %}
 
