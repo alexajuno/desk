@@ -97,9 +97,10 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
             # Planned, by you in its chat or on its own from the Agent's: it waits for your "go". A quick issue's
             # session waits for nothing, so one that stopped before its result stopped for you.
             needs.append((issue, "waiting for you" if issue.runs == "quick" else "plan ready"))
-        elif row.get("state") == "blocked" and row.get("pid") and issue.state not in CLOSED:
+        elif row.get("state") == "blocked" and row.get("pid") and issue.state not in CLOSED | {"waiting"}:
             # Claude Code keeps listing a session by its last state after it ends: igh-289's and
             # add-project-concept-to-desk's still said blocked, with no process, long after both were done (15 Oct).
+            # A waiting issue's session sits at its prompt by your choice: igh-296's, paused for QA (15 Oct).
             needs.append((issue, "waiting for you"))
         elif issue.state == "running" and has_questions(issue):
             needs.append((issue, "has questions"))
