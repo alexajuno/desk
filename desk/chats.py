@@ -259,9 +259,10 @@ def _same(a: str, b: str) -> bool:
 
 
 def _adds(cwd: str) -> list[str]:
-    """--add-dir for desk's data folder, which holds the issues' files, and ~/worktrees, unless the chat runs in one."""
-    return [arg for d in (str(store.DATA_DIR), str(HOME / "worktrees")) if not _same(d, cwd) and Path(d).is_dir()
-            for arg in ("--add-dir", d)]
+    """--add-dir for desk's data folder, which holds the issues' files, unless the chat runs in it. Worktrees need none:
+    they sit in their repo's .claude/worktrees."""
+    d = str(store.DATA_DIR)
+    return [] if _same(d, cwd) or not Path(d).is_dir() else ["--add-dir", d]
 
 
 def _move(chat_id: str, base: str) -> None:

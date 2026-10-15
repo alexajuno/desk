@@ -52,7 +52,7 @@ Then a "## Details" heading, and under it the whole write-up: what changed and w
 # From "go" to the card, then the review: the same for a session the user plans with and one started on a written
 # plan. Nothing lands before Approve, whatever the repo's rules say about where to work: that is the gate.
 WORK = """Carrying out the plan:
-- Work where this repo's own rules say: its CLAUDE.md, CONTRIBUTING and .claude/rules. When they say nothing about where, work on a new branch in a git worktree of your own, beside the checkout. In a folder that is not a git repo, work in it.
+- Work where this repo's own rules say: its CLAUDE.md, CONTRIBUTING and .claude/rules. When they say nothing about where, work on a new branch in a git worktree of your own, in the checkout's .claude/worktrees/<name>, and remove it once the work lands. In a folder that is not a git repo, work in it.
 - Keep the work off the branch it will land on (main, usually) until the user approves it: nothing lands before Approve.
 - Decide the details inside the plan yourself. Don't ask the user mid-way: write each question to {dir}/questions.md and carry on with your best default. Stop only when the answer would change the direction, or when the next step leaves the system: money, messages to people, deleted data, production. Then write the question there and stop.
 - Once you carry it out, never edit {file} or {plan}; the user and desk own them. Your files are questions.md and result.md.
