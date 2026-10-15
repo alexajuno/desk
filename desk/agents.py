@@ -56,8 +56,18 @@ The whole chat, which is all the context the user gave:
 
 How to work:
 - You are in your own worktree, on its own branch. Gather the context the chat points at: read the code and the repo's rules, the related desk issues, the links the user gave. Change nothing yet.
-- Then write the plan into the "## Plan" section of the issue file with the Write or Edit tool, in four short parts: Direction, Done when, What you may decide alone, and Lands as. Lands as is merge (desk fast-forwards your branch into the folder's checkout), pr (you push and open a draft PR) or nothing; suggest {lands} for this folder. Say why you chose the direction. A longer design goes into its own file in {dir}.
+- Then write the plan into {plan}, not the issue file, with the Write or Edit tool: a mini design doc, as the design-doc skill says, with the decisions so far and why, and the workflow drawn in d2. Its build plan ends with Done when, What you may decide alone, and Lands as. Lands as is merge (desk fast-forwards your branch into the folder's checkout), pr (you push and open a draft PR) or nothing; suggest {lands} for this folder.
 - Then stop and wait: the user reads the plan, talks it over with you, and presses Hand off in desk, which sends you to carry it out. Don't start the work before that."""
+
+# The review card: desk shows the text above "## Details" above Approve and folds the rest (app.split_result).
+# Results ran 309 to 1,499 words on 15 Oct, and the user: "tons of text that's gonna take too long to read".
+RESULT_CARD = """{dir}/result.md opens with a review card, which the user decides from at a glance. Keep it under 120 words, with no title above it:
+**What you'll see:** one or two sentences in the user's terms, with no file names, branches or commit ids.
+**Try it:** one action, such as "open /backlog and press T". In review, Try it here runs your branch in the user's own checkout.
+**Done when:** each line of the plan's Done when, marked ✓ (checked), ✗ (not met) or ? (not checked), each with its evidence in a few words.
+**Needs you:** one line for each default you picked that the user might reverse, or each thing you could not check, with what you chose. Or "Nothing".
+A change with a UI adds one or two screenshots of the result, saved as {dir}/review-1.png and review-2.png (Playwright's screenshot takes a full path) and shown in the card: ![what it shows](review-1.png).
+Then a "## Details" heading, and under it the whole write-up: what changed and where (branch, commits, PR links), and how you checked it, marking what you verified and what you assumed. desk folds the details away."""
 
 HANDOFF_PROMPT = """The user handed this issue off: carry out the plan now, on your own, in the background.
 
@@ -68,8 +78,10 @@ How to work:
 - Decide the details inside the plan yourself.
 - Don't ask the user mid-way. Write each question to {dir}/questions.md and carry on with your best default.
 - Stop only when the answer would change the direction, or when the next step leaves the system: money, messages to people, deleted data, production. Then write the question there and stop.
-- When you finish, write {dir}/result.md: what changed and where (branch, commits, PR links), and how you checked it, marking what you verified and what you assumed.
-- From now on, never edit {file} or {plan}; the user and desk own them. Your files are questions.md and result.md. Write them with the Write tool: the worktree guard refuses shell writes outside the worktree."""
+- When you finish, write {dir}/result.md, as below.
+- From now on, never edit {file} or {plan}; the user and desk own them. Your files are questions.md and result.md. Write them with the Write tool: the worktree guard refuses shell writes outside the worktree.
+
+""" + RESULT_CARD
 
 # A repo's .claude/ is often kept out of git, so a new worktree starts with no rules, and an agent
 # there loads none (checked 2026-10-14: an agent in a `claude -w` worktree did not see the repo's
@@ -258,12 +270,14 @@ SEND_BACK_PROMPT ="""The user reviewed your result and sends it back with this n
 
 {note}
 
-Fix what the note asks, in the same worktree. Then rewrite {dir}/result.md, and add a short "## Changed after review" part saying what you changed."""
+Fix what the note asks, in the same worktree. Then rewrite {dir}/result.md with a fresh card for the work as it stands now, and under Details a short "Changed after review" part saying what you changed.
+
+""" + RESULT_CARD
 
 
 LAND_PR_PROMPT = """The user reviewed and approved your work. It lands as a pull request: do that now.
 
-Push the branch and open a draft PR by this repo's own rules (its CLAUDE.md and the code skill): a branch name those rules accept rather than the worktree's, its commit and PR text style. Don't merge it. Then rewrite {dir}/result.md so it names the PR link on its own line. If pushing or opening fails, write why to {dir}/questions.md and stop."""
+Push the branch and open a draft PR by this repo's own rules (its CLAUDE.md and the code skill): a branch name those rules accept rather than the worktree's, its commit and PR text style. Don't merge it. Then put the PR link in {dir}/result.md, on its own line in the card, keeping the card on top. If pushing or opening fails, write why to {dir}/questions.md and stop."""
 
 
 def land_pr(issue, folder: Path) -> None:

@@ -283,6 +283,16 @@ def show(request: Request, slug: str):
     return templates.TemplateResponse(request, "issue.html", issue_context(request, all_issues, slug))
 
 
+DETAILS = re.compile(r"^## Details[ \t]*$", re.M)
+
+
+def split_result(text: str) -> tuple[str, str] | None:
+    """A result written as a review card (agents.RESULT_CARD): the card above its "## Details" heading, the
+    write-up under it. A result without one, as every one written before the card, is None and shows whole."""
+    match = DETAILS.search(text)
+    return (text[:match.start()], text[match.end():]) if match else None
+
+
 def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: str) -> dict:
     """What issue_view.html needs, on the issue's page or in the Inbox's right pane."""
     i = all_issues[slug]
@@ -305,6 +315,9 @@ def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: st
                "progress": progress, "agent_files": agent_files,
                "lands": land.lands(i), "lands_set": i.lands in land.LANDS, "has_plan": store.has_plan(i),
                "trial": land.trial(i, session.get("cwd")) if i.state == "review" else {}}
+    result = store.folder(slug) / "result.md"
+    if i.state == "review" and result.is_file() and (parts := split_result(result.read_text(encoding="utf-8"))):
+        context["card"] = [to_html(part, base=f"/issue/{slug}/f/") for part in parts]
     return context
 
 

@@ -298,6 +298,12 @@ button.primary:hover { background: var(--accent-hover); border-color: var(--acce
 
 .review { border: 1px solid var(--border-3); border-radius: 10px; padding: 14px 16px; background: var(--bg-raised); margin: 0 0 24px; }
 .review .body { margin-bottom: 12px; }
+/* The review card (agents.RESULT_CARD): its screenshots fit the panel, and the write-up under it starts folded */
+.review .card img { display: block; max-width: 100%; margin: 8px 0; border: 1px solid var(--border-3); border-radius: 8px; }
+.card-details { margin: 0 0 12px; }
+.card-details summary { cursor: pointer; width: fit-content; font-size: 13px; font-weight: 500; color: var(--text-3); }
+.card-details summary:hover { color: var(--text-2); }
+.card-details[open] summary { margin-bottom: 8px; }
 
 /* documents: normal mode, at the app's size; --col is the column, about 75 characters of 15px Inter */
 .doc { --col: 560px; max-width: var(--col); margin: 0 auto; padding: 32px 24px 120px; font-size: 15px; line-height: 24px;

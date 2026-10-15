@@ -16,7 +16,10 @@
     {%- if p.state == "review" %}
     <div class="review">
       <div class="section-label" style="margin-top: 0">Review</div>
-      {%- if "result.md" in agent_files %}<div class="body">{{ agent_files["result.md"] | safe }}</div>
+      {#- A result written as a review card shows the card, its details folded; an older one shows whole. #}
+      {%- if card %}<div class="body card">{{ card[0] | safe }}</div>
+      <details class="card-details"><summary>Details</summary><div class="body">{{ card[1] | safe }}</div></details>
+      {%- elif "result.md" in agent_files %}<div class="body">{{ agent_files["result.md"] | safe }}</div>
       {%- else %}<p class="muted">No result.md: this was done in a chat, so check the work itself.</p>{% endif %}
       <form method="post" action="/issue/{{ p.slug }}/review">
         {%- if in_inbox %}<input type="hidden" name="src" value="inbox">{% endif %}
