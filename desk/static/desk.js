@@ -418,6 +418,7 @@ async function refresh(url = location.pathname + location.search) {
       if (from) $(part).innerHTML = from.innerHTML;
     }
     showCollapsed(url);
+    showFolded(url);
     if (redraws) { onIssuesChanged(); return true; }
     document.title = fresh.title;
     $(".scroll").scrollTop = same ? y : 0;
@@ -582,6 +583,25 @@ function toggleGroup(group, all = false) {
   if (tip.isConnected) showTip(tipFor);
 }
 
+// --- folded sections: a click on a section's heading or its triangle folds or unfolds it, and Alt+click every
+// section with the same kind of heading on the page. base.html's showFolded draws what is remembered.
+function toggleSection(sec, all = false) {
+  const closing = !sec.classList.contains("folded"), here = location.pathname;
+  const kind = (s) => s.querySelector(":scope > .sec-head").tagName;
+  const remembered = JSON.parse(localStorage.folded ?? "{}"), shut = new Set(remembered[here]);
+  for (const [s, key] of sectionKeys()) if (s === sec || (all && kind(s) === kind(sec))) closing ? shut.add(key) : shut.delete(key);
+  if (shut.size) remembered[here] = [...shut]; else delete remembered[here];
+  localStorage.folded = JSON.stringify(remembered);
+  showFolded();
+}
+
+// A link to a heading, from On this page or the address, unfolds the sections it sits in.
+function unfoldTo(target) {
+  for (let sec = target?.closest(".sec"); sec; sec = sec.parentElement.closest(".sec"))
+    if (sec.classList.contains("folded")) toggleSection(sec);
+}
+if (location.hash) unfoldTo(document.getElementById(decodeURIComponent(location.hash.slice(1))));
+
 // Linear's tooltip on the triangle: after about 450 ms, centred 12px under it, naming the keys. With the
 // sidebar hidden the triangle sits near the window's edge, so the tooltip keeps 8px inside the window.
 const tip = Object.assign(document.createElement("div"), { className: "tip" });
@@ -612,6 +632,8 @@ document.addEventListener("click", (e) => {
   const toggled = (anchor) => anchor === closed;
   justClosed = null;
   if (t.closest(".menu")) return;
+  const anchor = t.closest('a[href^="#"]');
+  if (anchor) unfoldTo(document.getElementById(decodeURIComponent(anchor.hash.slice(1))));
   if (t.closest(".side-toggle")) { toggleSide(); return; }
   if (sideOpen() && (t.closest(".side a") || !t.closest(".side"))) closeSide(); // so Back returns to a page with it closed
   const rowIcon = t.closest(".item .icon");
@@ -638,6 +660,8 @@ document.addEventListener("click", (e) => {
   const projectAdd = t.closest(".project-add");
   if (projectAdd) { const d = projectAdd.closest(".project-page").dataset; openCreator({ project: d.project, projectTitle: d.title }); return; }
   if (t.closest(".issue .add-sub")) { openCreator({ parent: page().slug, parentTitle: raw().title }); return; }
+  const head = t.closest(".sec-head");
+  if (head && !t.closest("a, input, textarea, .add-sub") && !getSelection().toString()) { toggleSection(head.parentElement, e.altKey); return; }
   const theme = t.closest(".theme-pick");
   if (theme) { if (!toggled(theme)) themeMenu(theme); return; }
   const d2 = t.closest(".d2");

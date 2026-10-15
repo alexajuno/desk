@@ -57,6 +57,13 @@
   <svg width="16" height="16" viewBox="0 0 16 16"><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z"/></svg></button>
 {%- endmacro %}
 
+{# The same triangle beside a section's heading (render.py draws it in Markdown's), and the issue page's own
+   labelled parts; desk.js folds the section, and base.html's showFolded draws it. #}
+{% macro fold() -%}
+<button class="sec-toggle" type="button" aria-label="Collapse section" aria-expanded="true">
+  <svg width="16" height="16" viewBox="0 0 16 16"><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z"/></svg></button>
+{%- endmacro %}
+
 {% macro plus() -%}
 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>
 {%- endmacro %}

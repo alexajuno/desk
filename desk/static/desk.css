@@ -241,10 +241,20 @@ button.primary:hover { background: var(--accent-hover); border-color: var(--acce
              letter-spacing: -0.1px; color: var(--text-2); }
 .body-edit::placeholder { color: var(--text-3); }
 .body { font-size: 15px; line-height: 24px; color: var(--text-2); letter-spacing: -0.1px; }
-.body h2 { font-size: 13px; font-weight: 500; color: var(--text-3); margin: 24px 0 6px; }
+.body h2 { font-size: 16px; font-weight: 600; color: var(--text-1); margin: 24px 0 6px; }
 .body h3 { font-size: 15px; font-weight: 600; color: var(--text-1); margin: 16px 0 4px; }
 .body a { color: var(--link); }
-.section-label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; color: var(--text-3); margin: 32px 0 8px; }
+.section-label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-1); margin: 32px 0 8px; }
+.section-label .muted { font-weight: 450; }
+/* A section folds from the triangle in the gutter left of its heading, or a click on the heading: render.py's
+   ## and ### sections, and the issue page's labelled parts. The triangle is the group's, turned down while open. */
+.sec-head { position: relative; cursor: pointer; }
+.sec-toggle { position: absolute; left: -24px; top: 50%; translate: 0 -50%; box-sizing: border-box; width: 20px; height: 20px;
+              padding: 2px; justify-content: center; border: 0; border-radius: 9999px; background: none; color: var(--group-toggle); }
+.sec-toggle:hover, .sec-head:hover .sec-toggle { background: none; color: var(--text-2); }
+.sec-toggle svg { fill: currentColor; transform: rotate(90deg); transition: transform 0.15s; }
+.sec.folded > .sec-head .sec-toggle svg { transform: none; }
+.sec.folded > .sec-body { display: none; }
 .issue .tree .item, .project-page .tree .item { padding-left: 8px; height: 36px; }
 .issue .tree .tree .item { padding-left: 10px; }
 .props { font-size: 13px; }
