@@ -95,7 +95,9 @@ def sidebar(request: Request) -> dict:
     # Sub-issues too: a session runs whether or not its issue sits under another (15 Oct, one handed off as a
     # sub-issue never showed here).
     running = sorted((i for i in all_issues.values() if i.state == "running"), key=lambda i: i.rank)
+    now = land.trying(str(land.DESK_REPO))
     return {"sidebar": {"backlog": sum(i.state == "backlog" for i in all_issues.values()), "running": running,
+                        "trying": now and {**now, "issue": all_issues.get(now["slug"])},
                         "inbox": len(needs) + len(review),
                         "projects": sorted((p for p in projects.load_all().values() if p.state == "active"),
                                            key=lambda p: p.created)}, "version": version()}
@@ -301,7 +303,8 @@ def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: st
                "files": store.files(slug), "session": session, "msg": request.query_params.get("msg"),
                "trust": request.query_params.get("trust") == "1",
                "progress": progress, "agent_files": agent_files,
-               "lands": land.lands(i), "lands_set": i.lands in land.LANDS, "has_plan": store.has_plan(i)}
+               "lands": land.lands(i), "lands_set": i.lands in land.LANDS, "has_plan": store.has_plan(i),
+               "trial": land.trial(i, session.get("cwd")) if i.state == "review" else {}}
     return context
 
 
@@ -485,14 +488,35 @@ def review(slug: str, action: str = Form(...), note: str = Form(""), src: str = 
         store.save(i)
         return onward(before, slug, f"Back in the backlog: {i.title}") if from_inbox else back(slug)
     try:
+        left = land.leave(i)
         agents.send_back(i, store.folder(slug), note)
     except agents.TrustError as error:
         return stay(str(error), trust=True)
-    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+    except (land.Blocked, RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         return stay(str(error))
     i.state = "running"
     store.save(i)
-    return onward(before, slug, rebase or f"Sent back: {i.title}") if from_inbox else back(slug)
+    return onward(before, slug, rebase or f"Sent back: {i.title}") if from_inbox else back(slug, left or None)
+
+
+@app.post("/issue/{slug}/try")
+def try_it(slug: str, src: str = Form("")):
+    """Try it here: the folder's checkout runs the issue's branch, and desk restarts on it in desk's own repo."""
+    try:
+        message = land.try_branch(store.load(slug))
+    except (land.Blocked, OSError, subprocess.TimeoutExpired) as error:
+        message = str(error)
+    return back(slug, message, inbox=src == "inbox")
+
+
+@app.post("/issue/{slug}/back-to-main")
+def back_to_main(request: Request, slug: str):
+    """Back to main, from the review panel or the sidebar: to the page it was pressed on."""
+    try:
+        land.back_to_main(store.load(slug))
+    except (land.Blocked, OSError, subprocess.TimeoutExpired) as error:
+        return back(slug, str(error))
+    return RedirectResponse(request.headers.get("referer") or f"/issue/{slug}", status_code=303)
 
 
 @app.post("/issue/{slug}/jump")

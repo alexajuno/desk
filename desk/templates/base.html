@@ -111,6 +111,12 @@ function showFolded(url = location.pathname) {
   <a class="nav-item {{ 'here' if here == '/issue/' ~ p.slug }}" href="/issue/{{ p.slug }}">{{ state("running") }}<span class="nav-title">{{ p.title }}</span></a>
   {%- endfor %}
   {%- endif %}
+  {#- desk running a branch from Try it here (land.py), on every page until it goes back to main. #}
+  {%- if sidebar.trying %}{% set t = sidebar.trying %}
+  <div class="nav-label">desk runs a branch</div>
+  <a class="nav-item {{ 'here' if here == '/issue/' ~ t.slug }}" href="/issue/{{ t.slug }}" title="{{ t.branch }}">{{ state("review") }}<span class="nav-title">{{ t.issue.title if t.issue else t.branch }}</span></a>
+  <form class="nav-back" method="post" action="/issue/{{ t.slug }}/back-to-main"><button title="Put ~/projects/desk back on {{ t.back }} and restart desk">Back to {{ t.back }}</button></form>
+  {%- endif %}
   <div class="side-foot"><button class="side-icon theme-pick" type="button" title="Theme: follow the system, or pin light or dark">
     <svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="5.75" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 2.25a5.75 5.75 0 0 1 0 11.5z" fill="currentColor"/></svg></button></div>
 </aside>

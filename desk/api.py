@@ -206,3 +206,22 @@ def start_issue(slug: str, start: Start):
     i.state = "planning" if planning else "running"
     store.save(i)
     return as_json(i)
+
+
+@router.post("/issues/{slug}/try")
+def try_issue(slug: str):
+    """Switch the issue's folder checkout to its branch, to test or review it in the one running app. In desk's own
+    repo desk restarts on it, so wait until /version answers again."""
+    try:
+        return {"message": land.try_branch(_load(slug))}
+    except land.Blocked as error:
+        raise HTTPException(409, str(error))
+
+
+@router.post("/issues/{slug}/back-to-main")
+def back_issue(slug: str):
+    """Put the folder's checkout back on the branch it was on before try."""
+    try:
+        return {"message": land.back_to_main(_load(slug)) or "Nothing was switched."}
+    except land.Blocked as error:
+        raise HTTPException(409, str(error))

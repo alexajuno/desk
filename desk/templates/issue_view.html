@@ -22,7 +22,15 @@
         {%- if in_inbox %}<input type="hidden" name="src" value="inbox">{% endif %}
         <input type="text" name="note" placeholder="Look back: did it hold? Or, to send back: what to change." autocomplete="off">
         <div class="row" style="margin-top: 8px"><button class="primary" name="action" value="approve" title="Lands as {{ lands }}">Approve · {{ {"merge": "merge", "pr": "open PR", "nothing": "nothing to land"}[lands] }}</button>
-          <button name="action" value="back">Send back</button></div>
+          <button name="action" value="back">Send back</button>
+          {#- Try it here: review in the app you run, switched to this branch, rather than in a copy (land.py). #}
+          {%- if trial.here %}
+          <button formaction="/issue/{{ p.slug }}/back-to-main" title="Put the checkout back on the branch it was on{{ ' and restart desk' if trial.desk }}">Back to main</button>
+          {%- elif trial.can and not trial.other %}
+          <button formaction="/issue/{{ p.slug }}/try" title="Switch the folder's checkout to this branch{{ ', and restart desk on it' if trial.desk }}">Try it here</button>
+          {%- endif %}</div>
+        {%- if trial.here %}<p class="hint" style="margin-top: 8px">{{ "desk runs" if trial.desk else "The folder's checkout is on" }} this branch now. Approve and Send back put it back on main.</p>
+        {%- elif trial.can and trial.other %}<p class="hint" style="margin-top: 8px">Another branch runs there now, {{ trial.other.branch }}. Put it back on main to try this one.</p>{% endif %}
       </form>
     </div>
     {%- endif %}

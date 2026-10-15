@@ -154,6 +154,9 @@ button.side-icon { padding: 0; border: 0; }
 a.nav-label { text-decoration: none; } a.nav-label:hover, a.nav-label.here { color: var(--text-1); }
 .nav-label { display: flex; align-items: center; height: 28px; padding: 12px 6px 0; font-size: 12px; font-weight: 500; color: var(--text-3); }
 .nav-title { overflow: hidden; text-overflow: ellipsis; }
+/* desk running a branch from Try it here: its way back sits under it, as small as the labels */
+.nav-back { margin: 2px 0 0 30px; }
+.nav-back button { height: 24px; font-size: 12px; }
 /* the theme button sits at the sidebar's foot, where Linear keeps its help button, level with the Agent button */
 .side-foot { margin: auto 0 -8px; padding-top: 12px; }
 .theme-pick { background: none; }
