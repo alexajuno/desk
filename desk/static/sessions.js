@@ -93,6 +93,29 @@ document.querySelector(".session-bar").addEventListener("click", (e) => {
 
 clear.addEventListener("click", () => { box.value = ""; search(); box.focus(); });
 
+// desk tells the page when a session starts, moves or changes state (an inotify watcher on the transcripts, no timer
+// here): the rows loaded are fetched again and swapped in, keeping the focused row and the scroll. A reconnect after
+// desk restarted fetches them once more, since changes went unseen meanwhile.
+let connected = false;
+async function redraw() {
+  const mine = ++asked, q = query(), loaded = list.querySelectorAll(".session-row").length;
+  q.set("limit", loaded);
+  const html = await (await fetch(`/sessions/rows?${q}`, { cache: "no-store" })).text();
+  if (mine !== asked) return;
+  const was = focused?.dataset.session, scroll = document.querySelector(".scroll"), top = scroll.scrollTop;
+  focused = null;
+  list.innerHTML = html;
+  if (typeof showCollapsed === "function") showCollapsed();
+  const row = was && [...list.querySelectorAll(".session-row")].find((r) => r.dataset.session === was);
+  if (row) focusRow(row, false);
+  scroll.scrollTop = top;
+  watchEnd();
+}
+
+const events = new EventSource("/sessions/events");
+events.addEventListener("hello", () => { if (connected) redraw(); connected = true; });
+events.addEventListener("changed", redraw);
+
 // A change to the issues redraws only the sidebar here (desk.js's soft refresh), so the rows loaded and what is
 // typed stay; a state circle is as fresh as the page or the last search.
 window.onIssuesChanged = () => {};

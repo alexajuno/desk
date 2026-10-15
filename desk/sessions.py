@@ -16,16 +16,20 @@ What the transcripts hold, seen on 15 Oct (Claude Code 2.1.300); none of it is d
 - {"type": "last-prompt", "lastPrompt": ...}
 """
 
+import asyncio
 import json
+import logging
 import os
 import re
 import subprocess
 import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
+from watchfiles import watch
 
 from . import agents, chats, window
 from . import issues as store
@@ -276,16 +280,83 @@ def new_session(base: str) -> dict:
     return chat
 
 
+# --- telling the page ------------------------------------------------------------------------------
+
+JOBS = HOME / ".claude" / "jobs"
+DEBOUNCE = 100  # ms a burst of writes is gathered for, so a streaming session costs one check, not one per line
+TRAILING = 1.0  # s after a change, once more: a turn ends with no write apart from the others' (idle)
+
+_listeners: set[tuple[asyncio.AbstractEventLoop, asyncio.Queue]] = set()
+_listeners_lock = threading.Lock()
+_signature: tuple | None = None  # what the list looked like when the pages were last told
+_started = False
+
+
+def _signed() -> tuple:
+    """What the list shows, without the ages: the sessions in order, each with its title, state and group. A
+    session streaming at the top changes none of it, so it tells no page."""
+    agents.live(fresh=True)
+    return tuple((r["id"], r["title"], r["state"], r["group"]) for r in rows())
+
+
+def _tell(message: str) -> None:
+    with _listeners_lock:
+        for loop, queue in _listeners:
+            loop.call_soon_threadsafe(queue.put_nowait, message)
+
+
+def _check() -> bool:
+    """Look at the list again and tell the pages if it changed; whether it did."""
+    global _signature
+    with _listeners_lock:
+        if not _listeners:
+            _signature = None  # a page that connects next draws it afresh
+            return False
+    new = _signed()
+    if new == _signature:
+        return False
+    _signature = new
+    _tell("changed")
+    return True
+
+
+def _interesting(change, path: str) -> bool:
+    """A transcript written (not a subagent's, a folder deeper), or a background job's state."""
+    name = os.path.basename(path)
+    return name.endswith(".jsonl") and os.path.dirname(os.path.dirname(path)) == str(PROJECTS) or name == "state.json"
+
+
+def _watch() -> None:
+    """Wait for the files that move the list to change (inotify), instead of asking on a timer."""
+    PROJECTS.mkdir(parents=True, exist_ok=True)
+    JOBS.mkdir(parents=True, exist_ok=True)
+    for _ in watch(PROJECTS, JOBS, watch_filter=_interesting, debounce=DEBOUNCE, step=50):
+        try:
+            changed = _check()
+            while changed:  # the state a turn ends in shows only a moment after its last write
+                time.sleep(TRAILING)
+                changed = _check()
+        except Exception:
+            logging.getLogger("uvicorn.error").exception("sessions watcher")
+
+
+def start_watcher() -> None:
+    global _started
+    if not _started:
+        _started = True
+        threading.Thread(target=_watch, name="sessions-watcher", daemon=True).start()
+
+
 # --- routes ----------------------------------------------------------------------------------------
 
-def _page(request: Request, name: str, query: str, kind: str, offset: int = 0):
+def _page(request: Request, name: str, query: str, kind: str, offset: int = 0, limit: int = PAGE):
     found = rows(query, kind if kind in KINDS else "")
     groups: dict[str, int] = {}
     for r in found:
         groups[r["group"]] = groups.get(r["group"], 0) + 1
     return request.app.state.templates.TemplateResponse(request, name, {
-        "q": query, "kind": kind, "kinds": KINDS, "rows": found[offset:offset + PAGE], "counts": groups,
-        "next": offset + PAGE if offset + PAGE < len(found) else None, "total": len(found)})
+        "q": query, "kind": kind, "kinds": KINDS, "rows": found[offset:offset + limit], "counts": groups,
+        "next": offset + limit if offset + limit < len(found) else None, "total": len(found)})
 
 
 @router.get("/sessions")
@@ -294,10 +365,35 @@ def sessions_page(request: Request, q: str = "", kind: str = ""):
 
 
 @router.get("/sessions/rows")
-def sessions_rows(request: Request, q: str = "", kind: str = "", offset: int = 0):
-    """Just the rows, for the search as you type and for the next page as you scroll; no sidebar, whose
-    `claude agents` call would slow every key."""
-    return _page(request, "sessions_rows.html", q, kind, max(0, offset))
+def sessions_rows(request: Request, q: str = "", kind: str = "", offset: int = 0, limit: int = PAGE):
+    """Just the rows, for the search as you type, for the next page as you scroll and for a redraw of all the rows
+    loaded (limit); no sidebar, whose `claude agents` call would slow every key."""
+    return _page(request, "sessions_rows.html", q, kind, max(0, offset), max(PAGE, limit))
+
+
+@router.get("/sessions/events")
+async def sessions_events():
+    """Server-sent events: "changed" whenever the list's rows or a state circle changed, "hello" when it connects."""
+    start_watcher()
+    queue: asyncio.Queue = asyncio.Queue()
+    me = (asyncio.get_running_loop(), queue)
+    with _listeners_lock:
+        _listeners.add(me)
+
+    async def stream():
+        try:
+            yield "retry: 1000\nevent: hello\ndata: -\n\n"
+            while True:
+                try:
+                    message = await asyncio.wait_for(queue.get(), 20)
+                    yield f"event: {message}\ndata: -\n\n"
+                except asyncio.TimeoutError:
+                    yield ": still here\n\n"  # lets a dead socket show up
+        finally:  # the page closed
+            with _listeners_lock:
+                _listeners.discard(me)
+
+    return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/sessions/recent")
