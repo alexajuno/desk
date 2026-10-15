@@ -89,7 +89,9 @@ def sidebar(request: Request) -> dict:
     """Counts and the running list for the sidebar on every page."""
     all_issues = store.load_all()
     needs, review = inbox_items(all_issues, agents.live())
-    running = sorted((i for i in all_issues.values() if i.state == "running" and i.parent is None), key=lambda i: i.rank)
+    # Sub-issues too: a session runs whether or not its issue sits under another (15 Oct, one handed off as a
+    # sub-issue never showed here).
+    running = sorted((i for i in all_issues.values() if i.state == "running"), key=lambda i: i.rank)
     return {"sidebar": {"backlog": sum(i.state == "backlog" for i in all_issues.values()), "running": running,
                         "inbox": len(needs) + len(review),
                         "projects": sorted((p for p in projects.load_all().values() if p.state == "active"),
