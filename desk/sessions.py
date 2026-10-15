@@ -87,6 +87,38 @@ def _text(event: dict) -> str:
     return "" if text.startswith("<") else text[:300]
 
 
+_prompted: dict[str, list] = {}  # session id: [its transcript, bytes read, when the user last wrote to it]
+_prompted_lock = threading.Lock()
+
+
+def prompted(session_id: str) -> float | None:
+    """When the user last wrote to the session, as a Unix time: a message typed in its chat, or one desk sent for
+    them, such as Approve's; both carry "origin": {"kind": "human"}, a task's notification another kind (15 Oct).
+    Read from where it stopped, as the session table is, since an issue's transcript runs to megabytes (9.9 MB)."""
+    with _prompted_lock:
+        entry = _prompted.get(session_id)
+        if not entry or not os.path.isfile(entry[0]) or os.path.getsize(entry[0]) < entry[1]:
+            paths = list(PROJECTS.glob(f"*/{session_id}.jsonl"))
+            if not paths:
+                return None
+            entry = _prompted[session_id] = [str(max(paths, key=lambda p: p.stat().st_mtime)), 0, None]
+        with open(entry[0], "rb") as f:
+            f.seek(entry[1])
+            new = f.read()
+        end = new.rfind(b"\n") + 1
+        entry[1] += end
+        for line in new[:end].splitlines():
+            if b'"origin":{"kind":"human"}' not in line:
+                continue
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("type") == "user" and not event.get("isMeta") and _text(event) and event.get("timestamp"):
+                entry[2] = datetime.fromisoformat(event["timestamp"]).timestamp()
+        return entry[2]
+
+
 def refresh() -> dict[str, dict]:
     """The session table, brought up to date with the transcripts."""
     with _lock:

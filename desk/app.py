@@ -48,8 +48,13 @@ def version():
 
 
 def has_questions(issue: store.Issue) -> bool:
+    """Whether questions.md asks something you have not answered: it changed after you last wrote to the session.
+    15 Oct: two sessions stayed in the Inbox with questions the user had answered in their chats."""
     path = store.folder(issue.slug) / "questions.md"
-    return path.is_file() and path.read_text(encoding="utf-8").strip() != ""
+    if not path.is_file() or path.read_text(encoding="utf-8").strip() == "":
+        return False
+    answered = issue.session and sessions.prompted(issue.session)
+    return not answered or path.stat().st_mtime > answered
 
 
 def landed(result: Path) -> tuple[bool, str | None]:
@@ -92,6 +97,9 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
             review.append((issue, "result ready" if result.is_file() else "check it"))
         elif issue.state == "running" and now == "idle" and issue.landing:
             needs.append((issue, "waiting for you"))
+        elif issue.state == "running" and now != "working" and has_questions(issue):
+            # A session at work needs nothing from you yet; one that stopped with a question asks it, plan or not.
+            needs.append((issue, "has questions"))
         elif issue.state == "running" and now == "idle" and not result.is_file() and store.has_plan(issue):
             # Planned, by you in its chat or on its own from the Agent's: it waits for your "go". A quick issue's
             # session waits for nothing, so one that stopped before its result stopped for you.
@@ -101,8 +109,6 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
             # add-project-concept-to-desk's still said blocked, with no process, long after both were done (15 Oct).
             # A waiting issue's session sits at its prompt by your choice: igh-296's, paused for QA (15 Oct).
             needs.append((issue, "waiting for you"))
-        elif issue.state == "running" and has_questions(issue):
-            needs.append((issue, "has questions"))
     by_rank = lambda pair: pair[0].rank
     return sorted(needs, key=by_rank), sorted(review, key=by_rank)
 
