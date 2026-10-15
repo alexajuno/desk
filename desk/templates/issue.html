@@ -13,6 +13,11 @@
       {%- if trust %}
       <form method="post" action="/issue/{{ p.slug }}/trust" style="display: inline"><button class="primary">Trust folder</button></form>
       <span class="hint">Tells Claude Code to trust this folder, as accepting its prompt does.</span>{% endif %}</p>{% endif %}
+    {#- Sub-issues sit right under the title, so a long description or plan never pushes them down the page. #}
+    <section class="sec" data-sec="sub-issues">
+      <div class="section-label sec-head">{{ fold() }}Sub-issues{% if progress[1] %}<span class="pill">{{ progress[0] }}/{{ progress[1] }} done</span>{% endif %}
+        <button class="add-sub" type="button" title="Add sub-issue">{{ plus() }}</button></div>
+      <div class="sec-body">{% if kids %}{{ tree(kids, kids_of) }}{% endif %}</div></section>
     {%- if p.state == "review" %}
     <div class="review">
       <div class="section-label" style="margin-top: 0">Review</div>
@@ -37,10 +42,6 @@
       <div class="sec-body"><div class="body">{{ html | safe }}</div></div></section>
       {%- endif %}
     {%- endfor %}
-    <section class="sec" data-sec="sub-issues">
-      <div class="section-label sec-head">{{ fold() }}Sub-issues{% if progress[1] %}<span class="pill">{{ progress[0] }}/{{ progress[1] }} done</span>{% endif %}
-        <button class="add-sub" type="button" title="Add sub-issue">{{ plus() }}</button></div>
-      <div class="sec-body">{% if kids %}{{ tree(kids, kids_of) }}{% endif %}</div></section>
   </div>
 
   <aside class="props">
