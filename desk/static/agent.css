@@ -129,9 +129,10 @@
 .agent-panel[hidden] { display: none; }
 .agent-panel header { display: flex; align-items: center; gap: 2px; height: 48px; flex: none; padding: 0 8px 0 16px; }
 .panel-title { flex: 1; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Linear's icon button (desk.css, the buttons block): a 28px circle, no fill until the mouse is on it */
 .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0;
-               border-radius: 6px; background: none; color: var(--text-3); }
-.icon-button:hover { background: var(--bg-active); color: var(--text-1); }
+               border-radius: 9999px; background: none; color: var(--text-3); }
+.icon-button:hover { background: var(--btn-ghost-hover); color: var(--text-1); }
 .panel-scroll { flex: 1; overflow: auto; display: flex; flex-direction: column; }
 .agent-panel .thread { padding: 8px 16px 0; }
 .agent-panel .msg { font-size: 14px; line-height: 22px; margin-bottom: 24px; }

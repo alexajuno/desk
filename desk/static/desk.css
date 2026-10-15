@@ -39,6 +39,13 @@
   --bg-icon-hover: lch(10.149% 0.689 272);
   --bg-mark: rgb(94 105 209 / 0.3);
   --shadow-panel: lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
+  /* buttons, and their fill under the mouse (the buttons block below) */
+  --btn: lch(10.149% 0.689 272);
+  --btn-hover: lch(14.777% 1.075 272);
+  --btn-ghost-hover: lch(14.006% 0.593 272);
+  --btn-primary: lch(47.918% 59.303 288.421);
+  --btn-primary-hover: lch(52.418% 61.103 288.421);
+  --btn-primary-text: lch(100% 5 288.421);
   /* popovers: menus, the toast, the shortcut help, the new issue panel */
   --bg-pop: lch(10% 0.9 272);
   --bg-pop-on: lch(16.706% 0.979 272);
@@ -92,6 +99,12 @@
   --bg-side-hover: lch(91.64% 0.5 282);   /* sidebar: an item under the mouse */
   --bg-icon-hover: lch(0% 0 0 / 0.06);    /* the sidebar's round search button */
   --shadow-panel: lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px;
+  --btn: lch(99.997% 0.5 282);
+  --btn-hover: lch(95.883% 0.157 282);
+  --btn-ghost-hover: lch(94.854% 0.5 282);
+  --btn-primary: lch(53% 52.26 286.91);
+  --btn-primary-hover: lch(47% 50.26 286.91);
+  --btn-primary-text: lch(100% 5 286.91);
   --bg-pop: lch(100% 0 282);              /* popovers: the status menu */
   --bg-pop-on: lch(95% 0 282);
   --border-pop: lch(91.9% 0 282);
@@ -225,13 +238,24 @@ input[type=text] { font: 450 13px var(--font); height: 32px; padding: 0 10px; bo
 input[type=text]::placeholder { color: var(--text-3); }
 input[type=text]:focus { outline: none; border-color: var(--accent); }
 
-/* buttons */
-button { font: 500 12px var(--font); height: 28px; padding: 0 10px; border-radius: 8px; border: 0.5px solid var(--border-3);
-         background: var(--bg-raised); color: var(--text-1); cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
-button:hover { background: var(--bg-active); }
-button:disabled { color: var(--text-4); cursor: default; } button:disabled:hover { background: var(--bg-raised); }
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+/* Buttons, Linear's, measured on linear.app on 2026-10-15 (getComputedStyle at rest and under the mouse, dark and
+   light, on an issue page and the New issue panel): a pill, 12px at weight 500, a 0.5px border that stays
+   transparent, 28px high, 0 10px. Every <button> is the secondary kind, a quiet fill ("Copy issue URL"); .primary
+   is the accent with the panel's shadow ("Create issue"); .ghost has no fill until the mouse is on it
+   ("Subscribe"); .icon-button is a 28px circle. .small is 24px, .large 32px. Like Linear, a button names its key in
+   its tooltip (title), not on its face. Disabled is not measured: half opacity. */
+button { font: 500 12px var(--font); height: 28px; padding: 0 10px; border-radius: 9999px; border: 0.5px solid transparent;
+         background: var(--btn); color: var(--text-2); cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
+         transition: background-color 0.1s, color 0.1s; }
+button:hover { background: var(--btn-hover); }
+button.primary { background: var(--btn-primary); color: var(--btn-primary-text); box-shadow: var(--shadow-panel); }
+button.primary:hover { background: var(--btn-primary-hover); }
+button.ghost { background: transparent; color: var(--text-3); }
+button.ghost:hover { background: var(--btn-ghost-hover); color: var(--text-2); }
+button.small { height: 24px; padding: 0 8px; }
+button.large { height: 32px; padding: 0 12px; }
+button:disabled, button:disabled:hover { opacity: 0.5; cursor: default; background: var(--btn); }
+button.primary:disabled, button.primary:disabled:hover { background: var(--btn-primary); }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
 /* The strip at the top of an issue (issue_view.html): where it stands and its one button, the next step, pinned
@@ -244,8 +268,6 @@ button.primary:hover { background: var(--accent-hover); border-color: var(--acce
 .strip-what a { color: var(--link); text-decoration: none; } .strip-what a:hover { text-decoration: underline; }
 .strip-msg { color: var(--notice-text); }
 .strip form { margin: 0; }
-button.strip-go { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px; font-size: 13px; }
-.strip-go kbd { color: inherit; border-color: currentColor; opacity: 0.7; }
 .panel.has-term .strip .open-chat { display: none; }
 
 /* problem page: content on the left, properties and agents on the right, as Linear's issue page */
@@ -259,6 +281,7 @@ button.strip-go { display: inline-flex; align-items: center; gap: 8px; height: 3
              letter-spacing: -0.1px; color: var(--text-2); }
 .body-edit::placeholder { color: var(--text-3); }
 .body { font-size: 15px; line-height: 24px; color: var(--text-2); letter-spacing: -0.1px; }
+.body img { max-width: 100%; }  /* a screenshot in a plan is 1436px wide, and pushed the page sideways (15 Oct) */
 .body h2 { font-size: 18px; line-height: 1.4; font-weight: 600; color: var(--text-1); margin: 24px 0 6px; }
 .body h3 { font-size: 15px; font-weight: 600; color: var(--text-1); margin: 16px 0 4px; }
 .body a { color: var(--link); }
