@@ -430,8 +430,17 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
    unread dot, the 13px title and the 14px status icon; the second, in 12px, who did what and how long ago. */
 .scroll:has(> .inbox) { overflow: hidden; }
 .inbox { display: grid; grid-template-columns: 400px minmax(0, 1fr); height: 100%; }
-.inbox-list { overflow: auto; padding: 8px 0; }
-.inbox-open { overflow: auto; min-width: 0; }
+/* A line divides the list from the open notification, from the top bar down, as Linear's does. The bar carries its
+   part as a 1px background at the list's edge, and "Inbox" fills the bar over the list. */
+.inbox-list { overflow: auto; padding: 8px 0; border-right: 1px solid var(--border-1); }
+.bar:has(.inbox-head) { background: linear-gradient(var(--border-1), var(--border-1)) 399px 0 / 1px 100% no-repeat; }
+.bar .inbox-head { flex: none; box-sizing: border-box; width: 392px; color: var(--text-2); }
+.bar:has(.inbox-head) .sep { display: none; }
+.bar .inbox-crumb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The open notification is the issue's page, and folds its properties under the description by its own width, not
+   the window's: beside the list it is about 650px on a 1300px window, too narrow for two columns. */
+.inbox-open { overflow: auto; min-width: 0; container-type: inline-size; }
+@container (max-width: 720px) { .inbox-open .issue { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
 .item.inbox-row { height: auto; gap: 12px; margin: 0 10px; padding: 0 8px; border-radius: 8px; }
 .inbox-row.selected { background: var(--bg-raised); }
 .inbox-row .avatar { position: relative; flex: none; display: grid; place-items: center; width: 32px; height: 32px;
@@ -453,6 +462,10 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 @media (max-width: 900px) {
   .inbox { grid-template-columns: minmax(0, 1fr); }
   .inbox:has(.inbox-open .issue) .inbox-list, .inbox:not(:has(.inbox-open .issue)) .inbox-open { display: none; }
+  .inbox-list { border-right: 0; }
+  .bar:has(.inbox-head) { background: none; }
+  .bar .inbox-head { width: auto; color: var(--text-3); }
+  .bar:has(.inbox-head) .sep { display: inline; }
 }
 
 /* Keyboard shortcuts (keys.html), as Linear's panel, measured on linear.app on 2026-10-15: 360px at the window's right,

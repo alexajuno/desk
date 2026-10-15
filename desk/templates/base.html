@@ -59,8 +59,6 @@ function showSeen() {
   if (open) seen.add(open.dataset.seen);
   localStorage.inboxSeen = JSON.stringify([...seen]);
   for (const row of rows) row.classList.toggle("read", seen.has(row.dataset.seen));
-  const count = document.querySelector(".unread-count"), unread = rows.filter((row) => !seen.has(row.dataset.seen)).length;
-  if (count) count.textContent = !rows.length ? "No notifications" : unread ? `${unread} unread notification${unread === 1 ? "" : "s"}` : "No unread notifications";
 }
 function showFolded(url = location.pathname) {
   const shut = JSON.parse(localStorage.folded ?? "{}")[new URL(url, location.href).pathname] ?? [];
