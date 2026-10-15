@@ -77,25 +77,36 @@
         anchor: this.chip, className: "models", onClose: () => this.chip.classList.remove("open"), onArrow: step,
         items: () => MODELS.map((m) => ({ label: m.label, sub: m.hint, current: m.id === model.value, group: "model", run: () => this.set(model, m.id) })),
       });
-      // Claude Code's effort line under the models: a glyph and the level's name, and a bar to click or step with ←/→.
+      // Claude Code's effort line under the models: a glyph and the level's name, and a slider to drag
+      // along its five stops or step with ←/→. Until a level is set, the thumb sits hollow at Medium.
       const bar = document.createElement("div");
       bar.className = "effort";
-      bar.innerHTML = '<div class="effort-head"><span class="glyph"></span><span class="name"></span><kbd>←/→</kbd></div>' +
-        `<div class="track">${levels.map((e) => `<i data-id="${e.id}" title="${e.label}"></i>`).join("")}</div>`;
+      bar.innerHTML = '<div class="effort-head"><span class="glyph"></span><span class="name"></span><button class="reset" type="button">Reset</button><kbd>←/→</kbd></div>' +
+        `<div class="slider"><div class="rail"><div class="fill"></div>${levels.map((_, i) => `<i style="--f:${i / (levels.length - 1)}"></i>`).join("")}</div><b class="thumb"></b></div>`;
       menu.el.append(bar);
+      const slider = bar.querySelector(".slider");
       const paint = () => {
         const at = levels.findIndex((e) => e.id === effort.value);
         bar.querySelector(".glyph").textContent = at < 0 ? "◌" : EFFORT_GLYPHS[at];
         bar.querySelector(".name").textContent = at < 0 ? "Default effort" : `${levels[at].label} effort`;
-        bar.querySelectorAll("i").forEach((seg, i) => seg.classList.toggle("on", i <= at));
+        bar.classList.toggle("unset", at < 0);
+        slider.style.setProperty("--f", at < 0 ? 0.5 : at / (levels.length - 1));
       };
-      bar.addEventListener("mousedown", (e) => {
+      const drag = (e) => {
+        const box = slider.querySelector(".rail").getBoundingClientRect();
+        const at = Math.round(Math.max(0, Math.min(1, (e.clientX - box.left) / box.width)) * (levels.length - 1));
+        if (levels[at].id !== effort.value) { this.set(effort, levels[at].id); paint(); }
+      };
+      slider.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
         e.preventDefault();
-        const seg = e.target.closest("i");
-        if (!seg || e.button !== 0) return;
-        this.set(effort, effort.value === seg.dataset.id ? "" : seg.dataset.id); // the level that is set clears back to the default
-        paint();
+        slider.setPointerCapture(e.pointerId);
+        slider.classList.add("dragging");
+        drag(e);
       });
+      slider.addEventListener("pointermove", (e) => { if (slider.hasPointerCapture(e.pointerId)) drag(e); });
+      slider.addEventListener("pointerup", () => slider.classList.remove("dragging"));
+      bar.querySelector(".reset").addEventListener("mousedown", (e) => { e.preventDefault(); this.set(effort, ""); paint(); });
       paint();
     }
 

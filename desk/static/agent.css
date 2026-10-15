@@ -29,10 +29,19 @@
 .menu.models .effort-head .glyph { width: 14px; text-align: center; color: var(--text-3); }
 .menu.models .effort-head .name { flex: 1; }
 .menu.models .effort-head kbd { font-size: 11px; color: var(--text-3); }
-.menu.models .track { display: flex; gap: 3px; padding: 6px 0 6px; }
-.menu.models .track i { flex: 1; height: 6px; border-radius: 3px; background: var(--bg-active); cursor: pointer; }
-.menu.models .track i:hover { background: var(--text-3); }
-.menu.models .track i.on { background: var(--accent); }
+.menu.models .effort-head .reset { display: none; border: 0; background: none; padding: 0; font: inherit; font-size: 11px; color: var(--text-3); cursor: pointer; }
+.menu.models .effort-head .reset:hover { color: var(--text-1); }
+.menu.models .effort:not(.unset) .effort-head .reset { display: block; }
+.menu.models .effort:not(.unset) .effort-head kbd { display: none; }
+.menu.models .slider { position: relative; height: 22px; margin: 2px 0 2px; touch-action: none; cursor: pointer; user-select: none; }
+.menu.models .rail { position: absolute; left: 7px; right: 7px; top: 9px; height: 4px; border-radius: 2px; background: var(--bg-active); }
+.menu.models .rail .fill { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--f) * 100%); border-radius: 2px; background: var(--accent); }
+.menu.models .rail i { position: absolute; top: -1px; left: calc(var(--f) * 100%); width: 6px; height: 6px; margin-left: -3px; border-radius: 3px; background: var(--text-3); opacity: 0.5; }
+.menu.models .thumb { position: absolute; top: 3px; width: 16px; height: 16px; box-sizing: border-box; margin-left: -8px; border-radius: 8px; left: calc(7px + (100% - 14px) * var(--f));
+                      background: #fff; border: 0.5px solid var(--border-pop); box-shadow: 0 1px 3px rgb(0 0 0 / 0.35); }
+.menu.models .slider.dragging .thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent), 0 1px 3px rgb(0 0 0 / 0.35); }
+.menu.models .effort.unset .thumb { background: var(--bg-pop); border: 1.5px solid var(--text-3); }
+.menu.models .effort.unset .rail .fill { width: 0; }
 .composer .send { margin-left: auto; width: 24px; height: 24px; padding: 0; justify-content: center; border-radius: 12px;
                   border: 0.5px solid transparent; background: var(--accent); color: var(--on-accent);
                   box-shadow: var(--shadow-panel); }
