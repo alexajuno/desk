@@ -44,6 +44,7 @@
   --bg-pop-on: lch(16.706% 0.979 272);
   --border-pop: lch(16.32% 1.48 272);
   --shadow-pop: lch(0 0 0 / 0.4) 0 7px 32px;
+  --shadow-keys: lch(0 0 0 / 0.125) 0 3px 8px, lch(0 0 0 / 0.125) 0 2px 5px, lch(0 0 0 / 0.125) 0 1px 1px; /* the shortcuts panel */
   --overlay: lch(0 0 0 / 0.5);
   /* a group's triangle at rest (--text-2 under the mouse), and Linear's tooltip with its key caps */
   --group-toggle: lch(20.032% 7 270.292);
@@ -95,6 +96,7 @@
   --bg-pop-on: lch(95% 0 282);
   --border-pop: lch(91.9% 0 282);
   --shadow-pop: lch(0 0 0 / 0.08) 0 9px 48px, lch(0 0 0 / 0.1) 0 6px 24px, lch(0 0 0 / 0.04) 0 1px 1px;
+  --shadow-keys: var(--shadow-pop);
   --overlay: lch(0% 0 0 / 0.25);          /* bgModalOverlay */
   --group-toggle: lch(80.94% 12 279.067); /* the list's group triangle and its tooltip, measured 2026-10-15 */
   --bg-tip: lch(100% 0 282);
@@ -377,11 +379,36 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .tip kbd { display: inline-block; box-sizing: border-box; min-width: 18px; padding: 2px; border: 0.5px solid var(--border-tip-key);
            border-radius: 4px; font: 450 11px/1.1 var(--font); color: var(--text-tip-key); text-align: center; }
 .tip kbd + kbd { margin-left: 3px; }
-#keys { display: none; position: fixed; inset: 0; z-index: 20; background: var(--overlay); place-items: center; }
-#keys.open { display: grid; }
-.keys-box { background: var(--bg-pop); border: 0.5px solid var(--border-pop); border-radius: 12px; padding: 16px 20px; width: 340px; font-size: 13px; }
-.keys-box h2 { font-size: 13px; margin: 0 0 12px; } .keys-box dl + h2 { margin-top: 18px; } .keys-box dl { display: grid; grid-template-columns: 128px 1fr; gap: 8px 16px; margin: 0; }
-.keys-box dd { margin: 0; color: var(--text-3); }
+/* Keyboard shortcuts (keys.html), as Linear's panel, measured on linear.app on 2026-10-15: 360px at the window's right,
+   12px in from its edges, with a 12px radius; a 15px title, a 44px search box, groups 32px apart with 13px names, and
+   rows 23px tall, 12px apart. Key caps are 12px with a faint 1px border, 3px apart, "then" between a sequence's keys.
+   The page stays as it is behind it. */
+#keys { position: fixed; top: 12px; right: 12px; bottom: 12px; z-index: 30; display: flex; flex-direction: column;
+        width: 360px; max-width: calc(100vw - 24px); box-sizing: border-box; overflow: clip;
+        border: 1px solid var(--border-2); border-radius: 12px; background: var(--bg-pop); box-shadow: var(--shadow-keys); }
+#keys[hidden], #keys [hidden] { display: none; }
+#keys header { display: flex; align-items: center; gap: 12px; padding: 20px 20px 14px; }
+#keys h1 { margin: 0; font: 600 15px/23px var(--font); color: var(--text-1); }
+.keys-close, .keys-clear { justify-content: center; padding: 0; border: 1px solid transparent; border-radius: 9999px; background: none; color: var(--text-3); }
+.keys-close { width: 24px; height: 24px; margin-left: auto; }
+.keys-close:hover, .keys-clear:hover { background: var(--bg-hover); color: var(--text-1); }
+.keys-search { position: relative; margin: 0 20px 25px; }
+.keys-search > svg { position: absolute; left: 14px; top: 14px; color: var(--text-3); pointer-events: none; }
+.keys-search input { display: block; width: 100%; height: 44px; box-sizing: border-box; padding: 12px 36px; border: 1px solid var(--border-3);
+                     border-radius: 10px; background: none; font: 500 13px var(--font); color: var(--text-1); outline: none; }
+.keys-search input:focus { outline: 1px solid var(--accent); outline-offset: -1px; }
+.keys-search input::placeholder { color: var(--text-3); }
+.keys-clear { position: absolute; right: 10px; top: 10px; width: 24px; height: 24px; }
+.keys-list { flex: 1; display: flex; flex-direction: column; gap: 32px; overflow: auto; padding: 0 20px 20px; }
+#keys section { display: flex; flex-direction: column; gap: 12px; }
+#keys h2 { margin: 0; font: 500 13px/16px var(--font); color: var(--text-1); }
+.key-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 23px; font: 500 13px var(--font); color: var(--text-3); }
+.key-row .seq { display: inline-flex; align-items: center; gap: 3px; flex: none; }
+#keys kbd { box-sizing: border-box; min-width: 20px; padding: 4px; border: 1px solid var(--border-2); border-radius: 3px;
+            font: 450 12px/13.2px var(--font); color: var(--text-3); text-align: center; }
+.key-row .then { font: 450 12px/23px var(--font); color: var(--text-3); }
+.keys-none { margin: 0; font-size: 13px; color: var(--text-3); }
+.bar .keys-open { cursor: pointer; }
 
 @media (max-width: 900px) {
   .side { z-index: 9; background: var(--bg-app); box-shadow: var(--shadow-pop);

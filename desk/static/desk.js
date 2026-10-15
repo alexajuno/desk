@@ -1,7 +1,8 @@
 // Linear-style menus, row actions, inline edits, the new issue panel, delete with undo, and a full-screen
 // diagram viewer. Shortcuts: S status, P priority, C a new issue, T collapse a group, J/K or arrows to move,
 // Enter to open, right-click for a row's actions, Ctrl+Delete to delete and Ctrl+Z to undo it, / search,
-// G then B backlog, [ the sidebar, ? help, Esc to close (on an issue, Esc goes back). G then I and ? are
+// G then B backlog, G then J the Agent, G then P projects, [ the sidebar, ? or Ctrl+/ the shortcuts, Esc to
+// close (on an issue, Esc goes back). The list is keys.html. G then I and ? are
 // from Linear's guide
 // (linear.app/enablement/guide/navigating-linear); S, P and C follow Linear, and the S menu's
 // shape (filter on top, numbered rows, a tick on the current one) was copied from linear.app.
@@ -632,6 +633,9 @@ document.addEventListener("click", (e) => {
   const toggled = (anchor) => anchor === closed;
   justClosed = null;
   if (t.closest(".menu")) return;
+  if (t.closest(".keys-open")) { toggleKeys(); return; }
+  if (t.closest(".keys-close")) { toggleKeys(false); return; }
+  if (t.closest(".keys-clear")) { const box = $("#keys input"); box.value = ""; filterKeys(""); box.focus(); return; }
   const anchor = t.closest('a[href^="#"]');
   if (anchor) unfoldTo(document.getElementById(decodeURIComponent(anchor.hash.slice(1))));
   if (t.closest(".side-toggle")) { toggleSide(); return; }
@@ -851,6 +855,29 @@ function closeViewer() {
   if (viewer) { viewer.remove(); viewer = null; }
 }
 
+// --- keyboard shortcuts: keys.html, as Linear's panel --------------------------------------------
+// It opens with its search box focused and empty. Typing keeps the rows whose name, keys or group name hold
+// every word typed, and hides a group left with none.
+function toggleKeys(open = $("#keys").hidden) {
+  const panel = $("#keys"), box = panel.querySelector("input");
+  panel.hidden = !open;
+  if (open) { box.value = ""; filterKeys(""); box.focus(); }
+  else if (panel.contains(document.activeElement)) document.activeElement.blur();
+}
+
+function filterKeys(text) {
+  const panel = $("#keys"), words = fold(text).split(/\s+/).filter(Boolean);
+  for (const section of panel.querySelectorAll("section")) {
+    const rows = [...section.querySelectorAll(".key-row")], group = section.querySelector("h2").textContent;
+    for (const row of rows) row.hidden = !words.every((word) => fold(`${group} ${row.textContent}`).includes(word));
+    section.hidden = rows.every((row) => row.hidden);
+  }
+  panel.querySelector(".keys-none").hidden = !!panel.querySelector("section:not([hidden])");
+  panel.querySelector(".keys-clear").hidden = !text;
+}
+
+document.addEventListener("input", (e) => { if (e.target.closest?.("#keys")) filterKeys(e.target.value); });
+
 // --- keys ----------------------------------------------------------------------------------------
 let gPressed = 0;
 const target = () => focused?.dataset.slug ?? page()?.slug; // what S, P and Ctrl+Delete act on
@@ -858,6 +885,9 @@ const target = () => focused?.dataset.slug ?? page()?.slug; // what S, P and Ctr
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && viewer) { closeViewer(); return; }
   if (menu || viewer || editing || creator) return;
+  // Ctrl+/ works from a text box too, and Esc closes the shortcuts from their own search box.
+  if ((e.ctrlKey || e.metaKey) && e.key === "/") { toggleKeys(); e.preventDefault(); return; }
+  if (e.key === "Escape" && !$("#keys").hidden) { toggleKeys(false); return; }
   if (e.key === "Escape" && sideOpen()) { closeSide(); return; } // before an issue's Esc goes back
   if (typing(e.target)) { if (e.key === "Escape") e.target.blur(); return; }
   const key = e.key.toLowerCase();
@@ -873,6 +903,8 @@ document.addEventListener("keydown", (e) => {
     gPressed = 0;
     if (key === "b") location.href = "/backlog";
     if (key === "i") location.href = "/inbox";
+    if (key === "j") location.href = "/agent";
+    if (key === "p") location.href = "/projects";
     return;
   }
   if (key === "g") { gPressed = Date.now(); return; }
@@ -894,10 +926,9 @@ document.addEventListener("keydown", (e) => {
   }
   else if (e.key === "/") { const box = document.getElementById("search-q"); if (box) box.focus(); else location.href = "/search"; e.preventDefault(); }
   else if (e.key === "[") { toggleSide(); }
-  else if (e.key === "?") { $("#keys").classList.toggle("open"); }
+  else if (e.key === "?") { toggleKeys(); }
   else if (e.key === "Escape") {
-    if ($("#keys.open")) $("#keys").classList.remove("open");
-    else if (page()) goBack();
+    if (page()) goBack();
     else focusRow(null);
   }
 });
