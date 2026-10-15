@@ -305,6 +305,12 @@ def _tell(message: str) -> None:
             loop.call_soon_threadsafe(queue.put_nowait, message)
 
 
+def end_streams() -> None:
+    """The process is stopping: end every open event stream, since uvicorn waits for them to close before it
+    stops (and a tab holds one for as long as it is open). The pages reconnect to the desk that comes next."""
+    _tell("bye")
+
+
 def _check() -> bool:
     """Look at the list again and tell the pages if it changed; whether it did."""
     global _signature
@@ -386,6 +392,8 @@ async def sessions_events():
             while True:
                 try:
                     message = await asyncio.wait_for(queue.get(), 20)
+                    if message == "bye":
+                        return
                     yield f"event: {message}\ndata: -\n\n"
                 except asyncio.TimeoutError:
                     yield ": still here\n\n"  # lets a dead socket show up

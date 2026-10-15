@@ -6,7 +6,9 @@ Design: the design doc in the desk issue's files. Run: uv run uvicorn desk.app:a
 
 import os
 import re
+import signal
 import subprocess
+import threading
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -28,9 +30,25 @@ CLOSED = {"done", "dropped"}
 
 
 
+def _end_streams_on_stop() -> None:
+    """uvicorn's graceful stop waits for every open connection, and the sessions event stream stays open as long
+    as a tab does, so a restart hung with "Waiting for connections to close" (15 Oct). Ahead of uvicorn's own
+    handler for SIGTERM and SIGINT, end the streams; uvicorn then finds nothing to wait for."""
+    if threading.current_thread() is not threading.main_thread():
+        return
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        previous = signal.getsignal(sig)
+        if callable(previous):
+            def handler(number, frame, previous=previous):
+                sessions.end_streams()
+                previous(number, frame)
+            signal.signal(sig, handler)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     land.start_clock()  # the line for desk's own checkout moves on its own
+    _end_streams_on_stop()
     yield
 
 
