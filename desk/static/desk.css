@@ -177,7 +177,7 @@ a.nav-label { text-decoration: none; } a.nav-label:hover, a.nav-label.here { col
 .side-collapsed .side { transform: translateX(-100%); visibility: hidden; transition: transform 0.2s ease, visibility 0s 0.2s; }
 .side-toggle { background: none; }
 .side-head .side-toggle { margin-right: auto; }
-.bar .side-toggle { display: none; margin-left: -8px; }
+.bar .side-toggle { display: none; flex: none; margin-left: -8px; }  /* a long title squeezed it to 20px (15 Oct) */
 .side-collapsed .bar .side-toggle { display: grid; }
 
 /* the inset panel and its top bar */
