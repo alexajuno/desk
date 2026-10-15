@@ -24,6 +24,15 @@
 .menu.models { width: 248px; }
 .menu.models li .name small { display: block; margin-top: -2px; font-size: 12px; color: var(--text-3); }
 .menu.models li .shortcut { color: var(--text-3); }
+.menu.models .effort { margin: 4px 4px 4px; padding: 8px 8px 4px; border-top: 0.5px solid var(--border-pop); margin-top: 4px; }
+.menu.models .effort-head { display: flex; align-items: center; gap: 8px; height: 20px; color: var(--text-1); }
+.menu.models .effort-head .glyph { width: 14px; text-align: center; color: var(--text-3); }
+.menu.models .effort-head .name { flex: 1; }
+.menu.models .effort-head kbd { font-size: 11px; color: var(--text-3); }
+.menu.models .track { display: flex; gap: 3px; padding: 6px 0 6px; }
+.menu.models .track i { flex: 1; height: 6px; border-radius: 3px; background: var(--bg-active); cursor: pointer; }
+.menu.models .track i:hover { background: var(--text-3); }
+.menu.models .track i.on { background: var(--accent); }
 .composer .send { margin-left: auto; width: 24px; height: 24px; padding: 0; justify-content: center; border-radius: 12px;
                   border: 0.5px solid transparent; background: var(--accent); color: var(--on-accent);
                   box-shadow: var(--shadow-panel); }

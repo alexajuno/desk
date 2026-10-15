@@ -160,6 +160,7 @@ function openMenu(o) {
       if (shown[at]) pick(at);
       else if (o.onEnter) { const typed = query; closeMenu(); o.onEnter(typed); }
     }
+    else if (o.onArrow && (k === "ArrowLeft" || k === "ArrowRight")) o.onArrow(k === "ArrowRight" ? 1 : -1);
     else if (k === "Tab") o.onTab?.(shown[at], setQuery);
     else if (o.filter !== "input" && plain && /^\d$/.test(k) && !query && (i = shown.findIndex((item) => item.num === +k)) >= 0) pick(i);
     else if (!o.filter && plain && (i = shown.findIndex((item) => item.key === k.toLowerCase())) >= 0) pick(i);

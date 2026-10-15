@@ -14,6 +14,8 @@
   const EFFORTS = [{ id: "", label: "Default" }, { id: "low", label: "Low" }, { id: "medium", label: "Medium" }, { id: "high", label: "High" },
                    { id: "xhigh", label: "Extra high" }, { id: "max", label: "Max" }];
 
+  const EFFORT_GLYPHS = ["○", "◐", "●", "◉", "◈"]; // Claude Code's, low to max
+
   class Chat {
     // root holds .thread and .composer; scroller is what scrolls; onStart(chat) runs after a new chat's
     // first message and may return false to leave following the reply to another page.
@@ -64,14 +66,37 @@
 
     // The chip's menu, as Claude's: the models with a line each, then Effort, which opens its own list.
     modelMenu() {
-      const [model, effort] = this.pickers, open = (o) => { this.chip.classList.add("open"); openMenu({ ...o, anchor: this.chip, className: "models", onClose: () => this.chip.classList.remove("open") }); };
-      open({ items: () => [
-        ...MODELS.map((m) => ({ label: m.label, sub: m.hint, current: m.id === model.value, group: "model", run: () => this.set(model, m.id) })),
-        { label: "Effort", hint: EFFORTS.find((e) => e.id === effort.value)?.label ?? "", more: true, group: "effort", run: () => open({ items: () => [
-          { label: "‹ Back", group: "back", run: () => this.modelMenu() },
-          ...EFFORTS.map((e) => ({ label: e.label, current: e.id === effort.value, group: "levels", run: () => this.set(effort, e.id) })),
-        ] }) },
-      ] });
+      const [model, effort] = this.pickers, levels = EFFORTS.filter((e) => e.id);
+      const step = (by) => { // ←/→ move along the bar; from the default, either key lands on the nearest end
+        const at = levels.findIndex((e) => e.id === effort.value);
+        this.set(effort, levels[Math.max(0, Math.min(levels.length - 1, at < 0 ? (by > 0 ? 1 : 0) : at + by))].id);
+        paint();
+      };
+      this.chip.classList.add("open");
+      openMenu({
+        anchor: this.chip, className: "models", onClose: () => this.chip.classList.remove("open"), onArrow: step,
+        items: () => MODELS.map((m) => ({ label: m.label, sub: m.hint, current: m.id === model.value, group: "model", run: () => this.set(model, m.id) })),
+      });
+      // Claude Code's effort line under the models: a glyph and the level's name, and a bar to click or step with ←/→.
+      const bar = document.createElement("div");
+      bar.className = "effort";
+      bar.innerHTML = '<div class="effort-head"><span class="glyph"></span><span class="name"></span><kbd>←/→</kbd></div>' +
+        `<div class="track">${levels.map((e) => `<i data-id="${e.id}" title="${e.label}"></i>`).join("")}</div>`;
+      menu.el.append(bar);
+      const paint = () => {
+        const at = levels.findIndex((e) => e.id === effort.value);
+        bar.querySelector(".glyph").textContent = at < 0 ? "◌" : EFFORT_GLYPHS[at];
+        bar.querySelector(".name").textContent = at < 0 ? "Default effort" : `${levels[at].label} effort`;
+        bar.querySelectorAll("i").forEach((seg, i) => seg.classList.toggle("on", i <= at));
+      };
+      bar.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        const seg = e.target.closest("i");
+        if (!seg || e.button !== 0) return;
+        this.set(effort, effort.value === seg.dataset.id ? "" : seg.dataset.id); // the level that is set clears back to the default
+        paint();
+      });
+      paint();
     }
 
     fit() {
