@@ -100,8 +100,8 @@ function openMenu(o) {
     list.innerHTML = shown.length ? shown.map((item, i) => {
       const line = i && item.group !== group ? '<li class="divider" role="separator"></li>' : "";
       group = item.group;
-      return `${line}<li class="${i === at ? "on" : ""}${item.current ? " current" : ""}" data-i="${i}">${item.icon ?? ""}` +
-        `<span class="name">${esc(item.label)}</span>${item.current ? TICK : ""}` +
+      return `${line}<li class="${i === at ? "on" : ""}${item.current ? " current" : ""}" data-i="${i}"${item.sub ? ' style="height:44px"' : ""}>${item.icon ?? ""}` +
+        `<span class="name">${esc(item.label)}${item.sub ? `<small>${esc(item.sub)}</small>` : ""}</span>${item.current ? TICK : ""}` +
         `${item.hint !== undefined ? `<span class="shortcut">${esc(item.hint)}</span>` : ""}${item.more ? CHEVRON : ""}</li>`;
     }).join("") : `<li class="empty">${esc(o.empty ?? "No match")}</li>`;
     place();

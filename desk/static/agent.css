@@ -17,9 +17,13 @@
                      font: 450 15px/24px var(--font); }
 .composer textarea::placeholder { color: var(--text-3); }
 .composer-row { display: flex; align-items: center; gap: 8px; height: 24px; }
-.composer .model { font: inherit; font-size: 12px; font-weight: 500; color: var(--text-3); height: 24px; padding: 0 4px; border: 0;
-                   field-sizing: content; border-radius: 6px; background: transparent; cursor: pointer; }
-.composer .model:hover { background: var(--bg-active); }
+.composer .model { display: flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; font-weight: 500; color: var(--text-1); height: 24px;
+                   padding: 0 6px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
+.composer .model .e { color: var(--text-3); }
+.composer .model:hover, .composer .model.open { background: var(--bg-active); }
+.menu.models { width: 248px; }
+.menu.models li .name small { display: block; margin-top: -2px; font-size: 12px; color: var(--text-3); }
+.menu.models li .shortcut { color: var(--text-3); }
 .composer .send { margin-left: auto; width: 24px; height: 24px; padding: 0; justify-content: center; border-radius: 12px;
                   border: 0.5px solid transparent; background: var(--accent); color: var(--on-accent);
                   box-shadow: var(--shadow-panel); }

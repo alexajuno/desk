@@ -9,6 +9,11 @@
 (() => {
   const postJSON = (url, data) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
 
+  const MODELS = [{ id: "haiku", label: "Haiku", hint: "Fastest, for quick answers" }, { id: "sonnet", label: "Sonnet", hint: "Everyday work" },
+                  { id: "opus", label: "Opus", hint: "Hardest tasks, slower" }];
+  const EFFORTS = [{ id: "", label: "Default" }, { id: "low", label: "Low" }, { id: "medium", label: "Medium" }, { id: "high", label: "High" },
+                   { id: "xhigh", label: "Extra high" }, { id: "max", label: "Max" }];
+
   class Chat {
     // root holds .thread and .composer; scroller is what scrolls; onStart(chat) runs after a new chat's
     // first message and may return false to leave following the reply to another page.
@@ -22,9 +27,10 @@
       this.form = root.querySelector(".composer");
       this.box = this.form.querySelector("textarea");
       this.button = this.form.querySelector(".send");
+      this.chip = this.form.querySelector(".model");
       this.pickers = ["model", "effort"].map((n) => this.form.elements[n]);
       this.choose(root.dataset.chat ? root.dataset : null);
-      for (const pick of this.pickers) pick.addEventListener("change", () => { localStorage[`agent:${pick.name}`] = pick.value; });
+      this.chip.addEventListener("click", () => { if (justClosed !== this.chip) this.modelMenu(); });
       this.draft = `agentDraft:${root.id}`;
       this.box.value = sessionStorage[this.draft] || ""; // a reload keeps what you were typing
       let composing = false; // Enter while an input method composes (Vietnamese, fcitx5) is the method's
@@ -40,7 +46,32 @@
 
     // Show a chat's saved model and effort; a new chat starts from the last choice made anywhere.
     choose(saved) {
-      for (const pick of this.pickers) pick.value = saved ? saved[pick.name] ?? "" : localStorage[`agent:${pick.name}`] ?? pick.options[0].value;
+      for (const pick of this.pickers) pick.value = saved ? saved[pick.name] ?? "" : localStorage[`agent:${pick.name}`] ?? (pick.name === "model" ? "haiku" : "");
+      this.paint();
+    }
+
+    paint() {
+      const [model, effort] = this.pickers.map((p) => p.value);
+      this.chip.querySelector(".m").textContent = MODELS.find((m) => m.id === model)?.label ?? model;
+      this.chip.querySelector(".e").textContent = EFFORTS.find((e) => e.id === effort)?.label ?? "";
+    }
+
+    set(pick, value) {
+      pick.value = value;
+      localStorage[`agent:${pick.name}`] = value;
+      this.paint();
+    }
+
+    // The chip's menu, as Claude's: the models with a line each, then Effort, which opens its own list.
+    modelMenu() {
+      const [model, effort] = this.pickers, open = (o) => { this.chip.classList.add("open"); openMenu({ ...o, anchor: this.chip, className: "models", onClose: () => this.chip.classList.remove("open") }); };
+      open({ items: () => [
+        ...MODELS.map((m) => ({ label: m.label, sub: m.hint, current: m.id === model.value, group: "model", run: () => this.set(model, m.id) })),
+        { label: "Effort", hint: EFFORTS.find((e) => e.id === effort.value)?.label ?? "", more: true, group: "effort", run: () => open({ items: () => [
+          { label: "‹ Back", group: "back", run: () => this.modelMenu() },
+          ...EFFORTS.map((e) => ({ label: e.label, current: e.id === effort.value, group: "levels", run: () => this.set(effort, e.id) })),
+        ] }) },
+      ] });
     }
 
     fit() {
