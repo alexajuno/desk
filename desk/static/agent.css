@@ -150,3 +150,7 @@
 .agent-panel .composer { margin: 0 8px 8px; background: var(--composer); }
 .agent-panel .composer textarea { font-size: 14px; line-height: 22px; min-height: 40px; }
 .agent.home .thread { padding: 0 16px; }
+
+.chat-works { margin: 0 0 12px; font-size: 13px; color: var(--text-3); }
+.chat-works a { color: var(--text-2); }
+.chat-works code { font-size: 12px; color: var(--text-2); }

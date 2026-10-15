@@ -6,6 +6,9 @@
 {% block main %}
 {%- if chat %}
 <div class="agent chat" id="agent" data-chat="{{ chat.id }}" data-model="{{ chat.model or 'haiku' }}" data-effort="{{ chat.effort or '' }}" data-running="{{ 1 if running else 0 }}">
+  {%- if chat.issue %}
+  <p class="chat-works">Working <a href="/issue/{{ chat.issue }}">{{ chat.issue }}</a> in <code>{{ chat.folder }}</code></p>
+  {%- endif %}
   <div class="thread">
     {%- for m in chat.messages %}{{ message(m, md) }}{% endfor %}
     {%- if chat.messages and chat.messages[-1].role == "you" and not running %}
