@@ -870,8 +870,8 @@ function openViewer(svgEl) {
   const apply = () => { stage.style.transform = `translate(${x}px, ${y}px) scale(${scale})`; };
   const fit = () => {
     const picture = copyOf.tagName === "IMG"; // a screenshot opens at its own size, fitted to the window
-    const w = picture ? copyOf.naturalWidth : copyOf.viewBox.baseVal?.width || copyOf.getBoundingClientRect().width;
-    const h = picture ? copyOf.naturalHeight : copyOf.viewBox.baseVal?.height || copyOf.getBoundingClientRect().height;
+    const w = picture ? svgEl.naturalWidth : copyOf.viewBox.baseVal?.width || copyOf.getBoundingClientRect().width;
+    const h = picture ? svgEl.naturalHeight : copyOf.viewBox.baseVal?.height || copyOf.getBoundingClientRect().height;
     copyOf.setAttribute("width", w); copyOf.setAttribute("height", h);
     scale = Math.min((innerWidth - 80) / w, (innerHeight - 80) / h);
     x = (innerWidth - w * scale) / 2; y = (innerHeight - h * scale) / 2; apply();
