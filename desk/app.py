@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import agents, api, chats, land, projects, terminal
+from . import agents, api, chats, land, projects, terminal, window
 from . import issues as store
 from .render import to_html, to_html_with_toc
 from .search import find
@@ -323,8 +323,8 @@ def split_result(text: str) -> tuple[str, str] | None:
 def strip(i: store.Issue, row: dict, has_plan: bool, result: Path) -> dict:
     """The strip pinned at the top of an issue: where it stands, and its one button, the next step (the user,
     15 Oct: "a single button of action, and it should be somewhere static"). Only Start and Approve are clicks;
-    everything else, "go", a change, an answer, is said in the issue's chat, docked beside it while its session
-    lives. The button is {"label", "action"} for a form, {"label", "chat": True} to open the chat, or None."""
+    everything else, "go", a change, an answer, is said in the issue's chat, which Open chat brings up in a window
+    over desk. The button is {"label", "action"} for a form, {"label", "chat": True} to open the chat, or None."""
     now, has_result = agents.status(row), result.is_file()
     chat = {"label": "Open chat", "chat": True}
     asleep = "The session stopped. Open chat wakes it." if i.session else ""
@@ -548,6 +548,21 @@ def approve(slug: str, src: str = Form("")):
     # On the issue's page the strip says what happens next, Landing or Done; a message would stay in the address and
     # cover it after the issue moved on.
     return onward(before, slug, message) if from_inbox else back(slug)
+
+
+@app.post("/issue/{slug}/window")
+def chat_window(slug: str):
+    """Open chat: the issue's session in a floating kitty window over desk (window.py)."""
+    if not store.exists(slug):
+        raise HTTPException(404, "That issue is gone.")
+    i = store.load(slug)
+    if not i.session:
+        raise HTTPException(409, "This issue has no session yet.")
+    try:
+        window.issue(i)
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+        raise HTTPException(502, str(error))
+    return {"ok": True}
 
 
 @app.post("/issue/{slug}/jump")

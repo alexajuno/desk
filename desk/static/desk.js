@@ -239,9 +239,9 @@ function actionsMenu(issue, where) {
         run: () => fieldMenu(issue.slug, "priority", issue.priority, where) },
       { group: 0, icon: GLYPH.parent, label: "Set parent…", more: true, run: () => parentMenu(issue, where) },
       { group: 0, icon: GLYPH.plus, label: "Add sub-issue", run: () => openCreator({ parent: issue.slug, parentTitle: titleOf(issue.slug) }) },
-      // An issue page's session: its chat here, as the strip docks it, or in a kitty tab (agents.jump_back).
+      // An issue page's session: its chat in a window over desk (window.py), or in a kitty tab (agents.jump_back).
       ...(issue.session ? [
-        { group: 1, icon: GLYPH.chat, label: "Open chat", run: () => ($(".inbox") ? go(`/issue/${issue.slug}`) : window.openChat?.(issue.slug, issue.session)) },
+        { group: 1, icon: GLYPH.chat, label: "Open chat", run: () => openWindow(`/issue/${issue.slug}/window`) },
         { group: 1, icon: GLYPH.terminal, label: "Open chat in kitty", run: () => {
           const form = Object.assign(document.createElement("form"), { method: "post", action: `/issue/${issue.slug}/jump` });
           document.body.append(form);
@@ -395,6 +395,19 @@ async function undo() {
   else await refresh();
 }
 
+// A session's chat, in a floating kitty window over desk (window.py, chats.py): an issue's Open chat, and the Agent
+// tab's chats. desk opens it, so the page stays as it is; a failure says why.
+async function openWindow(url, body = {}) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) toast(await reason(res));
+  return res.ok ? res.json() : null;
+}
+
+document.addEventListener("click", (e) => {
+  const button = e.target.closest(".open-chat[data-slug]");
+  if (button) openWindow(`/issue/${button.dataset.slug}/window`);
+});
+
 let toastTimer = 0;
 
 function toast(text, action) {
@@ -457,8 +470,7 @@ async function go(url) {
 
 // Agents and the user's editor change issues too: poll /version and refresh, unless a menu, an
 // editor or a text box is in use; the refresh then waits for the next tick after it.
-// The session terminal's own text box (terminal.js) is no reason to wait: a refresh leaves it alone.
-const busy = () => menu || viewer || editing || (typing(document.activeElement) && !document.activeElement.closest(".term"));
+const busy = () => menu || viewer || editing || typing(document.activeElement);
 
 setInterval(async () => {
   try {
@@ -930,7 +942,7 @@ document.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
 
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
-    // The issue's next step, its strip's one button. Open chat, hidden while the chat is docked, then focuses it.
+    // The issue's next step, its strip's one button.
     const step = keyOf(e) === "Enter" && $(".strip .strip-go:not(:disabled)");
     if (step) { step.click(); e.preventDefault(); }
     else if (key === "z" && undoList().length) { undo(); e.preventDefault(); }

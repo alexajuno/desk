@@ -1,5 +1,10 @@
 """The Agent tab: chats with desk's agent, a Claude Code chat that files issues and works them itself.
 
+A new chat is Claude Code itself, in a floating kitty window over desk (see "chats in a window" below): the user,
+15 Oct: "this tab is trying to be claude but it can't bring the experience similar to claude", and "me just standing
+on this browser tab for work. then it's might be a floating window in hyprland would work". The chats made before
+that are drawn by desk, as follows, and keep their page.
+
 The agent is Claude Code headless on the user's own login, so it runs on their subscription:
 `claude -p --model <the chat's model> --output-format stream-json`, one Claude session per chat (--session-id for the
 first message, --resume after). It runs in DESK_DATA with Claude Code's own tools, in acceptEdits mode with Bash
@@ -20,16 +25,17 @@ import asyncio
 import json
 import os
 import re
+import subprocess
 import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
-from . import agents
+from . import agents, window
 from . import issues as store
 from .render import to_html
 
@@ -57,9 +63,9 @@ How you act:
 - "Park" means file it in the backlog and stop. Before you file an issue, search the open ones for the same work and link the one you find instead of filing a second.
 - When the user asks for work, or says to start an issue: find or file its issue, then bind this chat (its id is {chat}) to it, which makes this chat the issue's session and sets the folder you work in (`/work` in the reference; it needs the issue's folder, found with /api/folders?q=<name>). If you cannot tell what should be done, or in which repo, ask one short question instead.
 - Then plan it with the user, in this chat: write the plan as the issue's plan.md and tell them to say "go" here. The rules for planning and for carrying out the work follow below; they are the same ones every issue's session works by.
-- When the user says "it" or "that", they mean the issue you last talked about, or the page they are on (given as [On /issue/<slug>]).
+{folder_rule}- When the user says "it" or "that", they mean the issue you last talked about{page_rule}.
 - A reply holding "detail" means the call failed. Tell the user what it says; never report as done what failed.
-- Link each issue you name as [its title](/issue/<slug>). Between steps of work, reply in a few short sentences.
+- {link_rule} Between steps of work, reply in a few short sentences.
 
 Planning (a mini design doc, as the design-doc skill says): {plan_rules}
 
@@ -68,6 +74,13 @@ Planning (a mini design doc, as the design-doc skill says): {plan_rules}
 desk's API:
 
 {reference}"""
+
+DRAWN_RULES = {"folder_rule": "", "page_rule": ", or the page they are on (given as [On /issue/<slug>])",
+               "link_rule": "Link each issue you name as [its title](/issue/<slug>)."}
+# A window chat's session takes its folders and its CLAUDE.md files when it starts, so the folder of an issue it binds
+# to later brings neither; and the terminal makes an address clickable, not a Markdown link.
+WINDOW_RULES = {"folder_rule": "- This chat started in desk's data folder, so the CLAUDE.md, CONTRIBUTING and .claude/rules of an issue's folder do not load by themselves: once you bind to an issue, read them there before you plan.\n",
+                "page_rule": "", "link_rule": "Name each issue by its title and its address, {base}/issue/<slug>, which the terminal makes clickable."}
 
 PLAN_RULES = """the decisions so far with the user's reason for each, the workflow drawn in d2, and a build plan that ends with Done when and What you may decide alone. Write it with the Write or Edit tool to the issue's plan.md (next to issue.md, in the folder the API gives as "file"), a first draft as soon as you understand the issue, and rewrite it when the talk changes it. Keep it short. Do not start the work before the user says "go"."""
 
@@ -108,8 +121,12 @@ def exists(chat_id: str) -> bool:
 
 def transcript(chat_id: str) -> str:
     """The chat as plain text, the user's words and the agent's replies in order, for a session's first prompt."""
+    chat = load(chat_id)
+    if chat.get("kind") == WINDOW:
+        names = {"user": "The user", "assistant": "desk's agent"}
+        return "\n\n".join(f"{names[who]}: {text}" for who, text in _said(chat))
     lines = []
-    for message in load(chat_id)["messages"]:
+    for message in chat["messages"]:
         who = "The user" if message["role"] == "you" else "desk's agent"
         lines.append(f"{who} ({message['at']}): {message['text']}")
     return "\n\n".join(lines)
@@ -125,9 +142,18 @@ def age(iso: str) -> str:
 
 
 def recent() -> list[dict]:
-    chats = [json.loads(p.read_text(encoding="utf-8")) for p in CHATS_DIR.glob("*.json")] if CHATS_DIR.is_dir() else []
-    return [{"id": c["id"], "title": c["title"], "age": age(c["updated"]), "url": f"/agent/{c['id']}"}
-            for c in sorted(chats, key=lambda c: c["updated"], reverse=True)]
+    """Every chat, the one that moved last first. A window chat opens its window, and says when it is working; a drawn
+    chat opens its page."""
+    chats = _chats()
+    sessions = agents.live() if any(c.get("kind") == WINDOW for c in chats) else {}
+    found = []
+    for c in chats:
+        window = c.get("kind") == WINDOW
+        when = _activity(_named(c)) if window else c["updated"]
+        working = window and agents.status(sessions.get(c["session"], {})) == "working"
+        found.append({"id": c["id"], "title": c["title"], "age": age(when), "when": when, "url": f"/agent/{c['id']}",
+                      "window": window, "working": working})
+    return sorted(found, key=lambda c: c["when"], reverse=True)
 
 
 # --- a reply -------------------------------------------------------------------------------------
@@ -169,10 +195,13 @@ def bound() -> dict[str, str]:
 
 
 def bind(chat: dict, issue: store.Issue) -> None:
-    """The chat becomes the issue's session; its folder is one the chat may work in."""
+    """The chat becomes the issue's session; its folder is one the chat may work in. A window chat's session is an
+    ordinary background session, which desk lists, messages and lands as any other, so only a drawn chat is noted
+    in BOUND."""
     chat["issue"], chat["folder"] = issue.slug, str(Path(agents.workdir(issue)))
     save(chat)
-    BOUND.write_text(json.dumps(bound() | {chat["session"]: chat["id"]}), encoding="utf-8")
+    if chat.get("kind") != WINDOW:
+        BOUND.write_text(json.dumps(bound() | {chat["session"]: chat["id"]}), encoding="utf-8")
 
 
 def rows() -> dict[str, dict]:
@@ -231,16 +260,28 @@ def step_label(tool: dict, base: str) -> str:
     return f"{method} /api/{path}"
 
 
-async def reply(run: Run, chat: dict, text: str, base: str, render) -> None:
-    """Run the agent on one message, pushing its text and steps as they come, then save the reply."""
+def agent_prompt(chat: dict, base: str) -> str:
+    """The agent's system prompt: for a drawn chat, built again on each reply; for a window chat, once, when its
+    session starts, since Claude Code keeps the first one it was given."""
     reference = re.sub(r"\A---\n.*?\n---\n", "", SKILL.read_text(encoding="utf-8"), flags=re.S).replace(SKILL_BASE, base)
     slug = chat.get("issue")
     folder = store.folder(slug) if slug and store.exists(slug) else Path("<the issue's folder>")
     work = agents.WORK.format(dir=folder, file=folder / "issue.md", plan=folder / "plan.md")
-    prompt = PROMPT.format(today=f"{datetime.now():%A %-d %B %Y}", day=f"{datetime.now():%-d %b}", reference=reference,
-                           chat=chat["id"], plan_rules=PLAN_RULES, work=work)
+    if chat.get("kind") == WINDOW:  # it may run for days, and Claude Code gives it the date
+        today, day = "the date your environment gives", "15 Oct"
+        rules = {k: v.format(base=base) for k, v in WINDOW_RULES.items()}
+    else:
+        today, day, rules = f"{datetime.now():%A %-d %B %Y}", f"{datetime.now():%-d %b}", DRAWN_RULES
+    prompt = PROMPT.format(today=today, day=day, reference=reference, chat=chat["id"], plan_rules=PLAN_RULES, work=work,
+                           **rules)
     if slug:
         prompt += f"\n\nThis chat works the issue /issue/{slug}, in {chat['folder']}."
+    return prompt
+
+
+async def reply(run: Run, chat: dict, text: str, base: str, render) -> None:
+    """Run the agent on one message, pushing its text and steps as they come, then save the reply."""
+    prompt = agent_prompt(chat, base)
     dirs = [f for f in (chat.get("folder"), str(HOME / "worktrees")) if f and Path(f).is_dir()]
     adds = [arg for d in dirs for arg in ("--add-dir", d)]
     env = os.environ | {"CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD": "1"}
@@ -305,6 +346,101 @@ async def reply(run: Run, chat: dict, text: str, base: str, render) -> None:
     run.push({"t": "done", "html": render(message)})
 
 
+# --- chats in a window ---------------------------------------------------------------------------
+#
+# A window chat is a Claude Code background session desk starts in DESK_DATA with the agent's prompt, shown in a
+# floating kitty window Hyprland opens over desk, on the workspace the user is on. Checked on 15 Oct (Claude Code
+# 2.1.300, Hyprland 0.56.2) with a scratch session:
+# - `claude --bg` with no prompt starts the session idle: "backgrounded · <id> · <name> (idle — send a prompt to start)".
+# - `hyprctl dispatch 'hl.dsp.exec_cmd("<command>", { float = true, size = "1100 720", center = true })'` opens it
+#   floating, at that size, centred on the active workspace, and focused; a size in percent is ignored. Hyprland is the
+#   window's parent, so a restart of desk leaves it open.
+# - In the window, a message typed while the agent works queues ("Press up to edit queued messages") and is answered
+#   in the same turn. Closing the window leaves the session running, with the same pid.
+
+WINDOW = "window"
+# The user, 15 Oct: "i think it's best to set agent tab in desk default to opus xhigh and bypasspermissions".
+WINDOW_FLAGS = ["--model", "opus", "--effort", "xhigh", "--permission-mode", "bypassPermissions",
+                "--disallowedTools", "Bash(sudo *)", "Bash(rm -rf /*)", "Bash(rm -rf ~*)"]
+# Where Claude Code keeps the transcripts of the sessions started in DESK_DATA: the folder's path, each character other
+# than a letter or a digit made "-" (seen 15 Oct: ~/.claude/projects/-home-ajuno--local-share-desk/<session>.jsonl).
+TRANSCRIPTS = HOME / ".claude" / "projects" / re.sub(r"[^A-Za-z0-9]", "-", str(store.DATA_DIR))
+
+
+def new_window_chat(base: str) -> dict:
+    """Start a window chat's session, idle until the user types in its window."""
+    now = datetime.now()
+    chat = {"id": f"chat-{uuid.uuid4().hex[:8]}", "kind": WINDOW, "title": "New chat",
+            "created": now.isoformat(timespec="seconds"), "session": "", "messages": []}
+    short = agents._background(str(store.DATA_DIR), ["claude", "--bg", "-n", f"desk chat {now:%-d %b %H:%M}",
+                                                     *WINDOW_FLAGS, "--append-system-prompt", agent_prompt(chat, base)])
+    chat["session"] = agents._session_id(short)
+    save(chat)
+    return chat
+
+
+def _said(chat: dict):
+    """The user's words and the agent's, in order, from a window chat's transcript."""
+    path = TRANSCRIPTS / f"{chat['session']}.jsonl"
+    if not path.is_file():
+        return
+    with path.open(encoding="utf-8") as lines:
+        for line in lines:
+            event = json.loads(line)
+            if event.get("type") not in ("user", "assistant") or event.get("isMeta"):
+                continue
+            content = event["message"]["content"]
+            text = content if isinstance(content, str) else "\n".join(b.get("text", "") for b in content if b.get("type") == "text")
+            if text.strip() and not text.lstrip().startswith("<"):  # a tool result, or a slash command's own lines
+                yield event["type"], text.strip()
+
+
+def _activity(chat: dict) -> str:
+    """When a window chat last moved: its transcript's last write, or its start."""
+    path = TRANSCRIPTS / f"{chat['session']}.jsonl"
+    return datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds") if path.is_file() else chat["created"]
+
+
+def _named(chat: dict) -> dict:
+    """A window chat is named after the first thing the user typed in it, once they have."""
+    if chat["title"] == "New chat":
+        first = next((text for who, text in _said(chat) if who == "user"), None)
+        if first:
+            chat["title"] = title_of(first)
+            (CHATS_DIR / f"{chat['id']}.json").write_text(json.dumps(chat, indent=1, ensure_ascii=False), encoding="utf-8")
+    return chat
+
+
+def open_window(chat: dict) -> None:
+    """The chat's window, brought to the user or opened: `claude attach` while its session lists, which also wakes a
+    stopped one, else `claude --resume`."""
+    row = agents.live(fresh=True).get(chat["session"], {})
+    if row.get("kind") == "interactive":
+        raise RuntimeError("This chat is open in another terminal. Close that one first.")
+    argv = ["claude", "attach", row["id"]] if row.get("kind") == "background" else ["claude", "--resume", chat["session"]]
+    window.session(f"desk-agent-{chat['id']}", f"desk · {chat['title']}", str(store.DATA_DIR), argv)
+
+
+def _chats() -> list[dict]:
+    return [json.loads(p.read_text(encoding="utf-8")) for p in CHATS_DIR.glob("*.json")] if CHATS_DIR.is_dir() else []
+
+
+def window_of(session: str | None) -> dict | None:
+    """The window chat whose session this is, if any."""
+    return next((c for c in _chats() if c.get("kind") == WINDOW and c["session"] == session), None) if session else None
+
+
+def started_in(session: str | None) -> str | None:
+    """DESK_DATA when the session is a chat's, which every chat starts in and Claude Code finds again by --resume only
+    from there."""
+    return str(store.DATA_DIR) if session and any(c["session"] == session for c in _chats()) else None
+
+
+def window_chats() -> list[dict]:
+    """The window chats, the one that moved last first."""
+    return sorted((c for c in _chats() if c.get("kind") == WINDOW), key=_activity, reverse=True)
+
+
 # --- routes --------------------------------------------------------------------------------------
 
 def _templates(request: Request):
@@ -318,15 +454,49 @@ def _render_message(request: Request):
 
 @router.get("/agent")
 def agent_page(request: Request):
-    return _templates(request).TemplateResponse(request, "agent.html", {"chat": None, "recent": recent()[:8], "running": False,
+    return _templates(request).TemplateResponse(request, "agent.html", {"chat": None, "recent": recent()[:30], "running": False,
                                                                         "md": to_html})
 
 
 @router.get("/agent/{chat_id}")
 def chat_page(request: Request, chat_id: str):
-    run = RUNS.get(chat_id)
-    return _templates(request).TemplateResponse(request, "agent.html", {"chat": load(chat_id), "recent": recent(),
+    chat, run = load(chat_id), RUNS.get(chat_id)
+    if chat.get("kind") == WINDOW:  # it has no page: its window opens from the list
+        return RedirectResponse("/agent", status_code=303)
+    return _templates(request).TemplateResponse(request, "agent.html", {"chat": chat, "recent": recent(),
                                                                         "running": bool(run and not run.done), "md": to_html})
+
+
+class Open(BaseModel):
+    # The Agent button: the newest chat while it has taken on no issue yet, else a new one, so each problem the user
+    # types gets a chat of its own ("click agent, opens a floating window, start chatting there, i just start typing
+    # problems", the user, 15 Oct).
+    fresh: bool = False
+
+
+@router.post("/chats/window")
+def open_new_window(request: Request, choice: Open):
+    """Claude Code in a floating window over desk: a new chat, or with fresh, the newest one that has no issue yet."""
+    try:
+        chat = next((c for c in window_chats()[:1] if not c.get("issue")), None) if choice.fresh else None
+        chat = chat or new_window_chat(str(request.base_url).rstrip("/"))
+        open_window(chat)
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+        raise HTTPException(502, str(error))
+    return {"id": chat["id"], "title": chat["title"]}
+
+
+@router.post("/chats/{chat_id}/window")
+def open_chat_window(chat_id: str):
+    """Bring a window chat's window to the user, or open it."""
+    chat = load(chat_id)
+    if chat.get("kind") != WINDOW:
+        raise HTTPException(422, "desk draws this chat; open its page.")
+    try:
+        open_window(chat)
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+        raise HTTPException(502, str(error))
+    return {"id": chat_id}
 
 
 @router.get("/chats")

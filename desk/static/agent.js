@@ -1,10 +1,12 @@
-// The Agent tab: chats with desk's agent, on its own page and in a panel on every other page, as
-// Linear's Agent. A reply streams from /chats/<id>/stream as one JSON object per line: "text" pieces,
-// "step" and "failed" for the agent's tool calls, then "done" with the reply drawn by the server. The
-// reply runs on the server apart from the page, so a page that reloads mid-reply follows it again.
+// The Agent tab. A chat is Claude Code in a floating kitty window over desk (chats.py, window.py): the page
+// lists the chats and starts new ones, and the Agent and history buttons at the bottom right of every page
+// open them. A chat made before 15 Oct is drawn by desk on its own page, as Linear's Agent: its reply
+// streams from /chats/<id>/stream as one JSON object per line: "text" pieces, "step" and "failed" for the
+// agent's tool calls, then "done" with the reply drawn by the server. The reply runs on the server apart
+// from the page, so a page that reloads mid-reply follows it again.
 //
-// It runs after desk.js and uses its esc, reason, typing, keyOf, fold, menu and openMenu. Its own names stay inside this
-// function: classic scripts share one global scope, and desk.js already has a `page` and a `post`.
+// It runs after desk.js and uses its esc, reason, keyOf, fold, menu, openMenu and openWindow. Its own names stay inside
+// this function: classic scripts share one global scope, and desk.js already has a `page` and a `post`.
 
 (() => {
   const postJSON = (url, data) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
@@ -156,7 +158,7 @@
 
     // Show the reply as it streams: the agent's steps as they happen, its words under them.
     async follow() {
-      const id = this.id; // the panel may switch to another chat while this one answers
+      const id = this.id;
       this.setBusy(true);
       const msg = document.createElement("div");
       msg.className = "msg agent";
@@ -202,16 +204,8 @@
     }
   }
 
-  // Clicks shared by the page and the panel: example prompts, copying a reply.
+  // Copying a reply.
   document.addEventListener("click", (e) => {
-    const example = e.target.closest("[data-prompt]");
-    if (example) {
-      const box = example.closest(".agent").querySelector(".composer textarea");
-      box.value = example.dataset.prompt;
-      box.focus();
-      box.setSelectionRange(box.value.length, box.value.length);
-      box.dispatchEvent(new Event("input"));
-    }
     const copy = e.target.closest(".copy");
     if (copy) navigator.clipboard.writeText(copy.dataset.text).then(() => { copy.title = "Copied"; });
   });
@@ -221,24 +215,27 @@
   let shut = null;
   document.addEventListener("pointerdown", () => { shut = menu?.anchor ?? null; }, true);
 
-  function chatsMenu(anchor, current, pick) {
+  // A chat in a window opens its window over desk (desk.js's openWindow); one desk drew opens its page.
+  const newChat = () => openWindow("/chats/window");
+  const openChat = (c) => (c.window ? openWindow(`/chats/${c.id}/window`) : location.assign(c.url));
+
+  function chatsMenu(anchor, current) {
     if (shut === anchor) return;
     const chats = fetch("/chats").then((res) => res.json());
     openMenu({
       anchor, className: "chats", filter: "keys", placeholder: "Switch chat…", empty: "No chat matches",
       items: async (query) => [
-        { label: "New chat", group: "new", run: () => pick(null) },
+        { label: "New chat", group: "new", run: newChat },
         ...(await chats).filter((c) => fold(c.title).includes(fold(query)))
-          .map((c) => ({ label: c.title, hint: c.age, current: c.id === current, group: "chats", run: () => pick(c.id) })),
+          .map((c) => ({ label: c.title, hint: c.working ? "Working" : c.age, current: c.id === current, group: "chats", run: () => openChat(c) })),
       ],
     });
   }
 
-  // --- the Agent page ---------------------------------------------------------------------------
+  // --- the Agent page: New chat and the chats; or a chat desk drew, on its own page ----------------
   const page = document.getElementById("agent");
-  const goTo = (id) => location.assign(id ? `/agent/${id}` : "/agent");
 
-  if (page) {
+  if (page?.dataset.chat) {
     // A change to the issues changes nothing in a chat: desk.js's soft refresh swaps only the sidebar
     // on a page that redraws itself, so a reply streaming here keeps its page.
     window.onIssuesChanged = () => {};
@@ -246,84 +243,21 @@
     chat.scroll(true);
     if (page.dataset.running === "1") chat.follow();
     chat.box.focus();
-    const examples = page.querySelector(".examples");
-    if (examples && localStorage.agentExamples === "hidden") examples.remove();
-    page.querySelector(".examples .dismiss")?.addEventListener("click", () => { localStorage.agentExamples = "hidden"; examples.remove(); });
-    document.querySelector(".chat-switch")?.addEventListener("click", (e) => chatsMenu(e.currentTarget, chat.id, goTo));
-  }
-
-  // --- the panel and the buttons at the bottom right of every page ----------------------------
-  const panel = document.getElementById("agent-panel");
-  const dockAgent = document.querySelector(".dock-agent");
-  let panelChat = null;
-
-  function remember() {
-    sessionStorage.agentPanel = JSON.stringify({ open: !panel.hidden, chat: panelChat?.id || null });
-  }
-
-  async function showInPanel(id) {
-    const title = panel.querySelector(".panel-title"), expand = panel.querySelector("a.icon-button");
-    panelChat.id = panel.dataset.chat = id || "";
-    panelChat.setBusy(false);
-    panelChat.thread.innerHTML = "";
-    panelChat.choose(null);
-    title.textContent = "New chat";
-    expand.href = "/agent";
-    panel.classList.toggle("started", !!id);
-    remember();
-    if (!id) return;
-    const res = await fetch(`/chats/${id}`);
-    if (!res.ok) { showInPanel(null); return; }
-    const chat = await res.json();
-    panelChat.thread.innerHTML = chat.html;
-    panelChat.choose(chat);
-    title.textContent = chat.title;
-    expand.href = `/agent/${id}`;
-    panelChat.scroll(true);
-    if (chat.running) panelChat.follow();
-  }
-
-  function openPanel(id) {
-    panel.hidden = false;
-    dockAgent.classList.add("on");
-    if (!panelChat) {
-      panelChat = new Chat(panel, panel.querySelector(".panel-scroll"), (c) => {
-        panel.classList.add("started");
-        panel.querySelector(".panel-title").textContent = c.title;
-        panel.querySelector("a.icon-button").href = c.url;
-        remember();
-      });
-    }
-    if (id !== undefined && (id || "") !== (panelChat.id || "")) showInPanel(id);
-    remember();
-    panelChat.box.focus();
-  }
-
-  function closePanel() {
-    panel.hidden = true;
-    dockAgent.classList.remove("on");
-    remember();
-  }
-
-  if (panel) {
-    const saved = JSON.parse(sessionStorage.agentPanel || "{}"); // the panel stays open, on its chat, across pages
-    if (saved.open) openPanel(saved.chat || null);
-    dockAgent.addEventListener("click", () => (panel.hidden ? openPanel(panelChat ? undefined : saved.chat || null) : closePanel()));
-    panel.querySelector(".panel-close").addEventListener("click", closePanel);
-    // Esc closes the panel before desk.js's Esc acts (on an issue, it goes back). An open menu, or a
-    // text box outside the panel, keeps its own Esc.
-    addEventListener("keydown", (e) => {
-      const elsewhere = typing(document.activeElement) && !panel.contains(document.activeElement);
-      if (keyOf(e) !== "Escape" || panel.hidden || e.isComposing || elsewhere || document.querySelector(".menu, .viewer")) return;
-      closePanel();
+  } else if (page) {
+    // The list shows a new chat once it has one: reload when its window has opened.
+    page.querySelector(".new-chat").addEventListener("click", async () => { if (await newChat()) location.reload(); });
+    page.addEventListener("click", (e) => {
+      const row = e.target.closest("[data-window]");
+      if (!row) return;
       e.preventDefault();
-      e.stopImmediatePropagation();
-    }, true);
-  } else {
-    dockAgent.addEventListener("click", () => page?.querySelector(".composer textarea").focus());
+      openWindow(`/chats/${row.dataset.window}/window`);
+    });
   }
+  document.querySelector(".chat-switch")?.addEventListener("click", (e) => chatsMenu(e.currentTarget, page?.dataset.chat));
 
+  // --- the buttons at the bottom right of every page ---------------------------------------------
+  // Agent: the newest chat while it has taken on no issue yet, else a new one (chats.py, Open).
+  document.querySelector(".dock-agent").addEventListener("click", () => openWindow("/chats/window", { fresh: true }));
   const historyButton = document.querySelector(".dock-history");
-  historyButton.addEventListener("click", () =>
-    chatsMenu(historyButton, panel ? panelChat?.id : page?.dataset.chat, panel ? (id) => openPanel(id) : goTo));
+  historyButton.addEventListener("click", () => chatsMenu(historyButton, page?.dataset.chat));
 })();

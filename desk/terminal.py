@@ -31,7 +31,6 @@ import struct
 import subprocess
 import termios
 from contextlib import suppress
-from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, WebSocket
@@ -69,8 +68,7 @@ def command(issue) -> tuple[list[str], str]:
         return ["claude", "attach", row["id"]], row.get("cwd") or agents.workdir(issue)
     if row.get("kind") == "interactive":
         raise RuntimeError("This session is already open in a terminal. Close that one first.")
-    worktree = Path(agents.workdir(issue), ".claude", "worktrees", f"desk-{issue.slug[:40]}")
-    return ["claude", "--resume", issue.session], str(worktree if worktree.is_dir() else agents.workdir(issue))
+    return ["claude", "--resume", issue.session], agents.resume_dir(issue)
 
 
 def clean_env() -> dict[str, str]:

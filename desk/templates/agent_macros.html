@@ -1,4 +1,4 @@
-{# One chat message, on the Agent page and in the panel. An agent reply folds its steps under
+{# One chat message, on the page of a chat desk drew. An agent reply folds its steps under
    "Worked for N seconds", as Linear's agent does. #}
 
 {% macro message(m, md) -%}
@@ -31,20 +31,4 @@
       <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11.48 5.674a.75.75 0 1 1-.96 1.152L8.75 5.351v6.899a.75.75 0 0 1-1.5 0V5.351L5.48 6.826a.75.75 0 0 1-.96-1.152l3-2.5a.75.75 0 0 1 .96 0l3 2.5Z"/></svg>
       <svg class="stop" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="5" y="5" width="6" height="6" rx="1.2"/></svg></button></div>
 </form>
-{%- endmacro %}
-
-{# Things to ask, under the box of a new chat. #}
-{% macro examples(compact) -%}
-{%- set items = [
-  ("Park an issue", "File new work in one line, without starting it", "Park an issue: ",
-   '<circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="1.6 1.9"/>'),
-  ("Start an issue", "Write its plan and start its own session", "Start the issue ",
-   '<circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 4.5a3.5 3.5 0 0 1 0 7z" fill="currentColor"/>'),
-  ("What's running", "Where each issue stands, what needs you", "What is running, and what needs me?",
-   '<path d="M2 9h3l1 2h4l1-2h3M3 3h10l1 6v4H2V9z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>'),
-] %}
-{%- for title, text, prompt, icon in items %}
-<button class="{{ 'chip' if compact else 'card' }}" type="button" data-prompt="{{ prompt }}"><svg width="14" height="14" viewBox="0 0 16 16">{{ icon | safe }}</svg>
-  {%- if compact %}{{ title }}{% else %}<span class="card-title">{{ title }}</span><span class="card-text">{{ text }}</span>{% endif %}</button>
-{%- endfor %}
 {%- endmacro %}
