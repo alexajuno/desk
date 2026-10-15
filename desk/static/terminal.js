@@ -168,7 +168,7 @@
   });
 
   // The session's own forms close the terminal first, so its claude is gone before desk acts on the session:
-  // Approve stops and resumes it to land the work. The page they lead back to docks it again.
+  // Approve stops and resumes it to land the work. The page they lead back to docks it again, except while an Approve is landing.
   document.addEventListener("submit", async (e) => {
     const form = e.target;
     // getAttribute: a form with a field named "action" hides form.action

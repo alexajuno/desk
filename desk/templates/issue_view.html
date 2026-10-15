@@ -2,7 +2,7 @@
 {%- from "macros.html" import tree, prio, state, plus, fold %}
 {#- The strip: where the issue stands, and its one button, the next step (app.strip), pinned at the top while the
     issue scrolls, here and in the Inbox. On the issue's own page the chat docks beside the issue while its session
-    lives (data-dock, terminal.js). Whenever it is not on screen, a quiet Open chat sits beside the step (the user,
+    lives, except while it lands an Approve (data-dock, terminal.js). Whenever it is not on screen, a quiet Open chat sits beside the step (the user,
     15 Oct: "i see no clear button for jumping back to the session"); in the Inbox it leads to the issue's page.
     Ctrl+Enter presses the step (desk.js), as the buttons' tooltips say; Linear names keys there, not on the face. #}
 {%- macro open_chat(primary) -%}
@@ -16,7 +16,7 @@
 {%- set b = strip.button %}
 <div class="strip" data-slug="{{ p.slug }}"
   {%- if p.session and p.state not in ("done", "dropped") %} data-live="{{ live }}"{% endif %}
-  {%- if not in_inbox and p.session and p.state not in ("done", "dropped") and live in ("working", "idle") %} data-dock="{{ p.session[:8] }}"{% endif %}>
+  {%- if not in_inbox and not p.landing and p.session and p.state not in ("done", "dropped") and live in ("working", "idle") %} data-dock="{{ p.session[:8] }}"{% endif %}>
   <div class="strip-in">
     <span class="strip-state">{{ state(p.state) }}</span>
     <span class="strip-what{{ ' strip-msg' if msg }}">{{ msg or strip.text }}</span>
