@@ -4,10 +4,11 @@
     issue scrolls, here and in the Inbox. Open chat brings the issue's session to you in a floating kitty window over
     desk (window.py), here and in the Inbox; whenever it is not the step, a quiet Open chat sits beside it (the user,
     15 Oct: "i see no clear button for jumping back to the session").
-    Ctrl+Enter presses the step (desk.js), as the buttons' tooltips say; Linear names keys there, not on the face. #}
+    Ctrl+Enter presses the step and O opens the chat (desk.js), as the buttons' tooltips say; Linear names keys there,
+    not on the face. #}
 {%- macro open_chat(primary) -%}
     <button class="{{ 'primary strip-go' if primary else 'ghost' }} large open-chat" type="button" data-slug="{{ p.slug }}"
-      title="Open the issue's chat in a window over desk{{ '  Ctrl Enter' if primary }}">Open chat</button>
+      title="Open the issue's chat in a window over desk  {{ 'Ctrl Enter or O' if primary else 'O' }}">Open chat</button>
 {%- endmacro %}
 {%- set b = strip.button %}
 <div class="strip" data-slug="{{ p.slug }}"

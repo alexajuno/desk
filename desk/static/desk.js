@@ -264,7 +264,7 @@ function actionsMenu(issue, where) {
       { group: 0, icon: GLYPH.plus, label: "Add sub-issue", run: () => openCreator({ parent: issue.slug, parentTitle: titleOf(issue.slug) }) },
       // An issue page's session: its chat in a window over desk (window.py), or in a kitty tab (agents.jump_back).
       ...(issue.session ? [
-        { group: 1, icon: GLYPH.chat, label: "Open chat", run: () => openWindow(`/issue/${issue.slug}/window`) },
+        { group: 1, icon: GLYPH.chat, label: "Open chat", hint: "O", key: "o", run: () => openWindow(`/issue/${issue.slug}/window`) },
         { group: 1, icon: GLYPH.terminal, label: "Open chat in kitty", run: () => {
           const form = Object.assign(document.createElement("form"), { method: "post", action: `/issue/${issue.slug}/jump` });
           document.body.append(form);
@@ -1142,6 +1142,9 @@ document.addEventListener("keydown", (e) => {
     else location.href = focused.getAttribute("href");
   }
   else if (key === "c") { openCreator(); e.preventDefault(); }
+  // O opens the issue's chat, as its Open chat button does: back to its session once it is done ("approve is ctrl
+  // enter right. how about open chat", the user, 15 Oct). An issue with no session says so in a toast.
+  else if (key === "o" && target()) { openWindow(`/issue/${target()}/window`); e.preventDefault(); }
   else if (key === "t") {
     const group = $(".group[data-group]:hover") ?? (focused && groupOf(focused));
     if (group) toggleGroup(group);
