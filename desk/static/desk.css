@@ -331,9 +331,9 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .review { border: 1px solid var(--border-3); border-radius: 10px; padding: 14px 16px; background: var(--bg-raised); margin: 0 0 24px; }
 .review .body { margin-bottom: 12px; }
 /* The review card (agents.RESULT_CARD): its screenshots fit the panel, and the write-up under it starts folded */
-.review .review-card img { display: block; width: 100%; height: auto; margin: 8px 0; border: 1px solid var(--border-3); border-radius: 8px; }
-/* two shots sit side by side as thumbnails, so Approve stays in reach; a click opens one full size (desk.js) */
-.review .review-card p:has(> img:only-child) { display: inline-block; vertical-align: top; width: calc(50% - 8px); margin: 0 4px 0 0; }
+.review .review-card img { display: inline-block; vertical-align: top; width: calc(50% - 8px); height: auto; margin: 8px 4px 8px 0; border: 1px solid var(--border-3); border-radius: 8px; }
+/* two shots sit side by side as thumbnails, in one paragraph or two, so Approve stays in reach; a click opens one full size (desk.js) */
+.review .review-card p:has(> img) { display: inline; }
 .review-details { margin: 0 0 12px; }
 .review-details summary { cursor: pointer; width: fit-content; font-size: 13px; font-weight: 500; color: var(--text-3); }
 .review-details summary:hover { color: var(--text-2); }
