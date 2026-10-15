@@ -60,7 +60,7 @@ def command(issue) -> tuple[list[str], str]:
     blocked counts as live too: a session waiting for you is the one to attach to."""
     if not issue.session or not SESSION_ID.fullmatch(issue.session):
         raise RuntimeError("This issue has no session yet.")
-    row = agents.live().get(issue.session, {})
+    row = agents.live(fresh=True).get(issue.session, {})
     if row.get("kind") == "background" and row.get("state") in ("working", "done", "blocked"):
         return ["claude", "attach", row["id"]], row.get("cwd") or agents.workdir(issue)
     if row.get("kind") == "interactive":

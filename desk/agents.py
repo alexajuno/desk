@@ -125,14 +125,23 @@ def workdir(issue) -> str:
     return os.path.expanduser(issue.folder) if issue.folder else str(Path.home())
 
 
-def live() -> dict[str, dict]:
-    """Every session Claude Code knows, keyed by short id and by full session id."""
+_seen: tuple[float, dict] = (0.0, {})
+
+
+def live(fresh: bool = False) -> dict[str, dict]:
+    """Every session Claude Code knows, keyed by short id and by full session id. A page asks several times, for the
+    issue's strip, its state and the sidebar, so an answer under a second old is reused (`claude agents` takes about
+    0.15s, 15 Oct); fresh asks again, as right after starting a session."""
+    global _seen
+    if not fresh and time.monotonic() - _seen[0] < 1:
+        return _seen[1]
     try:
         out = subprocess.run(["claude", "agents", "--json", "--all"], capture_output=True, text=True, timeout=15).stdout
         rows = json.loads(out or "[]")
     except (subprocess.TimeoutExpired, json.JSONDecodeError):
         return {}
-    return {key: row for row in rows for key in (row.get("id"), row.get("sessionId")) if key}
+    _seen = (time.monotonic(), {key: row for row in rows for key in (row.get("id"), row.get("sessionId")) if key})
+    return _seen[1]
 
 
 # kitty.conf has `listen_on unix:/tmp/mykitty`, and kitty adds -<its pid> to a unix socket set there
@@ -221,7 +230,7 @@ def _new_session(issue, prompt: str) -> str:
 
 
 def _session_id(short: str) -> str:
-    return live().get(short, {}).get("sessionId") or short
+    return live(fresh=True).get(short, {}).get("sessionId") or short
 
 
 def start(issue, folder: Path) -> str:
@@ -269,7 +278,7 @@ def status(row: dict) -> str:
 
 def _continue(issue, prompt: str) -> None:
     """Give the issue's own session its next message, in the background, as the same session."""
-    row = live().get(issue.session, {})
+    row = live(fresh=True).get(issue.session, {})
     if row.get("kind") == "interactive":
         raise RuntimeError("This session is open in a terminal. Close that tab, then try again.")
     # `state` stays "working" while a session waits for you between turns (a planning session that had ended its

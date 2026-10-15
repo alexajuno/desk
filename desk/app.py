@@ -293,6 +293,9 @@ def show(request: Request, slug: str):
     all_issues = store.load_all()
     if slug not in all_issues:
         raise HTTPException(404)
+    # Move the issue on first, as the Inbox does, so its strip says where it stands now and not before the sidebar
+    # moved it (15 Oct: "Your turn in the chat" on an issue already in review).
+    inbox_items(all_issues, agents.live())
     return templates.TemplateResponse(request, "issue.html", issue_context(request, all_issues, slug))
 
 
