@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import agents, api, chats, terminal
+from . import agents, api, chats, projects, terminal
 from . import issues as store
 from .render import to_html, to_html_with_toc
 from .search import find
@@ -42,7 +42,7 @@ async def revalidate_static(request: Request, call_next):
 def version():
     """Changes whenever an issue's file is added, removed or edited; pages poll it to refresh.
     Each page carries the version it was made from, so a change right after it shows too."""
-    files = [f for f in store.ISSUES_DIR.rglob("*") if f.is_file()]
+    files = [f for d in (store.ISSUES_DIR, projects.PROJECTS_DIR) for f in d.rglob("*") if f.is_file()]
     return f"{len(files)}:{max((f.stat().st_mtime_ns for f in files), default=0)}"
 
 
@@ -77,7 +77,9 @@ def sidebar(request: Request) -> dict:
     needs, review = inbox_items(all_issues, agents.live())
     running = sorted((i for i in all_issues.values() if i.state == "running" and i.parent is None), key=lambda i: i.rank)
     return {"sidebar": {"backlog": sum(i.state == "backlog" for i in all_issues.values()), "running": running,
-                        "inbox": len(needs) + len(review)}, "version": version()}
+                        "inbox": len(needs) + len(review),
+                        "projects": sorted((p for p in projects.load_all().values() if p.state == "active"),
+                                           key=lambda p: p.created)}, "version": version()}
 
 
 templates = Jinja2Templates(directory=HERE / "templates", context_processors=[sidebar])
@@ -124,10 +126,68 @@ def old_link(rest: str):
 
 
 @app.get("/backlog")
-def backlog(request: Request):
+def backlog(request: Request, project: str = ""):
+    """The open issues by priority; ?project=<slug> keeps one project's, shown flat since their parents may sit outside it."""
     all_issues = store.load_all()
     kids_of = open_kids(all_issues)
-    return templates.TemplateResponse(request, "backlog.html", {"top": kids_of(None), "kids_of": kids_of})
+    if project:
+        if not projects.exists(project):
+            raise HTTPException(404)
+        top = [i for i in projects.issues_of(all_issues, project) if i.state not in CLOSED]
+        return templates.TemplateResponse(request, "backlog.html", {
+            "top": top, "kids_of": lambda slug: [], "project": projects.load(project)})
+    return templates.TemplateResponse(request, "backlog.html", {"top": kids_of(None), "kids_of": kids_of, "project": None})
+
+
+@app.get("/projects")
+def project_list(request: Request):
+    everyone = sorted(projects.load_all().values(), key=lambda p: (p.state != "active", p.created))
+    all_issues = store.load_all()
+    counts = {p.slug: projects.issues_of(all_issues, p.slug) for p in everyone}
+    return templates.TemplateResponse(request, "projects.html", {"projects": everyone, "counts": counts})
+
+
+@app.post("/projects")
+def project_create(title: str = Form("")):
+    title = " ".join(title.split())
+    if not title:
+        raise HTTPException(422, "A project needs a title.")
+    p = projects.Project(slug=projects.new_slug(title), title=title)
+    projects.save(p)
+    return RedirectResponse(f"/project/{p.slug}", status_code=303)
+
+
+@app.get("/project/{slug}")
+def project_page(request: Request, slug: str):
+    if not projects.exists(slug):
+        raise HTTPException(404)
+    p = projects.load(slug)
+    all_issues = store.load_all()
+    mine = projects.issues_of(all_issues, slug)
+    groups = [(s, [i for i in mine if i.state == s]) for s in store.STATES]
+    return templates.TemplateResponse(request, "project.html", {
+        "pr": p, "body": to_html(p.body), "groups": [(s, g) for s, g in groups if g], "kids_of": lambda _: []})
+
+
+@app.post("/project/{slug}/set")
+def project_set(slug: str, field: str = Form(...), value: str = Form("")):
+    if not projects.exists(slug):
+        raise HTTPException(404, "That project is gone.")
+    p = projects.load(slug)
+    if field == "state":
+        if value not in projects.STATES:
+            raise HTTPException(422, f"state cannot be {value}")
+    elif field == "title":
+        value = " ".join(value.split())
+        if not value:
+            raise HTTPException(422, "A title cannot be empty.")
+    elif field == "body":
+        value = value.replace("\r\n", "\n")
+    else:
+        raise HTTPException(422, f"No field {field}.")
+    setattr(p, field, value)
+    projects.save(p)
+    return RedirectResponse(f"/project/{slug}", status_code=303)
 
 
 @app.get("/inbox")
@@ -164,7 +224,9 @@ def show(request: Request, slug: str):
     direct = store.children(all_issues, slug)
     progress = (sum(k.state == "done" for k in direct), sum(k.state != "dropped" for k in direct))
     session = agents.live().get(i.session, {}) if i.session else {}
-    context = {"p": i, "trail": trail, "kids": kids_of(slug), "kids_of": kids_of, "body": to_html(i.body),
+    context = {"p": i, "project": projects.load(i.project) if i.project and projects.exists(i.project) else None,
+               "all_projects": [x for x in projects.load_all().values() if x.state == "active" or x.slug == i.project],
+               "trail": trail, "kids": kids_of(slug), "kids_of": kids_of, "body": to_html(i.body),
                "files": store.files(slug), "session": session, "msg": request.query_params.get("msg"),
                "trust": request.query_params.get("trust") == "1",
                "progress": progress, "agent_files": agent_files}
@@ -198,6 +260,10 @@ def set_field(slug: str, field: str = Form(...), value: str = Form("")):
             raise HTTPException(422, "A title cannot be empty.")
     elif field == "body":
         value = value.replace("\r\n", "\n")
+    elif field == "project":
+        value = value or None
+        if value and not projects.exists(value):
+            raise HTTPException(422, f"No project {value}.")
     elif field == "parent":
         value = value or None
         if value == slug or value in store.descendants(store.load_all(), slug):

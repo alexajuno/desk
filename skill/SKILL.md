@@ -20,6 +20,7 @@ An issue's fields:
 - `priority`: urgent, high, medium, low or none
 - `state`: backlog, planning, running, review, done or dropped
 - `parent`: the slug of the issue it belongs under, or null
+- `project`: the slug of the project it belongs to, or null. A project is ongoing work that is never done, such as desk itself; its issues finish, it does not. It is a separate thing from `parent`, which is for sub-issues
 - `folder`: where its session works, usually a repo, such as `~/projects/desk`
 
 List the open issues, or search them by the words in their title or body, best match first. Add `&state=all` to include done and dropped ones, or pick states with a list such as `state=running,review`:
@@ -44,6 +45,15 @@ Set fields, sending only the ones that change; null clears a parent or a folder:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"priority": "urgent", "parent": "desk"}'
+```
+
+Projects have a `title`, a `body` (their description) and a `state`, active or archived, never done. List the active ones (`?state=archived` or `?state=all` for others), read one with its issues, create one, or archive one; put an issue in one with `"project": "<slug>"` as above, and list a project's issues with `/api/issues?project=<slug>&state=all`. Its page is `http://127.0.0.1:8790/project/<slug>`:
+
+```bash
+curl -s "http://127.0.0.1:8790/api/projects"
+curl -s "http://127.0.0.1:8790/api/projects/<slug>"
+curl -s "http://127.0.0.1:8790/api/projects" --json '{"title": "Site redesign", "body": "Ongoing: the new site, one piece at a time."}'
+curl -s "http://127.0.0.1:8790/api/projects/<slug>" -X PATCH --json '{"state": "archived"}'
 ```
 
 Find the folder for an issue among the user's repos, by name:

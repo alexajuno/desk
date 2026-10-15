@@ -51,6 +51,12 @@ function toggleReadMode(button) {
   <a class="nav-item {{ 'here' if here == '/backlog' }}" href="/backlog">
     <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="1.6 1.9"/></svg>
     Backlog<span class="count">{{ sidebar.backlog }}</span></a>
+  <a class="nav-label {{ 'here' if here == '/projects' }}" href="/projects">Projects</a>
+  {%- for pr in sidebar.projects %}
+  <a class="nav-item {{ 'here' if here == '/project/' ~ pr.slug }}" href="/project/{{ pr.slug }}">
+    <svg viewBox="0 0 16 16"><path d="M8 2l5.5 3v6L8 14l-5.5-3V5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+    <span class="nav-title">{{ pr.title }}</span></a>
+  {%- endfor %}
   {%- if sidebar.running %}
   <div class="nav-label">Running</div>
   {%- for p in sidebar.running %}

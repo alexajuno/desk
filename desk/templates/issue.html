@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "macros.html" import tree, prio, state, plus %}
 {% block title %}{{ p.title }} · desk{% endblock %}
-{% block crumb %}<a href="/backlog">Backlog</a>{% for a in trail %}<span class="sep">›</span><a href="/issue/{{ a.slug }}">{{ a.title }}</a>{% endfor %}<span class="sep">›</span><span>{{ p.title }}</span>{% endblock %}
+{% block crumb %}{% if project %}<a href="/project/{{ project.slug }}">{{ project.title }}</a>{% else %}<a href="/backlog">Backlog</a>{% endif %}{% for a in trail %}<span class="sep">›</span><a href="/issue/{{ a.slug }}">{{ a.title }}</a>{% endfor %}<span class="sep">›</span><span>{{ p.title }}</span>{% endblock %}
 {% block tools %}<button class="more" title="Actions">
   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="12.5" cy="8" r="1.25"/></svg></button>{% endblock %}
 {% block main %}
@@ -41,6 +41,14 @@
       <span class="icon" data-field="state">{{ state(p.state) }}</span><span class="field-label" data-field="state">{{ state_names[p.state] }}</span></button>
     <button class="prop pick" data-slug="{{ p.slug }}" data-field="priority" data-priority="{{ p.priority }}" title="Change priority (P)">
       <span class="icon" data-field="priority">{{ prio(p.priority) }}</span><span class="field-label" data-field="priority">{{ prio_names[p.priority] }}</span></button>
+
+    <div class="label">Project</div>
+    <form method="post" action="/issue/{{ p.slug }}/set" class="prop project-pick">
+      <input type="hidden" name="field" value="project">
+      <select name="value" aria-label="Project">
+        <option value="">No project</option>
+        {%- for pr in all_projects %}<option value="{{ pr.slug }}"{{ " selected" if pr.slug == p.project }}>{{ pr.title }}{{ " (archived)" if pr.state == "archived" }}</option>{% endfor %}
+      </select></form>
 
     <div class="label">Works in</div>
     <button class="prop folder-pick" data-slug="{{ p.slug }}" data-value="{{ p.folder or '' }}" title="Pick the folder chats and agents start in; ~ until you pick one">

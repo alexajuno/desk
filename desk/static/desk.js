@@ -24,6 +24,7 @@ const fold = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/
 
 const svg = (path) => `<svg class="glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
 const GLYPH = {
+  project: svg('<path d="M8 2l5.5 3v6L8 14l-5.5-3V5z"/>'),
   parent: svg('<path d="M4.5 2.5v6a2 2 0 0 0 2 2h6M10 8l2.5 2.5L10 13"/>'),
   plus: svg('<path d="M8 3.5v9M3.5 8h9"/>'),
   link: svg('<path d="M7 9a2.5 2.5 0 0 0 3.5 0l2-2A2.5 2.5 0 0 0 9 3.5l-.5.5M9 7a2.5 2.5 0 0 0-3.5 0l-2 2A2.5 2.5 0 0 0 7 12.5l.5-.5"/>'),
@@ -258,6 +259,21 @@ function parentPicker(current, exclude, where, choose) {
       // Every word must match; the whole phrase matching puts an issue first.
       return all.filter((item) => words.every((w) => text(item).includes(w)))
         .sort((a, b) => !text(a).includes(phrase) - !text(b).includes(phrase));
+    },
+  });
+}
+
+// Active projects to put an issue in; choose(slug, title) gets "" for No project.
+function projectPicker(current, where, choose) {
+  const choices = fetch("/api/projects").then((res) => res.json());
+  openMenu({
+    ...where, filter: "input", className: "wide", placeholder: "Set project…", empty: "No project matches",
+    items: async (q) => {
+      const words = fold(q).trim().split(/\s+/).filter(Boolean);
+      const none = { icon: GLYPH.none, label: "No project", current: !current, run: () => choose("", "") };
+      const all = [none, ...(await choices).map((p) => ({ icon: GLYPH.project, label: p.title, current: p.slug === current,
+        run: () => choose(p.slug, p.title) }))];
+      return all.filter((item) => words.every((w) => fold(item.label).includes(w)));
     },
   });
 }
@@ -553,6 +569,8 @@ document.addEventListener("click", (e) => {
   if (t.closest(".side .new-issue")) { openCreator(); return; }
   const groupAdd = t.closest(".group-add");
   if (groupAdd) { openCreator({ priority: groupAdd.dataset.priority }); return; }
+  const projectAdd = t.closest(".project-add");
+  if (projectAdd) { const d = projectAdd.closest(".project-page").dataset; openCreator({ project: d.project, projectTitle: d.title }); return; }
   if (t.closest(".issue .add-sub")) { openCreator({ parent: page().slug, parentTitle: raw().title }); return; }
   const theme = t.closest(".theme-pick");
   if (theme) { if (!toggled(theme)) themeMenu(theme); return; }
@@ -573,7 +591,7 @@ document.addEventListener("click", (e) => {
 // Its keys are read on the window in the capture phase, ahead of the Agent tab's Esc and the page's
 // shortcuts; an open menu still gets its keys first, since the panel steps aside while one is open.
 let creator = null;
-const BLANK = { title: "", body: "", state: "backlog", priority: "none", parent: "", parentTitle: "" };
+const BLANK = { title: "", body: "", state: "backlog", priority: "none", parent: "", parentTitle: "", project: "", projectTitle: "" };
 const CLOSE = svg('<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>');
 
 // An issue's title from the page, for the parent chip; the slug when the page does not show it.
@@ -596,6 +614,7 @@ function openCreator(preset = {}) {
       <button type="button" class="field-chip" data-field="state" title="Change status"></button>
       <button type="button" class="field-chip" data-field="priority" title="Change priority"></button>
       <button type="button" class="field-chip" data-field="parent" title="Set parent"></button>
+      <button type="button" class="field-chip" data-field="project" title="Set project"></button>
     </div>
     <footer><label class="switch"><input type="checkbox" role="switch">Create more</label>
       <button class="primary" title="Create issue  Ctrl Enter">Create issue</button></footer>
@@ -607,10 +626,11 @@ function openCreator(preset = {}) {
   let box = title, composing = false, escDown = false, sending = false;
 
   function paint() {
-    const unset = { priority: draft.priority === "none", parent: !draft.parent };
+    const unset = { priority: draft.priority === "none", parent: !draft.parent, project: !draft.project };
     chip("state").innerHTML = `${icon("state", draft.state)}<span>${esc(nameOf("state", draft.state))}</span>`;
     chip("priority").innerHTML = `${icon("priority", draft.priority)}<span>${unset.priority ? "Priority" : esc(nameOf("priority", draft.priority))}</span>`;
     chip("parent").innerHTML = `${GLYPH.parent}<span>${unset.parent ? "Parent" : esc(draft.parentTitle || draft.parent)}</span>`;
+    chip("project").innerHTML = `${GLYPH.project}<span>${unset.project ? "Project" : esc(draft.projectTitle || draft.project)}</span>`;
     for (const field in unset) chip(field).classList.toggle("unset", unset[field]);
   }
 
@@ -618,7 +638,8 @@ function openCreator(preset = {}) {
   function choose(field) {
     const where = { anchor: chip(field), onClose: () => { if (creator?.el === el) box.focus(); } };
     const set = (changes) => { Object.assign(draft, changes); paint(); };
-    if (field === "parent") parentPicker(draft.parent, "", where, (slug, name) => set({ parent: slug, parentTitle: name }));
+    if (field === "project") projectPicker(draft.project, where, (slug, name) => set({ project: slug, projectTitle: name }));
+    else if (field === "parent") parentPicker(draft.parent, "", where, (slug, name) => set({ parent: slug, parentTitle: name }));
     else valueMenu(field, draft[field], where, (value) => set({ [field]: value }));
   }
 
@@ -638,7 +659,7 @@ function openCreator(preset = {}) {
     sending = true;
     const res = await fetch("/api/issues", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: name, body: body.value, state: draft.state, priority: draft.priority, parent: draft.parent || null }),
+      body: JSON.stringify({ title: name, body: body.value, state: draft.state, priority: draft.priority, parent: draft.parent || null, project: draft.project || null }),
     });
     sending = false;
     if (!res.ok) { toast(await reason(res)); return; }
@@ -783,4 +804,10 @@ document.addEventListener("keydown", (e) => {
     else if (page()) goBack();
     else focusRow(null);
   }
+});
+
+// The project picker on an issue page saves as soon as it changes.
+document.addEventListener("change", async (e) => {
+  const select = e.target.closest?.(".project-pick select");
+  if (select && page()) await setField(page().slug, "project", select.value);
 });

@@ -6,6 +6,10 @@ documents it for them).
     POST   /api/issues                create one: title, body, priority, state, parent, folder
     PATCH  /api/issues/<slug>         set any of those fields
     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
+    GET    /api/projects              list projects (state=active|archived|all); /api/issues takes project=<slug>
+    GET    /api/projects/<slug>       one project, with its description and issues
+    POST   /api/projects              create one: title, body        (issues join it with project=<slug>)
+    PATCH  /api/projects/<slug>       set title, body, state (active or archived)
 
 Issues stay files: this reads and writes them through issues.py, as the pages do.
 """
@@ -16,7 +20,7 @@ import subprocess
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import agents
+from . import agents, projects
 from . import issues as store
 from .search import find
 
@@ -26,7 +30,7 @@ OPEN = [s for s in store.STATES if s not in ("done", "dropped")]
 
 def as_json(i: store.Issue, full: bool = False) -> dict:
     data = {"slug": i.slug, "title": i.title, "state": i.state, "priority": i.priority, "parent": i.parent,
-            "folder": i.folder, "session": i.session, "created": i.created, "url": f"/issue/{i.slug}"}
+            "project": i.project, "folder": i.folder, "session": i.session, "created": i.created, "url": f"/issue/{i.slug}"}
     if full:
         data |= {"file": str(store.folder(i.slug) / store.MAIN), "files": store.files(i.slug), "body": i.body}
     return data
@@ -44,6 +48,7 @@ class Fields(BaseModel):
     priority: str | None = None
     state: str | None = None
     parent: str | None = None
+    project: str | None = None
     folder: str | None = None
 
 
@@ -60,20 +65,23 @@ def _apply(i: store.Issue, fields: Fields) -> None:
             raise HTTPException(422, f"No issue {parent} to be the parent.")
         if parent == i.slug or parent in store.descendants(all_issues, i.slug):
             raise HTTPException(422, f"{parent} is {i.slug} or under it, so it cannot be its parent.")
+    if (project := given.get("project")) and not projects.exists(project):
+        raise HTTPException(422, f"No project {project}. List them with GET /api/projects.")
     if given.get("folder") and not os.path.isdir(os.path.expanduser(given["folder"])):
         raise HTTPException(422, f"No folder {given['folder']}. Find one with GET /api/folders?q=<name>.")
     if "body" in given:
         given["body"] = given["body"] or ""
     for name, value in given.items():
-        setattr(i, name, value or None if name in ("parent", "folder") else value)
+        setattr(i, name, value or None if name in ("parent", "project", "folder") else value)
 
 
 @router.get("/issues")
-def list_issues(q: str = "", state: str = ""):
+def list_issues(q: str = "", state: str = "", project: str = ""):
     """Open issues unless state says otherwise (state=all, or a list such as state=running,review), in the
-    backlog's order; with q, the ones desk's search finds, best match first."""
+    backlog's order; with q, the ones desk's search finds, best match first; project= keeps one project's."""
     states = store.STATES if state == "all" else state.split(",") if state else OPEN
-    issues = {slug: i for slug, i in store.load_all().items() if i.state in states}
+    issues = {slug: i for slug, i in store.load_all().items()
+              if i.state in states and (not project or i.project == project)}
     found = [hit.issue for hit in find(issues, q)] if q.strip() else sorted(issues.values(), key=lambda i: i.rank)
     return [as_json(i) for i in found[:50]]
 
@@ -99,6 +107,68 @@ def update_issue(slug: str, fields: Fields):
     _apply(i, fields)
     store.save(i)
     return as_json(i, full=True)
+
+
+def project_json(p: projects.Project, full: bool = False) -> dict:
+    mine = projects.issues_of(store.load_all(), p.slug)
+    data = {"slug": p.slug, "title": p.title, "state": p.state, "created": p.created, "url": f"/project/{p.slug}",
+            "issues": len(mine), "open_issues": sum(i.state in OPEN for i in mine)}
+    if full:
+        data |= {"file": str(projects.folder(p.slug) / projects.MAIN), "body": p.body,
+                 "issue_list": [as_json(i) for i in mine]}
+    return data
+
+
+class ProjectFields(BaseModel):
+    title: str | None = None
+    body: str | None = None
+    state: str | None = None
+
+
+def _load_project(slug: str) -> projects.Project:
+    if not projects.exists(slug):
+        raise HTTPException(404, f"No project {slug}. List them with GET /api/projects.")
+    return projects.load(slug)
+
+
+def apply_project(p: projects.Project, fields: ProjectFields) -> None:
+    given = {k: v.strip() if isinstance(v, str) else v for k, v in fields.model_dump(exclude_unset=True).items()}
+    if "state" in given and given["state"] not in projects.STATES:
+        raise HTTPException(422, f"state must be one of: {', '.join(projects.STATES)}")
+    if "title" in given and not given["title"]:
+        raise HTTPException(422, "title cannot be empty")
+    for name, value in given.items():
+        setattr(p, name, value or "" if name == "body" else value)
+
+
+@router.get("/projects")
+def list_projects(state: str = "active"):
+    """Active projects unless state=archived or state=all."""
+    found = [p for p in projects.load_all().values() if state == "all" or p.state == state]
+    return [project_json(p) for p in sorted(found, key=lambda p: p.created)]
+
+
+@router.get("/projects/{slug}")
+def get_project(slug: str):
+    return project_json(_load_project(slug), full=True)
+
+
+@router.post("/projects", status_code=201)
+def create_project(fields: ProjectFields):
+    if not (fields.title or "").strip():
+        raise HTTPException(422, "title is required")
+    p = projects.Project(slug=projects.new_slug(fields.title), title=fields.title.strip())
+    apply_project(p, fields)
+    projects.save(p)
+    return project_json(p, full=True)
+
+
+@router.patch("/projects/{slug}")
+def update_project(slug: str, fields: ProjectFields):
+    p = _load_project(slug)
+    apply_project(p, fields)
+    projects.save(p)
+    return project_json(p, full=True)
 
 
 class Start(BaseModel):

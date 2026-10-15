@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "macros.html" import tree, state, plus %}
+{% block title %}{{ pr.title }} · desk{% endblock %}
+{% block crumb %}<a href="/projects">Projects</a><span class="sep">›</span><span>{{ pr.title }}</span>{% endblock %}
+{% block main %}
+<div class="project-page" data-project="{{ pr.slug }}" data-title="{{ pr.title }}">
+  <div>
+    <h1 class="title">{{ pr.title }}</h1>
+    {%- if pr.body.strip() %}<div class="body description">{{ body | safe }}</div>{% endif %}
+    <details class="project-edit"><summary>Edit title and description</summary>
+      <form method="post" action="/project/{{ pr.slug }}/set"><input type="hidden" name="field" value="title">
+        <input type="text" name="value" value="{{ pr.title }}" aria-label="Title"><button>Save title</button></form>
+      <form method="post" action="/project/{{ pr.slug }}/set"><input type="hidden" name="field" value="body">
+        <textarea name="value" rows="8" aria-label="Description">{{ pr.body }}</textarea><button>Save description</button></form>
+    </details>
+    <div class="section-label">Issues<button class="project-add add-sub" type="button" title="New issue in this project">{{ plus() }}</button></div>
+    {%- for s, group in groups %}
+    <div class="group">{{ state(s) }}{{ state_names[s] }}<span class="count">{{ group | length }}</span></div>
+    {{ tree(group, kids_of) }}
+    {%- else %}<p class="muted">No issues yet. A project never ends; its issues do.</p>{% endfor %}
+  </div>
+  <aside class="props">
+    <div class="label">Status</div>
+    <form method="post" action="/project/{{ pr.slug }}/set" class="prop static"><input type="hidden" name="field" value="state">
+      {%- if pr.state == "active" %}<span>Active</span><button name="value" value="archived">Archive</button>
+      {%- else %}<span>Archived</span><button name="value" value="active">Unarchive</button>{% endif %}</form>
+    <div class="label">Issues</div>
+    <div class="prop static"><a href="/backlog?project={{ pr.slug }}">Open in the backlog view</a></div>
+  </aside>
+</div>
+{% endblock %}

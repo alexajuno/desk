@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "macros.html" import tree, prio, plus %}
 {% block title %}Backlog · desk{% endblock %}
-{% block crumb %}<span>Backlog</span>{% endblock %}
+{% block crumb %}{% if project %}<a href="/backlog">Backlog</a><span class="sep">›</span><a href="/project/{{ project.slug }}">{{ project.title }}</a>{% else %}<span>Backlog</span>{% endif %}{% endblock %}
 {% block main %}
 <div class="page">
   {% for level in priorities %}
@@ -11,6 +11,6 @@
       <button class="group-add" type="button" data-priority="{{ level }}" title="New issue">{{ plus() }}</button></div>
     {{ tree(group, kids_of) }}
     {%- endif %}
-  {% else %}<p class="muted" style="padding: 16px">Nothing in the backlog.</p>{% endfor %}
+  {% else %}<p class="muted" style="padding: 16px">Nothing {{ "open in " ~ project.title if project else "in the backlog" }}.</p>{% endfor %}
 </div>
 {% endblock %}

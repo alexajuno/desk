@@ -40,6 +40,7 @@ class Issue:
     priority: str = "none"
     state: str = "backlog"
     parent: str | None = None
+    project: str | None = None  # slug of the project (projects.py) the issue belongs to
     folder: str | None = None
     link: str | None = None
     session: str | None = None  # the one Claude Code session bound to this issue, from planning to done
