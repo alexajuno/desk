@@ -191,7 +191,7 @@ def rows(query: str = "", kind: str = "") -> list[dict]:
         if kind and row.get("kind", "terminal") != kind:
             continue
         sid = row["id"]
-        issue = issues.get(sid) or issues.get(sid[:8])
+        issue = issues.get(sid)
         name = title(row, issue)
         if patterns:
             text = " ".join(filter(None, (name, row.get("cwd"), issue and f"{issue.slug} {issue.title}",
