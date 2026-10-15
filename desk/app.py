@@ -314,12 +314,12 @@ def split_result(text: str) -> tuple[str, str] | None:
     return (LIST_UNDER_LINE.sub(r"\1\n\n", text[:match.start()]), text[match.end():]) if match else None
 
 
-def strip(i: store.Issue, row: dict, has_plan: bool, has_result: bool) -> dict:
+def strip(i: store.Issue, row: dict, has_plan: bool, result: Path) -> dict:
     """The strip pinned at the top of an issue: where it stands, and its one button, the next step (the user,
     15 Oct: "a single button of action, and it should be somewhere static"). Only Start and Approve are clicks;
     everything else, "go", a change, an answer, is said in the issue's chat, docked beside it while its session
     lives. The button is {"label", "action"} for a form, {"label", "chat": True} to open the chat, or None."""
-    now = agents.status(row)
+    now, has_result = agents.status(row), result.is_file()
     chat = {"label": "Open chat", "chat": True}
     asleep = "The session stopped. Open chat wakes it." if i.session else ""
     if i.state == "backlog":
@@ -344,6 +344,10 @@ def strip(i: store.Issue, row: dict, has_plan: bool, has_result: bool) -> dict:
         ask = "Not yet? Say what to change in the chat." if i.session else ""
         return {"text": f"In review: {'read the card' if has_result else 'check the work'}. {ask}".strip(),
                 "button": {"label": "Approve", "action": "approve"}}
+    if i.state == "done" and has_result and landed(result)[0]:
+        # The session's own words on where it landed: the commit, or the pull request.
+        where = result.read_text(encoding="utf-8").strip().splitlines()[0].removeprefix("**Landed:**")
+        return {"text": f"Done. Landed: {where.replace('`', '').strip()[:160]}", "button": None}
     return {"text": "Done." if i.state == "done" else "Dropped.", "button": None}
 
 
@@ -368,7 +372,7 @@ def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: st
                "files": store.files(slug), "session": session, "live": agents.status(session),
                "msg": request.query_params.get("msg"), "trust": request.query_params.get("trust") == "1",
                "progress": progress, "agent_files": agent_files,
-               "strip": strip(i, session, store.has_plan(i), result.is_file())}
+               "strip": strip(i, session, store.has_plan(i), result)}
     if i.state == "review" and result.is_file() and (parts := split_result(result.read_text(encoding="utf-8"))):
         context["card"] = [to_html(part, base=f"/issue/{slug}/f/") for part in parts]
     return context
@@ -535,7 +539,9 @@ def approve(slug: str, src: str = Form("")):
     except (land.Blocked, RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         return stay(str(error))
     store.save(i)
-    return onward(before, slug, message) if from_inbox else back(slug, message)
+    # On the issue's page the strip says what happens next, Landing or Done; a message would stay in the address and
+    # cover it after the issue moved on.
+    return onward(before, slug, message) if from_inbox else back(slug)
 
 
 @app.post("/issue/{slug}/jump")

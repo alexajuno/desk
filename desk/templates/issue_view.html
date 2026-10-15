@@ -88,7 +88,7 @@
     {#- What the strip's button acts on. Opening it in kitty instead is in the … menu. #}
     <div class="label">Session</div>
     <div class="prop static"><code>{{ p.session[:8] }}</code>
-      <span class="live {{ live }}">{{ "open in a terminal" if session.get("kind") == "interactive" else {"working": "working", "idle": "your turn", "stopped": "stopped"}.get(live, "not running") }}</span></div>
+      <span class="live {{ live }}">{{ "open in a terminal" if session.get("kind") == "interactive" else {"working": "working", "idle": "idle" if p.state in ("done", "dropped") else "your turn", "stopped": "stopped"}.get(live, "not running") }}</span></div>
     {%- endif %}
   </aside>
 </div>
