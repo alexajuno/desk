@@ -775,6 +775,7 @@ function showTip(el) {
   if (!el.isConnected) return;
   fillTip(el);
   tip.className = el.closest(".group") ? "tip raised" : "tip";
+  tip.style.left = tip.style.top = "0"; // measured at the window's corner, so it is not squeezed by the edge it last sat at
   tip.remove();
   document.body.append(tip); // anew, so it fades in again
   const at = el.getBoundingClientRect(), gap = el.matches(".group-toggle") ? 12 : 8;
