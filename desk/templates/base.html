@@ -4,7 +4,6 @@
 <title>{% block title %}desk{% endblock %}</title>
 <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
 <link rel="stylesheet" href="{{ asset('desk.css') }}">
-<link rel="stylesheet" href="{{ asset('agent.css') }}">
 <link rel="stylesheet" href="{{ asset('sessions.css') }}">
 <script>
 // Theme: light or dark as the system is, unless pinned to one in this browser (localStorage.theme, from
@@ -72,7 +71,6 @@ function showFolded(url = location.pathname) {
 </script>
 <script id="desk-data" type="application/json">{{ {"states": states, "priorities": priorities, "state_names": state_names, "prio_names": prio_names, "protocols": protocols, "proto_names": proto_names, "proto_hints": proto_hints, "version": version} | tojson }}</script>
 <script src="{{ asset('desk.js') }}" defer></script>
-<script src="{{ asset('agent.js') }}" defer></script>
 <template id="icons">
   {%- for s in states %}<span data-k="state-{{ s }}">{{ state(s) }}</span>{% endfor %}
   {%- for p in priorities %}<span data-k="priority-{{ p }}">{{ prio(p) }}</span>{% endfor %}
@@ -138,6 +136,6 @@ function showFolded(url = location.pathname) {
 </div>
 <script>showCollapsed(); showFolded(); showSeen()</script>
 
-{% include "agent_panel.html" %}
+{% include "corner.html" %}
 
 {% include "keys.html" %}

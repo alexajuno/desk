@@ -432,6 +432,16 @@ document.addEventListener("click", (e) => {
 const newSession = () => openWindow("/sessions/new");
 document.addEventListener("click", (e) => { if (e.target.closest(".new-session")) newSession(); });
 
+// The corner's history button, as Linear's Chat history: the newest sessions, or those matching what is typed, each
+// with its folder and age, faint (sessions.py, /sessions/recent).
+function sessionsMenu(anchor) {
+  openMenu({
+    anchor, className: "sessions-menu", filter: "keys", placeholder: "Find a session…", empty: "No matching sessions",
+    items: async (query) => (await (await fetch(`/sessions/recent?q=${encodeURIComponent(query)}`)).json())
+      .map((s) => ({ label: s.title, hint: [s.folder, s.age].filter(Boolean).join(" · "), run: () => openWindow(`/sessions/${s.id}/open`) })),
+  });
+}
+
 let toastTimer = 0;
 
 function toast(text, action) {
@@ -820,6 +830,8 @@ document.addEventListener("click", (e) => {
   const notice = t.closest(".inbox-row");
   if (notice && !e.ctrlKey && !e.metaKey && !e.shiftKey && !t.closest(".item .icon")) { e.preventDefault(); go(notice.getAttribute("href")); return; }
   if (t.closest(".keys-close")) { toggleKeys(false); return; }
+  const history = t.closest(".dock-history");
+  if (history) { if (!toggled(history)) sessionsMenu(history); return; }
   if (t.closest(".keys-clear")) { const box = $("#keys input"); box.value = ""; filterKeys(""); box.focus(); return; }
   const anchor = t.closest('a[href^="#"]');
   if (anchor) unfoldTo(document.getElementById(decodeURIComponent(anchor.hash.slice(1))));
@@ -877,7 +889,7 @@ document.addEventListener("click", (e) => {
 // Create issue button. C, the sidebar's pencil and a group's + open it; Add sub-issue opens it with the
 // parent set. Enter in the title moves to the description, Ctrl+Enter creates, Esc closes, and what
 // you typed waits in localStorage as a draft until it is created, as Linear keeps its drafts.
-// Its keys are read on the window in the capture phase, ahead of the Agent tab's Esc and the page's
+// Its keys are read on the window in the capture phase, ahead of the page's Esc and its
 // shortcuts; an open menu still gets its keys first, since the panel steps aside while one is open.
 let creator = null;
 const BLANK = { title: "", body: "", state: "backlog", priority: "none", protocol: "design", parent: "", parentTitle: "", project: "", projectTitle: "" };

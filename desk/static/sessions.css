@@ -38,3 +38,15 @@
 .sessions-empty { padding: 24px 22px; }
 .session-more { height: 1px; }
 .item.session-row .icon { cursor: default; } .item.session-row .icon:hover { background: none; }
+
+/* The buttons at the bottom right of every page (corner.html), where Linear keeps Agent and Chat history, as desk's
+   Agent tab measured them on 2026-10-14; the history menu is 349px wide, as Linear's Chat history measured on
+   2026-10-15. */
+.corner { position: fixed; right: 8px; bottom: 4px; z-index: 15; display: flex; gap: 2px; }
+.corner button { height: 28px; border-color: transparent; background: none; color: var(--text-3); }
+.corner button:hover { background: var(--bg-icon-hover); color: var(--text-1); }
+.corner-new { padding: 0 12px 0 10px; gap: 6px; }
+.dock-history { width: 28px; padding: 0; justify-content: center; }
+.menu.sessions-menu { z-index: 20; width: 349px; } .menu.sessions-menu ul { max-height: 360px; overflow: auto; }
+.menu.sessions-menu li .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu.sessions-menu li .shortcut { flex: none; color: var(--text-4); }
