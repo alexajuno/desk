@@ -1,8 +1,10 @@
-// The issue's session in a terminal on its own page: xterm.js here, a websocket to desk/terminal.py,
-// and there a PTY running the claude command Jump back runs in kitty. "Open here" opens it to the
-// right of the issue. Closing it, or the page, hangs up the PTY: `claude attach` ends and the
-// background session keeps running. Kept apart from desk.js and the Agent tab; it uses desk.js's $ and
-// page. xterm.js and the terminal's CSS load on the first open, so other pages never fetch them.
+// The issue's chat: its session in a terminal on its own page, xterm.js here, a websocket to desk/terminal.py,
+// and there a PTY running the claude command Jump back runs in kitty. It docks right of the issue by itself while
+// the session lives (the strip's data-dock, issue_view.html), since every move but Start and Approve is said in it,
+// and the strip's Open chat opens it otherwise. Closing it, or the page, hangs up the PTY: `claude attach` ends
+// and the background session keeps running; closed by hand, it stays closed on that issue until the page is left.
+// Kept apart from desk.js and the Agent tab; it uses desk.js's $ and page. xterm.js and the terminal's CSS load
+// on the first open, so other pages never fetch them.
 //
 // Keys: every key goes to Claude Code, none to desk's shortcuts, except Ctrl+Z, which claude takes as
 // "suspend me and drop back to your shell"; here there is no shell to drop back to.
@@ -40,13 +42,23 @@
     load("link", { rel: "stylesheet", href: "/static/terminal.css" }),
   ]));
 
-  async function show(slug, short) {
+  // focus is false when the chat docks by itself, so the page keeps the keys: Ctrl+Enter still presses the strip's
+  // button, and Esc still goes back.
+  let opening = null;
+  async function show(slug, short, focus = true) {
     if (open?.slug === slug) {
       if (open.ended) reconnect();
-      return open.xterm.focus();
+      return focus && open.xterm.focus();
     }
-    if (open) await shut();
-    await ready();
+    if (opening === slug) return;
+    opening = slug;
+    try {
+      if (open) await shut();
+      await ready();
+    } finally {
+      opening = null;
+    }
+    closedHere.delete(slug);
     const panel = $(".panel");
     const el = document.createElement("section");
     el.className = "term";
@@ -78,10 +90,17 @@
     xterm.onResize(({ cols, rows }) => send(JSON.stringify({ resize: [cols, rows] })));
     new ResizeObserver(() => requestAnimationFrame(() => open?.xterm === xterm && fit.fit())).observe(el.querySelector(".term-screen"));
     el.addEventListener("keydown", (e) => e.stopPropagation()); // keeps desk's shortcuts (Esc goes back, S, P…) out of it
-    el.querySelector(".term-close").addEventListener("click", () => shut());
+    el.querySelector(".term-close").addEventListener("click", () => { closedHere.add(slug); shut(); });
     grip(el.querySelector(".term-grip"), panel);
     connect();
-    xterm.focus();
+    if (focus) xterm.focus();
+  }
+
+  // Dock the chat of the issue on this page when its strip asks for it, unless it was closed by hand here.
+  const closedHere = new Set();
+  function dock() {
+    const strip = $(".strip[data-dock]");
+    if (strip && !closedHere.has(strip.dataset.slug) && open?.slug !== strip.dataset.slug) show(strip.dataset.slug, strip.dataset.dock, false);
   }
 
   function connect() {
@@ -110,7 +129,7 @@
     if (open?.ws?.readyState === WebSocket.OPEN) open.ws.send(data);
   }
 
-  // Asks the server to hang up and waits until it has, so a form sent next (Hand off, Jump back) finds
+  // Asks the server to hang up and waits until it has, so a form sent next (Approve, Open chat in kitty) finds
   // the session no longer open here.
   async function shut() {
     if (!open) return;
@@ -139,6 +158,8 @@
     });
   }
 
+  window.openChat = (slug, short) => show(slug, short); // the … menu's Open chat (desk.js)
+
   document.addEventListener("click", (e) => {
     const button = e.target.closest(".term-open");
     if (!button) return;
@@ -146,11 +167,12 @@
     show(button.dataset.slug, button.dataset.short);
   });
 
-  // The session's own forms close the terminal first, so its claude is gone before desk acts on the session.
+  // The session's own forms close the terminal first, so its claude is gone before desk acts on the session:
+  // Approve stops and resumes it to land the work. The page they lead back to docks it again.
   document.addEventListener("submit", async (e) => {
     const form = e.target;
-    // getAttribute: the review form has a button named "action", which hides form.action
-    if (!open || !/\/(plan|handoff|review|jump)$/.test(form.getAttribute("action") ?? "")) return;
+    // getAttribute: a form with a field named "action" hides form.action
+    if (!open || !/\/(start|approve|jump)$/.test(form.getAttribute("action") ?? "")) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     await shut();
@@ -168,6 +190,11 @@
   // A theme picked while the terminal is open recolours it; claude keeps the colours it chose at its start.
   new MutationObserver(() => { if (open) open.xterm.options.theme = theme(); }).observe(document.documentElement, { attributeFilter: ["data-theme"] });
 
-  // A soft refresh that leaves the issue (a delete moves to its parent) closes its terminal.
-  new MutationObserver(() => { if (open && page()?.slug !== open.slug) shut(); }).observe($(".scroll"), { childList: true });
+  // A soft refresh that leaves the issue (a delete moves to its parent) closes its terminal; one that brings a strip
+  // asking for the chat, as when the session wakes, docks it.
+  new MutationObserver(() => {
+    if (open && page()?.slug !== open.slug) shut();
+    dock();
+  }).observe($(".scroll"), { childList: true });
+  dock();
 })();

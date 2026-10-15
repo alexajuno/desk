@@ -6,6 +6,8 @@ documents it for them).
     POST   /api/issues                create one: title, body, priority, state, parent, folder
     PATCH  /api/issues/<slug>         set any of those fields
     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
+    POST   /api/issues/<slug>/try     for a session in a worktree desk made: put the folder's checkout on its branch
+    POST   /api/issues/<slug>/back-to-main   and back
     GET    /api/projects              list projects (state=active|archived|all); /api/issues takes project=<slug>
     GET    /api/projects/<slug>       one project, with its description and issues
     POST   /api/projects              create one: title, body        (issues join it with project=<slug>)
@@ -30,7 +32,7 @@ OPEN = [s for s in store.STATES if s not in ("done", "dropped")]
 
 def as_json(i: store.Issue, full: bool = False) -> dict:
     data = {"slug": i.slug, "title": i.title, "state": i.state, "priority": i.priority, "parent": i.parent,
-            "project": i.project, "folder": i.folder, "lands": land.lands(i), "session": i.session, "created": i.created, "url": f"/issue/{i.slug}"}
+            "project": i.project, "folder": i.folder, "session": i.session, "created": i.created, "url": f"/issue/{i.slug}"}
     if full:
         data |= {"file": str(store.folder(i.slug) / store.MAIN), "files": store.files(i.slug), "body": i.body}
     return data
@@ -50,12 +52,13 @@ class Fields(BaseModel):
     parent: str | None = None
     project: str | None = None
     folder: str | None = None
-    lands: str | None = None
 
 
 def _apply(i: store.Issue, fields: Fields) -> None:
     given = {k: v.strip() if isinstance(v, str) else v for k, v in fields.model_dump(exclude_unset=True).items()}
-    for name, allowed in (("priority", store.PRIORITIES), ("state", store.STATES), ("lands", land.LANDS)):
+    if given.get("state") == "planning":  # the name the In progress state had before 15 Oct
+        given["state"] = "running"
+    for name, allowed in (("priority", store.PRIORITIES), ("state", store.STATES)):
         if name in given and given[name] not in allowed:
             raise HTTPException(422, f"{name} must be one of: {', '.join(allowed)}")
     if "title" in given and not given["title"]:
@@ -179,10 +182,12 @@ class Start(BaseModel):
 
 @router.post("/issues/{slug}/start")
 def start_issue(slug: str, start: Start):
-    """Write the plan into the issue, then start its session on it: the one it already has, or a new one."""
+    """Write the plan into the issue, then start its session on it: the one it already has, which carries it out as
+    if the user had said go in its chat, or a new one."""
     i = _load(slug)
-    if i.state not in ("backlog", "planning"):
-        raise HTTPException(409, f"{slug} is {i.state}; only a backlog or planning issue can start.")
+    if not (i.state == "backlog" or (i.state == "running" and i.session and not i.landing)):
+        raise HTTPException(409, f"{slug} is {i.state}; only a backlog issue, or one in progress that its session "
+                                 f"has only planned, can start.")
     if start.plan.strip():
         i.set_section("Plan", start.plan)
         store.save(i)
@@ -195,7 +200,7 @@ def start_issue(slug: str, start: Start):
         if planning:
             i.session = agents.plan_from_chat(i, store.folder(slug), chats.transcript(start.chat))
         elif i.session:
-            agents.hand_off(i, store.folder(slug))
+            agents.go(i, store.folder(slug))
         else:
             i.session = agents.run(i, store.folder(slug))
     except agents.TrustError:
@@ -203,15 +208,16 @@ def start_issue(slug: str, start: Start):
                                  f"and press Trust folder, then start again.")
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         raise HTTPException(502, f"The plan is saved, but the session did not start: {error}")
-    i.state = "planning" if planning else "running"
+    i.state = "running"
     store.save(i)
     return as_json(i)
 
 
 @router.post("/issues/{slug}/try")
 def try_issue(slug: str):
-    """Switch the issue's folder checkout to its branch, to test or review it in the one running app. In desk's own
-    repo desk restarts on it, so wait until /version answers again."""
+    """For a session in a worktree desk made with `claude -w`, which can only work in it: switch the issue's folder
+    checkout to its branch, to test or review it in the one running app. In desk's own repo desk restarts on it, so
+    wait until /version answers again. Any other session switches the checkout itself, as its repo's rules say."""
     try:
         return {"message": land.try_branch(_load(slug))}
     except land.Blocked as error:

@@ -29,7 +29,9 @@ PLAN = "plan.md"  # the plan, kept by the issue's session while the user plans w
 
 # Linear's priority levels, most urgent first.
 PRIORITIES = ["urgent", "high", "medium", "low", "none"]
-STATES = ["backlog", "planning", "running", "review", "done", "dropped"]
+# "running" shows as In progress: one chat plans the issue and carries it out, so planning is no state of its own
+# (the user, 15 Oct). An issue saved as planning before then reads as running.
+STATES = ["backlog", "running", "review", "done", "dropped"]
 
 FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 
@@ -44,8 +46,7 @@ class Issue:
     project: str | None = None  # slug of the project (projects.py) the issue belongs to
     folder: str | None = None
     link: str | None = None
-    lands: str | None = None  # merge, pr or nothing; unset means the default from the folder (land.py)
-    landing: str | None = None  # when Approve resumed the session to open a PR; set until it reports
+    landing: str | None = None  # when Approve told the session to land its work; set until it reports
     session: str | None = None  # the one Claude Code session bound to this issue, from planning to done
     created: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     body: str = ""
@@ -72,6 +73,8 @@ def _parse(slug: str, text: str) -> Issue:
     meta, body = (yaml.safe_load(match.group(1)) or {}, match.group(2)) if match else ({}, text)
     meta = {k: v for k, v in meta.items() if k in Issue.__dataclass_fields__}
     meta.setdefault("title", slug)
+    if meta.get("state") == "planning":
+        meta["state"] = "running"
     if "created" in meta:
         meta["created"] = str(meta["created"])
     return Issue(slug=slug, body=body, **meta)

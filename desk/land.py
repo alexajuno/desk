@@ -1,19 +1,19 @@
-"""Landing approved work. Approve in review reads the issue's `lands:` and does one of:
+"""Landing approved work. Approve hands it to the issue's own session, which lands it as its repo's rules say
+(agents.land): merged, or pushed with a pull request. desk then only waits for result.md to say it landed
+(app.inbox_items). A folder that is not a git repo has nothing to land, and the issue is done at once.
 
-    merge    desk runs `git merge --ff-only` in the folder's checkout, then stops the session and removes its
-             worktree and branch. The session cannot do this itself: Claude Code locks a worktree session's
-             git to its own worktree (15 Oct), while desk is a plain process.
-    pr       the issue's own session pushes and opens a draft PR by the repo's rules (agents.land_pr).
-    nothing  the issue is done.
+Two things stay here for the sessions desk started in a worktree of its own (`claude -w`), as it did until
+15 Oct. Claude Code locks such a session's git to its worktree, so it cannot merge, and desk, a plain process,
+merges for it (merge), rebasing on the way when main moved, with no second review (the user, 15 Oct: "after
+approve, and rebase, should merge immediately"). And the API's try and back-to-main switch the folder's checkout
+to its branch for review (try_branch). Both can go once no session works in a .claude/worktrees/desk-* worktree.
 
-Before that, Try it here switches the folder's checkout to the branch's commit, so you test and review in the app
-you already run: one desk, not a copy (the user, 15 Oct: "only a single instance of app runs"). Back to main, Approve
-and Send back put it back. One branch at a time per checkout.
+The sidebar says when desk's own checkout runs anything but a branch (running): desk's CLAUDE.md has a session put
+the desk the user runs on its branch for review.
 """
 
 import json
 import os
-import re
 import signal
 import subprocess
 import threading
@@ -22,8 +22,6 @@ from pathlib import Path
 
 from . import agents
 
-LANDS = ["merge", "pr", "nothing"]
-TEAM_ORGS = {"qikify", "ownego"}  # repos under these end at a PR that teammates merge
 DESK_REPO = Path(__file__).resolve().parent.parent
 
 
@@ -32,30 +30,16 @@ class Blocked(Exception):
 
 
 class MainMoved(Blocked):
-    """main moved after the branch began, so it cannot fast-forward."""
+    """main moved after the branch began, and the branch does not rebase onto it cleanly."""
 
 
-def default_lands(folder: str | None) -> str:
-    """From the folder's git remote: no repo is nothing, no remote is merge, a team org is pr."""
-    cwd = os.path.expanduser(folder) if folder else str(Path.home())
-    if not agents._git(cwd, "rev-parse", "--show-toplevel"):
-        return "nothing"
-    url = agents._git(cwd, "remote", "get-url", "origin")
-    if not url:
-        urls = agents._git(cwd, "config", "--get-regexp", r"^remote\..*\.url$")
-        url = urls.splitlines()[0].split()[-1] if urls else None
-    if not url:
-        return "merge"
-    owner = re.search(r"[:/]([^/:\s]+)/[^/\s]+?(?:\.git)?$", url)
-    return "pr" if owner and owner.group(1).lower() in TEAM_ORGS else "merge"
+def repo(issue) -> str | None:
+    """The git repo the issue's folder is in, if any."""
+    return agents._git(agents.workdir(issue), "rev-parse", "--show-toplevel")
 
 
-def lands(issue) -> str:
-    return issue.lands if issue.lands in LANDS else default_lands(issue.folder)
-
-
-def _worktree(issue) -> tuple[Path, str] | None:
-    """The issue's session worktree and its branch, if the session worked in one."""
+def worktree(issue) -> tuple[Path, str] | None:
+    """The worktree desk made for the issue's session with `claude -w`, and its branch, if it has one."""
     row = agents.live().get(issue.session, {}) if issue.session else {}
     guesses = [row.get("cwd"), Path(agents.workdir(issue), ".claude", "worktrees", f"desk-{issue.slug[:40]}")]
     for guess in guesses:
@@ -66,127 +50,117 @@ def _worktree(issue) -> tuple[Path, str] | None:
     return None
 
 
-def _repo(issue) -> str | None:
-    return agents._git(agents.workdir(issue), "rev-parse", "--show-toplevel")
-
-
 @lru_cache
-def _trial_file(repo: str) -> Path:
+def _trial_file(top: str) -> Path:
     """Where desk notes what it switched a checkout to, inside the repo's own git dir."""
-    return Path(agents._git(repo, "rev-parse", "--path-format=absolute", "--git-path", "desk-trying"))
+    return Path(agents._git(top, "rev-parse", "--path-format=absolute", "--git-path", "desk-trying"))
 
 
-def trying(repo: str) -> dict | None:
+def trying(top: str) -> dict | None:
     """The branch desk switched the checkout to, as {"branch", "slug", "back"}, or None. A checkout put back on a
     branch by hand, such as `git checkout main` after a branch broke desk's start, counts as back."""
-    path = _trial_file(repo)
-    if not path.is_file() or agents._git(repo, "branch", "--show-current"):
+    path = _trial_file(top)
+    if not path.is_file() or agents._git(top, "branch", "--show-current"):
         return None
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def trial(issue, cwd: str | None = None) -> dict:
-    """For the review panel: whether the issue has a branch to try, and what its folder's checkout runs now.
-    cwd is the session's, when the caller already has it from agents.live()."""
-    repo = _repo(issue)
-    now = trying(repo) if repo else None
-    guess = Path(agents.workdir(issue), ".claude", "worktrees", f"desk-{issue.slug[:40]}")
-    return {"can": bool(repo) and (guess.is_dir() or "/.claude/worktrees/" in (cwd or "")),
-            "here": bool(now) and now["slug"] == issue.slug, "other": now if now and now["slug"] != issue.slug else None,
-            "desk": bool(repo) and Path(repo).resolve() == DESK_REPO}
+def running(top: str) -> dict | None:
+    """What a checkout runs when it is on no branch, as a session leaves it for review: {"branch": the branch at
+    its commit, else the commit; "slug": the issue, when desk switched it}. None when it is on a branch."""
+    if agents._git(top, "branch", "--show-current") != "":  # "" is detached; None, no repo at all
+        return None
+    if now := trying(top):
+        return {"branch": now["branch"], "slug": now["slug"]}
+    names = (agents._git(top, "branch", "--points-at", "HEAD", "--format=%(refname:short)") or "").split()
+    return {"branch": names[0] if names else agents._git(top, "rev-parse", "--short", "HEAD") or "a commit", "slug": None}
 
 
 def try_branch(issue) -> str:
     """Switch the folder's checkout to the commit of the issue's branch, detached: the branch itself stays checked
     out in its worktree, where git allows it only once. desk restarts on it when the folder is desk's own repo."""
-    found, repo = _worktree(issue), _repo(issue)
-    if not found or not repo:
-        raise Blocked("No worktree branch to try.")
+    found, top = worktree(issue), repo(issue)
+    if not found or not top:
+        raise Blocked("No worktree branch to try: a session outside a desk-made worktree switches the checkout "
+                      "itself, as its repo's rules say.")
     branch = found[1]
-    now = trying(repo)
+    now = trying(top)
     if now and now["slug"] != issue.slug:
-        raise Blocked(f"{repo} runs {now['branch']} now. Put it back on main first.")
-    back = now["back"] if now else agents._git(repo, "branch", "--show-current")
+        raise Blocked(f"{top} runs {now['branch']} now. Put it back on main first.")
+    back = now["back"] if now else agents._git(top, "branch", "--show-current")
     if not back:
-        raise Blocked(f"{repo} is not on a branch. Put it back on main first.")
-    if agents._git(repo, "status", "--porcelain", "--untracked-files=no"):
-        raise Blocked(f"{repo} has uncommitted changes, so desk leaves it as it is.")
+        raise Blocked(f"{top} is not on a branch. Put it back on main first.")
+    if agents._git(top, "status", "--porcelain", "--untracked-files=no"):
+        raise Blocked(f"{top} has uncommitted changes, so desk leaves it as it is.")
     # The checkout shares its .venv with every branch: one that changes pyproject.toml needs `uv sync` there,
     # which desk does not run. None has so far; the day one does, run it here after the checkout.
-    run = subprocess.run(["git", "checkout", "--detach", branch], cwd=repo, capture_output=True, text=True)
+    run = subprocess.run(["git", "checkout", "--detach", branch], cwd=top, capture_output=True, text=True)
     if run.returncode:
         raise Blocked((run.stderr or run.stdout).strip() or "git checkout failed")
-    _trial_file(repo).write_text(json.dumps({"branch": branch, "slug": issue.slug, "back": back}), encoding="utf-8")
-    return f"{repo} runs {branch} now." + restart_if_desk(repo)
+    _trial_file(top).write_text(json.dumps({"branch": branch, "slug": issue.slug, "back": back}), encoding="utf-8")
+    return f"{top} runs {branch} now." + restart_if_desk(top)
 
 
-def _put_back(repo: str, now: dict) -> None:
-    run = subprocess.run(["git", "checkout", now["back"]], cwd=repo, capture_output=True, text=True)
+def _put_back(top: str, now: dict) -> None:
+    run = subprocess.run(["git", "checkout", now["back"]], cwd=top, capture_output=True, text=True)
     if run.returncode:
         raise Blocked((run.stderr or run.stdout).strip() or "git checkout failed")
-    _trial_file(repo).unlink(missing_ok=True)
+    _trial_file(top).unlink(missing_ok=True)
 
 
 def back_to_main(issue) -> str:
-    """Put the folder's checkout back on the branch it was on before Try it here."""
-    repo = _repo(issue)
-    now = trying(repo) if repo else None
+    """Put the folder's checkout back on the branch it was on before try."""
+    top = repo(issue)
+    now = trying(top) if top else None
     if not now:
         return ""
-    _put_back(repo, now)
-    return f"{repo} is back on {now['back']}." + restart_if_desk(repo)
-
-
-def leave(issue) -> str:
-    """Send back: the checkout stops running the branch that goes back for changes."""
-    repo = _repo(issue)
-    now = trying(repo) if repo else None
-    return back_to_main(issue) if now and now["slug"] == issue.slug else ""
+    _put_back(top, now)
+    return f"{top} is back on {now['back']}." + restart_if_desk(top)
 
 
 def merge(issue) -> str:
-    """Fast-forward the issue's branch into the folder's checkout and clean up; returns a message. A checkout
-    running the branch from Try it here goes back first. Raises MainMoved or Blocked, having changed nothing
-    else."""
-    found = _worktree(issue)
-    if not found:
+    """Fast-forward the branch of a session in a desk-made worktree into the folder's checkout, rebasing it first
+    when the checkout's branch moved, and clean up; returns a message. A checkout running the branch from try goes
+    back first. Raises MainMoved when the rebase stops on a conflict, or Blocked, having changed nothing else."""
+    found, top = worktree(issue), repo(issue)
+    if not found or not top:
         return "No worktree branch to merge, so nothing was merged."
     tree, branch = found
-    repo = _repo(issue)
-    if not repo:
-        return "The folder is not a git repo, so nothing was merged."
     if agents._git(str(tree), "status", "--porcelain"):
-        raise Blocked(f"{branch} has uncommitted changes in its worktree. Send it back to commit them.")
-    now = trying(repo)
+        raise Blocked(f"{branch} has uncommitted changes in its worktree. Ask the session to commit them.")
+    now = trying(top)
     if now and now["slug"] != issue.slug:
-        raise Blocked(f"{repo} runs {now['branch']} now. Put it back on main first.")
+        raise Blocked(f"{top} runs {now['branch']} now. Put it back on main first.")
     if now:
-        _put_back(repo, now)
+        _put_back(top, now)
     # Detached by hand, the fast-forward would move HEAD and not main, and the branch is deleted below.
-    target = agents._git(repo, "branch", "--show-current")
+    target = agents._git(top, "branch", "--show-current")
     if not target:
-        raise Blocked(f"{repo} is not on a branch, so there is nothing to merge into. Put it back on main first.")
-    run = subprocess.run(["git", "merge", "--ff-only", branch], cwd=repo, capture_output=True, text=True)
+        raise Blocked(f"{top} is not on a branch, so there is nothing to merge into. Put it back on main first.")
+    moved = subprocess.run(["git", "merge-base", "--is-ancestor", target, branch], cwd=top).returncode == 1
+    if moved and subprocess.run(["git", "rebase", target], cwd=tree, capture_output=True).returncode:
+        subprocess.run(["git", "rebase", "--abort"], cwd=tree, capture_output=True)
+        if now:
+            restart_if_desk(top)  # back on main, so desk must stop running the branch's code
+        raise MainMoved(f"{target} moved after {branch} began, and {branch} does not rebase onto it cleanly.")
+    run = subprocess.run(["git", "merge", "--ff-only", branch], cwd=top, capture_output=True, text=True)
     if run.returncode:
         if now:
-            restart_if_desk(repo)  # back on main, so desk must stop running the branch's code
-        diverged = subprocess.run(["git", "merge-base", "--is-ancestor", target, branch], cwd=repo).returncode == 1
-        if diverged:
-            raise MainMoved(f"{target} moved after {branch} began.")
+            restart_if_desk(top)
         raise Blocked((run.stderr or run.stdout).strip() or "git merge failed")
     row = agents.live().get(issue.session, {})
     if row:
         subprocess.run(["claude", "stop", row["id"]], capture_output=True, timeout=30)
     # Claude Code locks the worktree while its session lives, and a stopped session may leave the lock: -f -f.
-    subprocess.run(["git", "worktree", "remove", "-f", "-f", str(tree)], cwd=repo, capture_output=True)
-    subprocess.run(["git", "branch", "-d", branch], cwd=repo, capture_output=True)
-    return f"Merged {branch} into {target}." + restart_if_desk(repo)
+    subprocess.run(["git", "worktree", "remove", "-f", "-f", str(tree)], cwd=top, capture_output=True)
+    subprocess.run(["git", "branch", "-d", branch], cwd=top, capture_output=True)
+    return f"Merged {branch} into {target}{', rebased onto it first' if moved else ''}." + restart_if_desk(top)
 
 
-def restart_if_desk(repo: str) -> str:
+def restart_if_desk(top: str) -> str:
     """Merging desk's own repo changes the code this process runs. Under systemd (Restart=always) exit after
     the response and come back on it; otherwise say so."""
-    if Path(repo).resolve() != DESK_REPO:
+    if Path(top).resolve() != DESK_REPO:
         return ""
     if os.environ.get("INVOCATION_ID"):
         threading.Timer(1.5, lambda: os.kill(os.getpid(), signal.SIGTERM)).start()

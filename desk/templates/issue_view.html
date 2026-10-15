@@ -1,18 +1,36 @@
 {#- An issue, as its page shows it: the Inbox shows the same in its right pane. #}
 {%- from "macros.html" import tree, prio, state, plus, fold %}
-<div class="issue" data-slug="{{ p.slug }}" data-state="{{ p.state }}" data-priority="{{ p.priority }}" data-parent="{{ p.parent or '' }}">
+{#- The strip: where the issue stands, and its one button, the next step (app.strip), pinned at the top while the
+    issue scrolls, here and in the Inbox. On the issue's own page the chat docks beside the issue while its session
+    lives (data-dock, terminal.js), and Open chat then hides. Ctrl+Enter presses the button (desk.js). #}
+{%- set b = strip.button %}
+<div class="strip" data-slug="{{ p.slug }}"
+  {%- if not in_inbox and p.session and p.state not in ("done", "dropped") and live in ("working", "idle") %} data-dock="{{ p.session[:8] }}"{% endif %}>
+  <div class="strip-in">
+    <span class="strip-state">{{ state(p.state) }}</span>
+    <span class="strip-what{{ ' strip-msg' if msg }}">{{ msg or strip.text }}
+      {%- if in_inbox and p.session and p.state == "review" %} <a href="/issue/{{ p.slug }}">Open its chat</a>{% endif %}</span>
+    {%- if trust %}
+    <form method="post" action="/issue/{{ p.slug }}/trust"><button class="primary strip-go" title="Tells Claude Code to trust this folder, as accepting its prompt does">Trust folder</button></form>
+    {%- elif b and b.chat and in_inbox %}
+    <form method="get" action="/issue/{{ p.slug }}"><button class="primary strip-go">Open chat</button></form>
+    {%- elif b and b.chat %}
+    <button class="primary strip-go open-chat term-open" type="button" data-slug="{{ p.slug }}" data-short="{{ p.session[:8] }}" title="Open the issue's chat here (Ctrl Enter)">Open chat <kbd>Ctrl ↵</kbd></button>
+    {%- elif b and b.disabled %}
+    <button class="primary strip-go" type="button" disabled>{{ b.label }}</button>
+    {%- elif b %}
+    <form method="post" action="/issue/{{ p.slug }}/{{ b.action }}">
+      {%- if in_inbox %}<input type="hidden" name="src" value="inbox">{% endif %}
+      <button class="primary strip-go" title="{{ b.label }} (Ctrl Enter)">{{ b.label }} <kbd>Ctrl ↵</kbd></button></form>
+    {%- endif %}
+  </div>
+</div>
+<div class="issue" data-slug="{{ p.slug }}" data-state="{{ p.state }}" data-priority="{{ p.priority }}" data-parent="{{ p.parent or '' }}"
+  {%- if p.session %} data-session="{{ p.session[:8] }}"{% endif %}>
   <script id="issue-raw" type="application/json">{{ {"title": p.title, "body": p.body.strip()} | tojson }}</script>
   <div>
     <h1 class="title" title="Click to edit">{{ p.title }}</h1>
-    {% if msg %}<p class="notice">{{ msg }}
-      {%- if trust %}
-      <form method="post" action="/issue/{{ p.slug }}/trust" style="display: inline"><button class="primary">Trust folder</button></form>
-      <span class="hint">Tells Claude Code to trust this folder, as accepting its prompt does.</span>{% endif %}</p>{% endif %}
-    {#- Sub-issues sit right under the title, so a long description or plan never pushes them down the page. #}
-    <section class="sec" data-sec="sub-issues">
-      <div class="section-label sec-head">{{ fold() }}Sub-issues{% if progress[1] %}<span class="pill">{{ progress[0] }}/{{ progress[1] }} done</span>{% endif %}
-        <button class="add-sub" type="button" title="Add sub-issue">{{ plus() }}</button></div>
-      <div class="sec-body">{% if kids %}{{ tree(kids, kids_of) }}{% endif %}</div></section>
+    {#- In review the card comes first, right under the strip whose Approve decides on it. #}
     {%- if p.state == "review" %}
     <div class="review">
       <div class="section-label" style="margin-top: 0">Review</div>
@@ -21,22 +39,13 @@
       <details class="review-details"><summary>Details</summary><div class="body">{{ card[1] | safe }}</div></details>
       {%- elif "result.md" in agent_files %}<div class="body">{{ agent_files["result.md"] | safe }}</div>
       {%- else %}<p class="muted">No result.md: this was done in a chat, so check the work itself.</p>{% endif %}
-      <form method="post" action="/issue/{{ p.slug }}/review">
-        {%- if in_inbox %}<input type="hidden" name="src" value="inbox">{% endif %}
-        <input type="text" name="note" placeholder="Look back: did it hold? Or, to send back: what to change." autocomplete="off">
-        <div class="row" style="margin-top: 8px"><button class="primary" name="action" value="approve" title="Lands as {{ lands }}">Approve · {{ {"merge": "merge", "pr": "open PR", "nothing": "nothing to land"}[lands] }}</button>
-          <button name="action" value="back">Send back</button>
-          {#- Try it here: review in the app you run, switched to this branch, rather than in a copy (land.py). #}
-          {%- if trial.here %}
-          <button formaction="/issue/{{ p.slug }}/back-to-main" title="Put the checkout back on the branch it was on{{ ' and restart desk' if trial.desk }}">Back to main</button>
-          {%- elif trial.can and not trial.other %}
-          <button formaction="/issue/{{ p.slug }}/try" title="Switch the folder's checkout to this branch{{ ', and restart desk on it' if trial.desk }}">Try it here</button>
-          {%- endif %}</div>
-        {%- if trial.here %}<p class="hint" style="margin-top: 8px">{{ "desk runs" if trial.desk else "The folder's checkout is on" }} this branch now. Approve and Send back put it back on main.</p>
-        {%- elif trial.can and trial.other %}<p class="hint" style="margin-top: 8px">Another branch runs there now, {{ trial.other.branch }}. Put it back on main to try this one.</p>{% endif %}
-      </form>
     </div>
     {%- endif %}
+    {#- Sub-issues sit right under the title, so a long description or plan never pushes them down the page. #}
+    <section class="sec" data-sec="sub-issues">
+      <div class="section-label sec-head">{{ fold() }}Sub-issues{% if progress[1] %}<span class="pill">{{ progress[0] }}/{{ progress[1] }} done</span>{% endif %}
+        <button class="add-sub" type="button" title="Add sub-issue">{{ plus() }}</button></div>
+      <div class="sec-body">{% if kids %}{{ tree(kids, kids_of) }}{% endif %}</div></section>
     {%- if p.body.strip() %}<div class="body description">{{ body | safe }}</div>
     {%- else %}<div class="body description empty">Add description…</div>{% endif %}
     {%- for name, html in agent_files.items() if not (p.state == "review" and name == "result.md") %}
@@ -67,45 +76,18 @@
       </select></form>
 
     <div class="label">Works in</div>
-    <button class="prop folder-pick" data-slug="{{ p.slug }}" data-value="{{ p.folder or '' }}" title="Pick the folder chats and agents start in; ~ until you pick one">
+    <button class="prop folder-pick" data-slug="{{ p.slug }}" data-value="{{ p.folder or '' }}" title="Pick the folder the issue's session starts in; ~ until you pick one">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z" style="stroke: var(--text-3)" stroke-width="1.2"/></svg>
       <span>{{ p.folder or "~" }}</span></button>
-    <div class="label">Lands as</div>
-    <div class="prop static" title="What Approve does in review{{ '' if lands_set else ' (the default for this folder)' }}">
-      <select id="lands" data-slug="{{ p.slug }}" onchange="fetch('/issue/' + this.dataset.slug + '/set', {method: 'POST', body: new URLSearchParams({field: 'lands', value: this.value})}).then(() => location.reload())">
-        {%- for v, name in [("merge", "Merge into the folder"), ("pr", "Open a PR"), ("nothing", "Nothing")] %}
-        <option value="{{ v }}"{{ " selected" if v == lands }}>{{ name }}</option>{% endfor %}
-      </select></div>
     {% if p.link %}<div class="label">Link</div><div class="prop static"><a href="{{ p.link }}">{{ p.link.split('/')[-1] }}</a></div>{% endif %}
     {% if files %}<div class="label">Files</div>
       {%- for f in files %}<div class="prop static"><a href="/issue/{{ p.slug }}/f/{{ f }}">{{ f }}</a></div>{% endfor %}{% endif %}
-
-    <div class="label">Session</div>
-    {%- set where = session.get("kind") %}{% set live = session.get("state") %}
-    {%- if not p.session and p.state in ("backlog", "planning") %}
-    <form method="post" action="/issue/{{ p.slug }}/plan" style="margin: 0 0 4px"><button class="primary">Plan with Claude</button></form>
-    <p class="hint">Starts this issue's session in Works in, in its own worktree if that folder is a git repo, and opens it in a terminal. You and Claude write the plan, in plan.md.</p>
-    {%- elif p.state in ("backlog", "planning") and not has_plan %}
-    <div class="row" style="margin: 0 0 4px"><button class="primary term-open" data-slug="{{ p.slug }}" data-short="{{ p.session[:8] }}">Open here</button>
-      <form method="post" action="/issue/{{ p.slug }}/jump" style="margin: 0"><button>Back to the plan chat</button></form></div>
-    <p class="hint">Write the plan together in that chat, here or in kitty. Then the same session can carry it out.</p>
-    {%- elif p.state in ("backlog", "planning") %}
-    <form method="post" action="/issue/{{ p.slug }}/handoff" style="margin: 0 0 4px"><button class="primary">Hand off</button></form>
-    <form method="post" action="/issue/{{ p.slug }}/jump" id="jump" hidden></form>
-    <p class="hint">The same session carries out the plan in the background, remembering your talk. Close its kitty tab first.
-      Back to the chat: <a href="#" class="term-open" data-slug="{{ p.slug }}" data-short="{{ p.session[:8] }}">here</a>
-      or <a href="#" onclick="document.getElementById('jump').requestSubmit(); return false">in kitty</a></p>
-    {%- elif p.session %}
-    {#- The terminal here is primary: it keeps the issue and its session on one page, which is what the user
-        asked for; kitty is one click away. In review, Done is the next step and stays the one primary. #}
-    <div class="row" style="margin: 0 0 4px"><button class="{{ 'primary ' if p.state != 'review' }}term-open" data-slug="{{ p.slug }}" data-short="{{ p.session[:8] }}">Open here</button>
-      <form method="post" action="/issue/{{ p.slug }}/jump" style="margin: 0"><button>Jump back</button></form></div>
-    <p class="hint">Open here shows the session on this page, Jump back in kitty: watch it, answer it, ask a follow-up.</p>
-    {%- endif %}
     {%- if p.session %}
-    <div class="prop static"><span class="key">Session</span><code>{{ p.session[:8] }}</code>
-      <span class="live {{ live }}">{{ "open in a terminal" if where == "interactive" else {"working": "working", "done": "done", "blocked": "needs you", "stopped": "stopped", "failed": "failed"}.get(live, "not running") }}</span>
-      {%- if p.state == "planning" and where == "background" and session.get("status") != "busy" and has_plan %}<span class="pill">plan ready</span>{% endif %}</div>
+
+    {#- What the strip's button acts on. Opening it in kitty instead is in the … menu. #}
+    <div class="label">Session</div>
+    <div class="prop static"><code>{{ p.session[:8] }}</code>
+      <span class="live {{ live }}">{{ "open in a terminal" if session.get("kind") == "interactive" else {"working": "working", "idle": "your turn", "stopped": "stopped"}.get(live, "not running") }}</span></div>
     {%- endif %}
   </aside>
 </div>

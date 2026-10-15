@@ -1,20 +1,23 @@
-"""The one Claude Code session bound to an issue, from planning to done.
+"""The one Claude Code session bound to an issue, from its plan to its landing: one chat, docked beside the issue
+on its page (terminal.py), where the user plans with it, says "go", asks for changes and answers it.
 
-    Plan with Claude  claude --bg -w desk-<slug> in the issue's folder, then `claude attach` in a
-                      terminal: you talk, and the session keeps the plan in the issue's plan.md.
-    Hand off          the same session keeps going in the background: `claude stop`, then
-                      `claude --bg --resume <id> "<carry out>"`, with no other flags.
-    Start             the desk agent wrote the plan itself: claude --bg -w desk-<slug> "<carry out>",
-                      with no terminal and no planning chat.
-    Jump back         focus the session's kitty tab if it is open, else open one: `claude attach` while
-                      the session lives, else `claude --resume`.
+    Start      claude --bg in the issue's folder, with no -w: the repo's own rules (its CLAUDE.md, CONTRIBUTING,
+               .claude/rules) say where the session works, a branch, a worktree or the checkout (the user, 15 Oct:
+               "it's not necessary desk's job"). The session plans with the user and keeps the plan in plan.md.
+    "go"       said in the chat: the same session carries out the plan, then writes its review card in result.md.
+    Approve    the same session lands the work by the repo's rules (`claude stop`, then
+               `claude --bg --resume <id> "<land it>"`, with no other flags), rebasing on the way when the branch
+               it lands on moved, with no second review (the user, 15 Oct).
+    Jump back  focus the session's kitty tab if it is open, else open one: `claude attach` while the session
+               lives, else `claude --resume`.
 
 Facts checked on Claude Code 2.1.285 (2026-10-14): `claude --bg` prints "backgrounded · <id> · <name>",
 and the short id is the start of the session id; states seen: working, done, blocked (waiting for the user),
 stopped, failed; a background job ignores --session-id and picks its
 own; a finished background session stays alive and idle ("done"), so resuming it starts a copy; after
 `claude stop`, `claude --bg --resume <id>` with no other flags "woke session <id> with its saved options"
-and kept its worktree and memory, while adding flags such as -w "started a copy".
+and kept its worktree and memory, while adding flags such as -w "started a copy". Claude Code 2.1.300 has no
+command that hands a running session a message, so Approve and the desk agent's start go through stop and resume.
 
 Sessions start in the issue's folder (usually a repo), so its CLAUDE.md, .claude/rules, skills and MCP
 servers load; the issue file is only passed by its full path.
@@ -33,18 +36,43 @@ import subprocess
 import time
 from pathlib import Path
 
-PLAN_PROMPT = """We are planning one issue from desk, the user's workspace.
+# The review card: desk shows the text above "## Details" above Approve and folds the rest (app.split_result).
+# Results ran 309 to 1,499 words on 15 Oct, and the user: "tons of text that's gonna take too long to read".
+RESULT_CARD = """{dir}/result.md opens with a review card, which the user decides from at a glance. Keep it under 120 words, with no title above it:
+**What you'll see:** one or two sentences in the user's terms, with no file names, branches or commit ids.
+**Try it:** one action, such as "open /backlog and press T". When the repo's rules say how to put the app the user runs on your branch for review, do that before you write the card.
+**Done when:** each line of the plan's Done when, marked ✓ (checked), ✗ (not met) or ? (not checked), each with its evidence in a few words. A line only Approve can meet, such as the merge, is ? with "on Approve".
+**Needs you:** one line for each default you picked that the user might reverse, or each thing you could not check, with what you chose; only those that bear on Approve, the rest go under Details. Or "Nothing".
+A change with a UI adds one or two screenshots of the result, saved as {dir}/review-1.png and review-2.png (Playwright's screenshot takes a full path) and shown in the card: ![what it shows](review-1.png).
+Then a "## Details" heading, and under it the whole write-up: what changed and where (branch, commits, PR links), and how you checked it, marking what you verified and what you assumed. desk folds the details away."""
+
+# From "go" to the card, then the review: the same for a session the user plans with and one started on a written
+# plan. Nothing lands before Approve, whatever the repo's rules say about where to work: that is the gate.
+WORK = """Carrying out the plan:
+- Work where this repo's own rules say: its CLAUDE.md, CONTRIBUTING and .claude/rules. When they say nothing about where, work on a new branch in a git worktree of your own, beside the checkout. In a folder that is not a git repo, work in it.
+- Keep the work off the branch it will land on (main, usually) until the user approves it: nothing lands before Approve.
+- Decide the details inside the plan yourself. Don't ask the user mid-way: write each question to {dir}/questions.md and carry on with your best default. Stop only when the answer would change the direction, or when the next step leaves the system: money, messages to people, deleted data, production. Then write the question there and stop.
+- Once you carry it out, never edit {file} or {plan}; the user and desk own them. Your files are questions.md and result.md.
+- When you finish, write {dir}/result.md, as below, and stop: desk shows the issue In review.
+
+In review the user either asks for a change in this chat, or presses Approve in desk, which tells you to land the work. For a change: make it, then rewrite {dir}/result.md with a fresh card for the work as it stands now, and under Details a short "Changed after review" part saying what you changed.
+
+""" + RESULT_CARD
+
+PLAN_PROMPT = """You are the session of one issue in desk, the user's workspace, from its plan to its landing. The user talks to you here, in a chat docked beside the issue in desk.
 
 Issue: {title}
 Issue file: {file}. Read it first. Its other files are in {dir}.
 
 Help the user understand the issue, then plan it with them: a few directions, pick one together, note why.
 The plan lives in {plan}, not in the issue file. Write it as a mini design doc, as the design-doc skill says: the box with the resume line and the decisions so far, each with the user's reason, at the top, and the workflow drawn in d2. desk lists it in the issue's files and redraws it each time it changes, so the user can read the plan as it forms. Write a first draft as soon as you understand the issue, then rewrite it whenever the talk changes it. Write it with the Write or Edit tool.
-Its build plan ends with Done when and What you may decide alone, which the hand-off works from and the review card checks. How the work lands is not part of the plan: the repo's own rules and desk decide it.
+Its build plan ends with Done when and What you may decide alone, which you work from and the review card checks. How the work lands is not part of the plan: the repo's own rules decide it.
 Keep it short. A longer design goes into its own file in {dir}.
-When the plan is settled, tell the user they can press Hand off in desk, and that you will carry it out in the background."""
+When the plan is settled, tell the user to say "go" here, and carry it out when they do.
 
-CHAT_PLAN_PROMPT = """The user was talking to desk's agent about a piece of work, and it filed this issue and started you on it. Plan it, on your own, in the background.
+""" + WORK
+
+CHAT_PLAN_PROMPT = """The user was talking to desk's agent about a piece of work, and it filed this issue and started you on it. You are the issue's session, from its plan to its landing. Plan it, on your own, in the background.
 
 Issue: {title}
 Issue file: {file}. Read it first. Its other files are in {dir}.
@@ -53,75 +81,30 @@ The whole chat, which is all the context the user gave:
 
 {chat}
 
-How to work:
-- You are in your own worktree, on its own branch. Gather the context the chat points at: read the code and the repo's rules, the related desk issues, the links the user gave. Change nothing yet.
+How to plan:
+- Gather the context the chat points at: read the code and the repo's rules, the related desk issues, the links the user gave. Change nothing yet.
 - Then write the plan into {plan}, not the issue file, with the Write or Edit tool: a mini design doc, as the design-doc skill says, with the decisions so far and why, and the workflow drawn in d2. Its build plan ends with Done when and What you may decide alone.
-- Then stop and wait: the user reads the plan, talks it over with you, and presses Hand off in desk, which sends you to carry it out. Don't start the work before that."""
+- Then stop and wait: the user reads the plan, talks it over with you in the chat docked beside the issue in desk, and says "go" there. Don't start the work before that.
 
-# The review card: desk shows the text above "## Details" above Approve and folds the rest (app.split_result).
-# Results ran 309 to 1,499 words on 15 Oct, and the user: "tons of text that's gonna take too long to read".
-RESULT_CARD = """{dir}/result.md opens with a review card, which the user decides from at a glance. Keep it under 120 words, with no title above it:
-**What you'll see:** one or two sentences in the user's terms, with no file names, branches or commit ids.
-**Try it:** one action, such as "open /backlog and press T". In review, Try it here runs your branch in the user's own checkout.
-**Done when:** each line of the plan's Done when, marked ✓ (checked), ✗ (not met) or ? (not checked), each with its evidence in a few words. A line only Approve can meet, such as the merge, is ? with "on Approve".
-**Needs you:** one line for each default you picked that the user might reverse, or each thing you could not check, with what you chose; only those that bear on Approve, the rest go under Details. Or "Nothing".
-A change with a UI adds one or two screenshots of the result, saved as {dir}/review-1.png and review-2.png (Playwright's screenshot takes a full path) and shown in the card: ![what it shows](review-1.png).
-Then a "## Details" heading, and under it the whole write-up: what changed and where (branch, commits, PR links), and how you checked it, marking what you verified and what you assumed. desk folds the details away."""
+""" + WORK
 
-HANDOFF_PROMPT = """The user handed this issue off: carry out the plan now, on your own, in the background.
+GO_PROMPT = """Carry out this issue's plan now, on your own, in the background.
 
+Issue: {title}
 Your brief is the plan in {plan}. An older issue has no plan.md; its plan is the "## Plan" section of the issue file, {file}. The issue's other files are in {dir}.
 
-How to work:
-- You are in your own git worktree, on its own branch. Commit there. Don't merge or push: desk lands your work after the user's review.
-- Decide the details inside the plan yourself.
-- Don't ask the user mid-way. Write each question to {dir}/questions.md and carry on with your best default.
-- Stop only when the answer would change the direction, or when the next step leaves the system: money, messages to people, deleted data, production. Then write the question there and stop.
-- When you finish, write {dir}/result.md, as below.
-- From now on, never edit {file} or {plan}; the user and desk own them. Your files are questions.md and result.md. Write them with the Write tool: the worktree guard refuses shell writes outside the worktree.
+""" + WORK
 
-""" + RESULT_CARD
+# Approve, the gate. The session lands the work itself, so each repo's rules say how; desk knows it landed when the
+# first line of result.md says so (app.inbox_items).
+LAND_PROMPT = """The user approved your work in desk: land it now, as this repo's own rules say: merge it, or push it and open a pull request, as they direct. When they say nothing, fast-forward the branch the checkout is on to your work. If that branch moved since you began, rebase onto it, check the work again and land it, with no second review. Then clean up as the rules say, such as removing your worktree and branch.
 
-# A repo's .claude/ is often kept out of git, so a new worktree starts with no rules, and an agent
-# there loads none (checked 2026-10-14: an agent in a `claude -w` worktree did not see the repo's
-# CANARY rule; the same agent in the main checkout did). A post-checkout hook does not help: `claude -w`
-# creates worktrees without running it. Claude Code's own answer is .worktreeinclude, gitignore syntax,
-# copying matching gitignored files into every worktree it creates
-# (https://code.claude.com/docs/en/worktrees#copy-gitignored-files-into-worktrees).
-INCLUDE_MARK = "# desk: carry this repo's untracked Claude Code setup into agent worktrees"
-INCLUDE = f"""{INCLUDE_MARK}
-.claude/rules/**
-.claude/skills/**
-.claude/agents/**
-.claude/commands/**
-.claude/settings.json
-.claude/settings.local.json
-CLAUDE.md
-CLAUDE.local.md
-"""
+When it has landed, put one line at the very top of {dir}/result.md, above the card: **Landed:** and the commit, or the pull request's link. If you cannot land it, put **Not landed:** and why in a line there instead, and stop."""
 
 
 def _git(cwd: str, *args: str) -> str | None:
     run = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
     return run.stdout.strip() if run.returncode == 0 else None
-
-
-def rules_follow(cwd: str) -> None:
-    """Make the repo's untracked .claude/ reach the worktrees Claude Code creates, through
-    .worktreeinclude, and keep that file itself out of git status."""
-    top = _git(cwd, "rev-parse", "--show-toplevel")
-    if not top or not Path(top, ".claude").is_dir():
-        return
-    include = Path(top, ".worktreeinclude")
-    text = include.read_text() if include.exists() else ""
-    if INCLUDE_MARK not in text:
-        include.write_text(text + ("\n" if text and not text.endswith("\n") else "") + INCLUDE)
-    if not _git(top, "ls-files", ".worktreeinclude"):
-        exclude = Path(_git(top, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"))
-        lines = exclude.read_text().splitlines() if exclude.exists() else []
-        if ".worktreeinclude" not in lines:
-            exclude.parent.mkdir(parents=True, exist_ok=True)
-            exclude.write_text("\n".join([*lines, ".worktreeinclude"]) + "\n")
 
 
 # `claude --bg` and `claude attach` start Claude Code's daemon as their child when none is running, and every
@@ -232,65 +215,56 @@ def _background(cwd: str, command: list[str]) -> str:
 
 
 def _new_session(issue, prompt: str) -> str:
-    """Start the issue's session in the background, in its own worktree when its folder is a git repo;
-    returns the short id."""
-    cwd = workdir(issue)
-    command = ["claude", "--bg", "-n", issue.title[:40]]
-    if _git(cwd, "rev-parse", "--show-toplevel"):
-        rules_follow(cwd)
-        command += ["-w", f"desk-{issue.slug[:40]}"]
-    return _background(cwd, [*command, prompt])
+    """Start the issue's session in the background in its folder, whose repo's rules say where to work; returns
+    the short id."""
+    return _background(workdir(issue), ["claude", "--bg", "-n", issue.title[:40], prompt])
+
+
+def _session_id(short: str) -> str:
+    return live().get(short, {}).get("sessionId") or short
 
 
 def start(issue, folder: Path) -> str:
-    """Start the issue's session for planning and open it in a terminal; returns its session id."""
-    short = _new_session(issue, PLAN_PROMPT.format(**_paths(issue, folder)))
-    _terminal(workdir(issue), issue, "claude", "attach", short)
-    row = live().get(short, {})
-    return row.get("sessionId") or short
+    """Start: the issue's session plans it with the user, in the chat docked on the issue's page; returns its
+    session id."""
+    return _session_id(_new_session(issue, PLAN_PROMPT.format(**_paths(issue, folder))))
 
 
 def run(issue, folder: Path) -> str:
-    """Start the issue's session straight on its written plan, in the background with no terminal, as
-    the desk agent does; returns its session id."""
-    short = _new_session(issue, HANDOFF_PROMPT.format(**_paths(issue, folder)))
-    return live().get(short, {}).get("sessionId") or short
+    """Start the issue's session straight on its written plan, as the desk agent does; returns its session id."""
+    return _session_id(_new_session(issue, GO_PROMPT.format(**_paths(issue, folder))))
 
 
 def plan_from_chat(issue, folder: Path, chat: str) -> str:
-    """Start the issue's session in the background, with no terminal, to gather context and write the plan
-    from the Agent chat, then wait; returns its session id."""
-    short = _new_session(issue, CHAT_PLAN_PROMPT.format(chat=chat, **_paths(issue, folder)))
-    return live().get(short, {}).get("sessionId") or short
+    """Start the issue's session in the background to gather context and write the plan from the Agent chat,
+    then wait; returns its session id."""
+    return _session_id(_new_session(issue, CHAT_PLAN_PROMPT.format(chat=chat, **_paths(issue, folder))))
 
 
-SEND_BACK_PROMPT ="""The user reviewed your result and sends it back with this note:
-
-{note}
-
-Fix what the note asks, in the same worktree. Then rewrite {dir}/result.md with a fresh card for the work as it stands now, and under Details a short "Changed after review" part saying what you changed.
-
-""" + RESULT_CARD
+def go(issue, folder: Path) -> None:
+    """The desk agent starts an issue that already has a session: the same session carries out the plan."""
+    _continue(issue, GO_PROMPT.format(**_paths(issue, folder)))
 
 
-LAND_PR_PROMPT = """The user reviewed and approved your work. It lands as a pull request: do that now.
-
-Push the branch and open a draft PR by this repo's own rules (its CLAUDE.md and the code skill): a branch name those rules accept rather than the worktree's, its commit and PR text style. Don't merge it. Then put the PR link in {dir}/result.md, on its own line in the card, keeping the card on top. If pushing or opening fails, write why to {dir}/questions.md and stop."""
-
-
-def land_pr(issue, folder: Path) -> None:
-    """Approve with lands: pr. The issue's own session pushes and opens the draft PR."""
-    _continue(issue, LAND_PR_PROMPT.format(**_paths(issue, folder)))
+def land(issue, folder: Path) -> None:
+    """Approve: the issue's own session lands its work by the repo's rules."""
+    _continue(issue, LAND_PROMPT.format(**_paths(issue, folder)))
 
 
-def hand_off(issue, folder: Path) -> None:
-    """Let the issue's session carry out its plan in the background, as the same session."""
-    _continue(issue, HANDOFF_PROMPT.format(**_paths(issue, folder)))
+def say(issue, message: str) -> None:
+    """Give the issue's session one message, as the user would in its chat."""
+    _continue(issue, message)
 
 
-def send_back(issue, folder: Path, note: str) -> None:
-    """Return a reviewed result to the same session, with the user's note."""
-    _continue(issue, SEND_BACK_PROMPT.format(note=note.strip(), **_paths(issue, folder)))
+def status(row: dict) -> str:
+    """Where the session stands, from its row in `claude agents --json`: working while a turn runs (`status`
+    busy), idle while its process lives between turns, stopped with no process, whatever `state` says (15 Oct:
+    sessions listed as blocked or working long after their process ended), none when it does not list."""
+    if not row:
+        return "none"
+    if row.get("status") == "busy":
+        return "working"
+    return "idle" if row.get("pid") else "stopped"
 
 
 def _continue(issue, prompt: str) -> None:

@@ -52,33 +52,45 @@ def has_questions(issue: store.Issue) -> bool:
     return path.is_file() and path.read_text(encoding="utf-8").strip() != ""
 
 
+def landed(result: Path) -> tuple[bool, str | None]:
+    """Whether the session's result says, on its first line, that the work landed (agents.LAND_PROMPT), and the
+    pull request it opened, if any."""
+    text = result.read_text(encoding="utf-8").strip()
+    first = text.splitlines()[0] if text else ""
+    pr = re.search(r"https://github\.com/\S+/pull/\d+", first)
+    return first.startswith("**Landed:**"), pr and pr.group(0)
+
+
 def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, list]:
-    """What needs you and what waits for your review. A running issue whose session finished and
-    wrote result.md moves to review here; desk owns issue.md, so it may write the state."""
+    """What needs you and what waits for your review. desk owns issue.md, so it moves the state here, from the
+    session: In progress to In review once it wrote result.md and stopped working, back to In progress when you
+    ask it for a change in its chat and it works again, and from Landing to Done once result.md says it landed."""
     needs, review = [], []
     for issue in all_issues.values():
         row = live.get(issue.session, {}) if issue.session else {}
+        now = agents.status(row)
         result = store.folder(issue.slug) / "result.md"
-        # `state` stays working or blocked while a session waits for you between turns, as add-favicon-for-desk's
-        # did after its result, once the user had asked it something (15 Oct); `status` busy is a turn running.
-        busy = row.get("status") == "busy"
-        if issue.state == "running" and issue.landing and result.is_file() and not busy \
-                and datetime.fromtimestamp(result.stat().st_mtime) > datetime.fromisoformat(issue.landing):
-            # Approve resumed the session to open a PR: result.md rewritten since, with a PR link, means landed.
-            opened = re.search(r"https://github\.com/\S+/pull/\d+", result.read_text(encoding="utf-8"))
-            issue.state, issue.landing = ("done", None) if opened else ("review", None)
-            if opened:
-                issue.link = issue.link or opened.group(0)
-            store.save(issue)
-        elif issue.state == "running" and not issue.landing and result.is_file() and not busy:
+        if issue.state == "running" and issue.landing:
+            if result.is_file() and now != "working" \
+                    and datetime.fromtimestamp(result.stat().st_mtime) > datetime.fromisoformat(issue.landing):
+                done, pr = landed(result)
+                issue.state, issue.landing = ("done" if done else "review"), None
+                issue.link = issue.link or (pr if done else None)
+                store.save(issue)
+        elif issue.state == "running" and result.is_file() and now != "working":
             issue.state = "review"
             store.save(issue)
+        elif issue.state == "review" and now == "working":
+            issue.state = "running"
+            store.save(issue)
         if issue.state == "review":
-            review.append((issue, "result ready" if (store.folder(issue.slug) / "result.md").is_file() else "check it"))
-        elif issue.state == "planning" and row.get("kind") == "background" and not busy and store.has_plan(issue):
-            # A session the Agent started plans in the background; idle with a Plan written, it waits for you.
+            review.append((issue, "result ready" if result.is_file() else "check it"))
+        elif issue.state == "running" and now == "idle" and issue.landing:
+            needs.append((issue, "waiting for you"))
+        elif issue.state == "running" and now == "idle" and not result.is_file() and store.has_plan(issue):
+            # Planned, by you in its chat or on its own from the Agent's: it waits for your "go".
             needs.append((issue, "plan ready"))
-        elif row.get("state") == "blocked" and issue.state not in CLOSED:
+        elif row.get("state") == "blocked" and row.get("pid") and issue.state not in CLOSED:
             # Claude Code keeps listing a session by its last state after it ends: igh-289's and
             # add-project-concept-to-desk's still said blocked, with no process, long after both were done (15 Oct).
             needs.append((issue, "waiting for you"))
@@ -89,13 +101,13 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
 
 
 def sidebar(request: Request) -> dict:
-    """Counts and the running list for the sidebar on every page."""
+    """Counts and the In progress list for the sidebar on every page."""
     all_issues = store.load_all()
     needs, review = inbox_items(all_issues, agents.live())
     # Sub-issues too: a session runs whether or not its issue sits under another (15 Oct, one handed off as a
     # sub-issue never showed here).
     running = sorted((i for i in all_issues.values() if i.state == "running"), key=lambda i: i.rank)
-    now = land.trying(str(land.DESK_REPO))
+    now = land.running(str(land.DESK_REPO))
     return {"sidebar": {"backlog": sum(i.state == "backlog" for i in all_issues.values()), "running": running,
                         "trying": now and {**now, "issue": all_issues.get(now["slug"])},
                         "inbox": len(needs) + len(review),
@@ -106,7 +118,7 @@ def sidebar(request: Request) -> dict:
 templates = Jinja2Templates(directory=HERE / "templates", context_processors=[sidebar])
 templates.env.globals.update(
     priorities=store.PRIORITIES, states=store.STATES,
-    state_names={"backlog": "Backlog", "planning": "Planning", "running": "Running", "review": "In review",
+    state_names={"backlog": "Backlog", "running": "In progress", "review": "In review",
                  "done": "Done", "dropped": "Dropped"},
     prio_names={"urgent": "Urgent", "high": "High", "medium": "Medium", "low": "Low", "none": "No priority"},
 )
@@ -227,7 +239,8 @@ def project_set(slug: str, field: str = Form(...), value: str = Form("")):
 
 
 # What each reason for being in the Inbox reads as, in a row's second line, after "Session".
-NOTICES = {"waiting for you": "is waiting for you", "plan ready": "wrote its plan: read it, then hand off","has questions": "saved questions for you",
+NOTICES = {"waiting for you": "is waiting for you", "plan ready": "wrote its plan: read it, then say go in its chat",
+           "has questions": "saved questions for you",
            "result ready": "finished: the result is ready", "check it": "finished, with no result.md"}
 
 
@@ -298,6 +311,39 @@ def split_result(text: str) -> tuple[str, str] | None:
     return (LIST_UNDER_LINE.sub(r"\1\n\n", text[:match.start()]), text[match.end():]) if match else None
 
 
+def strip(i: store.Issue, row: dict, has_plan: bool, has_result: bool) -> dict:
+    """The strip pinned at the top of an issue: where it stands, and its one button, the next step (the user,
+    15 Oct: "a single button of action, and it should be somewhere static"). Only Start and Approve are clicks;
+    everything else, "go", a change, an answer, is said in the issue's chat, docked beside it while its session
+    lives. The button is {"label", "action"} for a form, {"label", "chat": True} to open the chat, or None."""
+    now = agents.status(row)
+    chat = {"label": "Open chat", "chat": True}
+    asleep = "The session stopped. Open chat wakes it." if i.session else ""
+    if i.state == "backlog":
+        if i.session:
+            return {"text": "In the backlog, with its chat.", "button": chat}
+        return {"text": "Start opens the issue's chat, and its session plans it with you.",
+                "button": {"label": "Start", "action": "start"}}
+    if i.state == "running" and i.landing:
+        text = {"working": "Landing, by the repo's rules.", "idle": "Landing waits for you in the chat."}.get(now, asleep)
+        return {"text": text, "button": {"label": "Landing…", "disabled": True} if now in ("working", "idle") else chat}
+    if i.state == "running":
+        if not i.session:
+            return {"text": "In progress, in a chat outside desk.", "button": None}
+        if now == "working":
+            return {"text": "The session is working.", "button": chat}
+        if now == "idle":
+            ready = has_plan and not has_result
+            return {"text": "Plan ready: read it, then say go in the chat." if ready else "Your turn in the chat.",
+                    "button": chat}
+        return {"text": asleep, "button": chat}
+    if i.state == "review":
+        ask = "Not yet? Say what to change in the chat." if i.session else ""
+        return {"text": f"In review: {'read the card' if has_result else 'check the work'}. {ask}".strip(),
+                "button": {"label": "Approve", "action": "approve"}}
+    return {"text": "Done." if i.state == "done" else "Dropped.", "button": None}
+
+
 def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: str) -> dict:
     """What issue_view.html needs, on the issue's page or in the Inbox's right pane."""
     i = all_issues[slug]
@@ -312,15 +358,14 @@ def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: st
     direct = store.children(all_issues, slug)
     progress = (sum(k.state == "done" for k in direct), sum(k.state != "dropped" for k in direct))
     session = agents.live().get(i.session, {}) if i.session else {}
+    result = store.folder(slug) / "result.md"
     context = {"p": i, "project": projects.load(i.project) if i.project and projects.exists(i.project) else None,
                "all_projects": [x for x in projects.load_all().values() if x.state == "active" or x.slug == i.project],
                "trail": trail, "kids": kids_of(slug), "kids_of": kids_of, "body": to_html(i.body),
-               "files": store.files(slug), "session": session, "msg": request.query_params.get("msg"),
-               "trust": request.query_params.get("trust") == "1",
+               "files": store.files(slug), "session": session, "live": agents.status(session),
+               "msg": request.query_params.get("msg"), "trust": request.query_params.get("trust") == "1",
                "progress": progress, "agent_files": agent_files,
-               "lands": land.lands(i), "lands_set": i.lands in land.LANDS, "has_plan": store.has_plan(i),
-               "trial": land.trial(i, session.get("cwd")) if i.state == "review" else {}}
-    result = store.folder(slug) / "result.md"
+               "strip": strip(i, session, store.has_plan(i), result.is_file())}
     if i.state == "review" and result.is_file() and (parts := split_result(result.read_text(encoding="utf-8"))):
         context["card"] = [to_html(part, base=f"/issue/{slug}/f/") for part in parts]
     return context
@@ -347,9 +392,6 @@ def set_field(slug: str, field: str = Form(...), value: str = Form("")):
     if field in ("priority", "state"):
         if value not in (store.PRIORITIES if field == "priority" else store.STATES):
             raise HTTPException(422, f"{field} cannot be {value}")
-    elif field == "lands":
-        if value not in land.LANDS:
-            raise HTTPException(422, f"lands must be one of: {', '.join(land.LANDS)}")
     elif field == "title":
         value = " ".join(value.split())
         if not value:
@@ -412,19 +454,19 @@ def set_folder(slug: str, folder: str = Form("")):
 
 # --- the issue's one session ---------------------------------------------------------------
 
-@app.post("/issue/{slug}/plan")
-def plan(slug: str):
+@app.post("/issue/{slug}/start")
+def start(slug: str):
+    """Start: the issue's session starts in its folder and plans it with you, in the chat the page docks beside it."""
     i = store.load(slug)
     if i.session:
-        return jump(slug)
+        return back(slug)
     try:
         i.session = agents.start(i, store.folder(slug))
     except agents.TrustError as error:
         return back(slug, str(error), trust=True)
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         return back(slug, str(error))
-    if i.state == "backlog":
-        i.state = "planning"
+    i.state = "running"
     store.save(i)
     return back(slug)
 
@@ -441,100 +483,46 @@ def trust_folder(request: Request, slug: str):
         agents.trust(agents.workdir(i))
     except (RuntimeError, OSError, ValueError) as error:
         return back(slug, str(error))
-    return back(slug, f"Trusted {agents.workdir(i)}. Press Plan with Claude or Hand off again.")
+    return back(slug, f"Trusted {agents.workdir(i)}. Press Start again.")
 
 
-@app.post("/issue/{slug}/handoff")
-def hand_off(slug: str):
-    i = store.load(slug)
-    if not i.session or not store.has_plan(i):
-        return back(slug, "Plan first: the session carries out the plan in plan.md.")
-    try:
-        agents.hand_off(i, store.folder(slug))
-    except agents.TrustError as error:
-        return back(slug, str(error), trust=True)
-    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
-        return back(slug, str(error))
-    i.state = "running"
-    store.save(i)
-    return back(slug)
-
-
-@app.post("/issue/{slug}/review")
-def review(slug: str, action: str = Form(...), note: str = Form(""), src: str = Form("")):
-    """Approve keeps your look back in the issue and lands the work by the issue's `lands:` (land.py);
-    Send back returns the result to the same session. From the Inbox (src=inbox) you stay in the Inbox: when it went
-    through, the next notification opens and a toast says what happened; when it did not, the same one, with why."""
+@app.post("/issue/{slug}/approve")
+def approve(slug: str, src: str = Form("")):
+    """Approve, the gate: the issue's session lands the work by its repo's rules, and the issue shows Landing until
+    its result says it landed (inbox_items). With nothing to land, no repo or no session, it is done at once. A
+    session in a worktree desk made cannot merge, so desk merges for it (land.merge). From the Inbox (src=inbox) you
+    stay in the Inbox: when it went through, the next notification opens and a toast says what happened; when it did
+    not, the same one, with why."""
     i = store.load(slug)
     from_inbox = src == "inbox"
     before = [n["p"].slug for n in notifications(store.load_all())] if from_inbox else []
     stay = lambda message=None, trust=False: back(slug, message, trust, inbox=from_inbox)
-    rebase = ""
-    if action == "approve":
-        how = land.lands(i)
-        try:
-            if how == "merge":
-                message = land.merge(i)
-            elif how == "pr" and i.session:
-                agents.land_pr(i, store.folder(slug))
-                message = ""
-            else:
-                message = ""
-        except land.MainMoved as moved:
-            if not i.session:
-                return stay(str(moved))
-            note = f"{moved} Rebase onto it, check the work again, then rewrite result.md. {note}".strip()
-            action, rebase = "back", f"{moved} Sent back to rebase: {i.title}"
-        except (land.Blocked, RuntimeError, OSError, subprocess.TimeoutExpired) as error:
-            return stay(str(error))
-    if action == "approve":
-        if note.strip():
-            i.set_section("Look back", f"{note.strip()} *({datetime.now():%-d %b})*")
-        if how == "pr" and i.session:
+    if i.state != "review":
+        return stay("Only an issue in review can be approved.")
+    message = f"Approved: {i.title}"
+    try:
+        if i.session and land.worktree(i):
+            message = land.merge(i)
+            i.state = "done"
+        elif i.session and land.repo(i):
+            agents.land(i, store.folder(slug))
             i.state, i.landing = "running", datetime.now().isoformat(timespec="seconds")
+            message = f"Landing: {i.title}"
         else:
             i.state = "done"
-        store.save(i)
-        if from_inbox:
-            return onward(before, slug, message or f"Approved: {i.title}")
-        return back(slug, message) if message else RedirectResponse("/inbox", status_code=303)
-    if not note.strip():
-        return stay("Say what to change, in the box, then Send back.")
-    if not i.session:
-        i.set_section("Resume", f"Sent back on {datetime.now():%-d %b}: {note.strip()}\n\n{i.section('Resume')}".strip())
-        i.state = "backlog"
-        store.save(i)
-        return onward(before, slug, f"Back in the backlog: {i.title}") if from_inbox else back(slug)
-    try:
-        left = land.leave(i)
-        agents.send_back(i, store.folder(slug), note)
+    except land.MainMoved as moved:
+        try:
+            agents.say(i, f"Approved, but {moved} Rebase onto it, resolve the conflicts, check the work again, then "
+                          f"rewrite {store.folder(slug)}/result.md with a fresh card.")
+        except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+            return stay(f"{moved} {error}")
+        i.state, message = "running", f"{moved} The session rebases it: {i.title}"
     except agents.TrustError as error:
         return stay(str(error), trust=True)
     except (land.Blocked, RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         return stay(str(error))
-    i.state = "running"
     store.save(i)
-    return onward(before, slug, rebase or f"Sent back: {i.title}") if from_inbox else back(slug, left or None)
-
-
-@app.post("/issue/{slug}/try")
-def try_it(slug: str, src: str = Form("")):
-    """Try it here: the folder's checkout runs the issue's branch, and desk restarts on it in desk's own repo."""
-    try:
-        message = land.try_branch(store.load(slug))
-    except (land.Blocked, OSError, subprocess.TimeoutExpired) as error:
-        message = str(error)
-    return back(slug, message, inbox=src == "inbox")
-
-
-@app.post("/issue/{slug}/back-to-main")
-def back_to_main(request: Request, slug: str):
-    """Back to main, from the review panel or the sidebar: to the page it was pressed on."""
-    try:
-        land.back_to_main(store.load(slug))
-    except (land.Blocked, OSError, subprocess.TimeoutExpired) as error:
-        return back(slug, str(error))
-    return RedirectResponse(request.headers.get("referer") or f"/issue/{slug}", status_code=303)
+    return onward(before, slug, message) if from_inbox else back(slug, message)
 
 
 @app.post("/issue/{slug}/jump")

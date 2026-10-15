@@ -32,6 +32,8 @@ const GLYPH = {
   parent: svg('<path d="M4.5 2.5v6a2 2 0 0 0 2 2h6M10 8l2.5 2.5L10 13"/>'),
   plus: svg('<path d="M8 3.5v9M3.5 8h9"/>'),
   link: svg('<path d="M7 9a2.5 2.5 0 0 0 3.5 0l2-2A2.5 2.5 0 0 0 9 3.5l-.5.5M9 7a2.5 2.5 0 0 0-3.5 0l-2 2A2.5 2.5 0 0 0 7 12.5l.5-.5"/>'),
+  chat: svg('<path d="M8 2.5c3.3 0 6 2.2 6 4.9s-2.7 4.9-6 4.9c-.6 0-1.1-.1-1.6-.2L3 13.5l.6-2.3C2.6 10.3 2 9 2 7.4 2 4.7 4.7 2.5 8 2.5z"/>'),
+  terminal: svg('<rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2"/><path d="M4.5 6l2 2-2 2M8 10.5h3.5"/>'),
   id: svg('<path d="M6.5 2.5l-1 11M10.5 2.5l-1 11M3 6h10.5M2.5 10H13"/>'),
   trash: svg('<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/>'),
   none: svg('<circle cx="8" cy="8" r="5.5"/><path d="M4.2 11.8l7.6-7.6"/>'),
@@ -237,6 +239,15 @@ function actionsMenu(issue, where) {
         run: () => fieldMenu(issue.slug, "priority", issue.priority, where) },
       { group: 0, icon: GLYPH.parent, label: "Set parent…", more: true, run: () => parentMenu(issue, where) },
       { group: 0, icon: GLYPH.plus, label: "Add sub-issue", run: () => openCreator({ parent: issue.slug, parentTitle: titleOf(issue.slug) }) },
+      // An issue page's session: its chat here, as the strip docks it, or in a kitty tab (agents.jump_back).
+      ...(issue.session ? [
+        { group: 1, icon: GLYPH.chat, label: "Open chat", run: () => ($(".inbox") ? go(`/issue/${issue.slug}`) : window.openChat?.(issue.slug, issue.session)) },
+        { group: 1, icon: GLYPH.terminal, label: "Open chat in kitty", run: () => {
+          const form = Object.assign(document.createElement("form"), { method: "post", action: `/issue/${issue.slug}/jump` });
+          document.body.append(form);
+          form.submit();
+        } },
+      ] : []),
       { group: 1, icon: GLYPH.link, label: "Copy link", run: () => copy(`${location.origin}/issue/${issue.slug}`, "Link copied") },
       { group: 1, icon: GLYPH.id, label: "Copy ID", run: () => copy(issue.slug, "ID copied") },
       { group: 2, icon: GLYPH.trash, label: "Delete", hint: "Ctrl ⌫", run: () => remove(issue.slug) },
@@ -904,7 +915,10 @@ document.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
 
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
-    if (key === "z" && undoList().length) { undo(); e.preventDefault(); }
+    // The issue's next step, its strip's one button. Open chat, hidden while the chat is docked, then focuses it.
+    const step = keyOf(e) === "Enter" && $(".strip .strip-go:not(:disabled)");
+    if (step) { step.click(); e.preventDefault(); }
+    else if (key === "z" && undoList().length) { undo(); e.preventDefault(); }
     else if ((e.key === "Delete" || e.key === "Backspace") && target()) { remove(target()); e.preventDefault(); }
     return;
   }

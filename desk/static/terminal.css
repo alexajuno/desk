@@ -24,6 +24,7 @@
                   grid-template-columns: minmax(0, 1fr) var(--term-w, clamp(440px, 58%, calc(100% - 400px))); }
 .panel.has-term .bar { grid-column: 1 / -1; }
 .panel.has-term .issue { grid-template-columns: minmax(0, 1fr); gap: 24px; max-width: 640px; }
+.panel.has-term .strip-in { max-width: 640px; }
 
 .term { position: relative; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--border-2);
         background: var(--term-background); }

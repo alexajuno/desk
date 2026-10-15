@@ -18,7 +18,7 @@ An issue's fields:
 - `title`
 - `body`: Markdown sections, usually `## Context` with what the user said, quoted and dated
 - `priority`: urgent, high, medium, low or none
-- `state`: backlog, planning, running, review, done or dropped
+- `state`: backlog, running (shown as In progress: planned with its session, or being carried out), review, done or dropped
 - `parent`: the slug of the issue it belongs under, or null
 - `project`: the slug of the project it belongs to, or null. A project is ongoing work that is never done, such as desk itself; its issues finish, it does not. It is a separate thing from `parent`, which is for sub-issues
 - `folder`: where its session works, usually a repo, such as `~/projects/desk`
@@ -64,12 +64,12 @@ curl -s "http://127.0.0.1:8790/api/folders?q=site"
 
 ## Start an issue's session
 
-Start one only when the user asks. Starting writes the plan into the issue's `## Plan` section, then starts the issue's own session with `claude --bg` in its folder, in a new git worktree when the folder is a repo, with no terminal. The session carries out the plan on its own, and the issue shows Running until its result is ready for review. If the issue already has a session, from planning it with the user, that same session carries on instead of a new one.
+Start one only when the user asks. Starting writes the plan into the issue's `## Plan` section, then starts the issue's own session with `claude --bg` in its folder, with no terminal; the repo's own rules say where it works, on a branch, in a worktree or in the checkout. The session carries out the plan on its own, and the issue shows In progress until its result is ready for review. If the issue already has a session, from planning it with the user, that same session carries on instead of a new one, as if the user had said "go" in its chat. On the issue's page, the user's Approve has that session land the work by the repo's rules.
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/start" --json '{"plan": "Direction:\n\n- Send the user back to the page they came from after login.\n\nDone when: logging in from /pricing lands on /pricing.\n\nWhat you may decide alone: where the return address is kept."}'
 ```
 
-To start work you have not planned, send the id of the Agent chat instead of a plan (`{"chat": "<chat id>"}`, only for the agent's own chat): the issue's session starts in the background with the whole chat as its first prompt, gathers context, writes the plan itself and waits. The issue shows Planning, and "plan ready" in the Inbox once the plan is written; the user reads it and presses Hand off.
+To start work you have not planned, send the id of the Agent chat instead of a plan (`{"chat": "<chat id>"}`, only for the agent's own chat): the issue's session starts in the background with the whole chat as its first prompt, gathers context, writes the plan itself and waits. The issue shows In progress, and "plan ready" in the Inbox once the plan is written; the user reads it and says "go" in the issue's chat, docked on its page.
 
-The plan has three short parts: Direction (what to do, and which way), Done when (how to tell it worked), and What you may decide alone. Only a backlog or planning issue can start. A plan already in the issue is used when the call sends none. If the call answers 409 "Workspace not trusted", the issue's folder was never trusted in Claude Code: link the issue's page and tell the user to press Trust folder there, then start again.
+The plan has three short parts: Direction (what to do, and which way), Done when (how to tell it worked), and What you may decide alone. Only a backlog issue, or one in progress whose session has only planned it, can start. A plan already in the issue is used when the call sends none. If the call answers 409 "Workspace not trusted", the issue's folder was never trusted in Claude Code: link the issue's page and tell the user to press Trust folder there, then start again.
