@@ -162,7 +162,10 @@ def merge(issue) -> str:
         raise Blocked(f"{repo} runs {now['branch']} now. Put it back on main first.")
     if now:
         _put_back(repo, now)
-    target = agents._git(repo, "branch", "--show-current") or "HEAD"
+    # Detached by hand, the fast-forward would move HEAD and not main, and the branch is deleted below.
+    target = agents._git(repo, "branch", "--show-current")
+    if not target:
+        raise Blocked(f"{repo} is not on a branch, so there is nothing to merge into. Put it back on main first.")
     run = subprocess.run(["git", "merge", "--ff-only", branch], cwd=repo, capture_output=True, text=True)
     if run.returncode:
         if now:
