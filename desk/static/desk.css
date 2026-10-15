@@ -179,9 +179,10 @@ a.nav-label { text-decoration: none; } a.nav-label:hover, a.nav-label.here { col
 .nav-title { overflow: hidden; text-overflow: ellipsis; }
 /* desk running a branch for a review, a row that is no link when no issue is known to have switched it */
 .nav-item.static { cursor: default; } .nav-item.static:hover { background: none; color: var(--text-3); }
-/* the theme button sits at the sidebar's foot, where Linear keeps its help button, level with the Agent button */
-.side-foot { margin: auto 0 -8px; padding-top: 12px; }
-.theme-pick { background: none; }
+/* Linear's Help button, measured 2026-10-15: a 24px circle 10px in from the window's bottom left corner,
+   level with the Agent button, its 16px question mark text-3 until hovered */
+.side-foot { margin: auto 0 -2px -2px; padding-top: 12px; }
+.side-icon.help-open { width: 24px; height: 24px; background: none; }
 /* Hiding the sidebar ([ or its toggle). On a wide window it slides out and the panel takes its space; at
    900px and under it is hidden until it opens over the page as a drawer (the media query below). The
    toggle sits where Linear's workspace switcher does, and in the top bar while the sidebar is hidden. */
@@ -414,9 +415,11 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .menu li .glyph { color: var(--text-3); }
 .menu li .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu li .name small { display: block; font-size: 12px; line-height: 16px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
+.menu li.heading { height: 28px; padding: 4px 8px 0; font-size: 12px; font-weight: 500; color: var(--text-3); cursor: default; }
 .menu li.divider { height: 0.5px; padding: 0; margin: 4px -4px; border-radius: 0; background: var(--border-pop); cursor: default; }
 .menu:focus { outline: none; }
 .menu.actions { width: 224px; } .menu.actions ul { padding-top: 4px; }
+.menu.help { width: 248px; }
 .menu.wide { width: 340px; } .menu.wide ul { max-height: 300px; overflow: auto; }
 /* the S and P menus filter from keys read on the window, so their box is text, with a drawn caret */
 div.menu-filter { flex: 1; line-height: 38px; color: var(--text-1); white-space: nowrap; overflow: hidden; }
@@ -549,7 +552,6 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
             font: 450 12px/13.2px var(--font); color: var(--text-3); text-align: center; }
 .key-row .then { font: 450 12px/23px var(--font); color: var(--text-3); }
 .keys-none { margin: 0; font-size: 13px; color: var(--text-3); }
-.bar .keys-open { cursor: pointer; }
 
 @media (max-width: 900px) {
   .side { z-index: 9; background: var(--bg-app); box-shadow: var(--shadow-pop);

@@ -41,6 +41,7 @@ const GLYPH = {
   system: svg('<rect x="2" y="3" width="12" height="8.5" rx="1.5"/><path d="M6 14h4M8 11.5V14"/>'),
   light: svg('<circle cx="8" cy="8" r="2.75"/><path d="M8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1.05 1.05M11.35 11.35l1.05 1.05M3.6 12.4l1.05-1.05M11.35 4.65l1.05-1.05"/>'),
   dark: svg('<path d="M13 9.6A5.5 5.5 0 0 1 6.4 3a5.5 5.5 0 1 0 6.6 6.6z"/>'),
+  keys: svg('<rect x="1.75" y="3.75" width="12.5" height="8.5" rx="1.5"/><path d="M4.5 6.5h.01M7 6.5h.01M9.5 6.5h.01M12 6.5h.01M5 9.5h6"/>'),
 };
 const TICK = '<svg class="tick" viewBox="0 0 14 14" width="14" height="14"><path d="M3 7.5l2.5 2.5L11 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const CHEVRON = '<svg class="chev" viewBox="0 0 16 16" width="12" height="12"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -59,7 +60,9 @@ function keyOf(e) {
 
 // --- one menu for every menu ---------------------------------------------------------------------
 // openMenu({ anchor | x, y, filter, placeholder, query, kbd, items, empty, onEnter, onTab, onClose, className })
-// items(query) returns, or resolves to, rows of { label, icon, hint, num, key, current, more, group, run }.
+// items(query) returns, or resolves to, rows of { label, icon, hint, num, key, current, more, group, heading, run };
+//   a group's first row may carry a heading, drawn above the group in place of the divider, as Linear's Help menu
+//   heads its "What's new".
 // filter "keys": typing filters, but nothing editable takes focus, so no input method stands between
 //   the keys and the menu (the S that opened it gets through for the same reason);
 // filter "input": a real text box, for titles and paths typed in any language;
@@ -106,7 +109,9 @@ function openMenu(o) {
   function draw() {
     let group;
     list.innerHTML = shown.length ? shown.map((item, i) => {
-      const line = i && item.group !== group ? '<li class="divider" role="separator"></li>' : "";
+      const opens = !i || item.group !== group;
+      const line = opens && item.heading ? `<li class="heading" role="presentation">${esc(item.heading)}</li>`
+        : opens && i ? '<li class="divider" role="separator"></li>' : "";
       group = item.group;
       return `${line}<li class="${i === at ? "on" : ""}${item.current ? " current" : ""}" data-i="${i}"${item.sub ? ' style="height:44px"' : ""}>${item.icon ?? ""}` +
         `<span class="name">${esc(item.label)}${item.sub ? `<small>${esc(item.sub)}</small>` : ""}</span>${item.current ? TICK : ""}` +
@@ -326,18 +331,22 @@ function toggleSide() {
   else delete localStorage.sideCollapsed;
 }
 
-// The sidebar foot's theme button: follow the system, as Linear's "System preference", or pin one.
-// base.html's applyTheme reads the choice from localStorage.
-function themeMenu(button) {
+// The Help menu, at the sidebar's foot: Linear's Help menu, cut to the keyboard shortcuts, plus the theme, which
+// Linear keeps in Settings › Preferences and desk has no page for. The theme follows the system, as Linear's
+// "System preference", or is pinned to one; base.html's applyTheme reads the choice from localStorage.
+function helpMenu(button) {
   const pinned = ["light", "dark"].includes(localStorage.theme) ? localStorage.theme : "system";
   const pick = (theme) => () => {
     if (theme === "system") delete localStorage.theme; else localStorage.theme = theme;
     applyTheme();
   };
   openMenu({
-    anchor: button, className: "actions",
-    items: () => [["system", "System preference"], ["light", "Light"], ["dark", "Dark"]].map(([theme, label]) =>
-      ({ icon: GLYPH[theme], label, current: theme === pinned, run: pick(theme) })),
+    anchor: button, className: "actions help",
+    items: () => [
+      { group: 0, icon: GLYPH.keys, label: "Keyboard shortcuts", hint: "Ctrl /", run: toggleKeys },
+      ...[["system", "System preference"], ["light", "Light"], ["dark", "Dark"]].map(([theme, label], i) =>
+        ({ group: 1, heading: i ? undefined : "Theme", icon: GLYPH[theme], label, current: theme === pinned, run: pick(theme) })),
+    ],
   });
 }
 
@@ -826,7 +835,6 @@ document.addEventListener("click", (e) => {
   const toggled = (anchor) => anchor === closed;
   justClosed = null;
   if (t.closest(".menu")) return;
-  if (t.closest(".keys-open")) { toggleKeys(); return; }
   const notice = t.closest(".inbox-row");
   if (notice && !e.ctrlKey && !e.metaKey && !e.shiftKey && !t.closest(".item .icon")) { e.preventDefault(); go(notice.getAttribute("href")); return; }
   if (t.closest(".keys-close")) { toggleKeys(false); return; }
@@ -871,8 +879,8 @@ document.addEventListener("click", (e) => {
   if (t.closest(".issue .add-sub")) { openCreator({ parent: page().slug, parentTitle: raw().title }); return; }
   const head = t.closest(".sec-head");
   if (head && !t.closest("a, input, textarea, .add-sub") && !getSelection().toString()) { toggleSection(head.parentElement, e.altKey); return; }
-  const theme = t.closest(".theme-pick");
-  if (theme) { if (!toggled(theme)) themeMenu(theme); return; }
+  const help = t.closest(".help-open");
+  if (help) { if (!toggled(help)) helpMenu(help); return; }
   const shot = t.closest(".body img");
   if (shot && !shot.closest("a")) { openViewer(shot); return; }
   const d2 = t.closest(".d2");
