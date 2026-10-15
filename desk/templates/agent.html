@@ -5,7 +5,7 @@
   <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5"/></svg></button>{% endblock %}
 {% block main %}
 {%- if chat %}
-<div class="agent chat" id="agent" data-chat="{{ chat.id }}" data-running="{{ 1 if running else 0 }}">
+<div class="agent chat" id="agent" data-chat="{{ chat.id }}" data-model="{{ chat.model or 'haiku' }}" data-effort="{{ chat.effort or '' }}" data-running="{{ 1 if running else 0 }}">
   <div class="thread">
     {%- for m in chat.messages %}{{ message(m, md) }}{% endfor %}
     {%- if chat.messages and chat.messages[-1].role == "you" and not running %}

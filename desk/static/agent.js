@@ -22,6 +22,9 @@
       this.form = root.querySelector(".composer");
       this.box = this.form.querySelector("textarea");
       this.button = this.form.querySelector(".send");
+      this.pickers = ["model", "effort"].map((n) => this.form.elements[n]);
+      this.choose(root.dataset.chat ? root.dataset : null);
+      for (const pick of this.pickers) pick.addEventListener("change", () => { localStorage[`agent:${pick.name}`] = pick.value; });
       this.draft = `agentDraft:${root.id}`;
       this.box.value = sessionStorage[this.draft] || ""; // a reload keeps what you were typing
       let composing = false; // Enter while an input method composes (Vietnamese, fcitx5) is the method's
@@ -33,6 +36,11 @@
       });
       this.form.addEventListener("submit", (e) => { e.preventDefault(); this.busy ? this.stop() : this.send(); });
       this.fit();
+    }
+
+    // Show a chat's saved model and effort; a new chat starts from the last choice made anywhere.
+    choose(saved) {
+      for (const pick of this.pickers) pick.value = saved ? saved[pick.name] ?? "" : localStorage[`agent:${pick.name}`] ?? pick.options[0].value;
     }
 
     fit() {
@@ -62,7 +70,7 @@
     async send() {
       const text = this.box.value.trim();
       if (!text || this.busy) return;
-      const res = await postJSON(this.id ? `/chats/${this.id}/messages` : "/chats", { text, page: location.pathname });
+      const res = await postJSON(this.id ? `/chats/${this.id}/messages` : "/chats", { text, page: location.pathname, model: this.pickers[0].value, effort: this.pickers[1].value });
       if (!res.ok) { this.note(await reason(res)); return; }
       const chat = await res.json();
       this.box.value = "";
@@ -191,6 +199,7 @@
     panelChat.id = panel.dataset.chat = id || "";
     panelChat.setBusy(false);
     panelChat.thread.innerHTML = "";
+    panelChat.choose(null);
     title.textContent = "New chat";
     expand.href = "/agent";
     panel.classList.toggle("started", !!id);
@@ -200,6 +209,7 @@
     if (!res.ok) { showInPanel(null); return; }
     const chat = await res.json();
     panelChat.thread.innerHTML = chat.html;
+    panelChat.choose(chat);
     title.textContent = chat.title;
     expand.href = `/agent/${id}`;
     panelChat.scroll(true);

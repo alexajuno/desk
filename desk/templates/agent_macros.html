@@ -20,12 +20,13 @@
 {%- endif %}
 {%- endmacro %}
 
-{# The box you write in: a textarea, the model's name, and Linear's round send button, which turns
+{# The box you write in: a textarea, the model and effort pickers, and Linear's round send button, which turns
    into a stop button while the agent answers. #}
 {% macro composer(placeholder) -%}
 <form class="composer">
   <textarea name="text" rows="1" placeholder="{{ placeholder }}" autocomplete="off"></textarea>
-  <div class="composer-row"><span class="model" title="desk's agent runs on Claude Haiku, on your Claude login">Haiku</span>
+  <div class="composer-row"><select class="model" name="model" title="Model: this chat's replies run on it, on your Claude login"><option value="haiku">Haiku</option><option value="sonnet">Sonnet</option><option value="opus">Opus</option></select>
+    <select class="model" name="effort" title="Effort: how hard the model thinks"><option value="">Default effort</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option><option value="max">Max</option></select>
     <button class="send" type="submit" title="Send (Enter)" disabled>
       <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11.48 5.674a.75.75 0 1 1-.96 1.152L8.75 5.351v6.899a.75.75 0 0 1-1.5 0V5.351L5.48 6.826a.75.75 0 0 1-.96-1.152l3-2.5a.75.75 0 0 1 .96 0l3 2.5Z"/></svg>
       <svg class="stop" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="5" y="5" width="6" height="6" rx="1.2"/></svg></button></div>

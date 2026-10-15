@@ -1,7 +1,7 @@
 """The Agent tab: chats with desk's agent, a dispatcher that files issues and starts their sessions.
 
 The agent is Claude Code headless on the user's own login, so it runs on their subscription:
-`claude -p --model haiku --output-format stream-json`, one Claude session per chat (--session-id for the
+`claude -p --model <the chat's model> --output-format stream-json`, one Claude session per chat (--session-id for the
 first message, --resume after). It runs in DESK_DATA with --restricted, so its file tools stay in desk's
 data, and with only Bash and Read, in dontAsk mode, so the one command it may run is curl to desk's own
 API (desk/api.py). Checked on Claude Code 2.1.285 (2026-10-14): `ls /` was denied, the curl ran, Read
@@ -33,7 +33,10 @@ SKILL = Path(__file__).resolve().parent.parent / "skill" / "SKILL.md"
 SKILL_BASE = "http://127.0.0.1:8790"  # the address SKILL.md is written for; each reply swaps in its own
 REPLY_TIMEOUT = 300  # seconds; a dispatcher's turn is a few curl calls
 
-FLAGS = ["--model", "haiku", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+MODELS = ["haiku", "sonnet", "opus"]
+EFFORTS = ["low", "medium", "high", "xhigh", "max"]  # `claude --effort`; "" leaves the CLI's own default
+
+FLAGS = ["--output-format", "stream-json", "--verbose", "--include-partial-messages",
          "--restricted", "--tools", "Bash,Read", "--strict-mcp-config", "--permission-mode", "dontAsk"]
 
 PROMPT = """You are desk's agent. desk is the user's workspace: each piece of work is an issue, a folder of files, and each issue gets its own Claude Code session that does the work.
@@ -86,7 +89,7 @@ def create(text: str) -> dict:
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40].strip("-") or "chat"
     now = datetime.now().isoformat(timespec="seconds")
     return {"id": f"{slug}-{uuid.uuid4().hex[:6]}", "title": title_of(text), "created": now, "updated": now,
-            "session": str(uuid.uuid4()), "started": False, "messages": []}
+            "session": str(uuid.uuid4()), "started": False, "model": "haiku", "effort": "", "messages": []}
 
 
 def age(iso: str) -> str:
@@ -169,10 +172,11 @@ async def reply(run: Run, chat: dict, text: str, base: str, render) -> None:
     prompt = PROMPT.format(today=f"{datetime.now():%A %-d %B %Y}", day=f"{datetime.now():%-d %b}", reference=reference)
     allowed = [f'Bash(curl -s "{base}/api/*)', f"Bash(curl -s {base}/api/*)"]
     session = ["--resume" if chat["started"] else "--session-id", chat["session"]]
+    choice = ["--model", chat.get("model", "haiku")] + (["--effort", chat["effort"]] if chat.get("effort") else [])
     began, blocks, tools, result, error = time.monotonic(), [], {}, None, None
     try:
         run.process = await asyncio.create_subprocess_exec(
-            "claude", "-p", *FLAGS, "--allowedTools", *allowed, "--system-prompt", prompt, *session,
+            "claude", "-p", *choice, *FLAGS, "--allowedTools", *allowed, "--system-prompt", prompt, *session,
             cwd=store.DATA_DIR, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE, limit=1 << 24)  # one line can hold a whole file the agent read
         run.process.stdin.write(text.encode())
@@ -256,6 +260,8 @@ def chat_list():
 class Message(BaseModel):
     text: str
     page: str = ""  # the page the user is on, when they write from the panel
+    model: str | None = None  # the composer's choice; the chat keeps it for its next replies
+    effort: str | None = None
 
 
 def _send(request: Request, chat: dict, message: Message) -> dict:
@@ -263,6 +269,14 @@ def _send(request: Request, chat: dict, message: Message) -> dict:
         raise HTTPException(422, "Write something first.")
     if (run := RUNS.get(chat["id"])) and not run.done:
         raise HTTPException(409, "The agent is still answering.")
+    if message.model is not None:
+        if message.model not in MODELS:
+            raise HTTPException(422, "Unknown model.")
+        chat["model"] = message.model
+    if message.effort is not None:
+        if message.effort and message.effort not in EFFORTS:
+            raise HTTPException(422, "Unknown effort.")
+        chat["effort"] = message.effort
     chat["messages"].append({"role": "you", "text": message.text.strip(), "page": message.page,
                              "at": datetime.now().isoformat(timespec="seconds")})
     save(chat)
@@ -302,7 +316,7 @@ def chat_json(request: Request, chat_id: str):
     """The chat's title and messages as HTML, and whether a reply is under way, for the panel."""
     chat, render, run = load(chat_id), _render_message(request), RUNS.get(chat_id)
     return {"id": chat_id, "title": chat["title"], "html": "".join(render(m) for m in chat["messages"]),
-            "running": bool(run and not run.done)}
+            "running": bool(run and not run.done), "model": chat.get("model", "haiku"), "effort": chat.get("effort", "")}
 
 
 @router.post("/chats/{chat_id}/stop")
