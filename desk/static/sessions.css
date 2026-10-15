@@ -24,7 +24,7 @@
 
 #session-rows { padding: 0 8px 120px; }
 #session-rows .group:first-child { margin-top: 0; }
-.item.session-row { height: 40px; gap: 10px; margin: 0 2px; padding: 0 12px; border-radius: 8px; cursor: default; }
+.item.session-row { flex: 1; min-width: 0; height: 40px; gap: 10px; margin: 0 2px; padding: 0 12px; border-radius: 8px; cursor: default; }
 .item.session-row.focus { background: var(--row-on); }
 .session-kind { flex: none; width: 72px; font-size: 12px; color: var(--text-3); }
 .item.session-row .title { min-width: 0; font-weight: 450; color: var(--text-2); }
