@@ -20,7 +20,7 @@ import subprocess
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import agents, projects
+from . import agents, land, projects
 from . import issues as store
 from .search import find
 
@@ -30,7 +30,7 @@ OPEN = [s for s in store.STATES if s not in ("done", "dropped")]
 
 def as_json(i: store.Issue, full: bool = False) -> dict:
     data = {"slug": i.slug, "title": i.title, "state": i.state, "priority": i.priority, "parent": i.parent,
-            "project": i.project, "folder": i.folder, "session": i.session, "created": i.created, "url": f"/issue/{i.slug}"}
+            "project": i.project, "folder": i.folder, "lands": land.lands(i), "session": i.session, "created": i.created, "url": f"/issue/{i.slug}"}
     if full:
         data |= {"file": str(store.folder(i.slug) / store.MAIN), "files": store.files(i.slug), "body": i.body}
     return data
@@ -50,11 +50,12 @@ class Fields(BaseModel):
     parent: str | None = None
     project: str | None = None
     folder: str | None = None
+    lands: str | None = None
 
 
 def _apply(i: store.Issue, fields: Fields) -> None:
     given = {k: v.strip() if isinstance(v, str) else v for k, v in fields.model_dump(exclude_unset=True).items()}
-    for name, allowed in (("priority", store.PRIORITIES), ("state", store.STATES)):
+    for name, allowed in (("priority", store.PRIORITIES), ("state", store.STATES), ("lands", land.LANDS)):
         if name in given and given[name] not in allowed:
             raise HTTPException(422, f"{name} must be one of: {', '.join(allowed)}")
     if "title" in given and not given["title"]:

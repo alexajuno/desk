@@ -43,6 +43,8 @@ class Issue:
     project: str | None = None  # slug of the project (projects.py) the issue belongs to
     folder: str | None = None
     link: str | None = None
+    lands: str | None = None  # merge, pr or nothing; unset means the default from the folder (land.py)
+    landing: str | None = None  # when Approve resumed the session to open a PR; set until it reports
     session: str | None = None  # the one Claude Code session bound to this issue, from planning to done
     created: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     body: str = ""

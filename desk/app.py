@@ -5,6 +5,7 @@ Design: the design doc in the desk issue's files. Run: uv run uvicorn desk.app:a
 """
 
 import os
+import re
 import subprocess
 import time
 from datetime import datetime
@@ -16,7 +17,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import agents, api, chats, projects, terminal
+from . import agents, api, chats, land, projects, terminal
 from . import issues as store
 from .render import to_html, to_html_with_toc
 from .search import find
@@ -57,7 +58,16 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
     needs, review = [], []
     for issue in all_issues.values():
         row = live.get(issue.session, {}) if issue.session else {}
-        if issue.state == "running" and (store.folder(issue.slug) / "result.md").is_file() \
+        result = store.folder(issue.slug) / "result.md"
+        if issue.state == "running" and issue.landing and result.is_file() and row.get("state") not in ("working", "blocked") \
+                and datetime.fromtimestamp(result.stat().st_mtime) > datetime.fromisoformat(issue.landing):
+            # Approve resumed the session to open a PR: result.md rewritten since, with a PR link, means landed.
+            opened = re.search(r"https://github\.com/\S+/pull/\d+", result.read_text(encoding="utf-8"))
+            issue.state, issue.landing = ("done", None) if opened else ("review", None)
+            if opened:
+                issue.link = issue.link or opened.group(0)
+            store.save(issue)
+        elif issue.state == "running" and not issue.landing and result.is_file() \
                 and row.get("state") not in ("working", "blocked"):
             issue.state = "review"
             store.save(issue)
@@ -229,7 +239,8 @@ def show(request: Request, slug: str):
                "trail": trail, "kids": kids_of(slug), "kids_of": kids_of, "body": to_html(i.body),
                "files": store.files(slug), "session": session, "msg": request.query_params.get("msg"),
                "trust": request.query_params.get("trust") == "1",
-               "progress": progress, "agent_files": agent_files}
+               "progress": progress, "agent_files": agent_files,
+               "lands": land.lands(i), "lands_set": i.lands in land.LANDS}
     return templates.TemplateResponse(request, "issue.html", context)
 
 
@@ -254,6 +265,9 @@ def set_field(slug: str, field: str = Form(...), value: str = Form("")):
     if field in ("priority", "state"):
         if value not in (store.PRIORITIES if field == "priority" else store.STATES):
             raise HTTPException(422, f"{field} cannot be {value}")
+    elif field == "lands":
+        if value not in land.LANDS:
+            raise HTTPException(422, f"lands must be one of: {', '.join(land.LANDS)}")
     elif field == "title":
         value = " ".join(value.split())
         if not value:
@@ -351,14 +365,35 @@ def hand_off(slug: str):
 
 @app.post("/issue/{slug}/review")
 def review(slug: str, action: str = Form(...), note: str = Form("")):
-    """Done keeps your look back in the issue; Send back returns the result to the same session."""
+    """Approve keeps your look back in the issue and lands the work by the issue's `lands:` (land.py);
+    Send back returns the result to the same session."""
     i = store.load(slug)
-    if action == "done":
+    if action == "approve":
+        how = land.lands(i)
+        try:
+            if how == "merge":
+                message = land.merge(i)
+            elif how == "pr" and i.session:
+                agents.land_pr(i, store.folder(slug))
+                message = ""
+            else:
+                message = ""
+        except land.MainMoved as moved:
+            if not i.session:
+                return back(slug, str(moved))
+            note = f"{moved} Rebase onto it, check the work again, then rewrite result.md. {note}".strip()
+            action = "back"
+        except (land.Blocked, RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+            return back(slug, str(error))
+    if action == "approve":
         if note.strip():
             i.set_section("Look back", f"{note.strip()} *({datetime.now():%-d %b})*")
-        i.state = "done"
+        if how == "pr" and i.session:
+            i.state, i.landing = "running", datetime.now().isoformat(timespec="seconds")
+        else:
+            i.state = "done"
         store.save(i)
-        return RedirectResponse("/inbox", status_code=303)
+        return back(slug, message) if message else RedirectResponse("/inbox", status_code=303)
     if not note.strip():
         return back(slug, "Say what to change, in the box, then Send back.")
     if not i.session:

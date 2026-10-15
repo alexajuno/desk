@@ -1,0 +1,18 @@
+# desk as a user service, so Approve on an issue in desk's own repo can restart it on the merged code:
+# land.py exits the process after the merge and Restart=always brings it back.
+#
+#   mkdir -p ~/.config/systemd/user && ln -sf ~/projects/desk/desk.service ~/.config/systemd/user/desk.service
+#   fuser -k 8790/tcp; systemctl --user daemon-reload && systemctl --user enable --now desk
+[Unit]
+Description=desk
+
+[Service]
+WorkingDirectory=%h/projects/desk
+ExecStart=%h/projects/desk/.venv/bin/uvicorn desk.app:app --port 8790
+Restart=always
+RestartSec=1
+# claude, kitty, hyprctl and git live outside systemd's default PATH
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin
+
+[Install]
+WantedBy=default.target

@@ -34,7 +34,8 @@ Issue: {title}
 Issue file: {file}. Read it first. Its other files are in {dir}.
 
 Help the user understand the issue, then plan it with them: a few directions, pick one together, note why.
-Write the plan into the "## Plan" section of the issue file, in three short parts: Direction, Done when, and What you may decide alone. Write it with the Write or Edit tool.
+Write the plan into the "## Plan" section of the issue file, in four short parts: Direction, Done when, What you may decide alone, and Lands as. Write it with the Write or Edit tool.
+Lands as is how the work lands after the user approves it: merge (desk fast-forwards your branch into the folder's checkout), pr (you push and open a draft PR) or nothing. Suggest {lands} for this folder and confirm it with the user; they can change it in desk's Properties.
 Keep it short. A longer design goes into its own file in {dir}.
 When the plan is written, tell the user they can press Hand off in desk, and that you will carry it out in the background."""
 
@@ -43,7 +44,7 @@ HANDOFF_PROMPT = """The user handed this issue off: carry out the plan now, on y
 Issue file: {file}. Its "## Plan" section is your brief. Its other files are in {dir}.
 
 How to work:
-- You are in your own git worktree, on its own branch. Commit there. Push or open a PR only if the plan says so.
+- You are in your own git worktree, on its own branch. Commit there. Don't merge or push: desk lands your work after the user's review.
 - Decide the details inside the plan yourself.
 - Don't ask the user mid-way. Write each question to {dir}/questions.md and carry on with your best default.
 - Stop only when the answer would change the direction, or when the next step leaves the system: money, messages to people, deleted data, production. Then write the question there and stop.
@@ -144,7 +145,8 @@ def _terminal(cwd: str, issue, *command: str) -> None:
 
 
 def _paths(issue, folder: Path) -> dict:
-    return {"title": issue.title, "file": folder / "issue.md", "dir": folder}
+    from .land import lands  # land.py imports this module
+    return {"title": issue.title, "file": folder / "issue.md", "dir": folder, "lands": lands(issue)}
 
 
 class TrustError(RuntimeError):
@@ -195,6 +197,16 @@ SEND_BACK_PROMPT = """The user reviewed your result and sends it back with this 
 {note}
 
 Fix what the note asks, in the same worktree. Then rewrite {dir}/result.md, and add a short "## Changed after review" part saying what you changed."""
+
+
+LAND_PR_PROMPT = """The user reviewed and approved your work. It lands as a pull request: do that now.
+
+Push the branch and open a draft PR by this repo's own rules (its CLAUDE.md and the code skill): a branch name those rules accept rather than the worktree's, its commit and PR text style. Don't merge it. Then rewrite {dir}/result.md so it names the PR link on its own line. If pushing or opening fails, write why to {dir}/questions.md and stop."""
+
+
+def land_pr(issue, folder: Path) -> None:
+    """Approve with lands: pr. The issue's own session pushes and opens the draft PR."""
+    _continue(issue, LAND_PR_PROMPT.format(**_paths(issue, folder)))
 
 
 def hand_off(issue, folder: Path) -> None:

@@ -19,7 +19,7 @@
       {%- else %}<p class="muted">No result.md: this was done in a chat, so check the work itself.</p>{% endif %}
       <form method="post" action="/issue/{{ p.slug }}/review">
         <input type="text" name="note" placeholder="Look back: did it hold? Or, to send back: what to change." autocomplete="off">
-        <div class="row" style="margin-top: 8px"><button class="primary" name="action" value="done">Done</button>
+        <div class="row" style="margin-top: 8px"><button class="primary" name="action" value="approve" title="Lands as {{ lands }}">Approve · {{ {"merge": "merge", "pr": "open PR", "nothing": "nothing to land"}[lands] }}</button>
           <button name="action" value="back">Send back</button></div>
       </form>
     </div>
@@ -54,6 +54,12 @@
     <button class="prop folder-pick" data-slug="{{ p.slug }}" data-value="{{ p.folder or '' }}" title="Pick the folder chats and agents start in; ~ until you pick one">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z" style="stroke: var(--text-3)" stroke-width="1.2"/></svg>
       <span>{{ p.folder or "~" }}</span></button>
+    <div class="label">Lands as</div>
+    <div class="prop static" title="What Approve does in review{{ '' if lands_set else ' (the default for this folder)' }}">
+      <select id="lands" data-slug="{{ p.slug }}" onchange="fetch('/issue/' + this.dataset.slug + '/set', {method: 'POST', body: new URLSearchParams({field: 'lands', value: this.value})}).then(() => location.reload())">
+        {%- for v, name in [("merge", "Merge into the folder"), ("pr", "Open a PR"), ("nothing", "Nothing")] %}
+        <option value="{{ v }}"{{ " selected" if v == lands }}>{{ name }}</option>{% endfor %}
+      </select></div>
     {% if p.link %}<div class="label">Link</div><div class="prop static"><a href="{{ p.link }}">{{ p.link.split('/')[-1] }}</a></div>{% endif %}
     {% if files %}<div class="label">Files</div>
       {%- for f in files %}<div class="prop static"><a href="/issue/{{ p.slug }}/f/{{ f }}">{{ f }}</a></div>{% endfor %}{% endif %}
