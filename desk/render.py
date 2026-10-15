@@ -8,6 +8,7 @@ import xml.etree.ElementTree as etree
 from functools import lru_cache
 
 import markdown
+from markdown.preprocessors import Preprocessor
 from markdown.treeprocessors import Treeprocessor
 
 D2_BLOCK = re.compile(r"^```d2\n(.*?)^```", re.S | re.M)
@@ -69,6 +70,30 @@ class Sections(Treeprocessor):
             into.append((level, etree.SubElement(section, "div", {"class": "sec-body"})))
 
 
+LIST_ITEM = re.compile(r"^ *([-*+]|\d+\.) +\S")
+RULE = re.compile(r"^ *([-*_])( *\1){2,} *$")
+
+
+class ListsAfterText(Preprocessor):
+    """Python-Markdown starts a list only after a blank line, so "Steps:" with "- a" and "- b" under it would
+    run together as one paragraph, as chat and GitHub Markdown do not. Puts the blank line in. Runs after
+    fenced_code has set the code blocks aside, so a line in one is left as it is."""
+
+    def run(self, lines: list[str]) -> list[str]:
+        out: list[str] = []
+        in_list = False  # from a list's first item to the next blank line
+        for line in lines:
+            item = LIST_ITEM.match(line) and not RULE.match(line)
+            if item and out and out[-1].strip() and not in_list and not out[-1].startswith(("    ", "\t")):
+                out.append("")
+            if item:
+                in_list = True
+            elif not line.strip():
+                in_list = False
+            out.append(line)
+        return out
+
+
 class Relative(Treeprocessor):
     """Points a relative link or image at the folder it was written in: plan.md's [review-card.md](review-card.md)
     means the issue's file, also when plan.md shows on the issue page rather than on its own file page."""
@@ -99,6 +124,7 @@ def to_html_with_toc(text: str, base: str = "") -> tuple[str, str]:
 
     md = markdown.Markdown(extensions=["tables", "fenced_code", "sane_lists", "toc"],
                            extension_configs={"toc": {"toc_depth": "2-3"}})
+    md.preprocessors.register(ListsAfterText(md), "lists_after_text", 24)  # after fenced_code (25)
     md.treeprocessors.register(Sections(md), "sections", 4)  # after toc (5), before unescape (0)
     if base:
         md.treeprocessors.register(Relative(md, base), "relative", 3)
