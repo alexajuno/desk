@@ -8,7 +8,7 @@ Description=desk
 
 [Service]
 WorkingDirectory=%h/projects/desk
-ExecStart=%h/projects/desk/.venv/bin/uvicorn desk.app:app --port 8790 --timeout-graceful-shutdown 5
+ExecStart=%h/projects/desk/.venv/bin/uvicorn desk.app:app --port 8790
 Restart=always
 RestartSec=1
 # claude, kitty, hyprctl and git live outside systemd's default PATH
