@@ -44,6 +44,7 @@
   --bg-pop-on: lch(16.706% 0.979 272);
   --border-pop: lch(16.32% 1.48 272);
   --shadow-pop: lch(0 0 0 / 0.4) 0 7px 32px;
+  --avatar-session: lch(58% 45 290);       /* the Inbox's avatar for an issue's session */
   --shadow-keys: lch(0 0 0 / 0.125) 0 3px 8px, lch(0 0 0 / 0.125) 0 2px 5px, lch(0 0 0 / 0.125) 0 1px 1px; /* the shortcuts panel */
   --overlay: lch(0 0 0 / 0.5);
   /* a group's triangle at rest (--text-2 under the mouse), and Linear's tooltip with its key caps */
@@ -97,6 +98,7 @@
   --border-pop: lch(91.9% 0 282);
   --shadow-pop: lch(0 0 0 / 0.08) 0 9px 48px, lch(0 0 0 / 0.1) 0 6px 24px, lch(0 0 0 / 0.04) 0 1px 1px;
   --shadow-keys: var(--shadow-pop);
+  --avatar-session: lch(58% 45 290);
   --overlay: lch(0% 0 0 / 0.25);          /* bgModalOverlay */
   --group-toggle: lch(80.94% 12 279.067); /* the list's group triangle and its tooltip, measured 2026-10-15 */
   --bg-tip: lch(100% 0 282);
@@ -379,6 +381,37 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .tip kbd { display: inline-block; box-sizing: border-box; min-width: 18px; padding: 2px; border: 0.5px solid var(--border-tip-key);
            border-radius: 4px; font: 450 11px/1.1 var(--font); color: var(--text-tip-key); text-align: center; }
 .tip kbd + kbd { margin-left: 3px; }
+/* The Inbox (inbox.html), as Linear's, measured on linear.app on 2026-10-15: a 400px list beside the open
+   notification. Rows are 55px with 8px corners, 10px in from the list's edges: a 32px avatar with a 16px badge
+   for the kind of notice, then two lines 2px apart, 10px from the row's top and bottom. The first holds an 8px
+   unread dot, the 13px title and the 14px status icon; the second, in 12px, who did what and how long ago. */
+.scroll:has(> .inbox) { overflow: hidden; }
+.inbox { display: grid; grid-template-columns: 400px minmax(0, 1fr); height: 100%; }
+.inbox-list { overflow: auto; padding: 8px 0; }
+.inbox-open { overflow: auto; min-width: 0; }
+.item.inbox-row { height: auto; gap: 12px; margin: 0 10px; padding: 0 8px; border-radius: 8px; }
+.inbox-row.selected { background: var(--bg-raised); }
+.inbox-row .avatar { position: relative; flex: none; display: grid; place-items: center; width: 32px; height: 32px;
+                     border-radius: 50%; background: var(--avatar-session); color: var(--on-accent); }
+.inbox-row .badge { position: absolute; left: 19.5px; top: 17.5px; display: grid; place-items: center; width: 16px; height: 16px;
+                    border-radius: 50%; background: var(--bg-panel); color: var(--text-3); }
+.inbox-row .lines { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 10px 0; }
+.inbox-row .line { display: flex; align-items: center; gap: 4px; min-width: 0; height: 17px; }
+.inbox-row .dot { flex: none; width: 8px; height: 8px; margin-right: 2px; border-radius: 50%; background: var(--accent); }
+.inbox-row.read .dot { display: none; }
+.item.inbox-row .title { flex: 1; min-width: 0; font: 500 13px var(--font); color: var(--text-2); }
+.inbox-row.read .title { color: var(--text-3); }
+.inbox-row .state { flex: none; display: inline-flex; margin-left: 4px; }
+.inbox-row .sub { height: 15px; font: 450 12px var(--font); color: var(--text-3); }
+.inbox-row .says { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-row .age { flex: none; margin-left: 4px; }
+.inbox-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; height: 100%;
+               font: 500 13px var(--font); color: var(--text-3); }
+@media (max-width: 900px) {
+  .inbox { grid-template-columns: minmax(0, 1fr); }
+  .inbox:has(.inbox-open .issue) .inbox-list, .inbox:not(:has(.inbox-open .issue)) .inbox-open { display: none; }
+}
+
 /* Keyboard shortcuts (keys.html), as Linear's panel, measured on linear.app on 2026-10-15: 360px at the window's right,
    12px in from its edges, with a 12px radius; a 15px title, a 44px search box, groups 32px apart with 13px names, and
    rows 23px tall, 12px apart. Key caps are 12px with a faint 1px border, 3px apart, "then" between a sequence's keys.

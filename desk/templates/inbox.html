@@ -1,19 +1,45 @@
 {% extends "base.html" %}
-{% from "macros.html" import row, toggle %}
+{% from "macros.html" import state %}
 {% block title %}Inbox · desk{% endblock %}
-{% block crumb %}<span>Inbox</span>{% endblock %}
+{% block crumb %}<a href="/inbox">Inbox</a>{% if open %}<span class="sep">›</span><span>{{ p.title }}</span>{% endif %}{% endblock %}
+{% block tools %}{% if open %}<button class="more" title="Actions">
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="12.5" cy="8" r="1.25"/></svg></button>{% endif %}{% endblock %}
 {% block main %}
-<div class="page">
-  {% for label, items in [("Needs you", needs), ("To review", review)] %}
-    {%- if items %}
-    <div class="group" data-group="{{ label }}">{{ toggle() }}{{ label }}<span class="count">{{ items | length }}</span></div>
-    <ul class="tree">
-      {%- for i, why in items %}
-      <li>{% call row(i) %}<span class="spacer"></span><span class="pill">{{ why }}</span>{% endcall %}</li>
-      {%- endfor %}
-    </ul>
+{#- Linear's Inbox: the notifications on the left, newest first; the one picked opens on the right, as the issue's
+    page shows it. Each row is the issue's session telling you something: a dot until you open it (base.html's
+    showSeen), the issue's title and status, then what the session did and how long ago. #}
+<div class="inbox">
+  <div class="inbox-list" data-keep-scroll="always">
+    {%- for n in items %}
+    <a class="item inbox-row{{ ' selected' if n.p.slug == open }}" href="/inbox?i={{ n.p.slug }}" title="{{ n.p.title }}"
+       data-slug="{{ n.p.slug }}" data-state="{{ n.p.state }}" data-priority="{{ n.p.priority }}" data-parent="{{ n.p.parent or '' }}"
+       data-seen="{{ n.p.slug }}:{{ n.why }}:{{ n.at.timestamp() | int }}">
+      <span class="avatar" aria-label="Session"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4.07 3.83a.17.17 0 0 0-.22.18l1.96 9.13c.04.19.28.22.37.04l1.73-3.53c.21-.45.61-.78 1.09-.92l3.78-1.08c.17-.05.18-.29.02-.36L4.07 3.83ZM3.75 2.34c.3-.05.6-.02.89.1l8.65 3.51c1.46.6 1.35 2.7-.17 3.14L9.34 10.18a.25.25 0 0 0-.16.13l-1.72 3.53c-.7 1.42-2.79 1.16-3.12-.38L2.38 4.33a1.6 1.6 0 0 1 1.37-1.99Z"/></svg>
+        <span class="badge">
+          {%- if n.kind == "review" %}<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>
+          {%- else %}<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2c3.6 0 6.5 2.4 6.5 5.4S11.6 12.8 8 12.8c-.6 0-1.2-.1-1.8-.2L3 14.1c-.4.2-.8-.2-.7-.6l.6-2.4C2 10.1 1.5 8.8 1.5 7.4 1.5 4.4 4.4 2 8 2z"/></svg>{% endif -%}
+        </span></span>
+      <span class="lines">
+        <span class="line"><span class="dot" aria-label="Unread"></span><span class="title">{{ n.p.title }}</span><span class="state">{{ state(n.p.state) }}</span></span>
+        <span class="line sub"><span class="says">Session {{ n.says }}</span><span class="age" title="{{ n.at.strftime('%b %-d, %H:%M') }}">{{ n.at | ago }}</span></span>
+      </span>
+    </a>
+    {%- endfor %}
+  </div>
+  <div class="inbox-open" data-keep-scroll="same">
+    {%- if open %}
+    {% include "issue_view.html" %}
+    {%- else %}
+    <div class="inbox-empty">
+      {#- Linear's empty Inbox drawing, its strokes in desk's own text colours #}
+      <svg width="98" height="100" viewBox="0 0 78 80" fill="none" aria-hidden="true">
+        <path style="stroke: var(--text-3)" stroke-width="1.5" d="M10.4 9.11A10 10 0 0 1 20.22 1h37.56a10 10 0 0 1 9.82 8.11l8.11 42.2a10 10 0 0 1-9.82 11.9H54.7a6.36 6.36 0 0 0-5.65 3.45 6.36 6.36 0 0 1-5.66 3.45H34.6a6.36 6.36 0 0 1-5.66-3.45 6.36 6.36 0 0 0-5.65-3.46H12.1a10 10 0 0 1-9.8-11.89l8.11-42.2Z"/>
+        <path style="stroke: var(--text-2)" stroke-width="1.5" d="M14.3 9.03a5 5 0 0 1 4.91-4.08H58.8a5 5 0 0 1 4.91 4.08l8.07 43.22a6 6 0 0 1-5.9 7.1H52.76a5.72 5.72 0 0 0-5.24 3.41 5.72 5.72 0 0 1-5.23 3.42h-6.58a5.72 5.72 0 0 1-5.23-3.42 5.72 5.72 0 0 0-5.24-3.4h-13.1a6 6 0 0 1-5.9-7.1L14.3 9.02Z"/>
+        <path style="stroke: var(--text-3)" stroke-width="1.5" d="m2.36 55.6 3.2 14.06A12 12 0 0 0 17.26 79h43.48a12 12 0 0 0 11.7-9.34l3.2-14.06"/>
+      </svg>
+      <span class="unread-count">{{ "%d unread notification%s" % (items | length, "" if items | length == 1 else "s") if items else "No notifications" }}</span>
+    </div>
     {%- endif %}
-  {% endfor %}
-  {% if not needs and not review %}<p class="muted" style="padding: 24px 16px">Nothing needs you. Agents are working, or the backlog is waiting.</p>{% endif %}
+  </div>
 </div>
 {% endblock %}

@@ -47,6 +47,21 @@ function sectionKeys() {
     return [sec, n ? `${id}~${n}` : id];
   });
 }
+// The Inbox's read rows (inbox.html): the notifications you have opened, as "<slug>:<why>:<time>" keys in
+// localStorage.inboxSeen. A read row loses its dot, as in Linear's Inbox; the one open now counts as read; a new
+// event on the issue is a new key, so it shows unread again. Keys no longer in the Inbox are let go.
+function showSeen() {
+  const rows = [...document.querySelectorAll(".inbox-row")];
+  if (!document.querySelector(".inbox")) return;
+  const now = new Set(rows.map((row) => row.dataset.seen));
+  const seen = new Set(JSON.parse(localStorage.inboxSeen ?? "[]").filter((key) => now.has(key)));
+  const open = document.querySelector(".inbox-row.selected");
+  if (open) seen.add(open.dataset.seen);
+  localStorage.inboxSeen = JSON.stringify([...seen]);
+  for (const row of rows) row.classList.toggle("read", seen.has(row.dataset.seen));
+  const count = document.querySelector(".unread-count"), unread = rows.filter((row) => !seen.has(row.dataset.seen)).length;
+  if (count) count.textContent = !rows.length ? "No notifications" : unread ? `${unread} unread notification${unread === 1 ? "" : "s"}` : "No unread notifications";
+}
 function showFolded(url = location.pathname) {
   const shut = JSON.parse(localStorage.folded ?? "{}")[new URL(url, location.href).pathname] ?? [];
   for (const [sec, key] of sectionKeys()) {
@@ -104,7 +119,7 @@ function showFolded(url = location.pathname) {
   <header class="bar"><button class="side-icon side-toggle" type="button" title="Show sidebar  [">{{ side_icon }}</button>{% block crumb %}{% endblock %}<span class="right">{% block tools %}{% endblock %}<kbd class="keys-open" title="Keyboard shortcuts">Ctrl /</kbd></span></header>
   <div class="scroll">{% block main %}{% endblock %}</div>
 </div>
-<script>showCollapsed(); showFolded()</script>
+<script>showCollapsed(); showFolded(); showSeen()</script>
 
 {% include "agent_panel.html" %}
 

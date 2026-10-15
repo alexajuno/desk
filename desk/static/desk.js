@@ -415,12 +415,19 @@ async function refresh(url = location.pathname + location.search) {
     seen = JSON.parse(fresh.getElementById("desk-data").textContent).version;
     const same = url === location.pathname + location.search, y = $(".scroll").scrollTop;
     const redraws = same && window.onIssuesChanged;
+    // A pane that scrolls on its own keeps its place: the Inbox's list always, its open issue while it stays open.
+    const kept = [...document.querySelectorAll("[data-keep-scroll]")].map((pane) => [pane.className, pane.dataset.keepScroll, pane.scrollTop]);
     for (const part of redraws ? [".side"] : [".side", ".bar", ".scroll"]) {
       const from = fresh.querySelector(part);
       if (from) $(part).innerHTML = from.innerHTML;
     }
+    for (const [name, when, top] of kept) {
+      const pane = document.querySelector(`[data-keep-scroll].${CSS.escape(name.split(" ")[0])}`);
+      if (pane && (when === "always" || same)) pane.scrollTop = top;
+    }
     showCollapsed(url);
     showFolded(url);
+    showSeen();
     if (redraws) { onIssuesChanged(); return true; }
     document.title = fresh.title;
     $(".scroll").scrollTop = same ? y : 0;
@@ -529,8 +536,9 @@ function goBack() {
 }
 
 // --- rows: hover or J/K focuses one, as in Linear ------------------------------------------------
-// J/K skip the rows of a collapsed group.
-const rows = () => [...document.querySelectorAll(".item")].filter((row) => row.checkVisibility());
+// J/K skip the rows of a collapsed group. In the Inbox they move through the notifications only, not the open
+// issue's sub-issues.
+const rows = () => [...($(".inbox-list") ?? document).querySelectorAll(".item")].filter((row) => row.checkVisibility());
 let focused = null, byMouse = false;
 
 function focusRow(row, scroll = true) {
@@ -635,6 +643,8 @@ document.addEventListener("click", (e) => {
   justClosed = null;
   if (t.closest(".menu")) return;
   if (t.closest(".keys-open")) { toggleKeys(); return; }
+  const notice = t.closest(".inbox-row");
+  if (notice && !e.ctrlKey && !e.metaKey && !e.shiftKey && !t.closest(".item .icon")) { e.preventDefault(); go(notice.getAttribute("href")); return; }
   if (t.closest(".keys-close")) { toggleKeys(false); return; }
   if (t.closest(".keys-clear")) { const box = $("#keys input"); box.value = ""; filterKeys(""); box.focus(); return; }
   const anchor = t.closest('a[href^="#"]');
@@ -910,9 +920,15 @@ document.addEventListener("keydown", (e) => {
   }
   if (key === "g") { gPressed = Date.now(); return; }
 
-  if (key === "j" || e.key === "ArrowDown") { moveFocus(1); e.preventDefault(); }
-  else if (key === "k" || e.key === "ArrowUp") { moveFocus(-1); e.preventDefault(); }
-  else if (e.key === "Enter" && focused) { location.href = focused.getAttribute("href"); }
+  if (key === "j" || e.key === "ArrowDown" || key === "k" || e.key === "ArrowUp") {
+    moveFocus(key === "j" || e.key === "ArrowDown" ? 1 : -1);
+    if (focused?.classList.contains("inbox-row")) go(focused.getAttribute("href")); // Linear's Inbox opens as you move
+    e.preventDefault();
+  }
+  else if (e.key === "Enter" && focused) {
+    if (focused.classList.contains("inbox-row")) go(focused.getAttribute("href"));
+    else location.href = focused.getAttribute("href");
+  }
   else if (key === "c") { openCreator(); e.preventDefault(); }
   else if (key === "t") {
     const group = $(".group[data-group]:hover") ?? (focused && groupOf(focused));
@@ -928,7 +944,8 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "/") { const box = document.getElementById("search-q"); if (box) box.focus(); else location.href = "/search"; e.preventDefault(); }
   else if (e.key === "[") { toggleSide(); }
   else if (e.key === "Escape") {
-    if (page()) goBack();
+    if ($(".inbox") && page()) go("/inbox");
+    else if (page()) goBack();
     else focusRow(null);
   }
 });

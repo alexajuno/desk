@@ -109,6 +109,18 @@ templates.env.globals.update(
 # no-cache header still fetches a changed file, since its URL is new.
 templates.env.globals["asset"] = lambda name: f"/static/{name}?v={(HERE / 'static' / name).stat().st_mtime_ns}"
 templates.env.filters["short_date"] = lambda iso: datetime.fromisoformat(str(iso)).strftime("%b %-d") if iso else ""
+
+
+def ago(when: datetime) -> str:
+    """How long ago, as Linear's Inbox writes it: now, 5m, 13h, 3d, 2w."""
+    seconds = (datetime.now() - when).total_seconds()
+    for size, unit in ((604800, "w"), (86400, "d"), (3600, "h"), (60, "m")):
+        if seconds >= size:
+            return f"{int(seconds // size)}{unit}"
+    return "now"
+
+
+templates.env.filters["ago"] = ago
 app.state.templates = templates  # the Agent tab's pages (chats.py) render with these too
 app.include_router(api.router)
 app.include_router(chats.router)
@@ -206,10 +218,27 @@ def project_set(slug: str, field: str = Form(...), value: str = Form("")):
     return RedirectResponse(f"/project/{slug}", status_code=303)
 
 
+# What each reason for being in the Inbox reads as, in a row's second line, after "Session".
+NOTICES = {"waiting for you": "is waiting for you", "has questions": "saved questions for you",
+           "result ready": "finished: the result is ready", "check it": "finished, with no result.md"}
+
+
 @app.get("/inbox")
-def inbox(request: Request):
-    needs, review = inbox_items(store.load_all(), agents.live())
-    return templates.TemplateResponse(request, "inbox.html", {"needs": needs, "review": review})
+def inbox(request: Request, i: str = ""):
+    """Linear's Inbox: the notifications on the left, newest first, and the one picked (?i=<slug>) on the right."""
+    all_issues = store.load_all()
+    needs, review = inbox_items(all_issues, agents.live())
+
+    def changed(issue: store.Issue) -> float:  # when anything of the issue's last changed: its files are its record
+        return max((f.stat().st_mtime for f in store.folder(issue.slug).iterdir() if f.is_file()), default=0)
+
+    items = sorted(({"p": p, "why": why, "says": NOTICES.get(why, why), "kind": "review" if (p, why) in review else "needs",
+                     "at": datetime.fromtimestamp(changed(p))} for p, why in needs + review),
+                   key=lambda item: item["at"], reverse=True)
+    context = {"items": items, "open": None}
+    if i in all_issues:
+        context |= issue_context(request, all_issues, i) | {"open": i}
+    return templates.TemplateResponse(request, "inbox.html", context)
 
 
 @app.get("/search")
@@ -229,6 +258,11 @@ def show(request: Request, slug: str):
     all_issues = store.load_all()
     if slug not in all_issues:
         raise HTTPException(404)
+    return templates.TemplateResponse(request, "issue.html", issue_context(request, all_issues, slug))
+
+
+def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: str) -> dict:
+    """What issue_view.html needs, on the issue's page or in the Inbox's right pane."""
     i = all_issues[slug]
     trail, up = [], i.parent
     while up in all_issues and len(trail) < 50:
@@ -248,7 +282,7 @@ def show(request: Request, slug: str):
                "trust": request.query_params.get("trust") == "1",
                "progress": progress, "agent_files": agent_files,
                "lands": land.lands(i), "lands_set": i.lands in land.LANDS}
-    return templates.TemplateResponse(request, "issue.html", context)
+    return context
 
 
 @app.get("/issue/{slug}/f/{name}")
