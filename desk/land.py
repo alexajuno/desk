@@ -201,7 +201,7 @@ def _leave_line(top: str, slug: str) -> None:
 
 def _switch(top: str, slug: str, branch: str, by: str, told: bool = True) -> str:
     """Detach the checkout on the branch and note it: whose it is, which branch to go back to, who holds it ("for"),
-    whether that session knows (told) and since when."""
+    whether that session knows (told), since when, and which desk process switched it (pid)."""
     now = trying(top)
     back = now["back"] if now else agents._git(top, "branch", "--show-current")
     if not back:
@@ -213,7 +213,8 @@ def _switch(top: str, slug: str, branch: str, by: str, told: bool = True) -> str
     run = subprocess.run(["git", "checkout", "--detach", branch], cwd=top, capture_output=True, text=True)
     if run.returncode:
         raise Blocked((run.stderr or run.stdout).strip() or "git checkout failed")
-    note = {"branch": branch, "slug": slug, "back": back, "for": by, "told": told, "since": time.time()}
+    note = {"branch": branch, "slug": slug, "back": back, "for": by, "told": told, "since": time.time(),
+            "pid": os.getpid()}
     _trial_file(top).write_text(json.dumps(note), encoding="utf-8")
     return f"{top} runs {branch} now."
 
@@ -288,7 +289,10 @@ def tick(top: str = str(DESK_REPO)) -> None:
         if now.get("for", "review") != "test":  # the user's Try, or a note from before the line: theirs to end
             return
         issue = store.load(now["slug"]) if store.exists(now["slug"]) else None
-    if issue and issue.session and not now.get("told"):
+    # Told by the desk that switched, about to restart, a quick session could test the old code (15 Oct: one woke
+    # 1.5s before the restart); in desk's own repo the desk that restarted on the branch tells it.
+    restarted = Path(top) != DESK_REPO or now.get("pid") != os.getpid()
+    if issue and issue.session and not now.get("told") and restarted:
         try:
             agents.say(issue, WAKE.format(branch=now["branch"], slug=issue.slug))
         except (RuntimeError, OSError, subprocess.TimeoutExpired):
