@@ -7,8 +7,9 @@ documents it for them).
     PATCH  /api/issues/<slug>         set any of those fields
     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
     POST   /api/issues/<slug>/work    the Agent chat works it itself: the chat becomes the issue's session
-    POST   /api/issues/<slug>/try     run the issue's branch in its folder's checkout, for review: branch
-    POST   /api/issues/<slug>/back-to-main   and back
+    POST   /api/issues/<slug>/try     run the issue's branch in its folder's checkout, to test it: branch; in desk's
+                                      own, while another branch runs, the issue joins the line (land.py)
+    POST   /api/issues/<slug>/back-to-main   and back, handing desk's checkout to the next in line
     GET    /api/projects              list projects (state=active|archived|all); /api/issues takes project=<slug>
     GET    /api/projects/<slug>       one project, with its description and issues
     POST   /api/projects              create one: title, body        (issues join it with project=<slug>)
@@ -256,9 +257,11 @@ class Try(BaseModel):
 
 @router.post("/issues/{slug}/try")
 def try_issue(slug: str, trial: Try | None = None):
-    """Switch the issue's folder checkout to its branch, to test or review it in the one running app, and note the
-    issue, so the sidebar's Trying names it. The branch is the one in the body, else that of the worktree desk made
-    for the session with `claude -w`. In desk's own repo desk restarts on it, so wait until /version answers again."""
+    """Switch the issue's folder checkout to its branch, to test it in the one running app, and note the issue, so
+    the sidebar's Trying names it. The branch is the one in the body, else that of the worktree desk made for the
+    session with `claude -w`. In desk's own repo desk restarts on it, so wait until /version answers again; when
+    another branch runs there, the message says the issue is in line, and desk messages its session when its turn
+    comes (land.tick)."""
     try:
         return {"message": land.try_branch(_load(slug), trial.branch if trial else None)}
     except land.Blocked as error:
@@ -267,7 +270,8 @@ def try_issue(slug: str, trial: Try | None = None):
 
 @router.post("/issues/{slug}/back-to-main")
 def back_issue(slug: str):
-    """Put the folder's checkout back on the branch it was on before try."""
+    """The issue is done with its folder's checkout: put it back on the branch it was on before try, and take the
+    issue out of the line."""
     try:
         return {"message": land.back_to_main(_load(slug)) or "Nothing was switched."}
     except land.Blocked as error:

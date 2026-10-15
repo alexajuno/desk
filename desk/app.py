@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
@@ -25,7 +26,15 @@ from .search import find
 HERE = Path(__file__).resolve().parent
 CLOSED = {"done", "dropped"}
 
-app = FastAPI()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    land.start_clock()  # the line for desk's own checkout moves on its own
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
 
@@ -122,8 +131,10 @@ def sidebar(request: Request) -> dict:
     running = sorted((i for i in all_issues.values() if i.state == "running"), key=lambda i: i.rank)
     waiting = sorted((i for i in all_issues.values() if i.state == "waiting"), key=lambda i: i.rank)
     now = land.running(str(land.DESK_REPO))
+    waits = [{**e, "issue": all_issues.get(e["slug"])} for e in land.line(str(land.DESK_REPO))]
     return {"sidebar": {"backlog": sum(i.state == "backlog" for i in all_issues.values()), "running": running,
                         "waiting": waiting, "trying": now and {**now, "issue": all_issues.get(now["slug"])},
+                        "line": waits,
                         "inbox": len(needs) + len(review),
                         "projects": sorted((p for p in projects.load_all().values() if p.state == "active"),
                                            key=lambda p: p.created)}, "version": version()}
@@ -412,6 +423,20 @@ def strip(i: store.Issue, row: dict, has_plan: bool, result: Path) -> dict:
     return {"text": "Done." if i.state == "done" else "Dropped.", "button": None}
 
 
+def try_button(i: store.Issue) -> dict | None:
+    """Beside Approve, on an issue in review whose session tested its branch in desk's own checkout: Try runs that
+    branch in the desk you use (land.try_branch), next in line when a session tests there, and Back to main ends it.
+    A session holds 8790 only while it tests, so you press Try to review."""
+    if i.state != "review" or not (branch := land.branch_of(i)):
+        return None
+    top = str(land.DESK_REPO)
+    if (now := land.trying(top)) and now["slug"] == i.slug:
+        return {"label": "Back to main", "action": "back-to-main", "title": f"desk runs {branch}: put it back on main"}
+    if any(e["slug"] == i.slug for e in land.line(top)):
+        return {"label": "Next on 8790", "disabled": True, "title": f"{branch} runs once the test there ends"}
+    return {"label": "Try", "action": "try", "title": f"Run {branch} in the desk you use, to try it"}
+
+
 def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: str) -> dict:
     """What issue_view.html needs, on the issue's page or in the Inbox's right pane."""
     i = all_issues[slug]
@@ -433,7 +458,7 @@ def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: st
                "files": store.files(slug), "session": session, "live": agents.status(session),
                "msg": request.query_params.get("msg"), "trust": request.query_params.get("trust") == "1",
                "progress": progress, "agent_files": agent_files,
-               "strip": strip(i, session, store.has_plan(i), result)}
+               "strip": strip(i, session, store.has_plan(i), result), "trial": try_button(i)}
     if i.state == "review" and result.is_file() and (parts := split_result(result.read_text(encoding="utf-8"))):
         context["card"] = [to_html(part, base=f"/issue/{slug}/f/") for part in parts]
     return context
@@ -608,6 +633,27 @@ def approve(slug: str, src: str = Form("")):
     # On the issue's page the strip says what happens next, Landing or Done; a message would stay in the address and
     # cover it after the issue moved on.
     return onward(before, slug, message) if from_inbox else back(slug)
+
+
+@app.post("/issue/{slug}/try")
+def try_it(slug: str, src: str = Form("")):
+    """Try: run the branch of an issue in review in the desk you use, or line it up next (try_button)."""
+    i = store.load(slug)
+    try:
+        message = land.try_branch(i, land.branch_of(i), by="review")
+    except land.Blocked as error:
+        message = str(error)
+    return back(slug, message, inbox=src == "inbox")
+
+
+@app.post("/issue/{slug}/back-to-main")
+def try_end(slug: str, src: str = Form("")):
+    """Back to main, after Try: desk runs main again, or the next in line (land.back_to_main)."""
+    try:
+        message = land.back_to_main(store.load(slug)) or "Nothing was switched."
+    except land.Blocked as error:
+        message = str(error)
+    return back(slug, message, inbox=src == "inbox")
 
 
 @app.post("/issue/{slug}/window")
