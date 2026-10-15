@@ -73,8 +73,8 @@
     {%- set where = session.get("kind") %}{% set live = session.get("state") %}
     {%- if not p.session and p.state in ("backlog", "planning") %}
     <form method="post" action="/issue/{{ p.slug }}/plan" style="margin: 0 0 4px"><button class="primary">Plan with Claude</button></form>
-    <p class="hint">Starts this issue's session in Works in, in its own worktree if that folder is a git repo, and opens it in a terminal. You and Claude write the plan.</p>
-    {%- elif p.state in ("backlog", "planning") and not p.section("Plan") %}
+    <p class="hint">Starts this issue's session in Works in, in its own worktree if that folder is a git repo, and opens it in a terminal. You and Claude write the plan, in plan.md.</p>
+    {%- elif p.state in ("backlog", "planning") and not has_plan %}
     <div class="row" style="margin: 0 0 4px"><button class="primary term-open" data-slug="{{ p.slug }}" data-short="{{ p.session[:8] }}">Open here</button>
       <form method="post" action="/issue/{{ p.slug }}/jump" style="margin: 0"><button>Back to the plan chat</button></form></div>
     <p class="hint">Write the plan together in that chat, here or in kitty. Then the same session can carry it out.</p>

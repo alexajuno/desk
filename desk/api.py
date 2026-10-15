@@ -186,8 +186,8 @@ def start_issue(slug: str, start: Start):
     if start.plan.strip():
         i.set_section("Plan", start.plan)
         store.save(i)
-    planning = not i.section("Plan") and not i.session and chats.exists(start.chat)
-    if not i.section("Plan") and not planning:
+    planning = not store.has_plan(i) and not i.session and chats.exists(start.chat)
+    if not store.has_plan(i) and not planning:
         raise HTTPException(422, "Write the plan first: send it as plan, in three parts: Direction, Done when, "
                                  "What you may decide alone. Or send chat, the id of this chat, and the issue's "
                                  "session writes the plan.")

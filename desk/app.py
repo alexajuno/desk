@@ -301,7 +301,7 @@ def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: st
                "files": store.files(slug), "session": session, "msg": request.query_params.get("msg"),
                "trust": request.query_params.get("trust") == "1",
                "progress": progress, "agent_files": agent_files,
-               "lands": land.lands(i), "lands_set": i.lands in land.LANDS}
+               "lands": land.lands(i), "lands_set": i.lands in land.LANDS, "has_plan": store.has_plan(i)}
     return context
 
 
@@ -426,8 +426,8 @@ def trust_folder(request: Request, slug: str):
 @app.post("/issue/{slug}/handoff")
 def hand_off(slug: str):
     i = store.load(slug)
-    if not i.session or not i.section("Plan"):
-        return back(slug, "Plan first: the session carries out the plan written in this issue.")
+    if not i.session or not store.has_plan(i):
+        return back(slug, "Plan first: the session carries out the plan in plan.md.")
     try:
         agents.hand_off(i, store.folder(slug))
     except agents.TrustError as error:

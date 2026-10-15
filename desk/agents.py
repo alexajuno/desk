@@ -1,7 +1,7 @@
 """The one Claude Code session bound to an issue, from planning to done.
 
     Plan with Claude  claude --bg -w desk-<slug> in the issue's folder, then `claude attach` in a
-                      terminal: you talk, and the plan gets written into the issue.
+                      terminal: you talk, and the session keeps the plan in the issue's plan.md.
     Hand off          the same session keeps going in the background: `claude stop`, then
                       `claude --bg --resume <id> "<carry out>"`, with no other flags.
     Start             the desk agent wrote the plan itself: claude --bg -w desk-<slug> "<carry out>",
@@ -39,10 +39,11 @@ Issue: {title}
 Issue file: {file}. Read it first. Its other files are in {dir}.
 
 Help the user understand the issue, then plan it with them: a few directions, pick one together, note why.
-Write the plan into the "## Plan" section of the issue file, in four short parts: Direction, Done when, What you may decide alone, and Lands as. Write it with the Write or Edit tool.
+The plan lives in {plan}, not in the issue file. Write it as a mini design doc, as the design-doc skill says: the box with the resume line and the decisions so far, each with the user's reason, at the top, and the workflow drawn in d2. desk lists it in the issue's files and redraws it each time it changes, so the user can read the plan as it forms. Write a first draft as soon as you understand the issue, then rewrite it whenever the talk changes it. Write it with the Write or Edit tool.
+Its build plan ends with three parts that desk and the hand-off read: Done when; What you may decide alone; and Lands as.
 Lands as is how the work lands after the user approves it: merge (desk fast-forwards your branch into the folder's checkout), pr (you push and open a draft PR) or nothing. Suggest {lands} for this folder and confirm it with the user; they can change it in desk's Properties.
 Keep it short. A longer design goes into its own file in {dir}.
-When the plan is written, tell the user they can press Hand off in desk, and that you will carry it out in the background."""
+When the plan is settled, tell the user they can press Hand off in desk, and that you will carry it out in the background."""
 
 CHAT_PLAN_PROMPT = """The user was talking to desk's agent about a piece of work, and it filed this issue and started you on it. Plan it, on your own, in the background.
 
@@ -60,7 +61,7 @@ How to work:
 
 HANDOFF_PROMPT = """The user handed this issue off: carry out the plan now, on your own, in the background.
 
-Issue file: {file}. Its "## Plan" section is your brief. Its other files are in {dir}.
+Your brief is the plan in {plan}. An older issue has no plan.md; its plan is the "## Plan" section of the issue file, {file}. The issue's other files are in {dir}.
 
 How to work:
 - You are in your own git worktree, on its own branch. Commit there. Don't merge or push: desk lands your work after the user's review.
@@ -68,7 +69,7 @@ How to work:
 - Don't ask the user mid-way. Write each question to {dir}/questions.md and carry on with your best default.
 - Stop only when the answer would change the direction, or when the next step leaves the system: money, messages to people, deleted data, production. Then write the question there and stop.
 - When you finish, write {dir}/result.md: what changed and where (branch, commits, PR links), and how you checked it, marking what you verified and what you assumed.
-- From now on, never edit {file}; the user and desk own it. Your files are questions.md and result.md. Write them with the Write tool: the worktree guard refuses shell writes outside the worktree."""
+- From now on, never edit {file} or {plan}; the user and desk own them. Your files are questions.md and result.md. Write them with the Write tool: the worktree guard refuses shell writes outside the worktree."""
 
 # A repo's .claude/ is often kept out of git, so a new worktree starts with no rules, and an agent
 # there loads none (checked 2026-10-14: an agent in a `claude -w` worktree did not see the repo's
@@ -180,7 +181,7 @@ def _terminal(cwd: str, issue, *command: str) -> None:
 
 def _paths(issue, folder: Path) -> dict:
     from .land import lands  # land.py imports this module
-    return {"title": issue.title, "file": folder / "issue.md", "dir": folder, "lands": lands(issue)}
+    return {"title": issue.title, "file": folder / "issue.md", "plan": folder / "plan.md", "dir": folder, "lands": lands(issue)}
 
 
 class TrustError(RuntimeError):

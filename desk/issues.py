@@ -25,6 +25,7 @@ DATA_DIR = Path(os.environ.get("DESK_DATA", "~/.local/share/desk")).expanduser()
 ISSUES_DIR = DATA_DIR / "issues"
 TRASH_DIR = DATA_DIR / "trash"
 MAIN = "issue.md"
+PLAN = "plan.md"  # the plan, kept by the issue's session while the user plans with it
 
 # Linear's priority levels, most urgent first.
 PRIORITIES = ["urgent", "high", "medium", "low", "none"]
@@ -97,6 +98,11 @@ def load_all() -> dict[str, Issue]:
 def files(slug: str) -> list[str]:
     """The issue's own files besides issue.md, by name."""
     return sorted(p.name for p in folder(slug).iterdir() if p.is_file() and p.name != MAIN)
+
+
+def has_plan(issue: Issue) -> bool:
+    """plan.md, or a ## Plan section: older issues have one, and the desk agent's Start writes one."""
+    return (folder(issue.slug) / PLAN).is_file() or bool(issue.section("Plan"))
 
 
 def save(issue: Issue) -> None:
