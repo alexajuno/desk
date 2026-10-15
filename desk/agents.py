@@ -40,8 +40,7 @@ Issue file: {file}. Read it first. Its other files are in {dir}.
 
 Help the user understand the issue, then plan it with them: a few directions, pick one together, note why.
 The plan lives in {plan}, not in the issue file. Write it as a mini design doc, as the design-doc skill says: the box with the resume line and the decisions so far, each with the user's reason, at the top, and the workflow drawn in d2. desk lists it in the issue's files and redraws it each time it changes, so the user can read the plan as it forms. Write a first draft as soon as you understand the issue, then rewrite it whenever the talk changes it. Write it with the Write or Edit tool.
-Its build plan ends with three parts that desk and the hand-off read: Done when; What you may decide alone; and Lands as.
-Lands as is how the work lands after the user approves it: merge (desk fast-forwards your branch into the folder's checkout), pr (you push and open a draft PR) or nothing. Suggest {lands} for this folder and confirm it with the user; they can change it in desk's Properties.
+Its build plan ends with Done when and What you may decide alone, which the hand-off works from and the review card checks. How the work lands is not part of the plan: the repo's own rules and desk decide it.
 Keep it short. A longer design goes into its own file in {dir}.
 When the plan is settled, tell the user they can press Hand off in desk, and that you will carry it out in the background."""
 
@@ -56,7 +55,7 @@ The whole chat, which is all the context the user gave:
 
 How to work:
 - You are in your own worktree, on its own branch. Gather the context the chat points at: read the code and the repo's rules, the related desk issues, the links the user gave. Change nothing yet.
-- Then write the plan into {plan}, not the issue file, with the Write or Edit tool: a mini design doc, as the design-doc skill says, with the decisions so far and why, and the workflow drawn in d2. Its build plan ends with Done when, What you may decide alone, and Lands as. Lands as is merge (desk fast-forwards your branch into the folder's checkout), pr (you push and open a draft PR) or nothing; suggest {lands} for this folder.
+- Then write the plan into {plan}, not the issue file, with the Write or Edit tool: a mini design doc, as the design-doc skill says, with the decisions so far and why, and the workflow drawn in d2. Its build plan ends with Done when and What you may decide alone.
 - Then stop and wait: the user reads the plan, talks it over with you, and presses Hand off in desk, which sends you to carry it out. Don't start the work before that."""
 
 # The review card: desk shows the text above "## Details" above Approve and folds the rest (app.split_result).
@@ -192,8 +191,7 @@ def _terminal(cwd: str, issue, *command: str) -> None:
 
 
 def _paths(issue, folder: Path) -> dict:
-    from .land import lands  # land.py imports this module
-    return {"title": issue.title, "file": folder / "issue.md", "plan": folder / "plan.md", "dir": folder, "lands": lands(issue)}
+    return {"title": issue.title, "file": folder / "issue.md", "plan": folder / "plan.md", "dir": folder}
 
 
 class TrustError(RuntimeError):
