@@ -221,7 +221,7 @@ function valueMenu(field, current, where, choose) {
   const values = { priority: ["none", "urgent", "high", "medium", "low"], protocol: DESK.protocols }[field] ?? DESK.states;
   const num = (v) => values.indexOf(v) + (field === "priority" ? 0 : 1);
   openMenu({
-    ...where, filter: "keys", kbd: { state: "S", priority: "P" }[field],
+    ...where, filter: "keys", kbd: { state: "S", priority: "P" }[field], className: field === "protocol" ? "wide" : "",
     placeholder: `Change ${field === "state" ? "status" : field}…`,
     items: (q) => values.filter((v) => nameOf(field, v).toLowerCase().includes(q.toLowerCase())).map((v) => ({
       icon: icon(field, v), label: nameOf(field, v), sub: field === "protocol" ? DESK.proto_hints[v] : undefined,

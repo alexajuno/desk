@@ -397,6 +397,7 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .menu li .chev { color: var(--text-3); }
 .menu li .glyph { color: var(--text-3); }
 .menu li .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu li .name small { display: block; font-size: 12px; line-height: 16px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
 .menu li.divider { height: 0.5px; padding: 0; margin: 4px -4px; border-radius: 0; background: var(--border-pop); cursor: default; }
 .menu:focus { outline: none; }
 .menu.actions { width: 224px; } .menu.actions ul { padding-top: 4px; }
