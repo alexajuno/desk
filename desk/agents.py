@@ -44,6 +44,20 @@ Lands as is how the work lands after the user approves it: merge (desk fast-forw
 Keep it short. A longer design goes into its own file in {dir}.
 When the plan is written, tell the user they can press Hand off in desk, and that you will carry it out in the background."""
 
+CHAT_PLAN_PROMPT = """The user was talking to desk's agent about a piece of work, and it filed this issue and started you on it. Plan it, on your own, in the background.
+
+Issue: {title}
+Issue file: {file}. Read it first. Its other files are in {dir}.
+
+The whole chat, which is all the context the user gave:
+
+{chat}
+
+How to work:
+- You are in your own worktree, on its own branch. Gather the context the chat points at: read the code and the repo's rules, the related desk issues, the links the user gave. Change nothing yet.
+- Then write the plan into the "## Plan" section of the issue file with the Write or Edit tool, in four short parts: Direction, Done when, What you may decide alone, and Lands as. Lands as is merge (desk fast-forwards your branch into the folder's checkout), pr (you push and open a draft PR) or nothing; suggest {lands} for this folder. Say why you chose the direction. A longer design goes into its own file in {dir}.
+- Then stop and wait: the user reads the plan, talks it over with you, and presses Hand off in desk, which sends you to carry it out. Don't start the work before that."""
+
 HANDOFF_PROMPT = """The user handed this issue off: carry out the plan now, on your own, in the background.
 
 Issue file: {file}. Its "## Plan" section is your brief. Its other files are in {dir}.
@@ -232,7 +246,14 @@ def run(issue, folder: Path) -> str:
     return live().get(short, {}).get("sessionId") or short
 
 
-SEND_BACK_PROMPT = """The user reviewed your result and sends it back with this note:
+def plan_from_chat(issue, folder: Path, chat: str) -> str:
+    """Start the issue's session in the background, with no terminal, to gather context and write the plan
+    from the Agent chat, then wait; returns its session id."""
+    short = _new_session(issue, CHAT_PLAN_PROMPT.format(chat=chat, **_paths(issue, folder)))
+    return live().get(short, {}).get("sessionId") or short
+
+
+SEND_BACK_PROMPT ="""The user reviewed your result and sends it back with this note:
 
 {note}
 

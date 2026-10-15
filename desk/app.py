@@ -75,6 +75,9 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
             store.save(issue)
         if issue.state == "review":
             review.append((issue, "result ready" if (store.folder(issue.slug) / "result.md").is_file() else "check it"))
+        elif issue.state == "planning" and row.get("kind") == "background" and not busy and issue.section("Plan"):
+            # A session the Agent started plans in the background; idle with a Plan written, it waits for you.
+            needs.append((issue, "plan ready"))
         elif row.get("state") == "blocked" and issue.state not in CLOSED:
             # Claude Code keeps listing a session by its last state after it ends: igh-289's and
             # add-project-concept-to-desk's still said blocked, with no process, long after both were done (15 Oct).
@@ -222,7 +225,7 @@ def project_set(slug: str, field: str = Form(...), value: str = Form("")):
 
 
 # What each reason for being in the Inbox reads as, in a row's second line, after "Session".
-NOTICES = {"waiting for you": "is waiting for you", "has questions": "saved questions for you",
+NOTICES = {"waiting for you": "is waiting for you", "plan ready": "wrote its plan: read it, then hand off","has questions": "saved questions for you",
            "result ready": "finished: the result is ready", "check it": "finished, with no result.md"}
 
 

@@ -20,7 +20,7 @@ import subprocess
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from . import agents, land, projects
+from . import agents, chats, land, projects
 from . import issues as store
 from .search import find
 
@@ -174,6 +174,7 @@ def update_project(slug: str, fields: ProjectFields):
 
 class Start(BaseModel):
     plan: str = ""
+    chat: str = ""  # the id of the Agent chat; with no plan, the issue's session plans from the whole chat
 
 
 @router.post("/issues/{slug}/start")
@@ -185,11 +186,15 @@ def start_issue(slug: str, start: Start):
     if start.plan.strip():
         i.set_section("Plan", start.plan)
         store.save(i)
-    if not i.section("Plan"):
+    planning = not i.section("Plan") and not i.session and chats.exists(start.chat)
+    if not i.section("Plan") and not planning:
         raise HTTPException(422, "Write the plan first: send it as plan, in three parts: Direction, Done when, "
-                                 "What you may decide alone.")
+                                 "What you may decide alone. Or send chat, the id of this chat, and the issue's "
+                                 "session writes the plan.")
     try:
-        if i.session:
+        if planning:
+            i.session = agents.plan_from_chat(i, store.folder(slug), chats.transcript(start.chat))
+        elif i.session:
             agents.hand_off(i, store.folder(slug))
         else:
             i.session = agents.run(i, store.folder(slug))
@@ -198,6 +203,6 @@ def start_issue(slug: str, start: Start):
                                  f"and press Trust folder, then start again.")
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         raise HTTPException(502, f"The plan is saved, but the session did not start: {error}")
-    i.state = "running"
+    i.state = "planning" if planning else "running"
     store.save(i)
     return as_json(i)

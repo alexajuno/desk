@@ -93,7 +93,8 @@
     {%- endif %}
     {%- if p.session %}
     <div class="prop static"><span class="key">Session</span><code>{{ p.session[:8] }}</code>
-      <span class="live {{ live }}">{{ "open in a terminal" if where == "interactive" else {"working": "working", "done": "done", "blocked": "needs you", "stopped": "stopped", "failed": "failed"}.get(live, "not running") }}</span></div>
+      <span class="live {{ live }}">{{ "open in a terminal" if where == "interactive" else {"working": "working", "done": "done", "blocked": "needs you", "stopped": "stopped", "failed": "failed"}.get(live, "not running") }}</span>
+      {%- if p.state == "planning" and where == "background" and session.get("status") != "busy" and p.section("Plan") %}<span class="pill">plan ready</span>{% endif %}</div>
     {%- endif %}
   </aside>
 </div>

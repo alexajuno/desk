@@ -41,7 +41,7 @@ FLAGS = ["--output-format", "stream-json", "--verbose", "--include-partial-messa
 
 PROMPT = """You are desk's agent. desk is the user's workspace: each piece of work is an issue, a folder of files, and each issue gets its own Claude Code session that does the work.
 
-You are a dispatcher. You file issues, set their fields, write a short plan when the user asks to start one, and start the issue's own session. You never do the work yourself: no code, no research, no answers beyond what desk's issues say. When the user asks for work, file it as an issue, or start it if they say so, and say where it is.
+You are a dispatcher. You file issues, set their fields, and start the issue's own session. You never do the work yourself: no code, no research, no answers beyond what desk's issues say. When the user asks for work, file it as an issue, or start it if they say so, and say where it is.
 
 Today is {today}.
 
@@ -49,7 +49,7 @@ How you act:
 - Call desk's API with curl, exactly as the reference below shows: `curl -s "<url>"`, the URL in double quotes, the whole command on one line, and any JSON body in single quotes with ’ for an apostrophe. It is the only command you can run. Read an issue's files with the Read tool, at the path the API gives as "file".
 - Give each issue you file a body with a `## Context` section quoting what the user said, dated: The user, {day}: "…".
 - "Park" means file it in the backlog and stop. Start a session only when the user asks you to start, run or hand off an issue.
-- Before starting, the issue needs a plan. Write it from what the user said, in three short parts: Direction, Done when, What you may decide alone. Do not add scope the user did not ask for. If you cannot tell what should be done, or in which repo, ask one short question instead of starting.
+- This chat's id is {chat}. To start an issue's session, call its start with {{"chat": "{chat}"}} and no plan: the issue's own session gets this whole chat, gathers context, and writes the plan itself, then waits for the user. If the issue already has a plan, start it without chat. If you cannot tell what should be done, or in which repo, ask one short question instead of starting.
 - Before you file an issue, search the open ones for the same work (the search call in the reference) and link the one you find instead of filing a second.
 - When starting fails with "Workspace not trusted", tell the user to open the issue's page and press Trust folder. Never suggest a `claude` command or flag yourself.
 - Work in a repo needs the issue's folder: find it with /api/folders?q=<name> and set it before starting.
@@ -90,6 +90,19 @@ def create(text: str) -> dict:
     now = datetime.now().isoformat(timespec="seconds")
     return {"id": f"{slug}-{uuid.uuid4().hex[:6]}", "title": title_of(text), "created": now, "updated": now,
             "session": str(uuid.uuid4()), "started": False, "model": "haiku", "effort": "", "messages": []}
+
+
+def exists(chat_id: str) -> bool:
+    return bool(re.fullmatch(r"[\w-]+", chat_id)) and _path(chat_id).is_file()
+
+
+def transcript(chat_id: str) -> str:
+    """The chat as plain text, the user's words and the agent's replies in order, for a session's first prompt."""
+    lines = []
+    for message in load(chat_id)["messages"]:
+        who = "The user" if message["role"] == "you" else "desk's agent"
+        lines.append(f"{who} ({message['at']}): {message['text']}")
+    return "\n\n".join(lines)
 
 
 def age(iso: str) -> str:
@@ -169,7 +182,7 @@ def step_label(tool: dict, base: str) -> str:
 async def reply(run: Run, chat: dict, text: str, base: str, render) -> None:
     """Run the agent on one message, pushing its text and steps as they come, then save the reply."""
     reference = re.sub(r"\A---\n.*?\n---\n", "", SKILL.read_text(encoding="utf-8"), flags=re.S).replace(SKILL_BASE, base)
-    prompt = PROMPT.format(today=f"{datetime.now():%A %-d %B %Y}", day=f"{datetime.now():%-d %b}", reference=reference)
+    prompt = PROMPT.format(today=f"{datetime.now():%A %-d %B %Y}", day=f"{datetime.now():%-d %b}", reference=reference, chat=chat["id"])
     allowed = [f'Bash(curl -s "{base}/api/*)', f"Bash(curl -s {base}/api/*)"]
     session = ["--resume" if chat["started"] else "--session-id", chat["session"]]
     choice = ["--model", chat.get("model", "haiku")] + (["--effort", chat["effort"]] if chat.get("effort") else [])
