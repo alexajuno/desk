@@ -27,7 +27,7 @@ from . import issues as store
 def _hyprctl(*args: str) -> str:
     if not shutil.which("hyprctl"):
         raise RuntimeError("A chat opens in a floating window, which needs Hyprland.")
-    run = subprocess.run(["hyprctl", *args], capture_output=True, text=True, timeout=10)
+    run = subprocess.run(["hyprctl", *args], capture_output=True, text=True, timeout=10, env=agents.session_env())
     if run.returncode:
         raise RuntimeError(f"Hyprland said: {(run.stdout + run.stderr).strip()}")
     return run.stdout

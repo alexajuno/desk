@@ -70,8 +70,9 @@ def command(issue) -> tuple[list[str], str]:
 def clean_env() -> dict[str, str]:
     """desk's environment for a terminal of its own. desk may itself have been started from a Claude
     Code session (on 14 Oct the app on 8790 carried CLAUDECODE, CLAUDE_CODE_SESSION_ID and a messaging
-    socket), and from kitty, whose TERM and KITTY_* would tell claude it draws in kitty."""
-    env = {k: v for k, v in os.environ.items()
+    socket), and from kitty, whose TERM and KITTY_* would tell claude it draws in kitty. The graphical
+    session's variables come fresh from the user manager (agents.session_env)."""
+    env = {k: v for k, v in agents.session_env().items()
            if not k.startswith(("CLAUDE", "KITTY_", "TERM")) and k not in ("COLORTERM", "FORCE_COLOR", "VIRTUAL_ENV")}
     return env | {"TERM": "xterm-256color", "COLORTERM": "truecolor"}
 

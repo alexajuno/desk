@@ -169,6 +169,21 @@ def own_scope(command: list[str], slice: str = "agents.slice") -> list[str]:
             "--expand-environment=no", "--", *command]
 
 
+# Hyprland's start hook in hyprland.lua imports these into the user manager at login. desk.service starts at boot,
+# before that (linger), and a running service never sees a later import, so on 15 Oct every hyprctl call from desk
+# failed with "HYPRLAND_INSTANCE_SIGNATURE not set!". The signature also changes with each Hyprland start, so desk
+# asks the manager each time it spawns something that talks to the session.
+SESSION_VARS = ("HYPRLAND_INSTANCE_SIGNATURE", "WAYLAND_DISPLAY", "DISPLAY")
+
+
+def session_env(env: dict[str, str] | None = None) -> dict[str, str]:
+    """The environment (desk's own by default) with the graphical session's variables as the user manager has
+    them now. `systemctl --user show-environment` prints plain VARIABLE=value lines for values like these."""
+    out = subprocess.run(["systemctl", "--user", "show-environment"], capture_output=True, text=True, timeout=10).stdout
+    now = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+    return (os.environ if env is None else env) | {name: now[name] for name in SESSION_VARS if name in now}
+
+
 def workdir(issue) -> str:
     return os.path.expanduser(issue.folder) if issue.folder else str(Path.home())
 
@@ -206,7 +221,7 @@ def _kitty(socket: str, *args: str) -> bool:
     # which went unseen here until the user found Jump back leaving them on desk's workspace (14 Oct).
     pid = socket.rsplit("-", 1)[1]
     focus = subprocess.run(["hyprctl", "dispatch", f'hl.dsp.focus({{ window = "pid:{pid}" }})'],
-                           capture_output=True, text=True, timeout=10)
+                           capture_output=True, text=True, timeout=10, env=session_env())
     if focus.returncode:
         raise RuntimeError(f"Opened in kitty, but Hyprland did not switch to it: {focus.stdout.strip()}")
     return True
@@ -225,7 +240,7 @@ def _terminal(cwd: str, issue, *command: str) -> None:
     if any(_kitty(socket, "launch", "--type=tab", *launch) for socket in sorted(glob.glob(KITTY_SOCKETS))):
         return
     kitty = subprocess.Popen(own_scope(["kitty", "--title", issue.title, "--session", "-"], slice="app.slice"),
-                             stdin=subprocess.PIPE, text=True, start_new_session=True,
+                             stdin=subprocess.PIPE, text=True, start_new_session=True, env=session_env(),
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     kitty.stdin.write(f"launch {shlex.join(launch)}\n")
     kitty.stdin.close()
@@ -260,7 +275,7 @@ def trust(folder: str) -> None:
 
 
 def _background(cwd: str, command: list[str]) -> str:
-    run = subprocess.run(own_scope(command), cwd=cwd, capture_output=True, text=True, timeout=60)
+    run = subprocess.run(own_scope(command), cwd=cwd, capture_output=True, text=True, timeout=60, env=session_env())
     # With FORCE_COLOR set, as in the kitty shell desk runs from, the id comes wrapped in colour codes:
     # "backgrounded · \x1b[36mf72e9ccb\x1b[39m · <name>" (seen 2026-10-14).
     out = re.sub(r"\x1b\[[0-9;]*m", "", run.stdout + run.stderr)
