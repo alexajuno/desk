@@ -231,8 +231,9 @@ def show(request: Request, slug: str):
         trail.insert(0, all_issues[up])
         up = all_issues[up].parent
     kids_of = all_kids(all_issues)
-    agent_files = {name: to_html(path.read_text(encoding="utf-8"))
-                   for name in ("questions.md", "result.md") if (path := store.folder(slug) / name).is_file()}
+    # The plan, a design doc the session keeps in plan.md, shows on the page with the agent's files.
+    agent_files = {name: to_html(path.read_text(encoding="utf-8"), base=f"/issue/{slug}/f/")
+                   for name in ("plan.md", "questions.md", "result.md") if (path := store.folder(slug) / name).is_file()}
     direct = store.children(all_issues, slug)
     progress = (sum(k.state == "done" for k in direct), sum(k.state != "dropped" for k in direct))
     session = agents.live().get(i.session, {}) if i.session else {}

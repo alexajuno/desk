@@ -69,12 +69,28 @@ class Sections(Treeprocessor):
             into.append((level, etree.SubElement(section, "div", {"class": "sec-body"})))
 
 
-def to_html(text: str) -> str:
-    return to_html_with_toc(text)[0]
+class Relative(Treeprocessor):
+    """Points a relative link or image at the folder it was written in: plan.md's [review-card.md](review-card.md)
+    means the issue's file, also when plan.md shows on the issue page rather than on its own file page."""
+
+    def __init__(self, md: markdown.Markdown, base: str):
+        super().__init__(md)
+        self.base = base
+
+    def run(self, root: etree.Element) -> None:
+        for el in root.iter():
+            for attr in ("href", "src"):
+                if (url := el.get(attr)) and not re.match(r"[a-z][a-z0-9+.-]*:|/|#", url, re.I):
+                    el.set(attr, self.base + url)
 
 
-def to_html_with_toc(text: str) -> tuple[str, str]:
-    """The page and its table of contents (the h2 and h3 headings), for long documents."""
+def to_html(text: str, base: str = "") -> str:
+    return to_html_with_toc(text, base)[0]
+
+
+def to_html_with_toc(text: str, base: str = "") -> tuple[str, str]:
+    """The page and its table of contents (the h2 and h3 headings), for long documents. With a base, such as
+    "/issue/<slug>/f/", relative links and images point under it."""
     diagrams: list[str] = []
 
     def hold(match: re.Match) -> str:
@@ -84,6 +100,8 @@ def to_html_with_toc(text: str) -> tuple[str, str]:
     md = markdown.Markdown(extensions=["tables", "fenced_code", "sane_lists", "toc"],
                            extension_configs={"toc": {"toc_depth": "2-3"}})
     md.treeprocessors.register(Sections(md), "sections", 4)  # after toc (5), before unescape (0)
+    if base:
+        md.treeprocessors.register(Relative(md, base), "relative", 3)
     body = md.convert(D2_BLOCK.sub(hold, text))
     for i, svg in enumerate(diagrams):
         body = body.replace(f"<p>D2DIAGRAM{i}</p>", svg)

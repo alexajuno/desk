@@ -241,11 +241,21 @@ button.primary:hover { background: var(--accent-hover); border-color: var(--acce
              letter-spacing: -0.1px; color: var(--text-2); }
 .body-edit::placeholder { color: var(--text-3); }
 .body { font-size: 15px; line-height: 24px; color: var(--text-2); letter-spacing: -0.1px; }
-.body h2 { font-size: 16px; font-weight: 600; color: var(--text-1); margin: 24px 0 6px; }
+.body h2 { font-size: 18px; line-height: 1.4; font-weight: 600; color: var(--text-1); margin: 24px 0 6px; }
 .body h3 { font-size: 15px; font-weight: 600; color: var(--text-1); margin: 16px 0 4px; }
 .body a { color: var(--link); }
-.section-label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-1); margin: 32px 0 8px; }
-.section-label .muted { font-weight: 450; }
+.body strong { color: var(--text-1); }
+/* The issue page's own parts (Plan, Result, Sub-issues) head like the description's ## sections. */
+.section-label { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; color: var(--text-1); margin: 32px 0 8px; }
+.section-label .muted { font-size: 13px; font-weight: 450; }
+.section-label a.muted { color: var(--text-3); }
+/* A document under one of those headings (the plan, the result, the questions) has its own headings a step
+   below it. The plan is a design doc whose title repeats the issue's, so its title is left out. */
+.sec-body > .body h2, .review .body h2 { font-size: 16px; } .sec-body > .body h3, .review .body h3 { font-size: 15px; }
+.plan > h1:first-child { display: none; }
+.body table { border-collapse: collapse; font-size: 13px; line-height: 20px; margin: 0 0 12px; }
+.body td, .body th { border: 1px solid var(--border-3); padding: 4px 8px; vertical-align: top; }
+.body blockquote { margin: 0 0 12px; background: var(--bg-raised); border-left: 3px solid var(--accent); padding: 6px 14px; border-radius: 0 8px 8px 0; }
 /* A section folds from the triangle in the gutter left of its heading, or a click on the heading: render.py's
    ## and ### sections, and the issue page's labelled parts. The triangle is the group's, turned down while open. */
 .sec-head { position: relative; cursor: pointer; }

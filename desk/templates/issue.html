@@ -29,8 +29,13 @@
     {%- else %}<div class="body description empty">Add description…</div>{% endif %}
     {%- for name, html in agent_files.items() if not (p.state == "review" and name == "result.md") %}
     <section class="sec" data-sec="{{ name }}">
+      {%- if name == "plan.md" %}
+      <div class="section-label sec-head">{{ fold() }}Plan <a class="muted" href="/issue/{{ p.slug }}/f/plan.md" title="Open the plan on its own page, with its contents">plan.md</a></div>
+      <div class="sec-body"><div class="body plan">{{ html | safe }}</div></div></section>
+      {%- else %}
       <div class="section-label sec-head">{{ fold() }}{{ "Saved questions" if name == "questions.md" else "Result" }} <span class="muted">from the agent · {{ name }}</span></div>
       <div class="sec-body"><div class="body">{{ html | safe }}</div></div></section>
+      {%- endif %}
     {%- endfor %}
     <section class="sec" data-sec="sub-issues">
       <div class="section-label sec-head">{{ fold() }}Sub-issues{% if progress[1] %}<span class="pill">{{ progress[0] }}/{{ progress[1] }} done</span>{% endif %}
