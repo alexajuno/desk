@@ -1,5 +1,5 @@
 {#- An issue, as its page shows it: the Inbox shows the same in its right pane. #}
-{%- from "macros.html" import tree, prio, state, plus, fold %}
+{%- from "macros.html" import tree, prio, proto, state, plus, fold %}
 {#- The strip: where the issue stands, and its one button, the next step (app.strip), pinned at the top while the
     issue scrolls, here and in the Inbox. Open chat brings the issue's session to you in a floating kitty window over
     desk (window.py), here and in the Inbox; whenever it is not the step, a quiet Open chat sits beside it (the user,
@@ -40,6 +40,8 @@
         <span class="icon" data-field="state">{{ state(p.state) }}</span><span class="field-label" data-field="state">{{ state_names[p.state] }}</span></button>
       <button class="field-chip pick{{ ' unset' if p.priority == 'none' }}" type="button" data-slug="{{ p.slug }}" data-field="priority" data-priority="{{ p.priority }}" title="Change priority (P)">
         <span class="icon" data-field="priority">{{ prio(p.priority) }}</span><span class="field-label" data-field="priority">{{ "Priority" if p.priority == "none" else prio_names[p.priority] }}</span></button>
+      <button class="field-chip pick" type="button" data-slug="{{ p.slug }}" data-field="protocol" data-protocol="{{ p.runs }}" title="Change protocol: how much plan, and whether it waits for go">
+        <span class="icon" data-field="protocol">{{ proto(p.runs) }}</span><span class="field-label" data-field="protocol">{{ proto_names[p.runs] }}</span></button>
       <button class="field-chip project-chip{{ ' unset' if not p.project }}" type="button" data-slug="{{ p.slug }}" data-value="{{ p.project or '' }}" title="Set project">
         <svg class="glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M8 2l5.5 3v6L8 14l-5.5-3V5z"/></svg>
         <span>{{ project.title if project else p.project or "Project" }}</span></button>
@@ -83,6 +85,11 @@
       <span class="icon" data-field="state">{{ state(p.state) }}</span><span class="field-label" data-field="state">{{ state_names[p.state] }}</span></button>
     <button class="prop pick" data-slug="{{ p.slug }}" data-field="priority" data-priority="{{ p.priority }}" title="Change priority (P)">
       <span class="icon" data-field="priority">{{ prio(p.priority) }}</span><span class="field-label" data-field="priority">{{ prio_names[p.priority] }}</span></button>
+
+    {#- How much plan the issue gets, and whether its session waits for go (issues.PROTOCOLS). #}
+    <div class="label">Protocol</div>
+    <button class="prop pick" data-slug="{{ p.slug }}" data-field="protocol" data-protocol="{{ p.runs }}" title="Change protocol: how much plan, and whether it waits for go">
+      <span class="icon" data-field="protocol">{{ proto(p.runs) }}</span><span class="field-label" data-field="protocol">{{ proto_names[p.runs] }}</span></button>
 
     <div class="label">Project</div>
     <form method="post" action="/issue/{{ p.slug }}/set" class="prop project-pick">

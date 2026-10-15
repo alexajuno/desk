@@ -16,7 +16,7 @@
 const DESK = JSON.parse(document.getElementById("desk-data").textContent);
 const ICONS = document.getElementById("icons").content;
 const icon = (field, value) => ICONS.querySelector(`[data-k="${field}-${value}"]`)?.innerHTML ?? "";
-const nameOf = (field, value) => (field === "priority" ? DESK.prio_names : DESK.state_names)[value];
+const nameOf = (field, value) => ({ priority: DESK.prio_names, protocol: DESK.proto_names }[field] ?? DESK.state_names)[value];
 const $ = (selector) => document.querySelector(selector);
 const esc = (text) => String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const typing = (el) => el?.closest?.("input, textarea, select, [contenteditable]");
@@ -215,15 +215,17 @@ function fieldMenu(slug, field, current, where) {
   valueMenu(field, current, where, (v) => { if (v !== current) setField(slug, field, v); });
 }
 
-// Linear numbers priority 0 for none, then 1 urgent to 4 low; statuses count from 1.
+// Linear numbers priority 0 for none, then 1 urgent to 4 low; statuses count from 1, and so do protocols, each with
+// what it does under its name.
 function valueMenu(field, current, where, choose) {
-  const values = field === "priority" ? ["none", "urgent", "high", "medium", "low"] : DESK.states;
+  const values = { priority: ["none", "urgent", "high", "medium", "low"], protocol: DESK.protocols }[field] ?? DESK.states;
   const num = (v) => values.indexOf(v) + (field === "priority" ? 0 : 1);
   openMenu({
-    ...where, filter: "keys", kbd: field === "state" ? "S" : "P",
-    placeholder: `Change ${field === "state" ? "status" : "priority"}…`,
+    ...where, filter: "keys", kbd: { state: "S", priority: "P" }[field],
+    placeholder: `Change ${field === "state" ? "status" : field}…`,
     items: (q) => values.filter((v) => nameOf(field, v).toLowerCase().includes(q.toLowerCase())).map((v) => ({
-      icon: icon(field, v), label: nameOf(field, v), hint: num(v), num: num(v), current: v === current, run: () => choose(v),
+      icon: icon(field, v), label: nameOf(field, v), sub: field === "protocol" ? DESK.proto_hints[v] : undefined,
+      hint: num(v), num: num(v), current: v === current, run: () => choose(v),
     })),
   });
 }
@@ -346,7 +348,7 @@ function paint(slug, field, value) {
 }
 
 async function setField(slug, field, value) {
-  if (field === "state" || field === "priority") paint(slug, field, value);
+  if (["state", "priority", "protocol"].includes(field)) paint(slug, field, value);
   const res = await post(`/issue/${slug}/set`, { field, value });
   if (!res.ok) toast(await reason(res));
   await refresh();
@@ -807,7 +809,7 @@ document.addEventListener("click", (e) => {
 // Its keys are read on the window in the capture phase, ahead of the Agent tab's Esc and the page's
 // shortcuts; an open menu still gets its keys first, since the panel steps aside while one is open.
 let creator = null;
-const BLANK = { title: "", body: "", state: "backlog", priority: "none", parent: "", parentTitle: "", project: "", projectTitle: "" };
+const BLANK = { title: "", body: "", state: "backlog", priority: "none", protocol: "design", parent: "", parentTitle: "", project: "", projectTitle: "" };
 const CLOSE = svg('<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>');
 
 // An issue's title from the page, for the parent chip; the slug when the page does not show it.
@@ -829,6 +831,7 @@ function openCreator(preset = {}) {
     <div class="create-fields">
       <button type="button" class="field-chip" data-field="state" title="Change status"></button>
       <button type="button" class="field-chip" data-field="priority" title="Change priority"></button>
+      <button type="button" class="field-chip" data-field="protocol" title="Change protocol: how much plan, and whether it waits for go"></button>
       <button type="button" class="field-chip" data-field="parent" title="Set parent"></button>
       <button type="button" class="field-chip" data-field="project" title="Set project"></button>
     </div>
@@ -845,6 +848,7 @@ function openCreator(preset = {}) {
     const unset = { priority: draft.priority === "none", parent: !draft.parent, project: !draft.project };
     chip("state").innerHTML = `${icon("state", draft.state)}<span>${esc(nameOf("state", draft.state))}</span>`;
     chip("priority").innerHTML = `${icon("priority", draft.priority)}<span>${unset.priority ? "Priority" : esc(nameOf("priority", draft.priority))}</span>`;
+    chip("protocol").innerHTML = `${icon("protocol", draft.protocol)}<span>${esc(nameOf("protocol", draft.protocol))}</span>`;
     chip("parent").innerHTML = `${GLYPH.parent}<span>${unset.parent ? "Parent" : esc(draft.parentTitle || draft.parent)}</span>`;
     chip("project").innerHTML = `${GLYPH.project}<span>${unset.project ? "Project" : esc(draft.projectTitle || draft.project)}</span>`;
     for (const field in unset) chip(field).classList.toggle("unset", unset[field]);
@@ -875,7 +879,7 @@ function openCreator(preset = {}) {
     sending = true;
     const res = await fetch("/api/issues", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: name, body: body.value, state: draft.state, priority: draft.priority, parent: draft.parent || null, project: draft.project || null }),
+      body: JSON.stringify({ title: name, body: body.value, state: draft.state, priority: draft.priority, protocol: draft.protocol, parent: draft.parent || null, project: draft.project || null }),
     });
     sending = false;
     if (!res.ok) { toast(await reason(res)); return; }

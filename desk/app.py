@@ -89,8 +89,9 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
         elif issue.state == "running" and now == "idle" and issue.landing:
             needs.append((issue, "waiting for you"))
         elif issue.state == "running" and now == "idle" and not result.is_file() and store.has_plan(issue):
-            # Planned, by you in its chat or on its own from the Agent's: it waits for your "go".
-            needs.append((issue, "plan ready"))
+            # Planned, by you in its chat or on its own from the Agent's: it waits for your "go". A quick issue's
+            # session waits for nothing, so one that stopped before its result stopped for you.
+            needs.append((issue, "waiting for you" if issue.runs == "quick" else "plan ready"))
         elif row.get("state") == "blocked" and row.get("pid") and issue.state not in CLOSED:
             # Claude Code keeps listing a session by its last state after it ends: igh-289's and
             # add-project-concept-to-desk's still said blocked, with no process, long after both were done (15 Oct).
@@ -122,6 +123,10 @@ templates.env.globals.update(
     state_names={"backlog": "Backlog", "running": "In progress", "review": "In review",
                  "done": "Done", "dropped": "Dropped"},
     prio_names={"urgent": "Urgent", "high": "High", "medium": "Medium", "low": "Low", "none": "No priority"},
+    protocols=store.PROTOCOLS, proto_names={"quick": "Quick", "brief": "Brief", "design": "Design"},
+    # What each protocol does, under its name in the picker.
+    proto_hints={"quick": "A 3-line brief, then the work, no go", "brief": "A 3-line brief, then waits for go",
+                 "design": "A design doc you talk through, then go"},
 )
 # desk.css and desk.js carry their file's time in the URL: a tab that cached them before the
 # no-cache header still fetches a changed file, since its URL is new.
@@ -352,6 +357,12 @@ def strip(i: store.Issue, row: dict, has_plan: bool, result: Path) -> dict:
     if i.state == "backlog":
         if i.session:
             return {"text": "In the backlog, with its chat.", "button": chat}
+        if i.runs == "quick":
+            return {"text": "Quick: Start sets its session going; it writes a 3-line brief, does the work, and you review.",
+                    "button": {"label": "Start", "action": "start"}}
+        if i.runs == "brief":
+            return {"text": "Brief: Plan sets its session writing a 3-line brief, then it waits for your go.",
+                    "button": {"label": "Plan", "action": "start"}}
         return {"text": "Plan opens the issue's chat, and its session plans it with you.",
                 "button": {"label": "Plan", "action": "start"}}
     if i.state == "running" and i.landing:
@@ -363,7 +374,7 @@ def strip(i: store.Issue, row: dict, has_plan: bool, result: Path) -> dict:
         if now == "working":
             return {"text": "The session is working.", "button": chat}
         if now == "idle":
-            ready = has_plan and not has_result
+            ready = has_plan and not has_result and i.runs != "quick"
             return {"text": "Plan ready: read it, then say go in the chat." if ready else "Your turn in the chat.",
                     "button": chat}
         return {"text": asleep, "button": chat}
@@ -433,8 +444,8 @@ def set_field(slug: str, field: str = Form(...), value: str = Form("")):
     if not store.exists(slug):
         raise HTTPException(404, "That issue is gone.")
     i = store.load(slug)
-    if field in ("priority", "state"):
-        if value not in (store.PRIORITIES if field == "priority" else store.STATES):
+    if field in ("priority", "state", "protocol"):
+        if value not in {"priority": store.PRIORITIES, "state": store.STATES, "protocol": store.PROTOCOLS}[field]:
             raise HTTPException(422, f"{field} cannot be {value}")
     elif field == "title":
         value = " ".join(value.split())
@@ -500,7 +511,8 @@ def set_folder(slug: str, folder: str = Form("")):
 
 @app.post("/issue/{slug}/start")
 def start(slug: str):
-    """Plan: the issue's session starts in its folder and plans it with you, in the chat the page docks beside it."""
+    """Plan, or Start for a quick issue: the issue's session starts in its folder and plans it by its protocol, with
+    you in the chat the page docks beside it, or on its own straight into the work."""
     i = store.load(slug)
     if i.session:
         return back(slug)
@@ -527,7 +539,7 @@ def trust_folder(request: Request, slug: str):
         agents.trust(agents.workdir(i))
     except (RuntimeError, OSError, ValueError) as error:
         return back(slug, str(error))
-    return back(slug, f"Trusted {agents.workdir(i)}. Press Plan again.")
+    return back(slug, f"Trusted {agents.workdir(i)}. Press {'Start' if i.runs == 'quick' else 'Plan'} again.")
 
 
 @app.post("/issue/{slug}/approve")

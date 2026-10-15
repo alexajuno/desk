@@ -3,7 +3,7 @@ documents it for them).
 
     GET    /api/issues?q=&state=      list and search issues
     GET    /api/issues/<slug>         one issue, with its body and files
-    POST   /api/issues                create one: title, body, priority, state, parent, folder
+    POST   /api/issues                create one: title, body, priority, state, parent, project, folder, protocol
     PATCH  /api/issues/<slug>         set any of those fields
     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
     POST   /api/issues/<slug>/work    the Agent chat works it itself: the chat becomes the issue's session
@@ -35,7 +35,7 @@ OPEN = [s for s in store.STATES if s not in ("done", "dropped")]
 
 def as_json(i: store.Issue, full: bool = False) -> dict:
     data = {"slug": i.slug, "title": i.title, "state": i.state, "priority": i.priority, "parent": i.parent,
-            "project": i.project, "folder": i.folder, "session": i.session, "created": i.created, "url": f"/issue/{i.slug}"}
+            "project": i.project, "folder": i.folder, "protocol": i.runs, "session": i.session, "created": i.created, "url": f"/issue/{i.slug}"}
     if full:
         data |= {"file": str(store.folder(i.slug) / store.MAIN), "files": store.files(i.slug), "body": i.body}
     return data
@@ -55,13 +55,14 @@ class Fields(BaseModel):
     parent: str | None = None
     project: str | None = None
     folder: str | None = None
+    protocol: str | None = None
 
 
 def _apply(i: store.Issue, fields: Fields) -> None:
     given = {k: v.strip() if isinstance(v, str) else v for k, v in fields.model_dump(exclude_unset=True).items()}
     if given.get("state") == "planning":  # the name the In progress state had before 15 Oct
         given["state"] = "running"
-    for name, allowed in (("priority", store.PRIORITIES), ("state", store.STATES)):
+    for name, allowed in (("priority", store.PRIORITIES), ("state", store.STATES), ("protocol", store.PROTOCOLS)):
         if name in given and given[name] not in allowed:
             raise HTTPException(422, f"{name} must be one of: {', '.join(allowed)}")
     if "title" in given and not given["title"]:
@@ -186,7 +187,8 @@ class Start(BaseModel):
 @router.post("/issues/{slug}/start")
 def start_issue(slug: str, start: Start):
     """Write the plan into the issue, then start its session on it: the one it already has, which carries it out as
-    if the user had said go in its chat, or a new one."""
+    if the user had said go in its chat, or a new one. With no plan, a session plans it from the Agent chat, or, for
+    a quick or brief issue, writes its own brief."""
     i = _load(slug)
     if not (i.state == "backlog" or (i.state == "running" and i.session and not i.landing)):
         raise HTTPException(409, f"{slug} is {i.state}; only a backlog issue, or one in progress that its session "
@@ -194,14 +196,17 @@ def start_issue(slug: str, start: Start):
     if start.plan.strip():
         i.set_section("Plan", start.plan)
         store.save(i)
-    planning = not store.has_plan(i) and not i.session and chats.exists(start.chat)
+    # A quick or brief issue's session writes its own brief, so it may start with no plan and no chat.
+    planning = not store.has_plan(i) and not i.session and (chats.exists(start.chat) or i.runs != "design")
     if not store.has_plan(i) and not planning:
         raise HTTPException(422, "Write the plan first: send it as plan, in three parts: Direction, Done when, "
                                  "What you may decide alone. Or send chat, the id of this chat, and the issue's "
-                                 "session writes the plan.")
+                                 "session writes the plan. A quick or brief issue needs neither.")
     try:
-        if planning:
+        if planning and chats.exists(start.chat):
             i.session = agents.plan_from_chat(i, store.folder(slug), chats.transcript(start.chat))
+        elif planning:
+            i.session = agents.start(i, store.folder(slug))
         elif i.session:
             agents.go(i, store.folder(slug))
         else:

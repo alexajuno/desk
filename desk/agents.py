@@ -3,8 +3,10 @@ on its page (terminal.py), where the user plans with it, says "go", asks for cha
 
     Plan       claude --bg in the issue's folder, with no -w: the repo's own rules (its CLAUDE.md, CONTRIBUTING,
                .claude/rules) say where the session works, a branch, a worktree or the checkout (the user, 15 Oct:
-               "it's not necessary desk's job"). The session plans with the user and keeps the plan in plan.md.
+               "it's not necessary desk's job"). The session plans by the issue's protocol and keeps the plan in
+               plan.md: a design doc planned with the user, or a three-line brief (BRIEF).
     "go"       said in the chat: the same session carries out the plan, then writes its review card in result.md.
+               A quick issue's session needs no go: it goes on from its brief.
     Approve    the same session lands the work by the repo's rules (`claude stop`, then
                `claude --bg --resume <id> "<land it>"`, with no other flags), rebasing on the way when the branch
                it lands on moved, with no second review (the user, 15 Oct).
@@ -43,6 +45,7 @@ RESULT_CARD = """{dir}/result.md opens with a review card, which the user decide
 **Try it:** one action, such as "open /backlog and press T". When the repo's rules say how to put the app the user runs on your branch for review, do that before you write the card.
 **Done when:** each line of the plan's Done when, marked ✓ (checked), ✗ (not met) or ? (not checked), each with its evidence in a few words. A line only Approve can meet, such as the merge, is ? with "on Approve".
 **Needs you:** one line for each default you picked that the user might reverse, or each thing you could not check, with what you chose; only those that bear on Approve, the rest go under Details. Or "Nothing".
+When {plan} is a brief (it opens with **Understood as:**), the card opens with that line, word for word, above What you'll see: the user checks first that you understood them.
 A change with a UI adds one or two screenshots of the result, saved as {dir}/review-1.png and review-2.png (Playwright's screenshot takes a full path) and shown in the card: ![what it shows](review-1.png).
 Then a "## Details" heading, and under it the whole write-up: what changed and where (branch, commits, PR links), and how you checked it, marking what you verified and what you assumed. desk folds the details away."""
 
@@ -58,6 +61,22 @@ WORK = """Carrying out the plan:
 In review the user either asks for a change in this chat, or presses Approve in desk, which tells you to land the work. For a change: make it, then rewrite {dir}/result.md with a fresh card for the work as it stands now, and under Details a short "Changed after review" part saying what you changed.
 
 """ + RESULT_CARD
+
+# The plan of a quick or brief issue, short enough to read at a glance: the 24 plans written by 15 Oct ran 522 to
+# 2,423 words, and the user: "i don't even bother to read the plan in depth".
+BRIEF = """The brief, in {plan}, written with the Write tool: three lines with a blank line between each, under 60 words, with no heading and no diagram.
+**Understood as:** what the user wants, in one sentence in their terms.
+**Done when:** what your review card will check.
+**Decide alone:** what you settle yourself."""
+
+# What each protocol (issues.PROTOCOLS) asks of a session, and when desk's agent picks it.
+PROTOCOLS = """Protocols. Each issue runs one, which says how much plan it gets and whether you wait for "go":
+- quick: write the brief, then carry it out at once, with no "go". For a fix or a small feature, where a redo is cheap.
+- brief: write the brief, then tell the user to say "go", and wait. For work where a wrong guess costs more than a redo: a team repo, real data, anything that leaves this machine.
+- design: plan it with the user as a mini design doc, then wait for "go". For work that changes how something works, or when the user asks to discuss or design it.
+Pick by those lines, and quick when none fits. A word from the user switches it: "just do it" means quick, "plan it first" brief, "let's discuss" or "design it" design; set the new one on the issue. An issue with no protocol set runs design.
+
+""" + BRIEF
 
 PLAN_PROMPT = """You are the session of one issue in desk, the user's workspace, from its plan to its landing. The user talks to you here, in a chat docked beside the issue in desk.
 
@@ -87,6 +106,35 @@ How to plan:
 - Then stop and wait: the user reads the plan, talks it over with you in the chat docked beside the issue in desk, and says "go" there. Don't start the work before that.
 
 """ + WORK
+
+# A quick or brief issue's first prompt, from the Plan or Start button, or from desk's agent with its chat.
+BRIEF_PROMPT = """You are the session of one issue in desk, the user's workspace, from its brief to its landing. The user talks to you in a chat docked beside the issue in desk.
+
+Issue: {title}
+Issue file: {file}. Read it first. Its other files are in {dir}.
+{told}
+The issue runs the {protocol} protocol: {how}
+
+First gather the context it points at, changing nothing yet: the code and the repo's rules, the related desk issues, the links the user gave. Then write the brief.
+
+""" + BRIEF + """
+
+{then}
+
+""" + WORK
+
+TOLD = """
+The user was talking to desk's agent about this work, and it filed the issue and started you on it. The whole chat, which is all the context the user gave:
+
+{chat}
+"""
+
+BRIEF_STEPS = {
+    "quick": ("the user wants it done without reading a plan, and checks your work afterward, from the review card.",
+              'Then carry it out at once, on your own: don\'t wait for "go".'),
+    "brief": ("a brief the user reads at a glance, then their go.",
+              'Then stop, and tell the user to say "go" in the chat. Carry it out when they do.'),
+}
 
 GO_PROMPT = """Carry out this issue's plan now, on your own, in the background.
 
@@ -235,10 +283,21 @@ def _session_id(short: str) -> str:
     return live(fresh=True).get(short, {}).get("sessionId") or short
 
 
+def _plan_prompt(issue, folder: Path, chat: str = "") -> str:
+    """The session's first prompt, by the issue's protocol: a design doc planned with the user, or a brief, after
+    which it waits for "go" or goes on at once. chat is the Agent chat it came from, if any."""
+    paths = _paths(issue, folder)
+    if issue.runs == "design":
+        return CHAT_PLAN_PROMPT.format(chat=chat, **paths) if chat else PLAN_PROMPT.format(**paths)
+    how, then = BRIEF_STEPS[issue.runs]
+    told = TOLD.format(chat=chat) if chat else ""
+    return BRIEF_PROMPT.format(protocol=issue.runs, how=how, then=then, told=told, **paths)
+
+
 def start(issue, folder: Path) -> str:
-    """Plan: the issue's session plans it with the user, in the chat docked on the issue's page; returns its
-    session id."""
-    return _session_id(_new_session(issue, PLAN_PROMPT.format(**_paths(issue, folder))))
+    """Plan, or Start: the issue's session plans it by its protocol, with the user in the chat docked on the issue's
+    page, or on its own straight into the work; returns its session id."""
+    return _session_id(_new_session(issue, _plan_prompt(issue, folder)))
 
 
 def run(issue, folder: Path) -> str:
@@ -247,9 +306,9 @@ def run(issue, folder: Path) -> str:
 
 
 def plan_from_chat(issue, folder: Path, chat: str) -> str:
-    """Start the issue's session in the background to gather context and write the plan from the Agent chat,
-    then wait; returns its session id."""
-    return _session_id(_new_session(issue, CHAT_PLAN_PROMPT.format(chat=chat, **_paths(issue, folder))))
+    """Start the issue's session in the background to gather context and write the plan from the Agent chat, then
+    wait, or go on at once for a quick issue; returns its session id."""
+    return _session_id(_new_session(issue, _plan_prompt(issue, folder, chat)))
 
 
 def go(issue, folder: Path) -> None:

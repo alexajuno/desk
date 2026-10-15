@@ -32,6 +32,11 @@ PRIORITIES = ["urgent", "high", "medium", "low", "none"]
 # "running" shows as In progress: one chat plans the issue and carries it out, so planning is no state of its own
 # (the user, 15 Oct). An issue saved as planning before then reads as running.
 STATES = ["backlog", "running", "review", "done", "dropped"]
+# How much plan an issue gets, and whether its session waits for "go" (agents.PROTOCOL_PROMPTS). quick: a three-line
+# brief, then the work at once; brief: the same brief, then "go"; design: a design doc talked through, then "go". The
+# user, 15 Oct: "some tasks i just want it to fire and fix without me looking at the detail plan". An issue with none,
+# as every one filed before then, runs design, the loop it was filed under.
+PROTOCOLS = ["quick", "brief", "design"]
 
 FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 
@@ -45,11 +50,17 @@ class Issue:
     parent: str | None = None
     project: str | None = None  # slug of the project (projects.py) the issue belongs to
     folder: str | None = None
+    protocol: str | None = None  # one of PROTOCOLS; read it through .runs, which gives design for none
     link: str | None = None
     landing: str | None = None  # when Approve told the session to land its work; set until it reports
     session: str | None = None  # the one Claude Code session bound to this issue, from planning to done
     created: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     body: str = ""
+
+    @property
+    def runs(self) -> str:
+        """The protocol the issue runs."""
+        return self.protocol if self.protocol in PROTOCOLS else "design"
 
     @property
     def rank(self) -> tuple[int, str]:

@@ -62,12 +62,14 @@ How you act:
 - Give each issue you file a body with a `## Context` section quoting what the user said, dated: The user, {day}: "…".
 - "Park" means file it in the backlog and stop. Before you file an issue, search the open ones for the same work and link the one you find instead of filing a second.
 - When the user asks for work, or says to start an issue: find or file its issue, then bind this chat (its id is {chat}) to it, which makes this chat the issue's session and sets the folder you work in (`/work` in the reference; it needs the issue's folder, found with /api/folders?q=<name>). If you cannot tell what should be done, or in which repo, ask one short question instead.
-- Then plan it with the user, in this chat: write the plan as the issue's plan.md and tell them to say "go" here. The rules for planning and for carrying out the work follow below; they are the same ones every issue's session works by.
+- When you file it, or find it with no protocol set, pick its protocol and set it on the issue (`protocol` in the reference), and tell the user which in one line, such as "Quick: the bullet list renders one item per line." Then work it by its protocol, in this chat: write its plan.md, a brief or a design doc, then go on or wait for "go", as the protocol says. The rules for protocols, planning and carrying out the work follow below; they are the same ones every issue's session works by.
 {folder_rule}- When the user says "it" or "that", they mean the issue you last talked about{page_rule}.
 - A reply holding "detail" means the call failed. Tell the user what it says; never report as done what failed.
 - {link_rule} Between steps of work, reply in a few short sentences.
 
-Planning (a mini design doc, as the design-doc skill says): {plan_rules}
+{protocols}
+
+Planning a design (a mini design doc, as the design-doc skill says): {plan_rules}
 
 {work}
 
@@ -273,7 +275,7 @@ def agent_prompt(chat: dict, base: str) -> str:
     else:
         today, day, rules = f"{datetime.now():%A %-d %B %Y}", f"{datetime.now():%-d %b}", DRAWN_RULES
     prompt = PROMPT.format(today=today, day=day, reference=reference, chat=chat["id"], plan_rules=PLAN_RULES, work=work,
-                           **rules)
+                           protocols=agents.PROTOCOLS.format(plan=folder / "plan.md"), **rules)
     if slug:
         prompt += f"\n\nThis chat works the issue /issue/{slug}, in {chat['folder']}."
     return prompt
