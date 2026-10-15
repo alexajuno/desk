@@ -72,7 +72,9 @@ def running(top: str) -> dict | None:
         return None
     if now := trying(top):
         return {"branch": now["branch"], "slug": now["slug"]}
-    names = (agents._git(top, "branch", "--points-at", "HEAD", "--format=%(refname:short)") or "").split()
+    # Branches only: `git branch --points-at` lists the checkout's own "(HEAD detached at …)" line first.
+    names = (agents._git(top, "for-each-ref", "--points-at=HEAD", "--format=%(refname:short)", "refs/heads")
+             or "").splitlines()
     return {"branch": names[0] if names else agents._git(top, "rev-parse", "--short", "HEAD") or "a commit", "slug": None}
 
 
