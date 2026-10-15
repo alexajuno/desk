@@ -123,7 +123,7 @@
 .dock-history { width: 28px; padding: 0; justify-content: center; }
 
 /* the chat panel above them */
-.agent-panel { position: fixed; right: 24px; bottom: 44px; z-index: 15; width: 400px; height: min(600px, calc(100vh - 96px));
+.agent-panel { position: fixed; right: 24px; bottom: 44px; z-index: 15; width: min(400px, calc(100vw - 48px)); height: min(600px, calc(100vh - 96px));
                display: flex; flex-direction: column; overflow: hidden; border: 0.5px solid var(--border-pop); border-radius: 12px;
                background: var(--bg-pop); box-shadow: var(--shadow-pop); }
 .agent-panel[hidden] { display: none; }

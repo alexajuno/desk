@@ -1,7 +1,7 @@
 // Linear-style menus, row actions, inline edits, the new issue panel, delete with undo, and a full-screen
 // diagram viewer. Shortcuts: S status, P priority, C a new issue, J/K or arrows to move, Enter to open,
 // right-click for a row's actions, Ctrl+Delete to delete and Ctrl+Z to undo it, / search, G then B backlog,
-// ? help, Esc to close (on an issue, Esc goes back). G then I and ? are from Linear's guide
+// [ the sidebar, ? help, Esc to close (on an issue, Esc goes back). G then I and ? are from Linear's guide
 // (linear.app/enablement/guide/navigating-linear); S, P and C follow Linear, and the S menu's
 // shape (filter on top, numbered rows, a tick on the current one) was copied from linear.app.
 // Delete, its undo toast and Ctrl+Z follow linear.app/docs/delete-archive-issues.
@@ -278,6 +278,21 @@ function projectPicker(current, where, choose) {
   });
 }
 
+// [ or the sidebar's toggle hides and shows it. A wide window collapses it, remembered in this browser
+// (base.html sets the class before the page draws). At 900px and under it opens over the page as a
+// drawer instead, until Esc, a click outside it or a link in it, and it starts each page closed.
+const narrow = matchMedia("(max-width: 900px)");
+const sideOpen = () => document.documentElement.classList.contains("side-open");
+const closeSide = () => document.documentElement.classList.remove("side-open");
+narrow.addEventListener("change", closeSide);
+
+function toggleSide() {
+  const root = document.documentElement;
+  if (narrow.matches) root.classList.toggle("side-open");
+  else if (root.classList.toggle("side-collapsed")) localStorage.sideCollapsed = "1";
+  else delete localStorage.sideCollapsed;
+}
+
 // The sidebar foot's theme button: follow the system, as Linear's "System preference", or pin one.
 // base.html's applyTheme reads the choice from localStorage.
 function themeMenu(button) {
@@ -550,6 +565,8 @@ document.addEventListener("click", (e) => {
   const toggled = (anchor) => anchor === closed;
   justClosed = null;
   if (t.closest(".menu")) return;
+  if (t.closest(".side-toggle")) { toggleSide(); return; }
+  if (sideOpen() && (t.closest(".side a") || !t.closest(".side"))) closeSide(); // so Back returns to a page with it closed
   const rowIcon = t.closest(".item .icon");
   if (rowIcon) {
     e.preventDefault(); // the row is a link
@@ -768,6 +785,7 @@ const target = () => focused?.dataset.slug ?? page()?.slug; // what S, P and Ctr
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && viewer) { closeViewer(); return; }
   if (menu || viewer || editing || creator) return;
+  if (e.key === "Escape" && sideOpen()) { closeSide(); return; } // before an issue's Esc goes back
   if (typing(e.target)) { if (e.key === "Escape") e.target.blur(); return; }
   const key = e.key.toLowerCase();
 
@@ -798,6 +816,7 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
   }
   else if (e.key === "/") { const box = document.getElementById("search-q"); if (box) box.focus(); else location.href = "/search"; e.preventDefault(); }
+  else if (e.key === "[") { toggleSide(); }
   else if (e.key === "?") { $("#keys").classList.toggle("open"); }
   else if (e.key === "Escape") {
     if ($("#keys.open")) $("#keys").classList.remove("open");

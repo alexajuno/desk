@@ -140,11 +140,21 @@ a.nav-label { text-decoration: none; } a.nav-label:hover, a.nav-label.here { col
 /* the theme button sits at the sidebar's foot, where Linear keeps its help button, level with the Agent button */
 .side-foot { margin: auto 0 -8px; padding-top: 12px; }
 .theme-pick { background: none; }
+/* Hiding the sidebar ([ or its toggle). On a wide window it slides out and the panel takes its space; at
+   900px and under it is hidden until it opens over the page as a drawer (the media query below). The
+   toggle sits where Linear's workspace switcher does, and in the top bar while the sidebar is hidden. */
+.side { transition: transform 0.2s ease, visibility 0s; }
+.side-collapsed .side { transform: translateX(-100%); visibility: hidden; transition: transform 0.2s ease, visibility 0s 0.2s; }
+.side-toggle { background: none; }
+.side-head .side-toggle { margin-right: auto; }
+.bar .side-toggle { display: none; margin-left: -8px; }
+.side-collapsed .bar .side-toggle { display: grid; }
 
 /* the inset panel and its top bar */
 .panel { position: fixed; top: 8px; right: 8px; bottom: 8px; left: 244px; display: flex; flex-direction: column;
          background: var(--bg-panel); border: 0.5px solid var(--border-2); border-radius: 12px;
-         box-shadow: var(--shadow-panel); overflow: hidden; }
+         box-shadow: var(--shadow-panel); overflow: hidden; transition: left 0.2s ease; }
+.side-collapsed .panel { left: 8px; }
 .bar { display: flex; align-items: center; gap: 8px; height: 44px; flex: none; padding: 0 16px; border-bottom: 1px solid var(--border-1);
        font-weight: 500; color: var(--text-2); }
 .bar a { text-decoration: none; color: var(--text-3); } .bar a:hover { color: var(--text-1); }
@@ -326,8 +336,15 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .keys-box dd { margin: 0; color: var(--text-3); }
 
 @media (max-width: 900px) {
-  .side { display: none; }
+  .side { z-index: 9; background: var(--bg-app); box-shadow: var(--shadow-pop);
+          transform: translateX(-100%); visibility: hidden; transition: transform 0.2s ease, visibility 0s 0.2s; }
+  .side-open .side { transform: none; visibility: visible; transition: transform 0.2s ease, visibility 0s; }
+  /* the drawer's backdrop: a click on it closes the drawer (desk.js) */
+  body::after { content: ""; position: fixed; inset: 0; z-index: 8; background: var(--overlay); opacity: 0; pointer-events: none;
+                transition: opacity 0.2s ease; }
+  .side-open body::after { opacity: 1; pointer-events: auto; }
   .panel { left: 8px; }
+  .bar .side-toggle { display: grid; }
   .issue, .project-page { grid-template-columns: 1fr; gap: 24px; }
 }
 
