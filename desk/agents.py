@@ -26,6 +26,7 @@ import os
 import re
 import shlex
 import subprocess
+import time
 from pathlib import Path
 
 PLAN_PROMPT = """We are planning one issue from desk, the user's workspace.
@@ -244,13 +245,32 @@ def _continue(issue, prompt: str) -> None:
     row = live().get(issue.session, {})
     if row.get("kind") == "interactive":
         raise RuntimeError("This session is open in a terminal. Close that tab, then try again.")
-    if row.get("state") == "working":
+    # `state` stays "working" while a session waits for you between turns (a planning session that had ended its
+    # turn, 15 Oct); `status` "busy" is a turn actually running.
+    if row.get("status") == "busy":
         raise RuntimeError("The session is still working. Wait until it is done, then try again.")
-    if row:
+    if row.get("pid"):
         subprocess.run(["claude", "stop", row["id"]], capture_output=True, timeout=30)
+        # `claude stop` returns, and the session already lists as stopped, about half a second before its process
+        # exits; a resume in that gap "started a copy" (Claude Code 2.1.300, 15 Oct, a blocked session each time).
+        _exited(row["pid"])
     short = _background(workdir(issue), ["claude", "--bg", "--resume", issue.session, prompt])
     if not issue.session.startswith(short):
-        raise RuntimeError(f"Claude Code started a copy ({short}) instead of continuing the session.")
+        # Left running, the copy would work on the issue's branch where desk cannot see it (15 Oct).
+        subprocess.run(["claude", "stop", short], capture_output=True, timeout=30)
+        raise RuntimeError(f"Claude Code started a copy ({short}) instead of continuing the session; desk stopped "
+                           "the copy. Try again.")
+
+
+def _exited(pid: int, seconds: float = 15) -> None:
+    """Wait, up to the given seconds, for a process to exit."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.1)
 
 
 def jump_back(issue) -> None:
