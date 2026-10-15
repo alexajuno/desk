@@ -1,7 +1,7 @@
 // Linear-style menus, row actions, inline edits, the new issue panel, delete with undo, and a full-screen
 // diagram viewer. Shortcuts: S status, P priority, C a new issue, T collapse a group, J/K or arrows to move,
 // Enter to open, right-click for a row's actions, Ctrl+Delete to delete and Ctrl+Z to undo it, / search,
-// G then B backlog, G then J the Agent, G then P projects, [ the sidebar, Ctrl+/ the shortcuts, Esc to
+// G then B backlog, G then S sessions, G then P projects, Ctrl+Shift+O a new session, [ the sidebar, Ctrl+/ the shortcuts, Esc to
 // close (on an issue, Esc goes back). The list is keys.html. Ctrl+/ is Linear's, not ?, which would type
 // itself into the panel's search box as it took the focus (15 Oct). G then I is
 // from Linear's guide
@@ -426,6 +426,12 @@ document.addEventListener("click", (e) => {
   if (button) openWindow(`/issue/${button.dataset.slug}/window`);
 });
 
+// A new Claude Code session in a window over desk (sessions.py, new_session): Ctrl+Shift+O from any page, as AI web
+// apps start a new chat ("the standard keyboard shortcut for new session in all AI web", the user, 15 Oct), and the
+// New session buttons.
+const newSession = () => openWindow("/sessions/new");
+document.addEventListener("click", (e) => { if (e.target.closest(".new-session")) newSession(); });
+
 let toastTimer = 0;
 
 function toast(text, action) {
@@ -689,7 +695,7 @@ document.addEventListener("mousemove", (e) => {
 });
 
 document.addEventListener("contextmenu", (e) => {
-  const row = e.target.closest(".item");
+  const row = e.target.closest(".item[data-slug]"); // an issue's row; a session's has no actions
   if (!row) return;
   e.preventDefault();
   focusRow(row, false);
@@ -1079,6 +1085,7 @@ document.addEventListener("keydown", (e) => {
   if (menu || viewer || editing || creator) return;
   // Ctrl+/ works from a text box too, and Esc closes the shortcuts from their own search box.
   if ((e.ctrlKey || e.metaKey) && e.key === "/") { toggleKeys(); e.preventDefault(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyO") { newSession(); e.preventDefault(); return; }
   if (e.key === "Escape" && !$("#keys").hidden) { toggleKeys(false); return; }
   if (e.key === "Escape" && sideOpen()) { closeSide(); return; } // before an issue's Esc goes back
   if (typing(e.target)) { if (e.key === "Escape") e.target.blur(); return; }
@@ -1098,7 +1105,7 @@ document.addEventListener("keydown", (e) => {
     gPressed = 0;
     if (key === "b") location.href = "/backlog";
     if (key === "i") location.href = "/inbox";
-    if (key === "j") location.href = "/agent";
+    if (key === "s") location.href = "/sessions";
     if (key === "p") location.href = "/projects";
     return;
   }
@@ -1110,7 +1117,8 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
   }
   else if (e.key === "Enter" && focused) {
-    if (focused.classList.contains("inbox-row")) go(focused.getAttribute("href"));
+    if (focused.dataset.session) openWindow(`/sessions/${focused.dataset.session}/open`);
+    else if (focused.classList.contains("inbox-row")) go(focused.getAttribute("href"));
     else location.href = focused.getAttribute("href");
   }
   else if (key === "c") { openCreator(); e.preventDefault(); }
@@ -1121,7 +1129,7 @@ document.addEventListener("keydown", (e) => {
   else if (key === "s" || key === "p") {
     const field = key === "s" ? "state" : "priority";
     // The issue's status and priority sit in its Properties column or, in a narrow Inbox pane, in its chips.
-    const row = focused, pick = [...document.querySelectorAll(`.pick[data-field=${field}]`)].find((el) => el.checkVisibility());
+    const row = focused?.dataset.slug ? focused : null, pick = [...document.querySelectorAll(`.pick[data-field=${field}]`)].find((el) => el.checkVisibility());
     if (row) fieldMenu(row.dataset.slug, field, row.dataset[field], { anchor: row.querySelector(`.icon[data-field=${field}]`) });
     else if (pick) fieldMenu(pick.dataset.slug, field, pick.dataset[field], { anchor: pick });
     e.preventDefault();
