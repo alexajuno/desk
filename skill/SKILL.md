@@ -5,7 +5,7 @@ description: Files, finds, updates and starts issues in desk, the user's own wor
 
 # desk
 
-desk keeps the user's work as issues. Each issue is a folder of files: `issue.md` (YAML front matter, then sections such as `## Context` and `## Plan`) and anything else that belongs to it. Each issue gets one Claude Code session, which does its work in the issue's folder and writes `result.md` when it is done. The user sees an issue at `http://127.0.0.1:8790/issue/<slug>`.
+desk keeps the user's work as issues. Each issue is a folder of files: `issue.md` (YAML front matter, then sections such as `## Context` and `## Plan`) and anything else that belongs to it. Each issue has one Claude Code session, which does its work in the issue's folder and writes `result.md` when it is done. The user sees an issue at `http://127.0.0.1:8790/issue/<slug>`.
 
 Change issues through the API below, not by editing `issue.md`: the user and desk own that file.
 
@@ -62,14 +62,18 @@ Find the folder for an issue among the user's repos, by name:
 curl -s "http://127.0.0.1:8790/api/folders?q=site"
 ```
 
-## Start an issue's session
+## Work an issue
 
-Start one only when the user asks. Starting writes the plan into the issue's `## Plan` section, then starts the issue's own session with `claude --bg` in its folder, with no terminal; the repo's own rules say where it works, on a branch, in a worktree or in the checkout. The session carries out the plan on its own, and the issue shows In progress until its result is ready for review. If the issue already has a session, from planning it with the user, that same session carries on instead of a new one, as if the user had said "go" in its chat. On the issue's page, the user's Approve has that session land the work by the repo's rules.
+desk's own agent chat works an issue itself; it starts no other session. Bind the chat to the issue (the issue needs its `folder` set first), and the chat becomes the issue's session: the issue shows In progress, the folder joins the folders the chat may work in, and that folder's CLAUDE.md and rules apply. Send the chat's id, which the agent's prompt gives. A backlog issue, or one in progress with no other session, can be bound:
+
+```bash
+curl -s "http://127.0.0.1:8790/api/issues/<slug>/work" --json '{"chat": "<chat id>"}'
+```
+
+Then plan with the user in the chat: write `plan.md` in the issue's folder (a mini design doc ending with Done when and What you may decide alone), and wait for their "go". Carry the work out in the chat, write `result.md` with the review card, and stop; the issue shows In review, and the user's Approve sends the chat a message to land the work by the repo's rules.
+
+Any other Claude Code session (not the agent chat) can still start an issue's own background session. Send a plan: Direction (what to do, and which way), Done when, and What you may decide alone. Only a backlog issue, or one in progress whose session has only planned it, can start. If the call answers 409 "Workspace not trusted", tell the user to press Trust folder on the issue's page, then start again.
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/start" --json '{"plan": "Direction:\n\n- Send the user back to the page they came from after login.\n\nDone when: logging in from /pricing lands on /pricing.\n\nWhat you may decide alone: where the return address is kept."}'
 ```
-
-To start work you have not planned, send the id of the Agent chat instead of a plan (`{"chat": "<chat id>"}`, only for the agent's own chat): the issue's session starts in the background with the whole chat as its first prompt, gathers context, writes the plan itself and waits. The issue shows In progress, and "plan ready" in the Inbox once the plan is written; the user reads it and says "go" in the issue's chat, docked on its page.
-
-The plan has three short parts: Direction (what to do, and which way), Done when (how to tell it worked), and What you may decide alone. Only a backlog issue, or one in progress whose session has only planned it, can start. A plan already in the issue is used when the call sends none. If the call answers 409 "Workspace not trusted", the issue's folder was never trusted in Claude Code: link the issue's page and tell the user to press Trust folder there, then start again.

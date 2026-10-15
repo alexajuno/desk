@@ -1,11 +1,15 @@
-"""The Agent tab: chats with desk's agent, a dispatcher that files issues and starts their sessions.
+"""The Agent tab: chats with desk's agent, a Claude Code chat that files issues and works them itself.
 
 The agent is Claude Code headless on the user's own login, so it runs on their subscription:
 `claude -p --model <the chat's model> --output-format stream-json`, one Claude session per chat (--session-id for the
-first message, --resume after). It runs in DESK_DATA with --restricted, so its file tools stay in desk's
-data, and with only Bash and Read, in dontAsk mode, so the one command it may run is curl to desk's own
-API (desk/api.py). Checked on Claude Code 2.1.285 (2026-10-14): `ls /` was denied, the curl ran, Read
-read DESK_DATA/you.md, and --resume kept the chat's memory and its session id.
+first message, --resume after). It runs in DESK_DATA with Claude Code's own tools, in acceptEdits mode with Bash
+allowed (nobody is there to answer a prompt), and reaches desk through curl to its API (desk/api.py). Work on an
+issue is done in this chat, not handed to another session (the user, 15 Oct: "don't hand the problem to another chat
+anymore"): the chat binds itself to the issue (`POST /api/issues/<slug>/work`), which makes the chat's session the
+issue's session, and its folder one of the chat's --add-dir, with that folder's CLAUDE.md and rules loaded
+(CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD, checked on 2026-10-15). The chat stays in DESK_DATA because a session
+is found again by --resume only from the folder it started in. Checked on Claude Code 2.1.285 (2026-10-14):
+--resume kept the chat's memory and its session id.
 
 A chat is a JSON file in DESK_DATA/chats/. A reply runs in this process, apart from the page that asked
 for it: the page follows its events and can drop and follow again from any event, so a reload in the
@@ -14,6 +18,7 @@ middle of a reply picks it up where it is.
 
 import asyncio
 import json
+import os
 import re
 import time
 import uuid
@@ -24,6 +29,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from . import agents
 from . import issues as store
 from .render import to_html
 
@@ -31,35 +37,39 @@ router = APIRouter()
 CHATS_DIR = store.DATA_DIR / "chats"
 SKILL = Path(__file__).resolve().parent.parent / "skill" / "SKILL.md"
 SKILL_BASE = "http://127.0.0.1:8790"  # the address SKILL.md is written for; each reply swaps in its own
-REPLY_TIMEOUT = 300  # seconds; a dispatcher's turn is a few curl calls
+IDLE_TIMEOUT = 900  # seconds without a single event from the agent; a turn of work runs for as long as it keeps going
+HOME = Path.home()
 
 MODELS = ["haiku", "sonnet", "opus"]
 EFFORTS = ["low", "medium", "high", "xhigh", "max"]  # `claude --effort`; "" leaves the CLI's own default
 
 FLAGS = ["--output-format", "stream-json", "--verbose", "--include-partial-messages",
-         "--restricted", "--tools", "Bash,Read", "--strict-mcp-config", "--permission-mode", "dontAsk"]
+         "--permission-mode", "acceptEdits", "--allowedTools", "Bash",
+         "--disallowedTools", "Bash(sudo *)", "Bash(rm -rf /*)", "Bash(rm -rf ~*)"]
 
-PROMPT = """You are desk's agent. desk is the user's workspace: each piece of work is an issue, a folder of files, and each issue gets its own Claude Code session that does the work.
-
-You are a dispatcher. You file issues, set their fields, and start the issue's own session. You never do the work yourself: no code, no research, no answers beyond what desk's issues say. When the user asks for work, file it as an issue, or start it if they say so, and say where it is.
+PROMPT = """You are desk's agent, a Claude Code chat inside desk. desk is the user's workspace: each piece of work is an issue, a folder of files. You file issues, and you do the work on them yourself, in this chat: never hand the work to another session or chat.
 
 Today is {today}.
 
 How you act:
-- Call desk's API with curl, exactly as the reference below shows: `curl -s "<url>"`, the URL in double quotes, the whole command on one line, and any JSON body in single quotes with ’ for an apostrophe. It is the only command you can run. Read an issue's files with the Read tool, at the path the API gives as "file".
+- Call desk's API with curl, exactly as the reference below shows: `curl -s "<url>"`, the URL in double quotes, the whole command on one line, and any JSON body in single quotes with ’ for an apostrophe. Read an issue's files with the Read tool, at the path the API gives as "file".
 - Give each issue you file a body with a `## Context` section quoting what the user said, dated: The user, {day}: "…".
-- "Park" means file it in the backlog and stop. Start a session only when the user asks you to start, run or hand off an issue.
-- This chat's id is {chat}. To start an issue's session, call its start with {{"chat": "{chat}"}} and no plan: the issue's own session gets this whole chat, gathers context, and writes the plan itself, then waits for the user. If the issue already has a plan, start it without chat. If you cannot tell what should be done, or in which repo, ask one short question instead of starting.
-- Before you file an issue, search the open ones for the same work (the search call in the reference) and link the one you find instead of filing a second.
-- When starting fails with "Workspace not trusted", tell the user to open the issue's page and press Trust folder. Never suggest a `claude` command or flag yourself.
-- Work in a repo needs the issue's folder: find it with /api/folders?q=<name> and set it before starting.
+- "Park" means file it in the backlog and stop. Before you file an issue, search the open ones for the same work and link the one you find instead of filing a second.
+- When the user asks for work, or says to start an issue: find or file its issue, then bind this chat to it, which makes this chat the issue's session and sets the folder you work in (`/work` in the reference; it needs the issue's folder, found with /api/folders?q=<name>). If you cannot tell what should be done, or in which repo, ask one short question instead.
+- Then plan it with the user, in this chat: write the plan as the issue's plan.md and tell them to say "go" here. The rules for planning and for carrying out the work follow below; they are the same ones every issue's session works by.
 - When the user says "it" or "that", they mean the issue you last talked about, or the page they are on (given as [On /issue/<slug>]).
 - A reply holding "detail" means the call failed. Tell the user what it says; never report as done what failed.
-- Reply in one or two short sentences once you have acted. Link each issue you name as [its title](/issue/<slug>).
+- Link each issue you name as [its title](/issue/<slug>). Between steps of work, reply in a few short sentences.
+
+Planning (a mini design doc, as the design-doc skill says): {plan_rules}
+
+{work}
 
 desk's API:
 
 {reference}"""
+
+PLAN_RULES = """the decisions so far with the user's reason for each, the workflow drawn in d2, and a build plan that ends with Done when and What you may decide alone. Write it with the Write or Edit tool to the issue's plan.md (next to issue.md, in the folder the API gives as "file"), a first draft as soon as you understand the issue, and rewrite it when the talk changes it. Keep it short. Do not start the work before the user says "go"."""
 
 
 # --- chat files --------------------------------------------------------------------------------
@@ -89,7 +99,7 @@ def create(text: str) -> dict:
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40].strip("-") or "chat"
     now = datetime.now().isoformat(timespec="seconds")
     return {"id": f"{slug}-{uuid.uuid4().hex[:6]}", "title": title_of(text), "created": now, "updated": now,
-            "session": str(uuid.uuid4()), "started": False, "model": "haiku", "effort": "", "messages": []}
+            "session": str(uuid.uuid4()), "started": False, "model": "sonnet", "effort": "", "messages": []}
 
 
 def exists(chat_id: str) -> bool:
@@ -150,6 +160,46 @@ class Run:
 
 
 RUNS: dict[str, Run] = {}
+LOOP: asyncio.AbstractEventLoop | None = None  # desk's event loop, set at startup, for replies started from a sync route
+BOUND = store.DATA_DIR / "chat-bound.json"  # {session id: chat id} of the chats that work an issue
+
+
+def bound() -> dict[str, str]:
+    return json.loads(BOUND.read_text(encoding="utf-8")) if BOUND.is_file() else {}
+
+
+def bind(chat: dict, issue: store.Issue) -> None:
+    """The chat becomes the issue's session; its folder is one the chat may work in."""
+    chat["issue"], chat["folder"] = issue.slug, str(Path(agents.workdir(issue)))
+    save(chat)
+    BOUND.write_text(json.dumps(bound() | {chat["session"]: chat["id"]}), encoding="utf-8")
+
+
+def rows() -> dict[str, dict]:
+    """The bound chats as rows of `claude agents --json`, so the issue's strip and the Inbox read them as they read
+    any session: busy while a reply runs, otherwise idle. pid 1 stands for a process that always lives."""
+    found = {}
+    for session, chat_id in bound().items():
+        run = RUNS.get(chat_id)
+        row = {"id": session, "sessionId": session, "kind": "chat", "chat": chat_id, "pid": 1,
+               "status": "busy" if run and not run.done else "idle", "state": "working" if run and not run.done else "done"}
+        found[session] = found[session[:8]] = row
+    return found
+
+
+def say(session: str, text: str) -> None:
+    """Send the bound chat a message from desk, as the user would (Approve's land prompt, a change); the reply runs
+    on desk's loop."""
+    chat_id = bound().get(session)
+    if not chat_id or LOOP is None:
+        raise RuntimeError("That chat is gone.")
+    if (run := RUNS.get(chat_id)) and not run.done:
+        raise RuntimeError("The session is still working. Wait until it is done, then try again.")
+    chat = load(chat_id)
+    chat["messages"].append({"role": "you", "text": text, "page": "", "at": datetime.now().isoformat(timespec="seconds")})
+    save(chat)
+    RUNS[chat_id] = run = Run()
+    asyncio.run_coroutine_threadsafe(reply(run, chat, text, agents.DESK_BASE, lambda message: ""), LOOP)
 
 
 def step_label(tool: dict, base: str) -> str:
@@ -170,6 +220,8 @@ def step_label(tool: dict, base: str) -> str:
             return "Created an issue"
         words = re.search(r"q=([^&]*)", query)
         return f"Searched issues for “{words.group(1).replace('+', ' ')}”" if words else "Listed issues"
+    if path.endswith("/work"):
+        return f"Took on {slug}"
     if path.endswith("/start"):
         return f"Started {slug}"
     if path.startswith("issues/"):
@@ -182,24 +234,34 @@ def step_label(tool: dict, base: str) -> str:
 async def reply(run: Run, chat: dict, text: str, base: str, render) -> None:
     """Run the agent on one message, pushing its text and steps as they come, then save the reply."""
     reference = re.sub(r"\A---\n.*?\n---\n", "", SKILL.read_text(encoding="utf-8"), flags=re.S).replace(SKILL_BASE, base)
-    prompt = PROMPT.format(today=f"{datetime.now():%A %-d %B %Y}", day=f"{datetime.now():%-d %b}", reference=reference, chat=chat["id"])
-    allowed = [f'Bash(curl -s "{base}/api/*)', f"Bash(curl -s {base}/api/*)"]
+    slug = chat.get("issue")
+    folder = store.folder(slug) if slug and store.exists(slug) else Path("<the issue's folder>")
+    work = agents.WORK.format(dir=folder, file=folder / "issue.md", plan=folder / "plan.md")
+    prompt = PROMPT.format(today=f"{datetime.now():%A %-d %B %Y}", day=f"{datetime.now():%-d %b}", reference=reference,
+                           chat=chat["id"], plan_rules=PLAN_RULES, work=work)
+    if slug:
+        prompt += f"\n\nThis chat works the issue /issue/{slug}, in {chat['folder']}."
+    dirs = [f for f in (chat.get("folder"), str(HOME / "worktrees")) if f and Path(f).is_dir()]
+    adds = [arg for d in dirs for arg in ("--add-dir", d)]
+    env = os.environ | {"CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD": "1"}
     session = ["--resume" if chat["started"] else "--session-id", chat["session"]]
     choice = ["--model", chat.get("model", "haiku")] + (["--effort", chat["effort"]] if chat.get("effort") else [])
     began, blocks, tools, result, error = time.monotonic(), [], {}, None, None
     try:
         run.process = await asyncio.create_subprocess_exec(
-            "claude", "-p", *choice, *FLAGS, "--allowedTools", *allowed, "--system-prompt", prompt, *session,
-            cwd=store.DATA_DIR, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+            "claude", "-p", *choice, *FLAGS, *adds, "--append-system-prompt", prompt, *session,
+            cwd=store.DATA_DIR, env=env, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE, limit=1 << 24)  # one line can hold a whole file the agent read
         run.process.stdin.write(text.encode())
         run.process.stdin.close()
-        async with asyncio.timeout(REPLY_TIMEOUT):
+        async with asyncio.timeout(IDLE_TIMEOUT) as limit:
             async for line in run.process.stdout:
+                limit.reschedule(asyncio.get_running_loop().time() + IDLE_TIMEOUT)
                 event = json.loads(line)
                 kind = event.get("type")
                 if kind == "system" and event.get("subtype") == "init":
                     chat["started"] = True
+                    save(chat)  # a desk restart in the middle of the reply still leaves a session to resume
                 elif kind == "stream_event" and event["event"]["type"] == "content_block_delta" \
                         and event["event"]["delta"].get("type") == "text_delta":
                     run.push({"t": "text", "text": event["event"]["delta"]["text"]})
@@ -227,7 +289,7 @@ async def reply(run: Run, chat: dict, text: str, base: str, render) -> None:
             error = result.get("result") or "The agent hit an error."
     except TimeoutError:
         run.process.kill()
-        error = f"No reply after {REPLY_TIMEOUT // 60} minutes, so desk stopped it."
+        error = f"Nothing from the agent for {IDLE_TIMEOUT // 60} minutes, so desk stopped it."
     except Exception as problem:  # any failure must still end the reply, or the chat waits forever
         error = f"The agent could not run: {problem!r}"
     answer = []
@@ -236,6 +298,8 @@ async def reply(run: Run, chat: dict, text: str, base: str, render) -> None:
     message = {"role": "agent", "text": "\n\n".join(answer).strip(), "steps": blocks, "error": error,
                "seconds": round(time.monotonic() - began), "at": datetime.now().isoformat(timespec="seconds")}
     chat["messages"].append(message)
+    if exists(chat["id"]):  # the agent may have bound the chat to an issue during this reply
+        chat.update({k: v for k, v in load(chat["id"]).items() if k in ("issue", "folder")})
     save(chat)
     run.done = True
     run.push({"t": "done", "html": render(message)})

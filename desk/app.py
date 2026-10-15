@@ -5,6 +5,7 @@ Design: the design doc in the desk issue's files. Run: uv run uvicorn desk.app:a
 """
 
 import os
+import asyncio
 import re
 import subprocess
 import time
@@ -139,6 +140,11 @@ def ago(when: datetime) -> str:
 
 templates.env.filters["ago"] = ago
 app.state.templates = templates  # the Agent tab's pages (chats.py) render with these too
+@app.on_event("startup")
+async def _remember_loop():
+    chats.LOOP = asyncio.get_running_loop()  # chats.say starts replies from the sync routes' threads
+
+
 app.include_router(api.router)
 app.include_router(chats.router)
 app.include_router(terminal.router)

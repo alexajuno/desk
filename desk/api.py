@@ -6,6 +6,7 @@ documents it for them).
     POST   /api/issues                create one: title, body, priority, state, parent, folder
     PATCH  /api/issues/<slug>         set any of those fields
     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
+    POST   /api/issues/<slug>/work    the Agent chat works it itself: the chat becomes the issue's session
     POST   /api/issues/<slug>/try     for a session in a worktree desk made: put the folder's checkout on its branch
     POST   /api/issues/<slug>/back-to-main   and back
     GET    /api/projects              list projects (state=active|archived|all); /api/issues takes project=<slug>
@@ -18,6 +19,7 @@ Issues stay files: this reads and writes them through issues.py, as the pages do
 
 import os
 import subprocess
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -210,6 +212,30 @@ def start_issue(slug: str, start: Start):
         raise HTTPException(502, f"The plan is saved, but the session did not start: {error}")
     i.state = "running"
     store.save(i)
+    return as_json(i)
+
+
+class Work(BaseModel):
+    chat: str
+
+
+@router.post("/issues/{slug}/work")
+def work_issue(slug: str, work: Work):
+    """The Agent chat works this issue itself: the chat's session becomes the issue's session, the issue's folder one
+    of the chat's, and the issue shows In progress. No other session starts."""
+    i = _load(slug)
+    if i.state not in ("backlog", "running"):
+        raise HTTPException(409, f"{slug} is {i.state}; only a backlog issue, or one in progress, can be worked.")
+    if not chats.exists(work.chat):
+        raise HTTPException(404, "No such chat")
+    chat = chats.load(work.chat)
+    if i.session and i.session != chat["session"]:
+        raise HTTPException(409, f"{slug} already has its own session; open its page to talk to it.")
+    if not i.folder or not Path(agents.workdir(i)).is_dir():
+        raise HTTPException(422, "Set the issue's folder first (PATCH folder; find it with /api/folders?q=<name>).")
+    i.session, i.state = chat["session"], "running"
+    store.save(i)
+    chats.bind(chat, i)
     return as_json(i)
 
 

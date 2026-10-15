@@ -125,6 +125,7 @@ def workdir(issue) -> str:
     return os.path.expanduser(issue.folder) if issue.folder else str(Path.home())
 
 
+DESK_BASE = "http://127.0.0.1:8790"
 _seen: tuple[float, dict] = (0.0, {})
 
 
@@ -133,15 +134,16 @@ def live(fresh: bool = False) -> dict[str, dict]:
     issue's strip, its state and the sidebar, so an answer under a second old is reused (`claude agents` takes about
     0.15s, 15 Oct); fresh asks again, as right after starting a session."""
     global _seen
+    from . import chats  # chats imports this module
     if not fresh and time.monotonic() - _seen[0] < 1:
-        return _seen[1]
+        return _seen[1] | chats.rows()
     try:
         out = subprocess.run(["claude", "agents", "--json", "--all"], capture_output=True, text=True, timeout=15).stdout
         rows = json.loads(out or "[]")
     except (subprocess.TimeoutExpired, json.JSONDecodeError):
-        return {}
+        return chats.rows()
     _seen = (time.monotonic(), {key: row for row in rows for key in (row.get("id"), row.get("sessionId")) if key})
-    return _seen[1]
+    return _seen[1] | chats.rows()
 
 
 # kitty.conf has `listen_on unix:/tmp/mykitty`, and kitty adds -<its pid> to a unix socket set there
@@ -279,6 +281,10 @@ def status(row: dict) -> str:
 def _continue(issue, prompt: str) -> None:
     """Give the issue's own session its next message, in the background, as the same session."""
     row = live(fresh=True).get(issue.session, {})
+    if row.get("kind") == "chat":  # the Agent chat that works the issue: the message goes into that chat
+        from . import chats
+        chats.say(issue.session, prompt)
+        return
     if row.get("kind") == "interactive":
         raise RuntimeError("This session is open in a terminal. Close that tab, then try again.")
     # `state` stays "working" while a session waits for you between turns (a planning session that had ended its
@@ -314,6 +320,8 @@ def jump_back(issue) -> None:
     if _focus(issue):
         return
     row = live().get(issue.session, {})
+    if row.get("kind") == "chat":
+        raise RuntimeError(f"This issue is worked in the Agent chat: open /agent/{row['chat']}.")
     if row.get("kind") == "background" and row.get("state") in ("working", "done"):
         _terminal(row.get("cwd") or workdir(issue), issue, "claude", "attach", row["id"])
     elif row.get("kind") == "interactive":
