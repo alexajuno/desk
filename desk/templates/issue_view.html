@@ -16,6 +16,16 @@
     <span class="strip-state">{{ state(p.state) }}</span>
     <span class="strip-what{{ ' strip-msg' if msg }}">{{ msg or strip.text }}</span>
     {%- if p.session and not (b and b.chat) %}{{ open_chat(False) }}{% endif %}
+    {#- Try, in review: runs the issue's branch in the desk you use, since its session gave 8790 back once it had
+        tested (app.try_button). Quiet, as Open chat is: Approve stays the step. #}
+    {%- set t = trial %}
+    {%- if t and t.disabled %}
+    <button class="ghost large" type="button" disabled title="{{ t.title }}">{{ t.label }}</button>
+    {%- elif t %}
+    <form method="post" action="/issue/{{ p.slug }}/{{ t.action }}">
+      {%- if in_inbox %}<input type="hidden" name="src" value="inbox">{% endif %}
+      <button class="ghost large" title="{{ t.title }}">{{ t.label }}</button></form>
+    {%- endif %}
     {%- if trust %}
     <form method="post" action="/issue/{{ p.slug }}/trust"><button class="primary large strip-go" title="Tells Claude Code to trust this folder, as accepting its prompt does">Trust folder</button></form>
     {%- elif b and b.chat %}{{ open_chat(True) }}

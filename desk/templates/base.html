@@ -115,16 +115,21 @@ function showFolded(url = location.pathname) {
   <a class="nav-item {{ 'here' if here == '/issue/' ~ p.slug }}" href="/issue/{{ p.slug }}" title="Waiting on {{ p.waiting_on or 'someone else' }}, {{ p.waiting_since | waited }}">{{ state("waiting") }}<span class="nav-title">{{ p.title }}</span></a>
   {%- endfor %}
   {%- endif %}
-  {#- desk's own checkout on no branch, as a session leaves it for your review (land.running), on every page until
-      the session puts it back. Read only: the session that switched it puts it back when it lands. #}
-  {%- if sidebar.trying %}{% set t = sidebar.trying %}
-  {%- set why = "desk runs this work instead of main until you approve it or throw it away" %}
+  {#- desk's own checkout on no branch: a session testing its branch, or your Try (land.running), and under it the
+      line of who waits for it (land.line). Read only: desk moves the line on its own. #}
+  {%- if sidebar.trying or sidebar.line %}
+  {%- set why = "desk runs this branch instead of main: a session's test, or your Try" %}
   <div class="nav-label" title="{{ why }}">Trying</div>
+  {%- if sidebar.trying %}{% set t = sidebar.trying %}
   {%- if t.issue %}
   <a class="nav-item {{ 'here' if here == '/issue/' ~ t.slug }}" href="/issue/{{ t.slug }}" title="{{ why }} ({{ t.branch }})">{{ state(t.issue.state) }}<span class="nav-title">{{ t.issue.title }}</span></a>
   {%- else %}
   <div class="nav-item static" title="{{ why }}">{{ state("review") }}<span class="nav-title">{{ t.branch }}</span></div>
   {%- endif %}
+  {%- endif %}
+  {%- for w in sidebar.line %}{% if w.issue %}
+  <a class="nav-item {{ 'here' if here == '/issue/' ~ w.slug }}" href="/issue/{{ w.slug }}" title="In line for 8790, to {{ 'try' if w.for == 'review' else 'test' }} {{ w.branch }}">{{ state(w.issue.state) }}<span class="nav-title">{{ w.issue.title }}</span><span class="count">{{ "next" if loop.first else loop.index }}</span></a>
+  {%- endif %}{% endfor %}
   {%- endif %}
   {#- Linear's Help button, measured 2026-10-15: a 24px circle at the sidebar's foot. Its menu holds what desk has of
       Linear's Help menu, the keyboard shortcuts, and the theme, which Linear keeps in Settings (desk.js helpMenu). #}
