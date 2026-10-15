@@ -24,7 +24,7 @@
     <span class="spacer"></span>
     {%- if r.issue %}<a class="session-issue" href="/issue/{{ r.issue.slug }}" title="Open the issue: {{ r.issue.title }}">
       {{- "Issue" if r.title == r.issue.title else r.issue.title }}</a>{% endif %}
-    <span class="session-folder">{{ r.folder }}</span><span class="date">{{ r.age }}</span></div></li>
+    <span class="session-folder">{{ r.folder }}</span><span class="date">{{ r.moved | ago }}</span></div></li>
 {%- endfor %}
 </ul>
 {%- if next %}<div class="session-more" data-next="{{ next }}"></div>{% endif %}

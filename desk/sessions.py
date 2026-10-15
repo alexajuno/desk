@@ -145,15 +145,6 @@ def folder(cwd: str | None) -> str:
     return short.removeprefix("projects/")
 
 
-def age(moved: float) -> str:
-    """How long ago, as Linear writes it in a list: now, 5m, 13h, 3d, 2w, then the date."""
-    seconds = datetime.now().timestamp() - moved
-    for size, unit in ((5 * 604800, None), (604800, "w"), (86400, "d"), (3600, "h"), (60, "m")):
-        if seconds >= size:
-            return f"{datetime.fromtimestamp(moved):%b %-d}" if unit is None else f"{int(seconds // size)}{unit}"
-    return "now"
-
-
 def group(moved: float, today=None) -> str:
     """The time group a session falls in by when it last moved: Today, Yesterday, Last 7 days, Last 30 days, then its
     month."""
@@ -209,7 +200,7 @@ def rows(query: str = "", kind: str = "") -> list[dict]:
                 continue
         found.append({"id": sid, "title": name, "marked": _mark(name, patterns), "kind": row.get("kind", "terminal"),
                       "folder": folder(row.get("cwd")), "cwd": row.get("cwd") or "", "issue": issue,
-                      "age": age(row["moved"]), "group": group(row["moved"]), "state": state(live.get(sid, {}))})
+                      "moved": datetime.fromtimestamp(row["moved"]), "group": group(row["moved"]), "state": state(live.get(sid, {}))})
     return found
 
 
@@ -228,7 +219,7 @@ def open_session(sid: str) -> None:
         window.issue(issue)
         return
     if chat := chats.window_of(sid):
-        chats.open_window(chat)
+        chats.open_window(chat, title(row))
         return
     name = f"desk-session-{sid[:8]}"
     if window.focus(name):
@@ -247,7 +238,7 @@ def open_session(sid: str) -> None:
 def new_session(base: str) -> dict:
     """Ctrl Shift O and New session: an Agent chat in a window over desk. The newest one is reused while nobody has
     typed in it yet, so pressing it twice leaves no empty session behind."""
-    chat = next((c for c in chats.window_chats()[:1] if not c.get("issue") and not any(chats._said(c))), None)
+    chat = next((c for c in chats.window_chats()[:1] if not c.get("issue") and not any(chats.said(c))), None)
     chat = chat or chats.new_window_chat(base)
     chats.open_window(chat)
     return chat
@@ -280,7 +271,8 @@ def sessions_rows(request: Request, q: str = "", kind: str = "", offset: int = 0
 @router.get("/sessions/recent")
 def sessions_recent(q: str = ""):
     """The corner's history menu: the newest sessions, or those matching what is typed."""
-    return [{k: r[k] for k in ("id", "title", "folder", "age", "state")} for r in rows(q)[:30]]
+    from .app import ago  # app imports this module
+    return [{k: r[k] for k in ("id", "title", "folder", "state")} | {"age": ago(r["moved"])} for r in rows(q)[:30]]
 
 
 @router.post("/sessions/new")

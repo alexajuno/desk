@@ -60,10 +60,6 @@ def command(issue) -> tuple[list[str], str]:
     if not issue.session or not SESSION_ID.fullmatch(issue.session):
         raise RuntimeError("This issue has no session yet.")
     row = agents.live(fresh=True).get(issue.session, {})
-    if row.get("kind") == "chat" and row["status"] == "busy":
-        raise RuntimeError("The Agent chat is answering. Wait until it is done, or watch it in the Agent tab.")
-    if row.get("kind") == "chat":
-        row = {}  # idle between replies: a terminal resumes the chat's session like any stopped one
     if row.get("kind") == "background" and row.get("state") in ("working", "done", "blocked"):
         return ["claude", "attach", row["id"]], row.get("cwd") or agents.workdir(issue)
     if row.get("kind") == "interactive":
