@@ -423,23 +423,39 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .tip kbd { display: inline-block; box-sizing: border-box; min-width: 18px; padding: 2px; border: 0.5px solid var(--border-tip-key);
            border-radius: 4px; font: 450 11px/1.1 var(--font); color: var(--text-tip-key); text-align: center; }
 .tip kbd + kbd { margin-left: 3px; }
-/* The Inbox (inbox.html), as Linear's, measured on linear.app on 2026-10-15: a 400px list beside the open
-   notification. Rows are 55px with 8px corners, 10px in from the list's edges: a 32px avatar with a 16px badge
+/* The Inbox (inbox.html), as Linear's, measured on linear.app on 2026-10-15: a list beside the open notification.
+   Rows are 55px with 8px corners, 10px in from the list's edges: a 32px avatar with a 16px badge
    for the kind of notice, then two lines 2px apart, 10px from the row's top and bottom. The first holds an 8px
-   unread dot, the 13px title and the 14px status icon; the second, in 12px, who did what and how long ago. */
+   unread dot, the 13px title and the 14px status icon; the second, in 12px, who did what and how long ago.
+   The list is 400px, or half the panel when that is less. With the sidebar showing on a window of 890 to 1029px,
+   Linear narrows it to 240px so the notification keeps its room; under 770px only one of them shows. */
+.panel { --inbox-list: min(400px, 50%); }
+@media (min-width: 901px) and (max-width: 1029px) { .panel { --inbox-list: 240px; } }
 .scroll:has(> .inbox) { overflow: hidden; }
-.inbox { display: grid; grid-template-columns: 400px minmax(0, 1fr); height: 100%; }
-/* A line divides the list from the open notification, from the top bar down, as Linear's does. The bar carries its
-   part as a 1px background at the list's edge, and "Inbox" fills the bar over the list. */
+.inbox { display: grid; grid-template-columns: var(--inbox-list) minmax(0, 1fr); height: 100%; }
+/* A line divides the list from the open notification, from the top bar down, as Linear's does. The bar draws its
+   part at the list's edge, and "Inbox" fills the bar over the list, less the sidebar's toggle when that shows. */
 .inbox-list { overflow: auto; padding: 8px 0; border-right: 1px solid var(--border-1); }
-.bar:has(.inbox-head) { background: linear-gradient(var(--border-1), var(--border-1)) 399px 0 / 1px 100% no-repeat; }
-.bar .inbox-head { flex: none; box-sizing: border-box; width: 392px; color: var(--text-2); }
+.bar:has(.inbox-head) { position: relative; }
+.bar:has(.inbox-head)::after { content: ""; position: absolute; top: 0; bottom: 0; left: calc(var(--inbox-list) - 1px); width: 1px;
+                               background: var(--border-1); }
+.bar .inbox-head { flex: none; box-sizing: border-box; width: calc(var(--inbox-list) - 8px); color: var(--text-2); }
+.side-collapsed .bar .inbox-head { width: calc(var(--inbox-list) - 36px); }
 .bar:has(.inbox-head) .sep { display: none; }
 .bar .inbox-crumb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* The open notification is the issue's page, and folds its properties under the description by its own width, not
-   the window's: beside the list it is about 650px on a 1300px window, too narrow for two columns. */
+/* The open notification is the issue's page, laid out by its own width, not the window's. Under 820px, where
+   Linear's drops its Properties column (between an 817 and an 827px pane, measured), the properties move to a
+   row of chips under the title: Linear's, 24px pills 6px apart, filled with the raised surface. */
 .inbox-open { overflow: auto; min-width: 0; container-type: inline-size; }
-@container (max-width: 720px) { .inbox-open .issue { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
+.chips { display: none; flex-wrap: wrap; gap: 6px; margin: 0 0 24px; }
+.chips .field-chip { border-color: transparent; background: var(--bg-raised); }
+.chips .field-chip:hover { background: var(--bg-active); }
+.chips .field-chip .icon { display: inline-flex; }
+@container (max-width: 819px) {
+  .inbox-open .issue { grid-template-columns: minmax(0, 1fr); }
+  .inbox-open .props { display: none; }
+  .inbox-open .chips { display: flex; }
+}
 .item.inbox-row { height: auto; gap: 12px; margin: 0 10px; padding: 0 8px; border-radius: 8px; }
 .inbox-row.selected { background: var(--bg-raised); }
 .inbox-row .avatar { position: relative; flex: none; display: grid; place-items: center; width: 32px; height: 32px;
@@ -458,12 +474,13 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .inbox-row .age { flex: none; margin-left: 4px; }
 .inbox-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; height: 100%;
                font: 500 13px var(--font); color: var(--text-3); }
-@media (max-width: 900px) {
+@media (max-width: 900px) { .bar .inbox-head { width: calc(var(--inbox-list) - 36px); } }
+@media (max-width: 769px) {
   .inbox { grid-template-columns: minmax(0, 1fr); }
   .inbox:has(.inbox-open .issue) .inbox-list, .inbox:not(:has(.inbox-open .issue)) .inbox-open { display: none; }
   .inbox-list { border-right: 0; }
-  .bar:has(.inbox-head) { background: none; }
-  .bar .inbox-head { width: auto; color: var(--text-3); }
+  .bar:has(.inbox-head)::after { content: none; }
+  .bar .inbox-head, .side-collapsed .bar .inbox-head { width: auto; color: var(--text-3); }
   .bar:has(.inbox-head) .sep { display: inline; }
 }
 

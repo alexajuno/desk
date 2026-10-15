@@ -700,6 +700,12 @@ document.addEventListener("click", (e) => {
   }
   const folder = t.closest(".folder-pick");
   if (folder) { if (!toggled(folder)) folderMenu(folder); return; }
+  const projectChip = t.closest(".project-chip");
+  if (projectChip) {
+    const slug = projectChip.dataset.slug;
+    if (!toggled(projectChip)) projectPicker(projectChip.dataset.value, { anchor: projectChip }, (value) => setField(slug, "project", value));
+    return;
+  }
   const more = t.closest(".bar .more");
   if (more && page()) { if (!toggled(more)) actionsMenu({ ...page() }, { anchor: more }); return; }
   if (t.closest(".side .new-issue")) { openCreator(); return; }
@@ -977,7 +983,8 @@ document.addEventListener("keydown", (e) => {
   }
   else if (key === "s" || key === "p") {
     const field = key === "s" ? "state" : "priority";
-    const row = focused, pick = $(`.pick[data-field=${field}]`);
+    // The issue's status and priority sit in its Properties column or, in a narrow Inbox pane, in its chips.
+    const row = focused, pick = [...document.querySelectorAll(`.pick[data-field=${field}]`)].find((el) => el.checkVisibility());
     if (row) fieldMenu(row.dataset.slug, field, row.dataset[field], { anchor: row.querySelector(`.icon[data-field=${field}]`) });
     else if (pick) fieldMenu(pick.dataset.slug, field, pick.dataset[field], { anchor: pick });
     e.preventDefault();

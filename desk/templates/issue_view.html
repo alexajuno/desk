@@ -33,6 +33,20 @@
   <script id="issue-raw" type="application/json">{{ {"title": p.title, "body": p.body.strip()} | tojson }}</script>
   <div>
     <h1 class="title" title="Click to edit">{{ p.title }}</h1>
+    {#- Linear's Inbox has no room for the Properties column in a pane under 820px, so it shows them as chips here
+        instead (desk.css); each opens the same picker as its row in the column. #}
+    <div class="chips">
+      <button class="field-chip pick" type="button" data-slug="{{ p.slug }}" data-field="state" data-state="{{ p.state }}" title="Change status (S)">
+        <span class="icon" data-field="state">{{ state(p.state) }}</span><span class="field-label" data-field="state">{{ state_names[p.state] }}</span></button>
+      <button class="field-chip pick{{ ' unset' if p.priority == 'none' }}" type="button" data-slug="{{ p.slug }}" data-field="priority" data-priority="{{ p.priority }}" title="Change priority (P)">
+        <span class="icon" data-field="priority">{{ prio(p.priority) }}</span><span class="field-label" data-field="priority">{{ "Priority" if p.priority == "none" else prio_names[p.priority] }}</span></button>
+      <button class="field-chip project-chip{{ ' unset' if not p.project }}" type="button" data-slug="{{ p.slug }}" data-value="{{ p.project or '' }}" title="Set project">
+        <svg class="glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M8 2l5.5 3v6L8 14l-5.5-3V5z"/></svg>
+        <span>{{ project.title if project else p.project or "Project" }}</span></button>
+      <button class="field-chip folder-pick{{ ' unset' if not p.folder }}" type="button" data-slug="{{ p.slug }}" data-value="{{ p.folder or '' }}" title="Pick the folder the issue's session starts in; ~ until you pick one">
+        <svg class="glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z"/></svg>
+        <span>{{ p.folder or "Folder" }}</span></button>
+    </div>
     {#- In review the card comes first, right under the strip whose Approve decides on it. #}
     {%- if p.state == "review" %}
     <div class="review">
