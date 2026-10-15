@@ -150,7 +150,15 @@ def ago(when: datetime) -> str:
 
 
 templates.env.filters["ago"] = ago
-templates.env.filters["since"] = lambda iso: ago(datetime.fromisoformat(iso)) if iso else ""
+
+
+def waited(iso: str | None) -> str:
+    """How long a wait has lasted, in days, as a wait is chased: today, then 3d, 2w."""
+    when = datetime.fromisoformat(iso) if iso else datetime.now()
+    return "today" if when.date() == datetime.now().date() else ago(when)
+
+
+templates.env.filters["waited"] = waited
 app.state.templates = templates  # the Agent tab's pages (chats.py) render with these too
 @app.on_event("startup")
 async def _remember_loop():
@@ -386,9 +394,10 @@ def strip(i: store.Issue, row: dict, has_plan: bool, result: Path) -> dict:
                     "button": chat}
         return {"text": asleep, "button": chat}
     if i.state == "waiting":
-        since = datetime.fromisoformat(i.waiting_since) if i.waiting_since else datetime.now()
-        who = i.waiting_on or "someone else. Say who under Waiting on"
-        return {"text": f"Waiting on {who}, since {since:%b %-d} ({ago(since)}).", "button": chat if i.session else None}
+        since = waited(i.waiting_since)
+        since = since if since == "today" else f"{datetime.fromisoformat(i.waiting_since):%b %-d} ({since})"
+        who = i.waiting_on or "someone else (say who under Waiting on)"
+        return {"text": f"Waiting on {who}, since {since}.", "button": chat if i.session else None}
     if i.state == "review":
         ask = "Not yet? Say what to change in the chat." if i.session else ""
         return {"text": f"In review: {'read the card' if has_result else 'check the work'}. {ask}".strip(),

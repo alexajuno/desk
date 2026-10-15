@@ -97,7 +97,7 @@
     <button class="prop waiting-pick" data-slug="{{ p.slug }}" data-value="{{ p.waiting_on or '' }}" title="Who or what it waits on">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="color: var(--text-3)" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="8" cy="8" r="5.75"/><path d="M8 5v3l2 1.25"/></svg>
       <span{% if not p.waiting_on %} class="muted"{% endif %}>{{ p.waiting_on or "Who or what?" }}</span></button>
-    <div class="prop static muted">since {{ p.waiting_since | short_date }} · {{ p.waiting_since | since }}</div>
+    <div class="prop static muted">since {{ p.waiting_since | short_date }}{% if (p.waiting_since | waited) != "today" %} · {{ p.waiting_since | waited }}{% endif %}</div>
     {%- endif %}
 
     {#- How much plan the issue gets, and whether its session waits for go (issues.PROTOCOLS). #}

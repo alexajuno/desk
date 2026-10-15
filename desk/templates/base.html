@@ -113,7 +113,7 @@ function showFolded(url = location.pathname) {
   {%- if sidebar.waiting %}
   <div class="nav-label">Waiting</div>
   {%- for p in sidebar.waiting %}
-  <a class="nav-item {{ 'here' if here == '/issue/' ~ p.slug }}" href="/issue/{{ p.slug }}" title="Waiting on {{ p.waiting_on or 'someone else' }}, {{ p.waiting_since | since }}">{{ state("waiting") }}<span class="nav-title">{{ p.title }}</span></a>
+  <a class="nav-item {{ 'here' if here == '/issue/' ~ p.slug }}" href="/issue/{{ p.slug }}" title="Waiting on {{ p.waiting_on or 'someone else' }}, {{ p.waiting_since | waited }}">{{ state("waiting") }}<span class="nav-title">{{ p.title }}</span></a>
   {%- endfor %}
   {%- endif %}
   {#- desk's own checkout on no branch, as a session leaves it for your review (land.running), on every page until

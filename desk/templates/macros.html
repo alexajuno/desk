@@ -43,7 +43,7 @@
   <span class="icon" data-field="priority" title="Change priority (P)">{{ prio(p.priority) }}</span>
   <span class="icon" data-field="state" title="Change status (S)">{{ state(p.state) }}</span>
   <span class="title">{{ p.title }}</span>
-  {%- if p.state == "waiting" %}<span class="waiting-on" title="Waiting since {{ p.waiting_since | short_date }}">{{ p.waiting_on or "Waiting" }} · {{ p.waiting_since | since }}</span>{% endif %}
+  {%- if p.state == "waiting" %}<span class="waiting-on" title="Waiting since {{ p.waiting_since | short_date }}">{{ p.waiting_on or "Waiting" }} · {{ p.waiting_since | waited }}</span>{% endif %}
   {{- caller() if caller }}</a>
 {%- endmacro %}
 
