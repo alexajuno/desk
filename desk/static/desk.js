@@ -1,8 +1,9 @@
 // Linear-style menus, row actions, inline edits, the new issue panel, delete with undo, and a full-screen
 // diagram viewer. Shortcuts: S status, P priority, C a new issue, T collapse a group, J/K or arrows to move,
 // Enter to open, right-click for a row's actions, Ctrl+Delete to delete and Ctrl+Z to undo it, / search,
-// G then B backlog, G then J the Agent, G then P projects, [ the sidebar, ? or Ctrl+/ the shortcuts, Esc to
-// close (on an issue, Esc goes back). The list is keys.html. G then I and ? are
+// G then B backlog, G then J the Agent, G then P projects, [ the sidebar, Ctrl+/ the shortcuts, Esc to
+// close (on an issue, Esc goes back). The list is keys.html. Ctrl+/ is Linear's, not ?, which would type
+// itself into the panel's search box as it took the focus (15 Oct). G then I is
 // from Linear's guide
 // (linear.app/enablement/guide/navigating-linear); S, P and C follow Linear, and the S menu's
 // shape (filter on top, numbered rows, a tick on the current one) was copied from linear.app.
@@ -926,7 +927,6 @@ document.addEventListener("keydown", (e) => {
   }
   else if (e.key === "/") { const box = document.getElementById("search-q"); if (box) box.focus(); else location.href = "/search"; e.preventDefault(); }
   else if (e.key === "[") { toggleSide(); }
-  else if (e.key === "?") { toggleKeys(); }
   else if (e.key === "Escape") {
     if (page()) goBack();
     else focusRow(null);

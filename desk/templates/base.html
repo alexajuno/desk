@@ -101,7 +101,7 @@ function showFolded(url = location.pathname) {
 </aside>
 
 <div class="panel">
-  <header class="bar"><button class="side-icon side-toggle" type="button" title="Show sidebar  [">{{ side_icon }}</button>{% block crumb %}{% endblock %}<span class="right">{% block tools %}{% endblock %}<kbd class="keys-open" title="Keyboard shortcuts  ?  or  Ctrl /">?</kbd></span></header>
+  <header class="bar"><button class="side-icon side-toggle" type="button" title="Show sidebar  [">{{ side_icon }}</button>{% block crumb %}{% endblock %}<span class="right">{% block tools %}{% endblock %}<kbd class="keys-open" title="Keyboard shortcuts">Ctrl /</kbd></span></header>
   <div class="scroll">{% block main %}{% endblock %}</div>
 </div>
 <script>showCollapsed(); showFolded()</script>
