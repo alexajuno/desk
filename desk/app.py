@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import agents, api, chats, land, projects, terminal, window
+from . import agents, api, chats, land, projects, sessions, terminal, window
 from . import issues as store
 from .render import to_html, to_html_with_toc
 from .search import find
@@ -167,6 +167,7 @@ async def _remember_loop():
 
 
 app.include_router(api.router)
+app.include_router(sessions.router)  # before chats.router: /agent now lands on /sessions
 app.include_router(chats.router)
 app.include_router(terminal.router)
 

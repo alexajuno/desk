@@ -120,14 +120,16 @@ def refresh() -> dict[str, dict]:
 
 # --- what the list shows ---------------------------------------------------------------------------
 
-def title(row: dict) -> str:
-    """A rename first; then Claude Code's own title; then the first thing typed. The name `-n` gave a session at its
-    start comes last, since desk names its own that way ("desk chat 15 Oct 17:41", an issue's title). A rename of
-    a session started with -n may change agent-name too and so lose to the AI title (not checked)."""
+def title(row: dict, issue: store.Issue | None = None) -> str:
+    """A rename first; then Claude Code's own title; then the title of the issue it works, since an issue's session
+    starts on desk's long prompt; then the first thing typed. The name `-n` gave a session at its start comes last,
+    since desk names its own that way ("desk chat 15 Oct 17:41", an issue's title cut short). A rename of a session
+    started with -n may change agent-name too and so lose to the AI title (not checked)."""
     custom = row.get("custom_title")
     if custom and custom != row.get("agent_name"):
         return custom
-    return row.get("ai_title") or row.get("first_prompt") or custom or "Untitled session"
+    return (row.get("ai_title") or (issue and issue.title) or row.get("first_prompt") or custom
+            or "Untitled session")
 
 
 def folder(cwd: str | None) -> str:
@@ -199,7 +201,7 @@ def rows(query: str = "", kind: str = "") -> list[dict]:
             continue
         sid = row["id"]
         issue = issues.get(sid) or issues.get(sid[:8])
-        name = title(row)
+        name = title(row, issue)
         if patterns:
             text = " ".join(filter(None, (name, row.get("cwd"), issue and f"{issue.slug} {issue.title}",
                                           row.get("first_prompt"), row.get("last_prompt"))))
@@ -239,7 +241,7 @@ def open_session(sid: str) -> None:
         raise RuntimeError(f"Its folder, {cwd}, is gone, and Claude Code resumes a session only from the folder it "
                            "started in.")
     argv = ["claude", "attach", live["id"]] if live.get("kind") == "background" else ["claude", "--resume", sid]
-    window.launch(name, f"desk · {title(row)}", cwd, argv)
+    window.launch(name, f"desk · {title(row)}", cwd, argv)  # an issue's session opened above
 
 
 def new_session(base: str) -> dict:
