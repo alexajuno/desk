@@ -3,10 +3,15 @@ kitty window over desk (see "chats in a window" below). The user, 15 Oct: "this 
 can't bring the experience similar to claude", and "me just standing on this browser tab for work. then it's might be
 a floating window in hyprland would work". Ctrl+Shift+O and New session start one (sessions.py).
 
-It runs in DESK_DATA and reaches desk through curl to its API (desk/api.py). Work on an issue is done in the chat,
+It starts in DESK_DATA and reaches desk through curl to its API (desk/api.py). Work on an issue is done in the chat,
 not handed to another session (the user, 15 Oct: "don't hand the problem to another chat anymore"): the chat binds
-itself to the issue (`POST /api/issues/<slug>/work`), which makes the chat's session the issue's session. The chat
-stays in DESK_DATA because a session is found again by --resume only from the folder it started in.
+itself to the issue (`POST /api/issues/<slug>/work`), which makes the chat's session the issue's session, and desk
+then moves the chat into the issue's folder (see "moving a chat" below), so that Claude Code loads that folder's
+CLAUDE.md, rules, skills, agents and settings as it does for any session started there (the user, 15 Oct: "the agent
+won't be able to get the rules and skills within that dir"). Checked on Claude Code 2.1.300 (15 Oct) with a scratch
+repo holding a marker in each kind of file: only the folder a session runs in loads all of them; --add-dir with
+CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD loaded CLAUDE.md, the rules with no `paths:`, skills and agents, but no
+path-scoped rule, no CLAUDE.md of a subfolder and no settings.
 
 A chat is a JSON file in DESK_DATA/chats/. The chats made before 15 Oct were drawn by desk in its own page, from
 `claude -p --session-id`; their sessions are ordinary ones now, listed and resumed with the rest (sessions.py).
@@ -14,6 +19,11 @@ A chat is a JSON file in DESK_DATA/chats/. The chats made before 15 Oct were dra
 
 import json
 import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -52,9 +62,10 @@ desk's API:
 
 {reference}"""
 
-# A window chat's session takes its folders and its CLAUDE.md files when it starts, so the folder of an issue it binds
-# to later brings neither; and the terminal makes an address clickable, not a Markdown link.
-WINDOW_RULES = {"folder_rule": "- This chat started in desk's data folder, so the CLAUDE.md, CONTRIBUTING and .claude/rules of an issue's folder do not load by themselves: once you bind to an issue, read them there before you plan.\n",
+# A window chat's session loads the folder it runs in when it starts, so desk moves it into the folder of an issue it
+# binds to, between two turns (see "moving a chat"); and the terminal makes an address clickable, not a
+# Markdown link.
+WINDOW_RULES = {"folder_rule": "- Binding this chat to an issue whose folder is not the one this chat runs in moves the chat there, so that the folder's CLAUDE.md, rules and skills load: once the issue is bound and its protocol set, tell the user in one line that you are moving to its folder, and end your turn. desk then resumes this chat in the folder and tells you to carry on.\n",
                 "page_rule": "", "link_rule": "Name each issue by its title and its address, {base}/issue/<slug>, which the terminal makes clickable."}
 
 PLAN_RULES = """the decisions so far with the user's reason for each, the workflow drawn in d2, and a build plan that ends with Done when and What you may decide alone. Write it with the Write or Edit tool to the issue's plan.md (next to issue.md, in the folder the API gives as "file"), a first draft as soon as you understand the issue, and rewrite it when the talk changes it. Keep it short. Do not start the work before the user says "go"."""
@@ -88,16 +99,19 @@ def transcript(chat_id: str) -> str:
     return "\n\n".join(f"{names[who]}: {text}" for who, text in said(load(chat_id)))
 
 
-def bind(chat: dict, issue: store.Issue) -> None:
-    """The chat becomes the issue's session; its folder is one the chat may work in. Its session is an ordinary
-    background session, which desk lists, messages and lands as any other."""
+def bind(chat: dict, issue: store.Issue, base: str) -> None:
+    """The chat becomes the issue's session, and desk moves it into the issue's folder once its turn ends. Its session
+    is an ordinary background session, which desk lists, messages and lands as any other."""
     chat["issue"], chat["folder"] = issue.slug, str(Path(agents.workdir(issue)))
     save(chat)
+    if not _same(chat["folder"], runs_in(chat)) and chat["id"] not in MOVING:
+        MOVING.add(chat["id"])
+        threading.Thread(target=_move, args=(chat["id"], base), daemon=True).start()
 
 
 def agent_prompt(chat: dict, base: str) -> str:
-    """The agent's system prompt, given once, when the chat's session starts, since Claude Code keeps the first one
-    it was given."""
+    """The agent's system prompt, given when the chat's session starts and when desk moves it, since Claude Code keeps
+    the one it was started with."""
     reference = re.sub(r"\A---\n.*?\n---\n", "", SKILL.read_text(encoding="utf-8"), flags=re.S).replace(SKILL_BASE, base)
     slug = chat.get("issue")
     folder = store.folder(slug) if slug and store.exists(slug) else Path("<the issue's folder>")
@@ -173,8 +187,11 @@ def open_window(chat: dict, title: str = "") -> None:
     row = agents.live(fresh=True).get(chat["session"], {})
     if row.get("kind") == "interactive":
         raise RuntimeError("This chat is open in another terminal. Close that one first.")
-    argv = ["claude", "attach", row["id"]] if row.get("kind") == "background" else ["claude", "--resume", chat["session"]]
-    window.session(f"desk-agent-{chat['id']}", f"desk · {title or chat['title']}", str(store.DATA_DIR), argv)
+    if row.get("kind") == "background":
+        argv = ["sh", "-c", REATTACH, "sh", shutil.which("claude") or "claude", row["id"], str(_moving(chat["id"]))]
+    else:
+        argv = ["claude", "--resume", chat["session"]]
+    window.session(f"desk-agent-{chat['id']}", f"desk · {title or chat['title']}", runs_in(chat), argv)
 
 
 def _chats() -> list[dict]:
@@ -186,12 +203,130 @@ def window_of(session: str | None) -> dict | None:
     return next((c for c in _chats() if c.get("kind") == WINDOW and c["session"] == session), None) if session else None
 
 
-def started_in(session: str | None) -> str | None:
-    """DESK_DATA when the session is a chat's, which every chat starts in and Claude Code finds again by --resume only
-    from there."""
-    return str(store.DATA_DIR) if session and any(c["session"] == session for c in _chats()) else None
+def runs_in(chat: dict) -> str:
+    """The folder the chat's session runs in: DESK_DATA, where every chat starts, until desk moves it."""
+    return chat.get("cwd") or str(store.DATA_DIR)
+
+
+def session_runs_in(session: str | None) -> str | None:
+    """The folder a chat's session runs in, when the session is a chat's."""
+    chat = next((c for c in _chats() if c["session"] == session), None) if session else None
+    return runs_in(chat) if chat else None
 
 
 def window_chats() -> list[dict]:
     """The window chats, the one that moved last first."""
     return sorted((c for c in _chats() if c.get("kind") == WINDOW), key=_activity, reverse=True)
+
+
+# --- moving a chat -------------------------------------------------------------------------------
+#
+# A chat's session loads the folder it runs in, and only that one, so once it binds to an issue in another
+# folder desk moves it there, between two turns. Checked on 15 Oct (Claude Code 2.1.300) with a scratch session:
+# - `claude --bg --resume <id>` with no other flags wakes the session with its saved options, its folder among them,
+#   wherever it is run; with flags it "started a copy" under a new id.
+# - After `claude rm`, which keeps the transcript, `claude --bg --resume <id>` with the flags, run in another folder,
+#   continues the same session there: the same id, the earlier turns remembered, that folder's CLAUDE.md, rules,
+#   skills and agents loaded, and the transcript still written where it began, so TRANSCRIPTS holds.
+# - `claude rm` ends a running session too, its process exiting about 0.4s after the command returns; a resume before
+#   that would start a copy. Each `claude` command takes about 0.6s, so the move takes about 1.7s: rm, the exit, the
+#   resume (the user, 15 Oct, of 3s: "too long imo").
+# - In a folder nobody trusted, the resume stops at "Workspace not trusted" (agents.TrustError).
+# - The session's end ends the `claude attach` in the chat's window, which would close it; REATTACH keeps it open.
+
+# The command of a window chat's window: `claude attach` in a loop that, when the attach ends while desk moves the
+# chat (its .moving file is there), says so, waits for the move, up to 30s, and attaches again. $1 is claude, $2 the
+# session's short id, $3 the .moving file.
+REATTACH = ('while "$1" attach "$2"; [ -e "$3" ]; do printf "\\nMoving this chat to %s…\\n" "$(cat "$3")"; '
+            'i=0; while [ -e "$3" ] && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done; done')
+MOVING: set[str] = set()  # the chats a move waits on, so a second bind does not start a second move
+MOVE_WAIT = 4 * 3600  # seconds a move waits for the chat's turn to end
+MOVED = ("desk moved this chat into {folder}, the folder of {title} ({base}/issue/{slug}), so its CLAUDE.md, rules and "
+         "skills are loaded now. Carry on where you left off.")
+NOT_MOVED = ("desk could not move this chat into {folder}, the folder of {title} ({base}/issue/{slug}): {why} Until then, "
+             "read that folder's CLAUDE.md and .claude/rules yourself before you plan, and carry on.")
+UNTRUSTED = ("Claude Code does not trust that folder yet. Tell the user to open {base}/issue/{slug}?trust=1 and press "
+             "Trust folder, then to ask you to bind this chat to the issue again.")
+
+
+def _moving(chat_id: str) -> Path:
+    """The file that is there while desk moves the chat, holding the folder it moves to."""
+    return CHATS_DIR / f"{chat_id}.moving"
+
+
+def _same(a: str, b: str) -> bool:
+    return Path(a).expanduser().resolve() == Path(b).expanduser().resolve()
+
+
+def _adds(cwd: str) -> list[str]:
+    """--add-dir for desk's data folder, which holds the issues' files, and ~/worktrees, unless the chat runs in one."""
+    return [arg for d in (str(store.DATA_DIR), str(HOME / "worktrees")) if not _same(d, cwd) and Path(d).is_dir()
+            for arg in ("--add-dir", d)]
+
+
+def _move(chat_id: str, base: str) -> None:
+    """Move the window chat into its issue's folder once its turn has ended, in a thread of its own."""
+    try:
+        _carry_over(chat_id, base)
+    except Exception as error:  # nothing else would see a failure in this thread
+        print(f"desk: could not move {chat_id}: {error!r}", file=sys.stderr)
+    finally:
+        MOVING.discard(chat_id)
+
+
+def _carry_over(chat_id: str, base: str) -> None:
+    """Drop Claude Code's record of the chat's session, which also ends it and would otherwise wake it in its old
+    folder, and resume it in the issue's folder, telling it to carry on. When the folder will not take it, resume it
+    where it was, telling it why. Its window attaches again by itself (REATTACH); one opened before REATTACH closes,
+    and desk opens it again."""
+    began = time.monotonic()
+    while (row := agents.live(fresh=True).get(load(chat_id)["session"], {})).get("status") == "busy":
+        waited = time.monotonic() - began
+        if waited > MOVE_WAIT:
+            return
+        time.sleep(0.2 if waited < 60 else 2)  # the turn usually ends right after the bind
+    chat = load(chat_id)
+    if row.get("kind") == "interactive" or _same(chat["folder"], runs_in(chat)):
+        return
+    if not row:  # nothing runs, so the next resume starts it in the folder
+        chat["cwd"] = chat["folder"]
+        save(chat)
+        return
+    name, issue = f"desk-agent-{chat['id']}", store.load(chat["issue"])
+    try:
+        shown = window.is_open(name)
+    except RuntimeError:  # no Hyprland
+        shown = False
+    words = {"folder": chat["folder"], "title": issue.title, "base": base, "slug": issue.slug}
+    moving = _moving(chat_id)
+    moving.write_text(chat["folder"], encoding="utf-8")
+    try:
+        subprocess.run(["claude", "rm", row["id"]], capture_output=True, timeout=30)
+        if row.get("pid"):
+            agents._exited(row["pid"])
+        try:
+            _resume(chat, row, chat["folder"], MOVED.format(**words), base)
+            moved = True
+        except RuntimeError as error:
+            why = UNTRUSTED.format(**words) if isinstance(error, agents.TrustError) else str(error)
+            _resume(chat, row, runs_in(chat), NOT_MOVED.format(why=why, **words), base)
+            moved = False
+    finally:
+        moving.unlink(missing_ok=True)
+    chat = load(chat_id)
+    if moved:
+        chat["cwd"] = chat["folder"]
+        save(chat)
+    if shown and window.closed(name, 1):
+        open_window(chat)
+
+
+def _resume(chat: dict, row: dict, folder: str, message: str, base: str) -> None:
+    """Resume the chat's session in the folder with the message, as the same session and with the flags it started
+    with."""
+    short = agents._background(folder, ["claude", "--bg", "--resume", chat["session"], "-n", row.get("name") or chat["title"],
+                                        *WINDOW_FLAGS, *_adds(folder), "--append-system-prompt", agent_prompt(chat, base),
+                                        message])
+    if not chat["session"].startswith(short):
+        subprocess.run(["claude", "stop", short], capture_output=True, timeout=30)
+        raise RuntimeError(f"Claude Code started a copy ({short}) instead of continuing the session; desk stopped it.")

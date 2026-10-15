@@ -66,7 +66,7 @@ curl -s "http://127.0.0.1:8790/api/folders?q=site"
 
 ## Work an issue
 
-desk's own agent chat works an issue itself; it starts no other session. Bind the chat to the issue (the issue needs its `folder` set first), and the chat becomes the issue's session: the issue shows In progress, the folder joins the folders the chat may work in, and that folder's CLAUDE.md and rules apply. Send the chat's id, which the agent's prompt gives. A backlog issue, or one in progress with no other session, can be bound:
+desk's own agent chat works an issue itself; it starts no other session. Bind the chat to the issue (the issue needs its `folder` set first), and the chat becomes the issue's session: the issue shows In progress, and the chat moves into the issue's folder, where that folder's CLAUDE.md, rules and skills load. A chat in a window moves once its turn ends, so end the turn right after binding; desk then resumes it in the folder and tells it to carry on. Send the chat's id, which the agent's prompt gives. A backlog issue, or one in progress with no other session, can be bound:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/work" --json '{"chat": "<chat id>"}'

@@ -351,7 +351,7 @@ def _continue(issue, prompt: str) -> None:
         # exits; a resume in that gap "started a copy" (Claude Code 2.1.300, 15 Oct, a blocked session each time).
         _exited(row["pid"])
     from . import chats
-    short = _background(chats.started_in(issue.session) or workdir(issue), ["claude", "--bg", "--resume", issue.session, prompt])
+    short = _background(chats.session_runs_in(issue.session) or workdir(issue), ["claude", "--bg", "--resume", issue.session, prompt])
     if not issue.session.startswith(short):
         # Left running, the copy would work on the issue's branch where desk cannot see it (15 Oct).
         subprocess.run(["claude", "stop", short], capture_output=True, timeout=30)
@@ -384,8 +384,8 @@ def jump_back(issue) -> None:
 
 
 def resume_dir(issue) -> str:
-    """Where `claude --resume` finds the issue's session: desk's data folder for an Agent window chat's, the worktree
-    desk made with `claude -w` for an old one's, else the issue's folder."""
+    """Where to `claude --resume` the issue's session: the folder an Agent chat's runs in, the worktree desk made with
+    `claude -w` for an old one's, else the issue's folder."""
     from . import chats
     worktree = Path(workdir(issue), ".claude", "worktrees", f"desk-{issue.slug[:40]}")
-    return chats.started_in(issue.session) or str(worktree if worktree.is_dir() else workdir(issue))
+    return chats.session_runs_in(issue.session) or str(worktree if worktree.is_dir() else workdir(issue))

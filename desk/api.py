@@ -22,7 +22,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from . import agents, chats, land, projects
@@ -231,9 +231,9 @@ class Work(BaseModel):
 
 
 @router.post("/issues/{slug}/work")
-def work_issue(slug: str, work: Work):
-    """The Agent chat works this issue itself: the chat's session becomes the issue's session, the issue's folder one
-    of the chat's, and the issue shows In progress. No other session starts."""
+def work_issue(request: Request, slug: str, work: Work):
+    """The Agent chat works this issue itself: the chat's session becomes the issue's session, the chat moves into the
+    issue's folder (a window chat once its turn ends), and the issue shows In progress. No other session starts."""
     i = _load(slug)
     if i.state not in ("backlog", "running"):
         raise HTTPException(409, f"{slug} is {i.state}; only a backlog issue, or one in progress, can be worked.")
@@ -246,7 +246,7 @@ def work_issue(slug: str, work: Work):
         raise HTTPException(422, "Set the issue's folder first (PATCH folder; find it with /api/folders?q=<name>).")
     i.session, i.state = chat["session"], "running"
     store.save(i)
-    chats.bind(chat, i)
+    chats.bind(chat, i, str(request.base_url).rstrip("/"))
     return as_json(i)
 
 

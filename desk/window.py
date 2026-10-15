@@ -39,6 +39,21 @@ def _dispatch(lua: str) -> None:
         raise RuntimeError(f"Hyprland said: {said}")
 
 
+def is_open(name: str) -> bool:
+    """Whether a window of that class is open."""
+    return any(client["class"] == name for client in json.loads(_hyprctl("clients", "-j")))
+
+
+def closed(name: str, seconds: float = 5) -> bool:
+    """Wait, up to the given seconds, for the window of that class to close; whether it has."""
+    deadline = time.monotonic() + seconds
+    while is_open(name):
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.1)
+    return True
+
+
 def focus(name: str) -> bool:
     """Bring the window of that class to the workspace the user is on and focus it; False when there is none."""
     here = json.loads(_hyprctl("activeworkspace", "-j"))["id"]
