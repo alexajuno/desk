@@ -69,6 +69,8 @@ def _apply(i: store.Issue, fields: Fields) -> None:
     for name, allowed in (("priority", store.PRIORITIES), ("state", store.STATES), ("protocol", store.PROTOCOLS)):
         if name in given and given[name] not in allowed:
             raise HTTPException(422, f"{name} must be one of: {', '.join(allowed)}")
+    if given.get("state") == "landing" and i.state != "landing":
+        raise HTTPException(422, "Only Approve lands an issue: the user presses it in desk.")
     if given.get("waiting_on") and given.get("state", i.state) != "waiting":
         raise HTTPException(422, "waiting_on is for an issue in waiting: send \"state\": \"waiting\" with it")
     if "title" in given and not given["title"]:
@@ -196,7 +198,7 @@ def start_issue(slug: str, start: Start):
     if the user had said go in its chat, or a new one. With no plan, a session plans it from the Agent chat, or, for
     a quick or brief issue, writes its own brief."""
     i = _load(slug)
-    if not (i.state == "backlog" or (i.state == "running" and i.session and not i.landing)):
+    if not (i.state == "backlog" or (i.state == "running" and i.session)):
         raise HTTPException(409, f"{slug} is {i.state}; only a backlog issue, or one in progress that its session "
                                  f"has only planned, can start.")
     if start.plan.strip():

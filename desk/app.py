@@ -11,7 +11,7 @@ import subprocess
 import threading
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
@@ -93,24 +93,33 @@ def landed(result: Path) -> tuple[bool, str | None]:
     return first.startswith("**Landed:**"), pr and pr.group(0)
 
 
+def landing_stuck(issue: store.Issue, row: dict, now: str) -> bool:
+    """Whether a landing issue's session stopped short of landing it: not working, or blocked on a prompt, a minute
+    after Approve. Approve stops the session and resumes it, and it is idle for a moment before the resumed turn
+    starts, which put every landing in the Inbox for that moment ("the landing also has a flash in the inbox", the
+    user, 15 Oct)."""
+    blocked = row.get("state") == "blocked" and row.get("pid")
+    return (now != "working" or blocked) and datetime.now() - datetime.fromisoformat(issue.landing) > timedelta(minutes=1)
+
+
 def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, list]:
     """What needs you and what waits for your review. desk owns issue.md, so it moves the state here, from the
     session: In progress to In review once it wrote result.md and stopped working, back to In progress when you
     ask it for a change in its chat and it works again, and from Landing to Done once result.md says it landed.
-    Waiting is yours to move, as it waits on someone else; only a result its session wrote since moves it on."""
+    Waiting is yours to move, as it waits on someone else; only a result its session wrote since moves it on.
+    Landing needs nothing from you unless it gets stuck."""
     needs, review = [], []
     for issue in all_issues.values():
         row = live.get(issue.session, {}) if issue.session else {}
         now = agents.status(row)
         result = store.folder(issue.slug) / "result.md"
-        if issue.state == "running" and issue.landing:
+        if issue.state == "landing":
             # A result that says it landed counts however old it is: a session approved again after it landed answers
             # so and leaves its card as it was, which kept desk-hangs-on-its-own-restart… Landing for good (15 Oct).
             done, pr = landed(result) if result.is_file() else (False, None)
             if result.is_file() and now != "working" and (done or
                     datetime.fromtimestamp(result.stat().st_mtime) > datetime.fromisoformat(issue.landing)):
-                store.move(issue, state="done" if done else "review", landing=None,
-                           link=issue.link or (pr if done else None))
+                store.move(issue, state="done" if done else "review", link=issue.link or (pr if done else None))
         elif issue.state == "running" and result.is_file() and now != "working":
             store.move(issue, state="review")
         elif issue.state == "waiting" and result.is_file() and now != "working" and issue.waiting_since \
@@ -120,8 +129,9 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
             store.move(issue, state="running")
         if issue.state == "review":
             review.append((issue, "result ready" if result.is_file() else "check it"))
-        elif issue.state == "running" and now == "idle" and issue.landing:
-            needs.append((issue, "waiting for you"))
+        elif issue.state == "landing":  # and no further: the blocked rule below would list it during the minute
+            if landing_stuck(issue, row, now):
+                needs.append((issue, "landing stuck"))
         elif issue.state == "running" and now != "working" and has_questions(issue):
             # A session at work needs nothing from you yet; one that stopped with a question asks it, plan or not.
             needs.append((issue, "has questions"))
@@ -144,12 +154,12 @@ def sidebar(request: Request) -> dict:
     needs, review = inbox_items(all_issues, agents.live())
     # Sub-issues too: a session runs whether or not its issue sits under another (15 Oct, one handed off as a
     # sub-issue never showed here).
-    running = sorted((i for i in all_issues.values() if i.state == "running"), key=lambda i: i.rank)
-    waiting = sorted((i for i in all_issues.values() if i.state == "waiting"), key=lambda i: i.rank)
+    running, landing, waiting = (sorted((i for i in all_issues.values() if i.state == s), key=lambda i: i.rank)
+                                 for s in ("running", "landing", "waiting"))
     now = land.running(str(land.DESK_REPO))
     waits = [{**e, "issue": all_issues.get(e["slug"])} for e in land.line(str(land.DESK_REPO))]
     return {"sidebar": {"backlog": sum(i.state == "backlog" for i in all_issues.values()), "running": running,
-                        "waiting": waiting, "trying": now and {**now, "issue": all_issues.get(now["slug"])},
+                        "landing": landing, "waiting": waiting, "trying": now and {**now, "issue": all_issues.get(now["slug"])},
                         "line": waits,
                         "inbox": len(needs) + len(review),
                         "projects": sorted((p for p in projects.load_all().values() if p.state == "active"),
@@ -160,7 +170,7 @@ templates = Jinja2Templates(directory=HERE / "templates", context_processors=[si
 templates.env.globals.update(
     priorities=store.PRIORITIES, states=store.STATES,
     state_names={"backlog": "Backlog", "running": "In progress", "waiting": "Waiting", "review": "In review",
-                 "done": "Done", "dropped": "Dropped"},
+                 "landing": "Landing", "done": "Done", "dropped": "Dropped"},
     prio_names={"urgent": "Urgent", "high": "High", "medium": "Medium", "low": "Low", "none": "No priority"},
     protocols=store.PROTOCOLS, proto_names={"quick": "Quick", "brief": "Brief", "design": "Design"},
     # What each protocol does, under its name in the picker.
@@ -296,7 +306,7 @@ def project_set(slug: str, field: str = Form(...), value: str = Form("")):
 
 # What each reason for being in the Inbox reads as, in a row's second line, after "Session".
 NOTICES = {"waiting for you": "is waiting for you", "plan ready": "wrote its plan: read it, then say go in its chat",
-           "has questions": "saved questions for you",
+           "has questions": "saved questions for you", "landing stuck": "stopped before the work landed",
            "result ready": "finished: the result is ready", "check it": "finished, with no result.md"}
 
 
@@ -410,9 +420,10 @@ def strip(i: store.Issue, row: dict, has_plan: bool, result: Path) -> dict:
                     "button": {"label": "Plan", "action": "start"}}
         return {"text": "Plan opens the issue's chat, and its session plans it with you.",
                 "button": {"label": "Plan", "action": "start"}}
-    if i.state == "running" and i.landing:
-        text = {"working": "Landing, by the repo's rules.", "idle": "Landing waits for you in the chat."}.get(now, asleep)
-        return {"text": text, "button": {"label": "Landing…", "disabled": True} if now in ("working", "idle") else chat}
+    if i.state == "landing":
+        if not landing_stuck(i, row, now):
+            return {"text": "Landing, by the repo's rules.", "button": {"label": "Landing…", "disabled": True}}
+        return {"text": "Landing stopped: it waits for you in the chat." if now == "idle" else asleep, "button": chat}
     if i.state == "running":
         if not i.session:
             return {"text": "In progress, in a chat outside desk.", "button": None}
@@ -511,6 +522,8 @@ def set_field(slug: str, field: str = Form(...), value: str = Form("")):
     if field in ("priority", "state", "protocol"):
         if value not in {"priority": store.PRIORITIES, "state": store.STATES, "protocol": store.PROTOCOLS}[field]:
             raise HTTPException(422, f"{field} cannot be {value}")
+        if field == "state" and value == "landing" and i.state != "landing":
+            raise HTTPException(422, "Only Approve lands an issue.")
     elif field == "title":
         value = " ".join(value.split())
         if not value:
@@ -630,7 +643,7 @@ def approve(slug: str, src: str = Form("")):
             i.state = "done"
         elif i.session and land.repo(i):
             agents.land(i, store.folder(slug))
-            i.state, i.landing = "running", datetime.now().isoformat(timespec="seconds")
+            i.state, i.landing = "landing", datetime.now().isoformat(timespec="seconds")
             message = f"Landing: {i.title}"
         else:
             i.state = "done"

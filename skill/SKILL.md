@@ -18,7 +18,7 @@ An issue's fields:
 - `title`
 - `body`: Markdown sections, usually `## Context` with what the user said, quoted and dated
 - `priority`: urgent, high, medium, low or none
-- `state`: backlog, running (shown as In progress: planned with its session, or being carried out), waiting (someone else's move, such as QA's), review, done or dropped
+- `state`: backlog, running (shown as In progress: planned with its session, or being carried out), waiting (someone else's move, such as QA's), review, landing (approved: its session lands the work; only the user's Approve sets it), done or dropped
 - `waiting_on`: for a waiting issue, who or what it waits on, such as `QA on #570`, sent with `"state": "waiting"` or on its own after; desk notes since when, and drops both when the issue leaves waiting
 - `parent`: the slug of the issue it belongs under, or null
 - `project`: the slug of the project it belongs to, or null. A project is ongoing work that is never done, such as desk itself; its issues finish, it does not. It is a separate thing from `parent`, which is for sub-issues

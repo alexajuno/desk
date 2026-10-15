@@ -108,6 +108,13 @@ function showFolded(url = location.pathname) {
   <a class="nav-item {{ 'here' if here == '/issue/' ~ p.slug }}" href="/issue/{{ p.slug }}">{{ state("running") }}<span class="nav-title">{{ p.title }}</span></a>
   {%- endfor %}
   {%- endif %}
+  {#- Approved: the session lands the work, and the issue leaves the list once it is Done. #}
+  {%- if sidebar.landing %}
+  <div class="nav-label">Landing</div>
+  {%- for p in sidebar.landing %}
+  <a class="nav-item {{ 'here' if here == '/issue/' ~ p.slug }}" href="/issue/{{ p.slug }}">{{ state("landing") }}<span class="nav-title">{{ p.title }}</span></a>
+  {%- endfor %}
+  {%- endif %}
   {#- Someone else's move: the list to chase. #}
   {%- if sidebar.waiting %}
   <div class="nav-label">Waiting</div>

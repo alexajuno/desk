@@ -72,6 +72,7 @@
   --state-running: lch(80% 90 85);
   --state-review: #4cb782;
   --state-done: #5e6ad2;
+  --state-landing: var(--state-done);
   --state-waiting: #f2994a;  /* Linear's orange, from its status colours */
   --state-dropped: #95a2b3;
   --state-cross: lch(10% 0 0);

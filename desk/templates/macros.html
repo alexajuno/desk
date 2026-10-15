@@ -1,7 +1,7 @@
 {# Icons are Linear's shapes: the status circle that fills as work moves (its backlog circle uses
    Linear's own dash pattern, 1.4 1.74), three priority bars, and the orange square for urgent. Their
-   colours are desk.css's --state-* and --prio variables, so they follow the theme. Waiting, which Linear
-   has no state for, is the circle paused. #}
+   colours are desk.css's --state-* and --prio variables, so they follow the theme. Waiting and Landing,
+   which Linear has no states for, are the circle paused, and the circle nearly full in Done's colour. #}
 
 {% macro state(s) -%}
 {%- if s == "done" -%}
@@ -11,7 +11,7 @@
 {%- elif s == "waiting" -%}
 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color: var(--state-waiting)"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.6 4.9v4.2M8.4 4.9v4.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
 {%- else -%}
-{%- set f = {"backlog": 0, "running": 0.5, "review": 0.75}[s] -%}
+{%- set f = {"backlog": 0, "running": 0.5, "review": 0.75, "landing": 0.9}[s] -%}
 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color: var(--state-{{ s }})"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.5"{% if s == "backlog" %} stroke-dasharray="1.4 1.74" stroke-dashoffset="0.65"{% endif %}/>
 {%- if f %}<circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="4" stroke-dasharray="{{ '%.3f' % (12.566 * f) }} 12.566" transform="rotate(-90 7 7)"/>{% endif %}</svg>
 {%- endif -%}
