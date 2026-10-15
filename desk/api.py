@@ -122,6 +122,9 @@ def start_issue(slug: str, start: Start):
             agents.hand_off(i, store.folder(slug))
         else:
             i.session = agents.run(i, store.folder(slug))
+    except agents.TrustError:
+        raise HTTPException(409, f"Workspace not trusted. The plan is saved; tell the user to open /issue/{slug} "
+                                 f"and press Trust folder, then start again.")
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         raise HTTPException(502, f"The plan is saved, but the session did not start: {error}")
     i.state = "running"

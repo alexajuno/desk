@@ -141,7 +141,7 @@ class Pty:
 
 
 @router.websocket("/issue/{slug}/terminal")
-async def terminal(ws: WebSocket, slug: str, cols: int = 100, rows: int = 30):
+async def terminal(ws: WebSocket, slug: str, cols: int = 100, rows: int = 30, trust: int = 0):
     """Runs until the command ends or the page hangs up. The page may also send {"close": true}: the
     server hangs up the PTY first and closes the socket after, so the page knows the command is gone."""
     if not from_desk(ws):
@@ -153,7 +153,10 @@ async def terminal(ws: WebSocket, slug: str, cols: int = 100, rows: int = 30):
     try:
         if not store.exists(slug):
             raise RuntimeError("That issue is gone.")
-        argv, cwd = await asyncio.to_thread(command, store.load(slug))
+        if trust:  # plain `claude` in the folder the session could not start in, for its trust prompt
+            argv, cwd = ["claude"], agents.workdir(store.load(slug))
+        else:
+            argv, cwd = await asyncio.to_thread(command, store.load(slug))
         pty = Pty(argv, cwd, cols, rows)
     except (RuntimeError, OSError) as error:
         with suppress(Exception):  # the page may be gone already, and Starlette and uvicorn differ in what they raise then

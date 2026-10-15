@@ -147,11 +147,17 @@ def _paths(issue, folder: Path) -> dict:
     return {"title": issue.title, "file": folder / "issue.md", "dir": folder}
 
 
+class TrustError(RuntimeError):
+    """Claude Code refused to start a session because nobody accepted its trust prompt in the folder."""
+
+
 def _background(cwd: str, command: list[str]) -> str:
     run = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=60)
     # With FORCE_COLOR set, as in the kitty shell desk runs from, the id comes wrapped in colour codes:
     # "backgrounded · \x1b[36mf72e9ccb\x1b[39m · <name>" (seen 2026-10-14).
     out = re.sub(r"\x1b\[[0-9;]*m", "", run.stdout + run.stderr)
+    if "workspace not trusted" in out.lower():  # Claude Code 2.1.285: "Workspace not trusted. Run `claude` in <dir> once ..."
+        raise TrustError(f"Workspace not trusted: {cwd}")
     match = re.search(r"backgrounded · ([0-9a-f]{8})", out)
     if not match:
         raise RuntimeError(out.strip() or "claude --bg printed no id")

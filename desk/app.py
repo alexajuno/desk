@@ -106,8 +106,9 @@ def all_kids(all_issues: dict[str, store.Issue]):
     return lambda slug: sorted(store.children(all_issues, slug), key=lambda i: i.state in CLOSED)
 
 
-def back(slug: str, message: str | None = None) -> RedirectResponse:
-    return RedirectResponse(f"/issue/{slug}" + (f"?msg={quote(message[:300])}" if message else ""), status_code=303)
+def back(slug: str, message: str | None = None, trust: bool = False) -> RedirectResponse:
+    query = (f"?msg={quote(message[:300])}" if message else "") + ("&trust=1" if trust and message else "")
+    return RedirectResponse(f"/issue/{slug}{query}", status_code=303)
 
 
 @app.get("/")
@@ -165,6 +166,7 @@ def show(request: Request, slug: str):
     session = agents.live().get(i.session, {}) if i.session else {}
     context = {"p": i, "trail": trail, "kids": kids_of(slug), "kids_of": kids_of, "body": to_html(i.body),
                "files": store.files(slug), "session": session, "msg": request.query_params.get("msg"),
+               "trust": request.query_params.get("trust") == "1",
                "progress": progress, "agent_files": agent_files}
     return templates.TemplateResponse(request, "issue.html", context)
 
@@ -255,6 +257,8 @@ def plan(slug: str):
         return jump(slug)
     try:
         i.session = agents.start(i, store.folder(slug))
+    except agents.TrustError as error:
+        return back(slug, str(error), trust=True)
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         return back(slug, str(error))
     if i.state == "backlog":
@@ -270,6 +274,8 @@ def hand_off(slug: str):
         return back(slug, "Plan first: the session carries out the plan written in this issue.")
     try:
         agents.hand_off(i, store.folder(slug))
+    except agents.TrustError as error:
+        return back(slug, str(error), trust=True)
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         return back(slug, str(error))
     i.state = "running"
@@ -296,6 +302,8 @@ def review(slug: str, action: str = Form(...), note: str = Form("")):
         return back(slug)
     try:
         agents.send_back(i, store.folder(slug), note)
+    except agents.TrustError as error:
+        return back(slug, str(error), trust=True)
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         return back(slug, str(error))
     i.state = "running"

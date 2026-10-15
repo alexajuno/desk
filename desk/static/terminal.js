@@ -40,8 +40,8 @@
     load("link", { rel: "stylesheet", href: "/static/terminal.css" }),
   ]));
 
-  async function show(slug, short) {
-    if (open?.slug === slug) {
+  async function show(slug, short, trust = false) {
+    if (open?.slug === slug && open.trust === trust) {
       if (open.ended) reconnect();
       return open.xterm.focus();
     }
@@ -55,7 +55,9 @@
       '<button class="icon-button term-close" type="button" title="Close the terminal. A background session keeps running.">' +
       '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button></header>' +
       '<div class="term-screen"></div>';
-    el.querySelector(".term-title code").textContent = short;
+    el.querySelector(".term-title").firstChild.textContent = trust ? "Trust folder " : "Session ";
+    if (trust) el.querySelector(".term-title code").remove();
+    else el.querySelector(".term-title code").textContent = short;
     if (localStorage.termWidth) panel.style.setProperty("--term-w", `${localStorage.termWidth}px`);
     panel.append(el);
     panel.classList.add("has-term");
@@ -66,7 +68,7 @@
     xterm.loadAddon(fit);
     xterm.open(el.querySelector(".term-screen"));
     fit.fit();
-    open = { slug, el, xterm, ws: null, ended: false };
+    open = { slug, el, xterm, trust, ws: null, ended: false };
 
     xterm.attachCustomKeyEventHandler((e) => !(e.ctrlKey && !e.altKey && !e.metaKey && e.code === "KeyZ"));
     xterm.onData((data) => {
@@ -86,7 +88,7 @@
 
   function connect() {
     const { slug, xterm } = open;
-    const ws = new WebSocket(`${location.origin.replace(/^http/, "ws")}/issue/${encodeURIComponent(slug)}/terminal?cols=${xterm.cols}&rows=${xterm.rows}`);
+    const ws = new WebSocket(`${location.origin.replace(/^http/, "ws")}/issue/${encodeURIComponent(slug)}/terminal?cols=${xterm.cols}&rows=${xterm.rows}${open.trust ? "&trust=1" : ""}`);
     ws.binaryType = "arraybuffer";
     ws.onmessage = (e) => {
       if (typeof e.data !== "string") return xterm.write(new Uint8Array(e.data));
@@ -143,7 +145,7 @@
     const button = e.target.closest(".term-open");
     if (!button) return;
     e.preventDefault();
-    show(button.dataset.slug, button.dataset.short);
+    show(button.dataset.slug, button.dataset.short, !!button.dataset.trust);
   });
 
   // The session's own forms close the terminal first, so its claude is gone before desk acts on the session.

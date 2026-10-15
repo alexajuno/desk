@@ -60,4 +60,4 @@ Start one only when the user asks. Starting writes the plan into the issue's `##
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/start" --json '{"plan": "Direction:\n\n- Send the user back to the page they came from after login.\n\nDone when: logging in from /pricing lands on /pricing.\n\nWhat you may decide alone: where the return address is kept."}'
 ```
 
-The plan has three short parts: Direction (what to do, and which way), Done when (how to tell it worked), and What you may decide alone. Only a backlog or planning issue can start. A plan already in the issue is used when the call sends none.
+The plan has three short parts: Direction (what to do, and which way), Done when (how to tell it worked), and What you may decide alone. Only a backlog or planning issue can start. A plan already in the issue is used when the call sends none. If the call answers 409 "Workspace not trusted", the issue's folder was never trusted in Claude Code: link the issue's page and tell the user to press Trust folder there, then start again.
