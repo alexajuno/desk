@@ -411,6 +411,13 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .menu li.on { background: var(--bg-pop-on); }
 .menu li .name { flex: 1; }
 .menu li .tick { width: 14px; color: var(--text-1); }
+/* Linear's checkbox at a value's left, measured on linear.app on 16 Oct: 14px, rounded 3px, a thin grey edge, shown on the
+   row under the mouse or when ticked, and then filled with the accent and a white tick. Its room stays when hidden. */
+.menu li .check { flex: none; display: grid; place-items: center; width: 14px; height: 14px; margin-right: -2px; box-sizing: border-box;
+                  border: 0.5px solid var(--text-3); border-radius: 3px; visibility: hidden; cursor: pointer; }
+.menu li.on .check, .menu li .check.checked { visibility: visible; }
+.menu li .check.checked { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.menu li .check .tick { width: 10px; height: 10px; color: var(--on-accent); }
 .menu li .shortcut { font-size: 12px; color: var(--text-3); min-width: 10px; text-align: right; }
 .menu li .chev { color: var(--text-3); }
 .menu li .glyph { color: var(--text-3); }

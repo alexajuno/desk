@@ -61,9 +61,11 @@ function keyOf(e) {
 
 // --- one menu for every menu ---------------------------------------------------------------------
 // openMenu({ anchor | x, y, filter, placeholder, query, kbd, items, empty, onEnter, onTab, onClose, className })
-// items(query) returns, or resolves to, rows of { label, icon, hint, num, key, current, more, group, heading, run };
-//   a group's first row may carry a heading, drawn above the group in place of the divider, as Linear's Help menu
-//   heads its "What's new".
+// items(query) returns, or resolves to, rows of { label, icon, hint, num, key, current, more, group, heading, run,
+//   checked, toggle }; a group's first row may carry a heading, drawn above the group in place of the divider, as
+//   Linear's Help menu heads its "What's new". A row with toggle has Linear's checkbox at its left (a filter's values,
+//   measured on linear.app on 16 Oct): a click on the box calls toggle and leaves the menu open, redrawn when it
+//   resolves, so several values can be ticked; a click on the rest of the row picks it, and closes the menu.
 // filter "keys": typing filters, but nothing editable takes focus, so no input method stands between
 //   the keys and the menu (the S that opened it gets through for the same reason);
 // filter "input": a real text box, for titles and paths typed in any language;
@@ -107,18 +109,19 @@ function openMenu(o) {
     el.style.top = `${y}px`;
   }
 
-  function draw() {
+  function draw(stay = false) {
     let group;
     list.innerHTML = shown.length ? shown.map((item, i) => {
       const opens = !i || item.group !== group;
       const line = opens && item.heading ? `<li class="heading" role="presentation">${esc(item.heading)}</li>`
         : opens && i ? '<li class="divider" role="separator"></li>' : "";
       group = item.group;
-      return `${line}<li class="${i === at ? "on" : ""}${item.current ? " current" : ""}" data-i="${i}"${item.sub ? ' style="height:44px"' : ""}>${item.icon ?? ""}` +
+      const box = item.toggle ? `<span class="check${item.checked ? " checked" : ""}" role="checkbox" aria-checked="${!!item.checked}">${item.checked ? TICK : ""}</span>` : "";
+      return `${line}<li class="${i === at ? "on" : ""}${item.current ? " current" : ""}" data-i="${i}"${item.sub ? ' style="height:44px"' : ""}>${box}${item.icon ?? ""}` +
         `<span class="name">${esc(item.label)}${item.sub ? `<small>${esc(item.sub)}</small>` : ""}</span>${item.current ? TICK : ""}` +
         `${item.hint !== undefined ? `<span class="shortcut">${esc(item.hint)}</span>` : ""}${item.more ? CHEVRON : ""}</li>`;
     }).join("") : `<li class="empty">${esc(o.empty ?? "No match")}</li>`;
-    place();
+    if (!stay) place(); // a redraw after a tick stays put: the page it changed may have swapped its anchor out
   }
 
   function light(i) {
@@ -151,6 +154,15 @@ function openMenu(o) {
     if (!item?.run) return;
     closeMenu();
     item.run();
+  }
+
+  async function tick(i) {
+    const item = shown[i], mine = ++asked;
+    await item.toggle();
+    if (mine !== asked || menu?.el !== el) return;
+    shown = await o.items(query);
+    at = Math.min(at, shown.length - 1);
+    draw(true);
   }
 
   function onKey(e) {
@@ -196,7 +208,9 @@ function openMenu(o) {
   list.addEventListener("mousedown", (e) => {
     e.preventDefault(); // keeps focus in the filter
     const li = e.target.closest("li[data-i]");
-    if (li && e.button === 0) pick(+li.dataset.i);
+    if (!li || e.button !== 0) return;
+    if (e.target.closest(".check")) tick(+li.dataset.i);
+    else pick(+li.dataset.i);
   });
   if (o.filter === "input") {
     input.addEventListener("compositionstart", () => { composing = true; });
@@ -367,12 +381,12 @@ async function setView(changes) {
 }
 
 function setFilter(name, filter) {
-  setView({ [name]: filter?.values.length ? (filter.not ? "not:" : "") + filter.values.join(",") : null });
+  return setView({ [name]: filter?.values.length ? (filter.not ? "not:" : "") + filter.values.join(",") : null });
 }
 
 function toggleValue(name, value) {
   const was = view().filters[name] ?? { not: false, values: [] };
-  setFilter(name, { ...was, values: was.values.includes(value) ? was.values.filter((x) => x !== value) : [...was.values, value] });
+  return setFilter(name, { ...was, values: was.values.includes(value) ? was.values.filter((x) => x !== value) : [...was.values, value] });
 }
 
 // F: the properties, each opening its values. Typing finds values straight away too, as Linear's quick filters
@@ -386,22 +400,27 @@ function filterMenu(where) {
       const props = v.fields.filter((f) => hit(f.label)).map((f) => ({ group: 0, icon: iconOf(f.icon), label: f.label,
         more: true, run: () => valuesMenu(f.name, where) }));
       if (!words.length) return props;
-      const values = v.fields.flatMap((f) => f.values.filter((x) => hit(x.label)).map((x) => ({ group: 1, icon: iconOf(x.icon),
-        label: x.label, hint: f.label, current: v.filters[f.name]?.values.includes(x.value), run: () => toggleValue(f.name, x.value) })));
+      const now = view(), values = now.fields.flatMap((f) => f.values.filter((x) => hit(x.label)).map((x) => ({ group: 1,
+        icon: iconOf(x.icon), label: x.label, hint: f.label, checked: now.filters[f.name]?.values.includes(x.value),
+        run: () => toggleValue(f.name, x.value), toggle: () => toggleValue(f.name, x.value) })));
       return [...props, ...values];
     },
   });
 }
 
-// A property's values, each with how many of the list's issues have it; a pick adds it to the filter, or takes it out.
+// A property's values, each with how many of the list's rows have it; a pick adds it to the filter, or takes it out,
+// and its checkbox does the same with the menu left open.
 function valuesMenu(name, where) {
-  const v = view(), f = v.fields.find((x) => x.name === name), on = v.filters[name]?.values ?? [];
+  const label = view().fields.find((x) => x.name === name).label;
   openMenu({
-    ...where, filter: "keys", placeholder: `${f.label}…`, className: "wide",
-    items: (q) => f.values.filter((x) => fold(x.label).includes(fold(q))).map((x) => ({
-      icon: iconOf(x.icon), label: x.label, hint: `${x.count} ${v.noun}${x.count === 1 ? "" : "s"}`,
-      current: on.includes(x.value), run: () => toggleValue(name, x.value),
-    })),
+    ...where, filter: "keys", placeholder: `${label}…`, className: "wide",
+    items: (q) => {
+      const v = view(), on = v.filters[name]?.values ?? [];
+      return v.fields.find((x) => x.name === name).values.filter((x) => fold(x.label).includes(fold(q))).map((x) => ({
+        icon: iconOf(x.icon), label: x.label, hint: `${x.count} ${v.noun}${x.count === 1 ? "" : "s"}`,
+        checked: on.includes(x.value), run: () => toggleValue(name, x.value), toggle: () => toggleValue(name, x.value),
+      }));
+    },
   });
 }
 
