@@ -60,6 +60,9 @@ class Frame {
 
 export const frame = new Frame();
 
+// Which branch runs on 8790 and which wait for it, which an issue's Try button says.
+export const lineKey = () => (frame.data ? [frame.data.trying?.slug, ...frame.data.line.map((w) => w.slug)].join(" ") : "");
+
 // Whether a desk tab has the focus: "1" from its focus until its blur, or until it closes.
 addEventListener("focus", () => { localStorage.deskFocus = 1; });
 addEventListener("blur", () => { localStorage.deskFocus = 0; });

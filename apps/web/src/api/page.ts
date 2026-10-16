@@ -1,5 +1,6 @@
-// A page's JSON from desk (pages.ts, /api/page/...), fetched again whenever an issue changes (the sync socket's seq)
-// and when an action registered with onReload asks. The last answer stays on screen while the next one comes, so a
+// A page's JSON from desk (pages.ts, /api/page/...), fetched again whenever an issue changes (the sync socket's seq),
+// whenever what the page also follows changes (also: an issue's files, say), and when an action registered with
+// onReload asks. The last answer stays on screen while the next one comes, so a
 // change redraws only what differs: no blank frame, no lost scroll or open fold.
 //
 // Moving to another page draws no blank frame either: each route's loader fetches the page's JSON first (prime), and
@@ -42,7 +43,7 @@ export async function prime(url: string): Promise<null> {
   return null;
 }
 
-export function usePage<T>(url: string) {
+export function usePage<T>(url: string, also: string | number = "") {
   const [data, setData] = useState<T | null>(() => (seen.get(url)?.data as T) ?? null);
   const [error, setError] = useState<string | null>(null);
   const asked = useRef(0);
@@ -76,7 +77,7 @@ export function usePage<T>(url: string) {
       if (known.seq === issues.seq && performance.now() - known.at < FRESH) return;
     }
     reload();
-  }, [reload, seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reload, seq, also]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => onReload(reload), [reload]);
   return { data, error, reload };
 }

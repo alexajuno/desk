@@ -36,11 +36,13 @@ export interface Project {
 
 export type SyncMessage =
   | { type: "snapshot"; seq: number; issues: Issue[]; projects: Project[] }
-  | { type: "changes"; seq: number; upsert: Issue[]; delete: string[]; projects?: Project[] };
+  | { type: "changes"; seq: number; upsert: Issue[]; delete: string[]; projects?: Project[] }
+  | { type: "files"; slugs: string[] };
 
 // Every issue, in memory. The screen draws from here, and MobX redraws only what read a field that changed.
 export class IssueStore {
   bySlug = observable.map<string, Issue>();
+  files = observable.map<string, number>(); // slug: how many times its other files changed (a plan, a result)
   projects: Project[] = [];
   connected = false;
   seq = -1;
@@ -50,6 +52,10 @@ export class IssueStore {
   }
 
   apply(message: SyncMessage) {
+    if (message.type === "files") {
+      for (const slug of message.slugs) this.files.set(slug, (this.files.get(slug) ?? 0) + 1);
+      return;
+    }
     if (message.type === "snapshot") {
       this.bySlug.replace(message.issues.map((i) => [i.slug, i]));
     } else {

@@ -1,11 +1,13 @@
 // An issue's own Markdown or D2 file, drawn as a document (templates/file.html), with its contents beside it when it
 // has headings. The top bar's Read mode switches documents to the reading rules (big text, about 66 characters a line),
 // remembered in this browser; a link to a heading unfolds the sections it sits in.
+import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { useParams } from "react-router";
 import { usePage } from "../api/page";
 import { Go } from "../app/nav";
 import { Bar } from "../frame/Bar";
+import { issues } from "../store/issues";
 import { showFolded, unfoldTo } from "../ui/folds";
 
 interface FileData {
@@ -31,9 +33,9 @@ function ReadToggle() {
   );
 }
 
-export function FilePage() {
+export const FilePage = observer(function FilePage() {
   const { slug = "", name = "" } = useParams();
-  const { data, error } = usePage<FileData>(`/api/page/file/${slug}/${encodeURIComponent(name)}`);
+  const { data, error } = usePage<FileData>(`/api/page/file/${slug}/${encodeURIComponent(name)}`, issues.files.get(slug) ?? 0);
   useEffect(() => { if (data) document.title = `${data.name} · ${data.issue.title} · desk`; }, [data]);
   useLayoutEffect(() => {
     if (!data) return;
@@ -59,4 +61,4 @@ export function FilePage() {
       </div>
     </>
   );
-}
+});

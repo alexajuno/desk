@@ -13,7 +13,8 @@ import { actionsMenu } from "../issues/menus";
 import { painted } from "../issues/painted";
 import { useLive } from "../issues/useLive";
 import type { IssueRow } from "../lib/desk";
-import { frame } from "../store/frame";
+import { frame, lineKey } from "../store/frame";
+import { issues } from "../store/issues";
 import { ui } from "../store/ui";
 import { StateIcon } from "../ui/icons";
 import { toggled } from "../ui/menu";
@@ -63,7 +64,8 @@ function NotifyAsk() {
 export const InboxPage = observer(function InboxPage() {
   const [params] = useSearchParams();
   const i = params.get("i") ?? "";
-  const { data, reload } = usePage<InboxData>(`/api/page/inbox${i ? `?i=${encodeURIComponent(i)}` : ""}`);
+  // The open issue's files and Try button, as on its page.
+  const { data, reload } = usePage<InboxData>(`/api/page/inbox${i ? `?i=${encodeURIComponent(i)}` : ""}`, `${issues.files.get(i) ?? 0} ${lineKey()}`);
   const open = data?.open && data.open.issue.slug === i ? data.open : data?.open ?? null;
   const seen = useSeen(data?.items, open?.issue.slug ?? null);
   // A session that replies, waits for you or writes its plan changes no issue, so the sync socket's changes say

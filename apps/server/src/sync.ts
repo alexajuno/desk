@@ -5,15 +5,17 @@
 //     {"type": "snapshot", "seq": 7, "issues": [<issue>, ...], "projects": [<project>, ...]}   first, on every connect
 //     {"type": "changes",  "seq": 8, "upsert": [<issue>, ...], "delete": [<slug>, ...], "projects": [...]}
 //     {"type": "frame", "frame": <frame>}                                                       on connect, then when it changed
+//     {"type": "files", "slugs": [<slug>, ...]}                                                 files beside issue.md changed
 //
 // An <issue> is what GET /api/issues lists (api.ts, asJson); a <project> is {slug, title, state}. "projects" comes in a
 // change only when a project changed, as the whole list. A <frame> is the sidebar and the Inbox's rows, with each open
-// issue's session state (pages.ts, framePage).
+// issue's session state (pages.ts, framePage). "files" names the issues whose other files changed (a session's plan.md,
+// questions.md, result.md, a screenshot), which no field the apps hold says: a page showing one of them asks again.
 //
 // desk's own saves tell this module at once (issues.onChange). An editor's change to an issue.md or project.md is seen
 // on the folders, read into the database (reconcile), and sent the same way.
 import { mkdirSync, readdirSync, readFileSync, watch } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, sep } from "node:path";
 import type { WebSocket } from "ws";
 import * as agents from "./agents.ts";
 import { asJson } from "./api.ts";
@@ -155,13 +157,24 @@ export async function start() {
     }
   });
   const agentWrote = soon(() => void frame());
+  const touched = new Set<string>();
+  const tellFiles = soon(() => {
+    const message = JSON.stringify({ type: "files", slugs: [...touched] });
+    touched.clear();
+    for (const ws of listeners) ws.send(message);
+  });
   for (const root of [ISSUES_DIR, PROJECTS_DIR]) {
     mkdirSync(root, { recursive: true });
     watch(root, { recursive: true }, (_event, name) => {
       if (!name) return;
       const path = join(root, name.toString());
-      if (interesting(path)) readIn();
-      else if (root === ISSUES_DIR && AGENT_FILES.includes(basename(path))) agentWrote();
+      if (interesting(path)) return readIn();
+      if (root !== ISSUES_DIR) return;
+      const slug = name.toString().split(sep)[0];
+      if (slug.startsWith(".")) return; // a hidden folder, not an issue
+      touched.add(slug);
+      tellFiles();
+      if (AGENT_FILES.includes(basename(path))) agentWrote();
     });
   }
   mkdirSync(SESSIONS, { recursive: true });
