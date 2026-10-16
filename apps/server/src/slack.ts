@@ -17,7 +17,7 @@ import { fill, SLACK_PROMPT } from "./prompts.ts";
 import { dayAndTime } from "./when.ts";
 
 const TAG = "penguin"; // 🐧, desk's own mark (apps/web/public/favicon.svg), which the user had never reacted with
-const EVERY = 60; // s between two looks
+const EVERY = 60; // s between two looks; reactions.list allows 20+ a minute ("Tier 2", docs.slack.dev/reference/methods/reactions.list)
 // The user's latest reactions, newest first. The user made 943 from 5 May to 17 Oct, so 100 reach back about two weeks.
 const LATEST = "100";
 // The user's own token, from pass. Its gpg key has no passphrase (gpg-agent's keyinfo: protection C, 17 Oct), so
@@ -63,7 +63,7 @@ export async function look(base: string) {
   if (r.code) throw new Error(`pass show ${TOKEN} failed: ${r.stderr.trim()}`);
   const token = r.stdout.trim();
   const me = (await call<{ user_id: string }>(token, "auth.test")).user_id;
-  const { items } = await call<{ items: Item[] }>(token, "reactions.list", { limit: LATEST });
+  const { items } = await call<{ items: Item[] }>(token, "reactions.list", { limit: LATEST, full: "true" }); // full: every reaction, so a busy message keeps its 🐧
   const seen: Seen = existsSync(STATE) ? JSON.parse(readFileSync(STATE, "utf8")) : { filed: [], threads: {} };
   // Oldest first, so two tags in one thread file the first.
   for (const { type, channel, message: m } of items.reverse()) {
