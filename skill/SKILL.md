@@ -18,7 +18,7 @@ An issue's fields:
 - `title`
 - `body`: Markdown sections, usually `## Context` with what the user said, quoted and dated
 - `priority`: urgent, high, medium, low or none
-- `state`: backlog, running (shown as In progress: planned with its session, or being carried out), waiting (someone else's move, such as QA's), review, landing (approved: its session lands the work; only the user's Approve sets it), done or dropped
+- `state`: triage (a desk chat's own issue, filed in its first reply, until the talk settles it; only desk's agent chat files one), backlog, running (shown as In progress: planned with its session, or being carried out), waiting (someone else's move, such as QA's), review, landing (approved: its session lands the work; only the user's Approve sets it), done or dropped
 - `waiting_on`: for a waiting issue, who or what it waits on, such as `QA on #570`, sent with `"state": "waiting"` or on its own after; desk notes since when, and drops both when the issue leaves waiting
 - `parent`: the slug of the issue it belongs under, or null
 - `project`: the slug of the project it belongs to, or null. A project is ongoing work that is never done, such as desk itself; its issues finish, it does not. It is a separate thing from `parent`, which is for sub-issues
@@ -66,7 +66,7 @@ curl -s "http://127.0.0.1:8790/api/folders?q=site"
 
 ## Work an issue
 
-desk's own agent chat works an issue itself; it starts no other session. Bind the chat to the issue (the issue needs its `folder` set first), and the chat becomes the issue's session: the issue shows In progress, and the chat moves into the issue's folder, where that folder's CLAUDE.md, rules and skills load. A chat in a window moves once its turn ends, so end the turn right after binding; desk then resumes it in the folder and tells it to carry on. Send the chat's id, which the agent's prompt gives. A backlog issue, or one in progress with no other session, can be bound:
+desk's own agent chat works an issue itself; it starts no other session. Bind the chat to the issue (the issue needs its `folder` set first), and the chat becomes the issue's session: the issue shows In progress, and the chat moves into the issue's folder, where that folder's CLAUDE.md, rules and skills load. A chat in a window moves once its turn ends, so end the turn right after binding; desk then resumes it in the folder and tells it to carry on. Send the chat's id, which the agent's prompt gives. An issue in triage, the backlog, or in progress with no other session, can be bound. One in triage with no folder binds where the chat runs and stays in triage; binding the chat to another issue drops its triage one as a duplicate:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/work" --json '{"chat": "<chat id>"}'
