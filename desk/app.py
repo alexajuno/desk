@@ -590,15 +590,33 @@ def set_folder(slug: str, folder: str = Form("")):
 
 # --- the issue's one session ---------------------------------------------------------------
 
+def from_page(request: Request) -> bool:
+    """Whether desk's own page sent the request: its Origin is the page's own address on a loopback name. The agent's
+    curl sends none."""
+    host = request.headers.get("host", "")
+    return urlsplit(f"//{host}").hostname in terminal.LOOPBACK and request.headers.get("origin") == f"http://{host}"
+
+
 @app.post("/issue/{slug}/start")
-def start(slug: str):
+def start(request: Request, slug: str):
     """Plan, or Start for a quick issue: the issue's session starts in its folder and plans it by its protocol, with
-    you in the chat the page docks beside it, or on its own straight into the work."""
+    you in the chat the page docks beside it, or on its own straight into the work. Pressed on desk's page in a folder
+    Claude Code does not trust yet, desk trusts it and starts again, so one press does it ("best to just trust the dir
+    automatically", the user, 16 Oct); the Trust folder button stays for when that fails."""
     i = store.load(slug)
     if i.session:
         return back(slug)
     try:
-        i.session = agents.start(i, store.folder(slug))
+        try:
+            i.session = agents.start(i, store.folder(slug))
+        except agents.TrustError:
+            if not from_page(request):
+                raise
+            try:
+                agents.trust(agents.workdir(i))
+            except (RuntimeError, OSError, ValueError) as error:
+                return back(slug, str(error), trust=True)
+            i.session = agents.start(i, store.folder(slug))
     except agents.TrustError as error:
         return back(slug, str(error), trust=True)
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
@@ -610,10 +628,9 @@ def start(slug: str):
 
 @app.post("/issue/{slug}/trust")
 def trust_folder(request: Request, slug: str):
-    """Trust the issue's folder in Claude Code. Only desk's own page may ask: the Origin must be the page's
-    own address on a loopback name, so the agent's curl, which sends none, cannot trust a folder."""
-    host = request.headers.get("host", "")
-    if not (urlsplit(f"//{host}").hostname in terminal.LOOPBACK and request.headers.get("origin") == f"http://{host}"):
+    """Trust the issue's folder in Claude Code. Only desk's own page may ask (from_page), so the agent's curl cannot
+    trust a folder."""
+    if not from_page(request):
         raise HTTPException(403, "Trust a folder from its issue page in desk.")
     i = store.load(slug)
     try:
