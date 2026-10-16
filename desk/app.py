@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import agents, api, land, projects, sessions, terminal, views, window
+from . import agents, api, chats, land, projects, sessions, terminal, views, window
 from . import issues as store
 from .render import to_html, to_html_with_toc
 from .search import find
@@ -108,7 +108,8 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
     ask it for a change in its chat and it works again, and from Landing to Done once result.md says it landed.
     Waiting is yours to move, as it waits on someone else: nothing its session writes moves it, not even the result
     the turn that parked it wrote after (16 Oct), and only a message you write in its chat after the wait began
-    resumes it, to In progress. Landing needs nothing from you unless it gets stuck."""
+    resumes it, to In progress. Landing needs nothing from you unless it gets stuck. A chat's issue in Triage needs
+    you once its chat has replied, unless its window is the one in front, where you read the reply already."""
     needs, review = [], []
     for issue in all_issues.values():
         row = live.get(issue.session, {}) if issue.session else {}
@@ -141,6 +142,8 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
             # Planned, by you in its chat or on its own from the Agent's: it waits for your "go". A quick issue's
             # session waits for nothing, so one that stopped before its result stopped for you.
             needs.append((issue, "waiting for you" if issue.runs == "quick" else "plan ready"))
+        elif issue.state == "triage" and now == "idle" and not chats.read_now(issue.session):
+            needs.append((issue, "chat replied"))
         elif row.get("state") == "blocked" and row.get("pid") and issue.state not in CLOSED | {"waiting"}:
             # Claude Code keeps listing a session by its last state after it ends: igh-289's and
             # add-project-concept-to-desk's still said blocked, with no process, long after both were done (15 Oct).
@@ -301,7 +304,7 @@ def project_set(slug: str, field: str = Form(...), value: str = Form("")):
 
 
 # What each reason for being in the Inbox reads as, in a row's second line, after "Session".
-NOTICES = {"waiting for you": "is waiting for you", "plan ready": "wrote its plan: read it, then say go in its chat",
+NOTICES = {"chat replied": "replied: your turn in its chat", "waiting for you": "is waiting for you", "plan ready": "wrote its plan: read it, then say go in its chat",
            "has questions": "saved questions for you", "landing stuck": "stopped before the work landed",
            "result ready": "finished: the result is ready", "check it": "finished, with no result.md"}
 
@@ -309,8 +312,15 @@ NOTICES = {"waiting for you": "is waiting for you", "plan ready": "wrote its pla
 def notifications(all_issues: dict[str, store.Issue]) -> list[dict]:
     """The Inbox's rows, newest first."""
     needs, review = inbox_items(all_issues, agents.live())
+
+    def changed(issue: store.Issue) -> float:
+        # A chat in Triage changes no file when it replies: its transcript says when, so each reply shows unread.
+        chat = issue.state == "triage" and chats.window_of(issue.session)
+        at = store.changed(issue.slug)
+        return max(at, datetime.fromisoformat(chats._activity(chat)).timestamp()) if chat else at
+
     return sorted(({"p": p, "why": why, "says": NOTICES.get(why, why), "kind": "review" if (p, why) in review else "needs",
-                    "at": datetime.fromtimestamp(store.changed(p.slug))} for p, why in needs + review),
+                    "at": datetime.fromtimestamp(changed(p))} for p, why in needs + review),
                   key=lambda item: item["at"], reverse=True)
 
 

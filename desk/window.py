@@ -44,6 +44,11 @@ def is_open(name: str) -> bool:
     return any(client["class"] == name for client in json.loads(_hyprctl("clients", "-j")))
 
 
+def in_front() -> str:
+    """The class of the window in front, the one with the focus (`hyprctl activewindow -j`, checked 16 Oct)."""
+    return json.loads(_hyprctl("activewindow", "-j") or "{}").get("class", "")
+
+
 def closed(name: str, seconds: float = 5) -> bool:
     """Wait, up to the given seconds, for the window of that class to close; whether it has."""
     deadline = time.monotonic() + seconds

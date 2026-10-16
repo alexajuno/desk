@@ -209,6 +209,15 @@ def window_of(session: str | None) -> dict | None:
     return next((c for c in _chats() if c.get("kind") == WINDOW and c["session"] == session), None) if session else None
 
 
+def read_now(session: str | None) -> bool:
+    """Whether the window chat whose session this is sits in front, where the user reads its reply as it comes."""
+    chat = window_of(session)
+    try:
+        return bool(chat) and window.in_front() == f"desk-agent-{chat['id']}"
+    except RuntimeError:  # no Hyprland, so no window in front
+        return False
+
+
 def runs_in(chat: dict) -> str:
     """The folder the chat's session runs in: DESK_DATA, where every chat starts, until desk moves it."""
     return chat.get("cwd") or str(store.DATA_DIR)
