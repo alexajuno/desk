@@ -14,7 +14,8 @@
 
 /* Linear serves its own "Inter Variable" web font (document.fonts showed it loaded, 2026-10-14) with
    -webkit-font-smoothing: antialiased and text-rendering: optimizeLegibility. desk serves Inter too, so
-   no browser falls back to another font. InterVariable.ttf is from Arch's inter-font, under the SIL OFL. */
+   no browser falls back to another font. InterVariable.ttf is from Arch's inter-font, under the SIL OFL, whose
+   text ships beside it as fonts/LICENSE.txt, as the OFL asks of every copy. */
 @font-face { font-family: "Inter Variable"; src: url("/fonts/InterVariable.ttf") format("truetype");
              font-weight: 100 900; font-style: normal; font-display: block; }
 
