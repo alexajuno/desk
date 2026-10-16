@@ -3,9 +3,11 @@
 // every message (1 to 14 Oct) made "a lot of noise". desk only reads Slack ("read only", the user, 17 Oct): it posts
 // nothing, and nothing in the thread syncs back once the issue is filed.
 //
-// Once a minute desk lists the user's latest reactions in the Ownego Slack, with the token the slack skill uses, so a
-// tag made while the laptop slept comes in when it wakes. Each tagged message is filed once, and a tag in a thread
-// whose issue is still open files nothing more, since that issue's chat reads the whole thread.
+// Slack pushes each reaction to desk the moment it is added, over Socket Mode: a WebSocket desk opens with the desk
+// app's app-level token ("i don't want a poll each minute. it should feel instant", the user, 17 Oct). Each time the
+// connection opens, desk lists the user's latest reactions once, so a tag made while desk was down or the laptop slept
+// comes in then. Each tagged message is filed once, and a tag in a thread whose issue is still open files nothing
+// more, since that issue's chat reads the whole thread.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as chats from "./chats.ts";
@@ -17,12 +19,16 @@ import { fill, SLACK_PROMPT } from "./prompts.ts";
 import { dayAndTime } from "./when.ts";
 
 const TAG = "penguin"; // 🐧, desk's own mark (apps/web/public/favicon.svg), which the user had never reacted with
-const EVERY = 60; // s between two looks; reactions.list allows 20+ a minute ("Tier 2", docs.slack.dev/reference/methods/reactions.list)
-// The user's latest reactions, newest first. The user made 943 from 5 May to 17 Oct, so 100 reach back about two and a half weeks.
+// The user's latest reactions, newest first. The user made 943 from 5 May to 17 Oct, so 100 reach back about two and a
+// half weeks.
 const LATEST = "100";
-// The user's own token, from pass. Its gpg key has no passphrase (gpg-agent's keyinfo: protection C, 17 Oct), so
-// reading it each minute never asks.
-const TOKEN = "dev/slack-ownego-user-token";
+// In pass. Their gpg key has no passphrase (gpg-agent's keyinfo: protection C, 17 Oct), so reading them never asks.
+const TOKEN = "dev/slack-ownego-user-token"; // the user's own token from the desk app (A0C4JSGDYUB, named muse until 17 Oct)
+const APP_TOKEN = "dev/slack-ownego-app-level-token"; // the desk app's own, with connections:write, for Socket Mode
+const RETRY = 30; // s before trying again when Slack cannot be reached
+// s the clock may jump between two ticks of a 5 s timer before desk takes it for a sleep. After one the WebSocket may be
+// dead without knowing it, so desk opens a new one.
+const SLEPT = 30;
 const STATE = join(DATA_DIR, "slack.json");
 
 interface Seen {
@@ -35,33 +41,66 @@ interface Item { type: string; channel: string; message: Message }
 interface Profile { display_name: string; real_name: string }
 const nameOf = (p: Profile) => p.display_name || p.real_name;
 
+// A Web API method, posted as a form: apps.connections.open answers a GET with insecure_request (17 Oct).
 async function call<T>(token: string, method: string, params: Record<string, string> = {}): Promise<T> {
-  const res = await fetch(`https://slack.com/api/${method}?${new URLSearchParams(params)}`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(`https://slack.com/api/${method}`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: new URLSearchParams(params) });
   const body = (await res.json()) as T & { ok: boolean; error?: string };
   if (!body.ok) throw new Error(`Slack's ${method} answered ${body.error}`);
   return body;
 }
 
-// Look once a minute, for as long as desk runs. A failure that repeats, such as no network, is logged once.
-export function startClock() {
-  let last = "";
-  const clock = async () => {
+async function secret(name: string): Promise<string> {
+  const r = await run(["pass", "show", name], { timeout: 30 });
+  if (r.code) throw new Error(`pass show ${name} failed: ${r.stderr.trim()}`);
+  return r.stdout.split("\n")[0].trim();
+}
+
+// Hold the Socket Mode connection for as long as desk runs. A failure that repeats, such as no network, is logged once.
+export function connect() {
+  const base = `http://localhost:${PORT}`;
+  let socket: WebSocket | null = null, last = "", looking = Promise.resolve(), tick = Date.now();
+  const fail = (error: unknown) => { if (String(error) !== last) console.error("slack:", (last = String(error))); };
+  // One look at a time, so a catch-up and a pushed 🐧 never file the same message twice.
+  const lookNow = () => { looking = looking.then(() => look(base)).then(() => { last = ""; }, fail); };
+  const open = async () => {
     try {
-      await look(`http://localhost:${PORT}`);
-      last = "";
+      const { url } = await call<{ url: string }>(await secret(APP_TOKEN), "apps.connections.open");
+      const ws = (socket = new WebSocket(url));
+      // Slack's envelopes: hello once connected, disconnect before it closes the link (every few hours, or warning
+      // first), and events_api, which must be acknowledged with its envelope_id or Slack sends it again
+      // (docs.slack.dev/apis/events-api/using-socket-mode).
+      ws.onmessage = (m) => {
+        const data = JSON.parse(String(m.data));
+        if (data.envelope_id) ws.send(JSON.stringify({ envelope_id: data.envelope_id }));
+        if (data.type === "hello") lookNow();
+        else if (data.type === "disconnect") ws.close();
+        // Sent for reactions by anyone in a conversation the user can see (docs.slack.dev/reference/events/reaction_added);
+        // look() keeps the user's own.
+        else if (data.payload?.event?.type === "reaction_added" && data.payload.event.reaction === TAG) lookNow();
+      };
+      ws.onclose = () => {
+        if (socket === ws) setTimeout(open, 1000);
+      };
     } catch (error) {
-      if (String(error) !== last) console.error("slack:", (last = String(error)));
+      fail(error);
+      setTimeout(open, RETRY * 1000);
     }
-    setTimeout(clock, EVERY * 1000);
   };
-  void clock();
+  setInterval(() => {
+    if (Date.now() - tick > SLEPT * 1000 && socket) {
+      const old = socket;
+      socket = null; // so its close starts nothing
+      old.close();
+      void open();
+    }
+    tick = Date.now();
+  }, 5000);
+  void open();
 }
 
 // File each newly tagged message, and start its chat.
 export async function look(base: string) {
-  const r = await run(["pass", "show", TOKEN], { timeout: 30 });
-  if (r.code) throw new Error(`pass show ${TOKEN} failed: ${r.stderr.trim()}`);
-  const token = r.stdout.trim();
+  const token = await secret(TOKEN);
   const me = (await call<{ user_id: string }>(token, "auth.test")).user_id;
   const { items } = await call<{ items: Item[] }>(token, "reactions.list", { limit: LATEST, full: "true" }); // full: every reaction, so a busy message keeps its 🐧
   const seen: Seen = existsSync(STATE) ? JSON.parse(readFileSync(STATE, "utf8")) : { filed: [], threads: {} };
