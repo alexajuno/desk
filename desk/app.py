@@ -106,8 +106,9 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
     """What needs you and what waits for your review. desk owns issue.md, so it moves the state here, from the
     session: In progress to In review once it wrote result.md and stopped working, back to In progress when you
     ask it for a change in its chat and it works again, and from Landing to Done once result.md says it landed.
-    Waiting is yours to move, as it waits on someone else; only a result its session wrote since moves it on.
-    Landing needs nothing from you unless it gets stuck."""
+    Waiting is yours to move, as it waits on someone else: nothing its session writes moves it, not even the result
+    the turn that parked it wrote after (16 Oct), and only a message you write in its chat after the wait began
+    resumes it, to In progress. Landing needs nothing from you unless it gets stuck."""
     needs, review = [], []
     for issue in all_issues.values():
         row = live.get(issue.session, {}) if issue.session else {}
@@ -122,9 +123,10 @@ def inbox_items(all_issues: dict[str, store.Issue], live: dict) -> tuple[list, l
                 store.move(issue, state="done" if done else "review", link=issue.link or (pr if done else None))
         elif issue.state == "running" and result.is_file() and now != "working":
             store.move(issue, state="review")
-        elif issue.state == "waiting" and result.is_file() and now != "working" and issue.waiting_since \
-                and datetime.fromtimestamp(result.stat().st_mtime) > datetime.fromisoformat(issue.waiting_since):
-            store.move(issue, state="review")
+        elif issue.state == "waiting" and issue.session and issue.waiting_since \
+                and (wrote := sessions.prompted(issue.session)) \
+                and wrote > datetime.fromisoformat(issue.waiting_since).timestamp():
+            store.move(issue, state="running")
         elif issue.state == "review" and now == "working":
             store.move(issue, state="running")
         if issue.state == "review":
