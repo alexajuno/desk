@@ -1,13 +1,16 @@
 {# Icons are Linear's shapes: the status circle that fills as work moves (its backlog circle uses
    Linear's own dash pattern, 1.4 1.74), three priority bars, and the orange square for urgent. Their
    colours are desk.css's --state-* and --prio variables, so they follow the theme. Waiting and Landing,
-   which Linear has no states for, are the circle paused, and the circle nearly full in Done's colour. #}
+   which Linear has no states for, are the circle paused, and the circle nearly full in Done's colour. Triage is
+   Linear's: a full circle with two arrows, one each way. #}
 
 {% macro state(s) -%}
 {%- if s == "done" -%}
 <svg width="14" height="14" viewBox="0 0 14 14" style="color: var(--state-done)"><circle cx="7" cy="7" r="6.25" fill="currentColor"/><path d="M4.4 7.1l1.8 1.8 3.4-3.6" fill="none" style="stroke: var(--on-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
 {%- elif s == "dropped" -%}
 <svg width="14" height="14" viewBox="0 0 14 14" style="color: var(--state-dropped)"><circle cx="7" cy="7" r="6.25" fill="currentColor"/><path d="M5 5l4 4M9 5l-4 4" style="stroke: var(--state-cross)" stroke-width="1.5" stroke-linecap="round"/></svg>
+{%- elif s == "triage" -%}
+<svg width="14" height="14" viewBox="0 0 14 14" style="color: var(--state-triage)"><circle cx="7" cy="7" r="6.25" fill="currentColor"/><path d="M4.25 5.6h5.5M8.1 3.95l1.65 1.65M9.75 8.4h-5.5M5.9 10.05L4.25 8.4" fill="none" style="stroke: var(--on-accent)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
 {%- elif s == "waiting" -%}
 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="color: var(--state-waiting)"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5.6 4.9v4.2M8.4 4.9v4.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
 {%- else -%}

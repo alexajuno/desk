@@ -68,6 +68,7 @@
   --border-tip-key-raised: lch(23.992% 2.38 272);
   --text-tip-key-raised: lch(66.215% 1.65 272);
   /* status and priority icons, and words in their colours */
+  --state-triage: #fc7840;   /* Linear's Triage orange-red (from memory, not checked) */
   --state-backlog: #bec2c8;
   --state-running: lch(80% 90 85);
   --state-review: #4cb782;

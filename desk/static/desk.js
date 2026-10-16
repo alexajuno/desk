@@ -252,10 +252,10 @@ function waitingMenu(slug, current, where) {
 }
 
 // Linear numbers priority 0 for none, then 1 urgent to 4 low; statuses count from 1, and so do protocols, each with
-// what it does under its name. Landing is not offered: only Approve sets it.
+// what it does under its name. Landing is not offered: only Approve sets it; nor is Triage: only a chat files one.
 function valueMenu(field, current, where, choose) {
   const values = { priority: ["none", "urgent", "high", "medium", "low"], protocol: DESK.protocols }[field]
-    ?? DESK.states.filter((s) => s !== "landing");
+    ?? DESK.states.filter((s) => s !== "landing" && s !== "triage");
   const num = (v) => values.indexOf(v) + (field === "priority" ? 0 : 1);
   openMenu({
     ...where, filter: "keys", kbd: { state: "S", priority: "P" }[field], className: field === "protocol" ? "wide" : "",

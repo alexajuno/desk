@@ -63,7 +63,7 @@ CLOSED = {"done", "dropped"}
 DONE_DAYS = {"none": 0, "day": 1, "week": 7, "month": 30, "all": None}
 NEWEST_FIRST = {"created", "updated", "moved"}  # Linear's "Last created" and "Last updated"; the others go up
 # Linear's status order in a list: "closest to done → farthest from done, followed by completed and canceled issues".
-BY_STATUS = ["landing", "review", "waiting", "running", "backlog", "done", "dropped"]
+BY_STATUS = ["landing", "review", "waiting", "running", "backlog", "triage", "done", "dropped"]
 HOME = str(Path.home())
 
 
@@ -227,11 +227,12 @@ def build(view: View, page_issues: list[store.Issue], everyone: dict[str, store.
     updated = cache(store.changed)
     days = DONE_DAYS[view.done]
     now = time.time()
-    # Done and dropped issues come back by Completed issues, or when a status filter asks for them by name.
+    # Done and dropped issues come back by Completed issues, or when a status filter asks for them by name. A chat's
+    # issue in Triage shows in the sidebar's Triage list, as Linear keeps Triage apart, unless a filter asks for it.
     negate, wanted = view.filters.get("status", (True, []))
-    asked = set() if negate else CLOSED & set(wanted)
-    base = [i for i in page_issues if i.state not in CLOSED or i.state in asked or days is None
-            or (days and now - updated(i.slug) < days * 86400)]
+    asked = set() if negate else (CLOSED | {"triage"}) & set(wanted)
+    base = [i for i in page_issues if (i.state != "triage" or "triage" in asked)
+            and (i.state not in CLOSED or i.state in asked or days is None or (days and now - updated(i.slug) < days * 86400))]
 
     kept = [i for i in base if view.matches(lambda name: value(i, name))]
     hidden = len(base) - len(kept)

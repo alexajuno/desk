@@ -36,14 +36,18 @@ PRIORITIES = ["urgent", "high", "medium", "low", "none"]
 # who it waits on and since when. landing: approved, its session lands the work; only Approve enters it, and it carries
 # since when. It was In progress with a landing mark until 15 Oct, which put it back in the In progress list and every
 # rule meant for In progress: "landing, feel like it needs its own state … at this point, user needs no review anymore".
-STATES = ["backlog", "running", "waiting", "review", "landing", "done", "dropped"]
+# triage: a desk chat's own issue, filed in its first reply, until the talk settles it: accepted as work, parked,
+# a duplicate, or declined. Linear's state for issues that arrived but are not yet accepted (linear.app/docs/triage).
+# The user, 16 Oct: "issue is created only after a short small first discussion. in which within i need to know which
+# session is running and if we gonna create issue at all".
+STATES = ["triage", "backlog", "running", "waiting", "review", "landing", "done", "dropped"]
 # How much plan an issue gets, and whether its session waits for "go" (agents.PROTOCOL_PROMPTS). quick: a three-line
 # brief, then the work at once; brief: the same brief, then "go"; design: a design doc talked through, then "go". The
 # user, 15 Oct: "some tasks i just want it to fire and fix without me looking at the detail plan". An issue with none,
 # as every one filed before then, runs design, the loop it was filed under.
 PROTOCOLS = ["quick", "brief", "design"]
 # What the pages call them.
-STATE_NAMES = {"backlog": "Backlog", "running": "In progress", "waiting": "Waiting", "review": "In review",
+STATE_NAMES = {"triage": "Triage", "backlog": "Backlog", "running": "In progress", "waiting": "Waiting", "review": "In review",
                "landing": "Landing", "done": "Done", "dropped": "Dropped"}
 PRIORITY_NAMES = {"urgent": "Urgent", "high": "High", "medium": "Medium", "low": "Low", "none": "No priority"}
 PROTOCOL_NAMES = {"quick": "Quick", "brief": "Brief", "design": "Design"}

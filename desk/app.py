@@ -156,11 +156,14 @@ def sidebar(request: Request) -> dict:
     needs, review = inbox_items(all_issues, agents.live())
     # Sub-issues too: a session runs whether or not its issue sits under another (15 Oct, one handed off as a
     # sub-issue never showed here).
-    running, landing, waiting = (sorted((i for i in all_issues.values() if i.state == s), key=lambda i: i.rank)
-                                 for s in ("running", "landing", "waiting"))
+    triage, running, landing, waiting = (sorted((i for i in all_issues.values() if i.state == s), key=lambda i: i.rank)
+                                         for s in ("triage", "running", "landing", "waiting"))
+    live = agents.live()
     now = land.running(str(land.DESK_REPO))
     waits = [{**e, "issue": all_issues.get(e["slug"])} for e in land.line(str(land.DESK_REPO))]
+    # Each chat in Triage with where its session stands, so you see which chats work and which wait for you.
     return {"sidebar": {"backlog": sum(i.state == "backlog" for i in all_issues.values()), "running": running,
+                        "triage": [(i, agents.status(live.get(i.session, {}) if i.session else {})) for i in triage],
                         "landing": landing, "waiting": waiting, "trying": now and {**now, "issue": all_issues.get(now["slug"])},
                         "line": waits,
                         "inbox": len(needs) + len(review),
@@ -409,6 +412,9 @@ def strip(i: store.Issue, row: dict, has_plan: bool, result: Path) -> dict:
                     "button": {"label": "Plan", "action": "start"}}
         return {"text": "Plan opens the issue's chat, and its session plans it with you.",
                 "button": {"label": "Plan", "action": "start"}}
+    if i.state == "triage":
+        return {"text": "Triage: its chat settles what this is, work, parked, a duplicate or nothing to do. 2 declines it.",
+                "button": chat}
     if i.state == "landing":
         if not landing_stuck(i, row, now):
             return {"text": "Landing, by the repo's rules.", "button": {"label": "Landing…", "disabled": True}}
