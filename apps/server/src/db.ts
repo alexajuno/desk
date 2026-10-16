@@ -45,6 +45,10 @@ export async function open(): Promise<PGlite> {
   if (!process.env.DESK_DB && !existsSync(ignore)) writeFileSync(ignore, "*\n");
   const opened = await PGlite.create(DB_DIR);
   await opened.exec(SCHEMA);
+  // desk's database is a few MB: Postgres's default 128 MB of shared buffers only holds memory, about 50 MB of it. Set
+  // once in postgresql.auto.conf, it applies from the next start.
+  if ((await opened.query<{ shared_buffers: string }>("show shared_buffers")).rows[0]?.shared_buffers !== "16MB")
+    await opened.exec("alter system set shared_buffers = '16MB'");
   db = opened;
   return opened;
 }
