@@ -30,7 +30,7 @@ interface Seen {
   threads: Record<string, string>; // "<channel>/<thread ts>": the slug of the thread's issue
 }
 
-interface Message { ts: string; thread_ts?: string; user?: string; username?: string; text?: string; permalink: string; reactions?: { name: string; users: string[] }[] }
+interface Message { ts: string; thread_ts?: string; user?: string; username?: string; text?: string; reactions?: { name: string; users: string[] }[] }
 interface Item { type: string; channel: string; message: Message }
 interface Profile { display_name: string; real_name: string }
 const nameOf = (p: Profile) => p.display_name || p.real_name;
@@ -73,33 +73,34 @@ export async function look(base: string) {
     let i: store.Issue | null = null, author = "";
     if (!(open && (await store.exists(open)) && !CLOSED.has((await store.load(open)).state))) {
       author = m.user ? nameOf((await call<{ user: { profile: Profile } }>(token, "users.info", { user: m.user })).user.profile) : m.username ?? "a bot";
-      i = await file(m, author);
+      // reactions.list gives a message's permalink only sometimes: not for one posted through an app (17 Oct).
+      const { permalink } = await call<{ permalink: string }>(token, "chat.getPermalink", { channel, message_ts: m.ts });
+      i = await file(m, author, permalink);
       seen.threads[thread] = i.slug;
     }
     seen.filed.push(key);
     // Written before the chat starts, so a chat that fails to start leaves its issue filed once, not once a minute.
     writeFileSync(STATE, JSON.stringify(seen, null, 1) + "\n", "utf8");
-    if (i) await startChat(i, m, author, base);
+    if (i) await startChat(i, m, author, i.link!, base);
   }
 }
 
 // The issue in Triage, with the message as its Context and its link.
-async function file(m: Message, author: string): Promise<store.Issue> {
+async function file(m: Message, author: string, link: string): Promise<store.Issue> {
   const text = (m.text ?? "").trim();
   // Slack writes a mention or a link as <...>; the agent's title replaces this one once it has read the thread.
   const gist = text.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
   const title = `${author}: ${gist.length > 60 ? `${gist.slice(0, 60).trimEnd()}…` : gist || "a Slack message"}`;
   const i = store.blank(await store.newSlug(title), title);
-  Object.assign(i, { state: "triage", link: m.permalink,
-    body: `## Context\n\n${author} in Slack, ${when(m)}:\n\n${quoted(m)}\n\nThe user tagged it with 🐧 for desk: ${m.permalink}\n` });
+  Object.assign(i, { state: "triage", link, body: `## Context\n\n${author} in Slack, ${when(m)}:\n\n${quoted(m)}\n\nThe user tagged it with 🐧 for desk: ${link}\n` });
   await store.save(i);
-  console.log(`slack: filed ${i.slug} from ${m.permalink}`);
+  console.log(`slack: filed ${i.slug} from ${link}`);
   return i;
 }
 
 // The chat that reads the message's thread, bound to its issue.
-async function startChat(i: store.Issue, m: Message, author: string, base: string) {
-  const message = fill(SLACK_PROMPT, { title: i.title, base, slug: i.slug, author, date: when(m), link: m.permalink, quote: quoted(m) });
+async function startChat(i: store.Issue, m: Message, author: string, link: string, base: string) {
+  const message = fill(SLACK_PROMPT, { title: i.title, base, slug: i.slug, author, date: when(m), link, quote: quoted(m) });
   const chat = await chats.newWindowChat(base, { issue: i, message });
   await store.move(i, { session: chat.session }); // onto the issue as it is now, which the chat may have retitled already
 }
