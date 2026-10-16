@@ -347,9 +347,9 @@ export async function openSession(sid: string) {
 // it yet, so pressing it twice leaves no empty session behind.
 export async function newSession(base: string): Promise<chats.Chat> {
   const newest = chats.windowChats()[0];
-  const chat = newest && !newest.issue && ![...chats.said(newest)].length ? newest : await chats.newWindowChat(base);
-  await chats.openWindow(chat);
-  return chat;
+  if (!newest || newest.issue || [...chats.said(newest)].length) return chats.openNewWindowChat(base);
+  await chats.openWindow(newest);
+  return newest;
 }
 
 // The corner's history menu: the newest sessions, or those matching what is typed.

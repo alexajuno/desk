@@ -5,7 +5,8 @@
 // CLAUDE.md, rules, skills, agents and settings.
 //
 // A chat is a JSON file in DESK_DATA/chats/.
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import * as agents from "./agents.ts";
@@ -107,16 +108,40 @@ const WINDOW = "window";
 // than a letter or a digit made "-".
 const TRANSCRIPTS = join(HOME, ".claude", "projects", DATA_DIR.replace(/[^A-Za-z0-9]/g, "-"));
 
-// Start a window chat's session, idle until the user types in its window.
-export async function newWindowChat(base: string): Promise<Chat> {
+// Start a window chat's session, idle until the user types in its window. started hears the session's short id, which
+// `claude attach` takes, as soon as Claude Code prints it.
+export async function newWindowChat(base: string, id = newChatId(), started?: (short: string) => void): Promise<Chat> {
   // strftime's %b in the C locale: Sep, never Sept.
   const d = new Date(), month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
-  const chat: Chat = { id: `chat-${randomBytes(4).toString("hex")}`, kind: WINDOW, title: "New chat", created: now(), session: "", messages: [] };
+  const chat: Chat = { id, kind: WINDOW, title: "New chat", created: now(), session: "", messages: [] };
   const name = `desk chat ${d.getDate()} ${month} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   const short = await agents.background(DATA_DIR, ["claude", "--bg", "-n", name, ...WINDOW_FLAGS, "--append-system-prompt", await agentPrompt(chat, base)]);
+  started?.(short);
   chat.session = await agents.sessionId(short);
   save(chat);
   return chat;
+}
+
+const newChatId = () => `chat-${randomBytes(4).toString("hex")}`;
+
+// A new chat's window waits, up to a minute, for its session's short id in the file $2, then attaches as REATTACH does;
+// an empty file, left when Claude Code did not start the session, closes it.
+const AWAIT_ATTACH = `i=0; while [ ! -e "$2" ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done; id=$(cat "$2" 2>/dev/null); rm -f "$2"; [ -n "$id" ] || exit 1; set -- "$1" "$id" "$3"; ${REATTACH}`;
+
+// Ctrl Shift O's new chat, whose window opens at once instead of after `claude --bg` has started the session (about
+// 0.7 s), and attaches as soon as it has.
+export async function openNewWindowChat(base: string): Promise<Chat> {
+  const id = newChatId(), handoff = join(tmpdir(), `desk-${id}.session`);
+  const hand = (short: string) => {
+    writeFileSync(`${handoff}.part`, short);
+    renameSync(`${handoff}.part`, handoff); // whole, so the window never reads it half written
+  };
+  const starting = newWindowChat(base, id, hand).catch((error) => {
+    hand("");
+    throw error;
+  });
+  const opening = window.launch(`desk-agent-${id}`, "desk · New chat", DATA_DIR, ["sh", "-c", AWAIT_ATTACH, "sh", which("claude") ?? "claude", handoff, moving(id)]);
+  return (await Promise.all([starting, opening]))[0];
 }
 
 // The user's words and the agent's, in order, from a window chat's transcript.
