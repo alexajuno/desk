@@ -82,11 +82,6 @@ export async function launch(name: string, title: string, cwd: string, argv: str
   await dispatch(`hl.dsp.exec_cmd(${JSON.stringify(line)}, { float = true, size = "${size}", center = true })`);
 }
 
-// The session's window: brought to the user if open, else opened.
-export async function session(name: string, title: string, cwd: string, argv: string[]) {
-  if (!(await focus(name))) await launch(name, title, cwd, argv);
-}
-
 // The claude command and folder for an issue's session, as Jump back picks them, but blocked counts as live too: a
 // session waiting for you is the one to attach to (ported from desk/terminal.py, command).
 async function command(i: Issue): Promise<[string[], string]> {
@@ -97,11 +92,14 @@ async function command(i: Issue): Promise<[string[], string]> {
   return [["claude", "--resume", i.session], await agents.resumeDir(i)];
 }
 
-// The issue's Open chat. A session that began as one of desk's agent chats opens that chat's window.
+// The issue's Open chat: its window brought to the user if open, else opened. A session that began as one of desk's
+// agent chats opens that chat's window.
 export async function issue(i: Issue) {
   const chats = await import("./chats.ts");
   const chat = await chats.windowOf(i.session);
   if (chat) return chats.openWindow(chat);
+  const name = `desk-issue-${i.slug}`;
+  if (await focus(name)) return;
   const [argv, cwd] = await command(i);
-  await session(`desk-issue-${i.slug}`, `desk · ${i.title}`, cwd, argv);
+  await launch(name, `desk · ${i.title}`, cwd, argv);
 }

@@ -148,14 +148,16 @@ export function activity(chat: Chat): string {
 }
 
 // The chat's window, brought to the user or opened: `claude attach` while its session lists, which also wakes a
-// stopped one, else `claude --resume`.
+// stopped one, else `claude --resume`. An open window comes forward before desk asks Claude Code about the session.
 export async function openWindow(chat: Chat, title = "") {
+  const name = `desk-agent-${chat.id}`;
+  if (await window.focus(name)) return;
   const row = await agents.liveRow(chat.session, true);
   if (row.kind === "interactive") throw new Error("This chat is open in another terminal. Close that one first.");
   const argv = row.kind === "background"
     ? ["sh", "-c", REATTACH, "sh", which("claude") ?? "claude", row.id!, moving(chat.id)]
     : ["claude", "--resume", chat.session];
-  await window.session(`desk-agent-${chat.id}`, `desk · ${title || chat.title}`, runsIn(chat), argv);
+  await window.launch(name, `desk · ${title || chat.title}`, runsIn(chat), argv);
 }
 
 function chats(): Chat[] {
