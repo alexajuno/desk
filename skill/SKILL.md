@@ -49,6 +49,13 @@ Set fields, sending only the ones that change; null clears a parent or a folder:
 curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"priority": "urgent", "parent": "desk"}'
 ```
 
+Closing an issue (done or dropped) can close others with it, by the user's Settings › Workflows & automations, as Linear's do: `sub_issue_auto_close` (on unless the user turned it off) closes its open sub-issues the same way, and `parent_auto_close` closes its parent once its last sub-issue is closed. The reply then lists them as `closed`. Read the settings, or change one only when the user asks:
+
+```bash
+curl -s "http://127.0.0.1:8790/api/settings"
+curl -s "http://127.0.0.1:8790/api/settings" -X PATCH --json '{"parent_auto_close": true}'
+```
+
 Projects have a `title`, a `body` (their description) and a `state`, active or archived, never done. List the active ones (`?state=archived` or `?state=all` for others), read one with its issues, create one, or archive one; put an issue in one with `"project": "<slug>"` as above, and list a project's issues with `/api/issues?project=<slug>&state=all`. Its page is `http://127.0.0.1:8790/project/<slug>`:
 
 ```bash
