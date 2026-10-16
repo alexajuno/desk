@@ -3,7 +3,8 @@
 // "One process, as now; no new services"). Its data lives in DB_DIR. A server Postgres can take its place later: the
 // queries here are plain SQL.
 import { PGlite } from "@electric-sql/pglite";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { DB_DIR } from "./config.ts";
 
 let db: PGlite | null = null;
@@ -39,6 +40,9 @@ create table if not exists projects (
 export async function open(): Promise<PGlite> {
   if (db) return db;
   mkdirSync(DB_DIR, { recursive: true });
+  // The data folder is a git repo of its own, for the issues: the database stays out of it.
+  const ignore = join(dirname(DB_DIR), ".gitignore");
+  if (!process.env.DESK_DB && !existsSync(ignore)) writeFileSync(ignore, "*\n");
   const opened = await PGlite.create(DB_DIR);
   await opened.exec(SCHEMA);
   db = opened;

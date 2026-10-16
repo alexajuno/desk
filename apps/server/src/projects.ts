@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { PROJECTS_DIR } from "./config.ts";
 import { sql } from "./db.ts";
 import { asText, dump, split } from "./frontmatter.ts";
-import { byRank, locked, now, type Issue } from "./issues.ts";
+import { byRank, listingOrder, locked, now, type Issue } from "./issues.ts";
 
 export const MAIN = "project.md";
 export const STATES = ["active", "archived"];
@@ -44,7 +44,10 @@ type Row = Project & { written: string | null };
 const fromRow = ({ written: _, ...p }: Row): Project => p;
 
 export async function loadAll(): Promise<Map<string, Project>> {
-  const rows = (await sql().query<Row>("select * from projects order by slug")).rows;
+  const rows = (await sql().query<Row>('select * from projects order by slug collate "C"')).rows;
+  // In the order the folder lists them, as the Python's glob read them.
+  const at = listingOrder(PROJECTS_DIR);
+  rows.sort((a, b) => (at.get(a.slug) ?? Infinity) - (at.get(b.slug) ?? Infinity));
   return new Map(rows.map((r) => [r.slug, fromRow(r)]));
 }
 
@@ -72,7 +75,7 @@ export async function save(p: Project) {
     const text = render(p);
     mkdirSync(folder(p.slug), { recursive: true });
     writeFileSync(join(folder(p.slug), MAIN), text, "utf8");
-    await upsert(p, text);
+    await upsert(parse(p.slug, text), text); // as a load reads it back from the file
   });
   changed_();
 }

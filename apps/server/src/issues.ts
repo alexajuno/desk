@@ -5,7 +5,7 @@
 //
 // Nesting is a `parent` slug, not nested folders, so a sub-issue can have its own sub-issues to any depth. Deleting
 // moves an issue and its sub-issues to TRASH_DIR/<slug>/, one folder each, so undo is a move back.
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, opendirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ISSUES_DIR, TRASH_DIR } from "./config.ts";
 import { sql } from "./db.ts";
@@ -123,8 +123,25 @@ let changed_: () => void = () => {};
 // sync.ts learns of each save here, as it learns of an editor's change from the folders.
 export const onChange = (fn: () => void) => { changed_ = fn; };
 
+// Each name in the folder with its place in the folder's own listing, unsorted, as os.scandir gives it (Node's readdir
+// sorts its answer).
+export function listingOrder(dir: string): Map<string, number> {
+  const at = new Map<string, number>();
+  try {
+    const listing = opendirSync(dir);
+    for (let e = listing.readSync(); e; e = listing.readSync()) at.set(e.name, at.size);
+    listing.closeSync();
+  } catch {
+    // no folder yet
+  }
+  return at;
+}
+
 export async function loadAll(): Promise<Map<string, Issue>> {
-  const rows = (await sql().query<Row>("select * from issues order by slug")).rows;
+  const rows = (await sql().query<Row>('select * from issues order by slug collate "C"')).rows;
+  // In the order the folder lists them, as the Python's glob read them: issues filed in the same second keep their order.
+  const at = listingOrder(ISSUES_DIR);
+  rows.sort((a, b) => (at.get(a.slug) ?? Infinity) - (at.get(b.slug) ?? Infinity));
   return new Map(rows.map((r) => [r.slug, fromRow(r)]));
 }
 
@@ -165,7 +182,7 @@ async function saveNow(i: Issue) {
   const text = render(i);
   mkdirSync(folder(i.slug), { recursive: true });
   writeFileSync(join(folder(i.slug), MAIN), text, "utf8");
-  await upsert(i, text);
+  await upsert(parse(i.slug, text), text); // as a load reads it back from the file, as the Python's did
 }
 
 export async function save(i: Issue) {

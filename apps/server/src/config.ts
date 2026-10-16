@@ -12,8 +12,8 @@ export const ISSUES_DIR = join(DATA_DIR, "issues");
 export const TRASH_DIR = join(DATA_DIR, "trash");
 export const PROJECTS_DIR = join(DATA_DIR, "projects");
 export const CHATS_DIR = join(DATA_DIR, "chats");
-// The database, beside the data it holds; a folder git leaves alone (DATA_DIR/.gitignore).
-export const DB_DIR = resolve(expand(process.env.DESK_DB ?? join(DATA_DIR, "db")));
+// The database, beside the data it holds, in DATA_DIR/.db, which git leaves alone (db.ts writes its .gitignore).
+export const DB_DIR = resolve(expand(process.env.DESK_DB ?? join(DATA_DIR, ".db", "pg")));
 // The code repo: apps/server/src is three levels under it.
 export const REPO = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 export const PORT = Number(process.env.PORT ?? 8790);
