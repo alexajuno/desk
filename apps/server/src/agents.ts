@@ -172,7 +172,7 @@ export async function sessionId(short: string): Promise<string> {
 
 // The session's first prompt, by the issue's protocol: a design doc planned with the user, or a brief, after which it
 // waits for "go" or goes on at once. chat is the Agent chat it came from, if any.
-function planPrompt(i: Issue, folder: string, chat = ""): string {
+export function planPrompt(i: Issue, folder: string, chat = ""): string {
   const p = paths(i, folder);
   const runs = store.runs(i);
   if (runs === "design") return chat ? fill(CHAT_PLAN_PROMPT, { chat, ...p }) : fill(PLAN_PROMPT, p);

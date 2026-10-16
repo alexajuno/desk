@@ -18,7 +18,9 @@ import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import { run } from "./proc.ts";
 
-export const DESK_REPO = REPO;
+// desk's own checkout, the one with the line. DESK_LINE_REPO names another for a test desk, so its line runs on a
+// throwaway repo and never touches the checkout desk runs from.
+export const DESK_REPO = process.env.DESK_LINE_REPO ? resolve(process.env.DESK_LINE_REPO) : REPO;
 // How long a session that holds desk's checkout may go without a turn running before desk takes the checkout back.
 const LINE_GRACE = 120;
 const TICK = 5; // seconds between the line's checks (tick)

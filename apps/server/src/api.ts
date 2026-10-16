@@ -205,7 +205,7 @@ export function routes(app: FastifyInstance) {
   app.post("/api/issues/:slug/work", async (req: Req) => {
     const slug = req.params.slug, i = await loadIssue(slug);
     const id = str(((req.body ?? {}) as Record<string, unknown>).chat);
-    if (!id) throw new HttpError(422, "chat is required");
+    if (!id) throw new HttpError(422, "chat is required", [{ type: "missing", loc: ["body", "chat"], msg: "Field required", input: req.body ?? null }]);
     if (!["triage", "backlog", "running"].includes(i.state))
       throw new HttpError(409, `${slug} is ${i.state}; only an issue in triage, the backlog or in progress can be worked.`);
     if (!chats.exists(id)) throw new HttpError(404, "No such chat");
