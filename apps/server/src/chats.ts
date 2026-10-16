@@ -109,13 +109,17 @@ const WINDOW = "window";
 const TRANSCRIPTS = join(HOME, ".claude", "projects", DATA_DIR.replace(/[^A-Za-z0-9]/g, "-"));
 
 // Start a window chat's session, idle until the user types in its window. started hears the session's short id, which
-// `claude attach` takes, as soon as Claude Code prints it.
-export async function newWindowChat(base: string, id = newChatId(), started?: (short: string) => void): Promise<Chat> {
+// `claude attach` takes, as soon as Claude Code prints it. Given an issue in Triage and a first message, as for a Slack
+// message the user tagged (slack.ts), the chat starts bound to the issue and works on the message at once.
+export async function newWindowChat(base: string, { id = newChatId(), started, issue, message }:
+  { id?: string; started?: (short: string) => void; issue?: Issue; message?: string } = {}): Promise<Chat> {
   // strftime's %b in the C locale: Sep, never Sept.
   const d = new Date(), month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
-  const chat: Chat = { id, kind: WINDOW, title: "New chat", created: now(), session: "", messages: [] };
+  const chat: Chat = { id, kind: WINDOW, title: issue?.title ?? "New chat", created: now(), session: "", messages: [],
+    ...(issue && { issue: issue.slug, folder: DATA_DIR }) }; // where bind() leaves a chat whose issue has no folder
   const name = `desk chat ${d.getDate()} ${month} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const short = await agents.background(DATA_DIR, ["claude", "--bg", "-n", name, ...WINDOW_FLAGS, "--append-system-prompt", await agentPrompt(chat, base)]);
+  const short = await agents.background(DATA_DIR, ["claude", "--bg", "-n", name, ...WINDOW_FLAGS, "--append-system-prompt", await agentPrompt(chat, base),
+    ...(message ? [message] : [])]);
   started?.(short);
   chat.session = await agents.sessionId(short);
   save(chat);
@@ -136,7 +140,7 @@ export async function openNewWindowChat(base: string): Promise<Chat> {
     writeFileSync(`${handoff}.part`, short);
     renameSync(`${handoff}.part`, handoff); // whole, so the window never reads it half written
   };
-  const starting = newWindowChat(base, id, hand).catch((error) => {
+  const starting = newWindowChat(base, { id, started: hand }).catch((error) => {
     hand("");
     throw error;
   });
