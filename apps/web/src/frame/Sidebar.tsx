@@ -3,6 +3,7 @@
 import { observer } from "mobx-react-lite";
 import { useLocation } from "react-router";
 import { deskPath, Go } from "../app/nav";
+import { fromSlack } from "../lib/desk";
 import { frame } from "../store/frame";
 import { ui } from "../store/ui";
 import { SIDE_ICON, StateIcon } from "../ui/icons";
@@ -48,13 +49,13 @@ export const Sidebar = observer(function Sidebar() {
           <span className="nav-title">{pr.title}</span>
         </Go>
       ))}
-      {/* The chats not settled yet, each with Triage's icon whether its chat works or waits; hovering says where its chat stands. */}
+      {/* The issues not settled yet, each with Triage's icon whether its chat works or waits, and a 🐧 when it came from Slack; hovering says where its chat stands. */}
       {d && d.triage.length > 0 && (
         <>
           <div className="nav-label">Triage</div>
           {d.triage.map((p) => (
             <Go key={p.slug} className={`nav-item${at(`/issue/${p.slug}`)}`} to={`/issue/${p.slug}`} title={TRIAGE_TIP[p.now] ?? "Its chat is closed"}>
-              <StateIcon state="triage" /><span className="nav-title">{p.title}</span>
+              <StateIcon state="triage" /><span className="nav-title">{p.title}</span>{fromSlack(p.link) && <span className="from" title="Tagged in Slack">🐧</span>}
             </Go>
           ))}
         </>

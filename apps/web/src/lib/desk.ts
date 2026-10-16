@@ -30,6 +30,9 @@ export const nameOf = (field: Field, value: string): string =>
 // Vietnamese titles match without their marks: "viec" finds "việc".
 export const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d").toLowerCase();
 
+// Whether the issue came from a Slack message the user tagged with 🐧 (slack.ts), whose link it keeps.
+export const fromSlack = (link: string | null) => /^https:\/\/[\w-]+\.slack\.com\//.test(link ?? "");
+
 // An issue as the page JSON carries it (pages.ts, issueJson).
 export interface IssueRow {
   slug: string;

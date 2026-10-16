@@ -6,7 +6,7 @@ import { observer } from "mobx-react-lite";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { post, said } from "../api/http";
 import { go, Go } from "../app/nav";
-import { PRIORITY_NAMES, PROTOCOL_NAMES, STATE_NAMES, type Field, type IssueRow, type Priority, type Protocol, type State, type TreeRow } from "../lib/desk";
+import { fromSlack, PRIORITY_NAMES, PROTOCOL_NAMES, STATE_NAMES, type Field, type IssueRow, type Priority, type Protocol, type State, type TreeRow } from "../lib/desk";
 import { keyOf } from "../lib/keys";
 import { fieldIcon, PLUS, PrioIcon, ProtoIcon, StateIcon, TRIANGLE } from "../ui/icons";
 import { toggled } from "../ui/menu";
@@ -245,7 +245,7 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z" style={{ stroke: "var(--text-3)" }} strokeWidth="1.2" /></svg>
         <span>{p.folder || "~"}</span>
       </button>
-      {p.link && (<><div className="label">Link</div><div className="prop static"><a href={p.link}>{p.link.split("/").pop()}</a></div></>)}
+      {p.link && (<><div className="label">Link</div><div className="prop static"><a href={p.link}>{fromSlack(p.link) ? "🐧 Slack" : p.link.split("/").pop()}</a></div></>)}
       {data.files.length > 0 && (
         <>
           <div className="label">Files</div>

@@ -179,6 +179,7 @@ button.side-icon { padding: 0; border: 0; }
 a.nav-label { text-decoration: none; } a.nav-label:hover, a.nav-label.here { color: var(--text-1); }
 .nav-label { display: flex; align-items: center; height: 28px; padding: 12px 6px 0; font-size: 12px; font-weight: 500; color: var(--text-3); }
 .nav-title { overflow: hidden; text-overflow: ellipsis; }
+.nav-item .from { margin-left: auto; font-size: 12px; }
 /* desk running a branch for a review, a row that is no link when no issue is known to have switched it */
 .nav-item.static { cursor: default; } .nav-item.static:hover { background: none; color: var(--text-3); }
 /* Linear's Help button, measured 2026-10-15: a 24px circle 10px in from the window's bottom left corner,
