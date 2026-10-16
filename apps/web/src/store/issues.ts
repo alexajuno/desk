@@ -1,6 +1,6 @@
 import { makeAutoObservable, observable } from "mobx";
 
-// The fields /api/sync sends for each issue: what GET /api/issues lists (desk/api.py, as_json).
+// The fields /api/sync sends for each issue: what GET /api/issues lists (the server's api.ts, asJson).
 export type State = "triage" | "backlog" | "running" | "waiting" | "review" | "landing" | "done" | "dropped";
 export type Priority = "urgent" | "high" | "medium" | "low" | "none";
 
@@ -20,7 +20,7 @@ export interface Issue {
   waiting_since?: string | null;
 }
 
-// desk's order and names (desk/issues.py, STATES and STATE_NAMES).
+// desk's order and names (the server's issues.ts, STATES and STATE_NAMES).
 export const STATES: State[] = ["triage", "backlog", "running", "waiting", "review", "landing", "done", "dropped"];
 export const STATE_NAMES: Record<State, string> = {
   triage: "Triage", backlog: "Backlog", running: "In progress", waiting: "Waiting",

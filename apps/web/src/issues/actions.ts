@@ -1,4 +1,4 @@
-// What the issue pages do to an issue, through the old pages' routes (app.py), as desk.js did.
+// What the issue pages do to an issue, through the server's form routes (app.ts), as desk.js did.
 import { post, postJson, reason } from "../api/http";
 import { deskPath, go } from "../app/nav";
 import type { Field } from "../lib/desk";
@@ -18,7 +18,7 @@ export async function setFolder(slug: string, folder: string) {
   await reloadPages();
 }
 
-// A session's chat, in a floating kitty window over desk (window.py): the page stays as it is; a failure says why.
+// A session's chat, in a floating kitty window over desk (window.ts): the page stays as it is; a failure says why.
 export async function openWindow(url: string, body: unknown = {}) {
   const res = await postJson(url, body);
   if (!res.ok) toast(await reason(res));

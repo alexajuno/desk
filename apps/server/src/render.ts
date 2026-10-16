@@ -1,4 +1,4 @@
-// Markdown to HTML (desk/render.py), with ```d2 blocks drawn as SVG diagrams by the d2 command, and each ## and ###
+// Markdown to HTML (ported from desk/render.py), with ```d2 blocks drawn as SVG diagrams by the d2 command, and each ## and ###
 // section wrapped so the page can fold it. render.py used Python-Markdown with its tables, fenced_code, sane_lists and
 // toc extensions; this follows that dialect where it differs from CommonMark, as the documents desk holds use it.
 import MarkdownIt, { type Token } from "markdown-it";

@@ -1,4 +1,4 @@
-// Times as desk writes them (desk/app.py): short dates, ages as Linear's Inbox writes them, and how long a wait lasted.
+// Times as desk writes them (ported from desk/app.py): short dates, ages as Linear's Inbox writes them, and how long a wait lasted.
 // Times are local, as Python's naive datetimes were.
 
 // "2026-10-16T19:26:20" (or "2026-10-16 19:26:20") read as local time.

@@ -1,4 +1,4 @@
-// desk's agent (desk/chats.py): a Claude Code session with desk's own skills, which files issues and works them itself,
+// desk's agent (ported from desk/chats.py): a Claude Code session with desk's own skills, which files issues and works them itself,
 // in a floating kitty window over desk. It starts in DESK_DATA and reaches desk through curl to its API. Work on an issue
 // is done in the chat: the chat binds itself to the issue (POST /api/issues/<slug>/work), which makes the chat's session
 // the issue's session, and desk then moves the chat into the issue's folder, so that Claude Code loads that folder's
@@ -100,7 +100,7 @@ export async function agentPrompt(chat: Chat, base: string): Promise<string> {
 
 // --- chats in a window -------------------------------------------------------------------------------------------
 // A window chat is a Claude Code background session desk starts in DESK_DATA with the agent's prompt, shown in a
-// floating kitty window Hyprland opens over desk (chats.py says what was checked, 15 Oct).
+// floating kitty window Hyprland opens over desk (chats.py, in git history, said what was checked, 15 Oct).
 
 const WINDOW = "window";
 // Where Claude Code keeps the transcripts of the sessions started in DESK_DATA: the folder's path, each character other
@@ -195,7 +195,7 @@ export function windowChats(): Chat[] {
 
 // --- moving a chat -------------------------------------------------------------------------------------------------
 // A chat's session loads the folder it runs in, and only that one, so once it binds to an issue in another folder desk
-// moves it there, between two turns (chats.py says what was checked, 15 Oct).
+// moves it there, between two turns (chats.py, in git history, said what was checked, 15 Oct).
 
 const MOVING = new Set<string>(); // the chats a move waits on, so a second bind does not start a second move
 const MOVE_WAIT = 4 * 3600; // seconds a move waits for the chat's turn to end

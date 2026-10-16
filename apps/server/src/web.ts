@@ -1,4 +1,4 @@
-// desk's app (apps/web: React, MobX, StyleX), the page behind every one of desk's addresses (desk/web.py).
+// desk's app (apps/web: React, MobX, StyleX), the page behind every one of desk's addresses (ported from desk/web.py).
 //
 // desk.service runs whatever commit Try, back-to-main or a landing checked out, so desk builds the app itself when it
 // starts, whenever the app's committed sources differ from the ones its last build came from. With nothing changed

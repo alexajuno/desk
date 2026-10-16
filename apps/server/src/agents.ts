@@ -1,5 +1,5 @@
-// The one Claude Code session bound to an issue, from its plan to its landing (desk/agents.py, which says how each step
-// works and what was checked on Claude Code 2.1.285 and 2.1.300).
+// The one Claude Code session bound to an issue, from its plan to its landing (ported from desk/agents.py, which said
+// how each step works and what was checked on Claude Code 2.1.285 and 2.1.300).
 //
 //   Plan       claude --bg in the issue's folder, with no -w: the repo's own rules say where the session works. The
 //              session plans by the issue's protocol and keeps the plan in plan.md.

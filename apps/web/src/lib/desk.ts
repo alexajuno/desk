@@ -1,4 +1,4 @@
-// desk's vocabulary, as desk/issues.py and app.py's template globals define it.
+// desk's vocabulary, as the server's issues.ts defines it.
 export type State = "triage" | "backlog" | "running" | "waiting" | "review" | "landing" | "done" | "dropped";
 export type Priority = "urgent" | "high" | "medium" | "low" | "none";
 export type Protocol = "quick" | "brief" | "design";
@@ -30,7 +30,7 @@ export const nameOf = (field: Field, value: string): string =>
 // Vietnamese titles match without their marks: "viec" finds "việc".
 export const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d").toLowerCase();
 
-// An issue as the page JSON carries it (app.py, issue_json).
+// An issue as the page JSON carries it (pages.ts, issueJson).
 export interface IssueRow {
   slug: string;
   title: string;

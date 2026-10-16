@@ -1,4 +1,4 @@
-// A list's view: Linear's Filter and Display options (desk/views.py). The view lives in the page's address, in words
+// A list's view: Linear's Filter and Display options (the server's views.ts). The view lives in the page's address, in words
 // (/backlog?folder=muse&priority=not:low,none&group=status), and only what differs from the page's defaults is
 // written. The app keeps each page's last view in this browser (localStorage.views), so the sidebar's bare /backlog
 // opens it again, as the old pages kept it in a cookie.
@@ -35,11 +35,11 @@ export interface Filter {
   values: string[];
 }
 
-// The words views.py reads; any of them in the address means it carries a view.
+// The words the server's views.ts reads; any of them in the address means it carries a view.
 const WORDS = new Set(["status", "priority", "project", "folder", "protocol", "issue", "group", "order", "done", "subs", "reverse", "empty"]);
 export const hasView = (search: string) => [...new URLSearchParams(search).keys()].some((k) => WORDS.has(k));
 
-// The words views.py writes keep their slashes, tildes, commas and colons, as in folder=genai/api.
+// The words views.ts writes keep their slashes, tildes, commas and colons, as in folder=genai/api.
 export const readable = (params: URLSearchParams) =>
   params.toString().replace(/%2F/gi, "/").replace(/%7E/gi, "~").replace(/%2C/gi, ",").replace(/%3A/gi, ":");
 

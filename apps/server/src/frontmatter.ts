@@ -1,4 +1,4 @@
-// issue.md and project.md: YAML front matter, then the body (desk/issues.py, _parse and save). The front matter is
+// issue.md and project.md: YAML front matter, then the body (ported from desk/issues.py, _parse and save). The front matter is
 // read as YAML 1.1, as PyYAML read it, and written as PyYAML's safe_dump(sort_keys=False, allow_unicode=True) wrote
 // it, so files written by either read the same and the data folder's git history shows no churn.
 import { parse } from "yaml";

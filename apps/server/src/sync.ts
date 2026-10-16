@@ -1,4 +1,4 @@
-// Sync for the app (desk/sync.py): a WebSocket that sends every issue when the app connects, then each change the moment
+// Sync for the app (ported from desk/sync.py): a WebSocket that sends every issue when the app connects, then each change the moment
 // an issue changes, whoever made it: a page, an agent's curl, desk itself, or the user's editor. The app's own changes go
 // through the JSON API and come back this way, like everyone else's.
 //

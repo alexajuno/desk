@@ -1,4 +1,4 @@
-// Issue search (desk/search.py): the issues whose title or description holds every word of the query, in any state.
+// Issue search (ported from desk/search.py): the issues whose title or description holds every word of the query, in any state.
 // A word matches where a word starts, so "sear" finds "search" as you type but "arch" does not. Best match first: a
 // word in the title outweighs any number of words in the description, and the query as typed, in the title, outweighs
 // both. Ties go to open issues, then the backlog's order.

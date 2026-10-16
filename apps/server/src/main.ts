@@ -1,48 +1,35 @@
-// desk: one place to park, plan, run and review issues with Claude. Run: node apps/server/src/main.ts (PORT picks the
-// port, default 8790; DESK_DATA the data folder, default ~/.local/share/desk; DESK_CLOCK=0 leaves the line's clock and the
-// reaper off, as a second desk for testing should).
-import { create } from "./app.ts";
-import { PORT } from "./config.ts";
-import * as db from "./db.ts";
-import * as store from "./issues.ts";
-import * as land from "./land.ts";
-import * as projects from "./projects.ts";
-import * as reaper from "./reaper.ts";
-import * as sessions from "./sessions.ts";
-import * as sync from "./sync.ts";
-import * as web from "./web.ts";
+// desk: one place to park, plan, run and review issues with Claude. Run: node apps/server/src/main.ts (desk.service
+// does). Try, back-to-main and a landing switch the commit under desk.service, which then restarts desk; a commit may
+// need packages the last one did not. So before anything else, desk installs them whenever pnpm-lock.yaml differs from
+// the one its last install came from, as web.ts builds the app whenever apps/web changed. With nothing changed that
+// costs one `git rev-parse`. Only Node's own modules load before the install; the server's come after it (server.ts).
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-await db.open();
-// The folders are the record: whatever changed there while desk was down is read in first.
-await store.reconcile();
-await projects.reconcile();
-await web.build();
-const app = await create();
-await sync.start();
-if (process.env.DESK_CLOCK !== "0") {
-  land.startClock(); // the line for desk's own checkout moves on its own
-  reaper.startClock(); // sessions nobody needs any more are stopped on their own
-}
+const REPO = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
+const STAMP = join(REPO, "node_modules", ".desk-lock"); // the lockfile's git blob the last install came from
 
-let stopping = false;
-async function stop() {
-  if (stopping) return;
-  stopping = true;
-  // Event streams and sockets stay open as long as a tab does: end them, and the pages reconnect to the desk that comes
-  // next.
-  sessions.endStreams();
-  sync.closeAll();
-  const late = setTimeout(() => process.exit(0), 5000);
+function lockfile(): string {
   try {
-    await app.close();
-    await db.close();
-  } finally {
-    clearTimeout(late);
-    process.exit(0);
+    return execFileSync("git", ["rev-parse", "HEAD:pnpm-lock.yaml"], { cwd: REPO, encoding: "utf8" }).trim();
+  } catch {
+    return ""; // not a git checkout: install by hand
   }
 }
-process.on("SIGTERM", stop);
-process.on("SIGINT", stop);
 
-await app.listen({ port: PORT, host: process.env.HOST ?? "127.0.0.1" });
-console.log(`desk on http://127.0.0.1:${PORT}`);
+const lock = lockfile();
+if (lock && !(existsSync(STAMP) && readFileSync(STAMP, "utf8") === lock)) {
+  // pnpm comes from volta, which desk.service's PATH may leave out.
+  const env = { ...process.env, PATH: `${join(homedir(), ".volta", "bin")}:${process.env.PATH ?? ""}` };
+  try {
+    execFileSync("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], { cwd: REPO, env, stdio: "inherit", timeout: 300_000 });
+    writeFileSync(STAMP, lock);
+  } catch (error) {
+    console.error(`Installing desk's packages failed, so desk runs on those it has: ${error}`);
+  }
+}
+
+await import("./server.ts");

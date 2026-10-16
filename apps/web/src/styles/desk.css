@@ -315,7 +315,7 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .body table { border-collapse: collapse; font-size: 13px; line-height: 20px; margin: 0 0 12px; }
 .body td, .body th { border: 1px solid var(--border-3); padding: 4px 8px; vertical-align: top; }
 .body blockquote { margin: 0 0 12px; background: var(--bg-raised); border-left: 3px solid var(--accent); padding: 6px 14px; border-radius: 0 8px 8px 0; }
-/* A section folds from the triangle in the gutter left of its heading, or a click on the heading: render.py's
+/* A section folds from the triangle in the gutter left of its heading, or a click on the heading: render.ts's
    ## and ### sections, and the issue page's labelled parts. The triangle is the group's, turned down while open. */
 .sec-head { position: relative; cursor: pointer; }
 .sec-toggle { position: absolute; left: -24px; top: 50%; translate: 0 -50%; box-sizing: border-box; width: 20px; height: 20px;
@@ -636,7 +636,7 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .project-row.archived { color: var(--text-3); }
 .project-page .group { margin-top: 16px; }
 
-/* Filter and Display options on an issue list (list.html, views.py), measured on linear.app on 16 Oct: two 28px
+/* Filter and Display options on an issue list (views.ts), measured on linear.app on 16 Oct: two 28px
    round buttons in the top bar, the dot on Display when the list's display is not its default, a filter bar of
    24px chips, and a 300px Display panel with 12px labels, 24px selects and a 22x14 switch. */
 .view-btn { position: relative; width: 28px; height: 28px; padding: 0; justify-content: center; border: 0; border-radius: 9999px;

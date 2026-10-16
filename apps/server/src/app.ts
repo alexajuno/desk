@@ -1,4 +1,4 @@
-// desk's server: every address desk answers (desk/app.py and its routers). The pages are the app's (apps/web), which
+// desk's server: every address desk answers (ported from desk/app.py and its routers). The pages are the app's (apps/web), which
 // asks /api/page/... for their data (pages.ts); the forms the pages post answer with a redirect that may carry ?msg=
 // for the strip; the agents' JSON API is api.ts; the app's live sync is sync.ts; the Sessions list's events are
 // sessions.ts's.

@@ -1,5 +1,5 @@
 // Calls to desk's server. The old pages' forms post form-encoded fields; their routes answer with a redirect that
-// may carry ?msg= and ?trust=1 for the strip (app.py, back), which a fetch follows and the app reads off the final URL.
+// may carry ?msg= and ?trust=1 for the strip (app.ts, back), which a fetch follows and the app reads off the final URL.
 export const post = (url: string, fields: Record<string, string> = {}) =>
   fetch(url, { method: "POST", body: new URLSearchParams(fields) });
 

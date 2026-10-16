@@ -1,5 +1,5 @@
 // A floating kitty window over desk, on the Hyprland workspace the user is on, for a Claude Code session: desk's agent
-// chats and an issue's Open chat (desk/window.py, which says what was checked on Hyprland 0.56.2). Each window is found
+// chats and an issue's Open chat (ported from desk/window.py, which said what was checked on Hyprland 0.56.2). Each window is found
 // again by its class, so one session never opens in two windows from desk.
 import * as agents from "./agents.ts";
 import type { Issue } from "./issues.ts";
@@ -88,7 +88,7 @@ export async function session(name: string, title: string, cwd: string, argv: st
 }
 
 // The claude command and folder for an issue's session, as Jump back picks them, but blocked counts as live too: a
-// session waiting for you is the one to attach to (desk/terminal.py, command).
+// session waiting for you is the one to attach to (ported from desk/terminal.py, command).
 async function command(i: Issue): Promise<[string[], string]> {
   if (!i.session || !/^(?:[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-f]{8})$/.test(i.session)) throw new Error("This issue has no session yet.");
   const row = await agents.liveRow(i.session, true);

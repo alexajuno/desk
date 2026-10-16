@@ -1,4 +1,4 @@
-// Projects (desk/projects.py): long-lived work that is never done, such as desk itself, so a project is only active or
+// Projects (ported from desk/projects.py): long-lived work that is never done, such as desk itself, so a project is only active or
 // archived. Postgres holds them; each keeps its folder in PROJECTS_DIR, where project.md is written on every save. An
 // issue joins one with its `project` slug; archiving a project keeps its issues and their link to it.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";

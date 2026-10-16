@@ -40,7 +40,7 @@ function ListGlyph({ name }: { name: string }) {
   );
 }
 
-// An icon by the key views.py gives it: state-running, priority-high, protocol-quick, session-open, glyph-folder.
+// An icon by the key the server's views.ts gives it: state-running, priority-high, protocol-quick, session-open, glyph-folder.
 // In a menu a property's glyph is desk.js's (menu = true); in the list it is list.html's.
 export function iconOf(key: string | null | undefined, menu = false): ReactNode {
   if (!key) return null;
@@ -194,7 +194,7 @@ export function Groups({ list, empty, here = null }: { list: ListData; empty: st
 
 // Shift+V: Linear's Display options panel, its rows measured on linear.app (16 Oct): a 300px panel, 12px labels on the
 // left, 24px selects on the right, the direction button beside Ordering, a 22x14 switch, and Reset at its foot. Its
-// choices are the page's own (views.py PAGES): Grouping and Ordering first, the rest under a line.
+// choices are the page's own (views.ts, PAGES): Grouping and Ordering first, the rest under a line.
 const SELECT_CHEV = <svg width="9" height="5" viewBox="0 0 9 5" fill="currentColor"><path d="M.5.5h8L4.5 4.5z" /></svg>;
 // Linear's Direction icon: an arrow beside bars that shorten. Reversed, it flips.
 const DIRECTION = (

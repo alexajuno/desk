@@ -68,7 +68,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
 
   // A form route of the old pages: Plan, Start, Approve, Try, Trust folder. Its redirect may say something for the
   // strip. From the Inbox, Approve moves on as Linear does: the next notification opens, and a toast says what
-  // happened (app.py, onward).
+  // happened (app.ts, onward).
   async function act(action: string) {
     const res = await post(`/issue/${p.slug}/${action}`, inInbox ? { src: "inbox" } : {});
     const to = new URL(res.url), note = to.searchParams.get("note");

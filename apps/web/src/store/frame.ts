@@ -1,4 +1,4 @@
-// The sidebar on every page and the Inbox's rows (app.py, /api/page/frame). A session that starts or stops working
+// The sidebar on every page and the Inbox's rows (pages.ts, /api/page/frame). A session that starts or stops working
 // changes no file, so besides each sync change the app asks every 3 s, as the old pages ask /api/inbox; the timer
 // ticks in a worker, since Chrome checks a page's own timers once a minute once it has been hidden for 5 minutes
 // (developer.chrome.com/blog/timer-throttling-in-chrome-88), and desk waits in the background by design.

@@ -66,7 +66,7 @@ export function actionsMenu(issue: ActionTarget, where: Where, here: string | nu
       if (to !== (issue.parent || "")) setField(issue.slug, "parent", to);
     }) },
     { group: 0, icon: GLYPH.plus, label: "Add sub-issue", run: () => ui.openCreator({ parent: issue.slug, parentTitle: issue.title }) },
-    // An issue's session: its chat in a window over desk (window.py), or in a kitty tab (agents.jump_back).
+    // An issue's session: its chat in a window over desk (window.ts), or in a kitty tab (agents.ts, jumpBack).
     ...(issue.session ? [
       { group: 1, icon: GLYPH.chat, label: "Open chat", hint: "O", key: "o", run: () => openWindow(`/issue/${issue.slug}/window`) },
       { group: 1, icon: GLYPH.terminal, label: "Open chat in kitty", run: async () => { await post(`/issue/${issue.slug}/jump`); await reloadPages(); } },

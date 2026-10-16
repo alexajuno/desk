@@ -1,4 +1,4 @@
-// The Sessions list (desk/sessions.py): every Claude Code session on this laptop in one list, grouped by when each last
+// The Sessions list (ported from desk/sessions.py): every Claude Code session on this laptop in one list, grouped by when each last
 // moved, and each opened in a floating kitty window over desk.
 //
 // Claude Code keeps each session as a transcript, ~/.claude/projects/<the folder it ran in, as a name>/<session>.jsonl,

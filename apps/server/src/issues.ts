@@ -1,4 +1,4 @@
-// Issues (desk/issues.py). Postgres holds every issue's fields; each issue also keeps its folder in ISSUES_DIR, where
+// Issues (ported from desk/issues.py). Postgres holds every issue's fields; each issue also keeps its folder in ISSUES_DIR, where
 // issue.md is written on every save, as before, and where its other files live: a plan, a design doc, a diagram, an
 // agent's result. So agents, git and an editor still find each issue where they always did, and an issue.md an
 // editor changes is read back in (sync.ts watches the folders).
@@ -16,7 +16,7 @@ export const PLAN = "plan.md"; // the plan, kept by the issue's session while th
 
 // Linear's priority levels, most urgent first.
 export const PRIORITIES = ["urgent", "high", "medium", "low", "none"];
-// The states (desk/issues.py says why each exists).
+// The states (desk/issues.py, in git history, said why each exists).
 export const STATES = ["triage", "backlog", "running", "waiting", "review", "landing", "done", "dropped"];
 export const PROTOCOLS = ["quick", "brief", "design"];
 export const STATE_NAMES: Record<string, string> = {

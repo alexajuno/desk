@@ -1,4 +1,4 @@
-// A list's view (desk/views.py): Linear's Filter and Display options on desk's lists, the Backlog, a project page and
+// A list's view (ported from desk/views.py): Linear's Filter and Display options on desk's lists, the Backlog, a project page and
 // Sessions (linear.app/docs/filters and linear.app/docs/display-options). It says which rows the list keeps and how it
 // groups and orders them; on an issue list also which done issues come back and how sub-issues show.
 //

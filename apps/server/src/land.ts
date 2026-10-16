@@ -1,4 +1,4 @@
-// Landing approved work, and the line for desk's own checkout (desk/land.py, which tells the whole story).
+// Landing approved work, and the line for desk's own checkout (ported from desk/land.py, whose docstring, in git history, tells the whole story).
 //
 // Approve hands the work to the issue's own session, which lands it as its repo's rules say. One thing stays here for
 // the sessions desk started in a worktree of its own (`claude -w`), as it did until 15 Oct: Claude Code locks such a

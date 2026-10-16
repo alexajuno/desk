@@ -1,18 +1,20 @@
-# desk as a user service, so Approve on an issue in desk's own repo can restart it on the merged code:
-# land.py exits the process after the merge and Restart=always brings it back.
+# desk as a user service, so Approve on an issue in desk's own repo can restart it on the merged code: land.ts exits the
+# process after the merge and Restart=always brings it back. Node runs the server's TypeScript as it is; main.ts installs
+# packages and server.ts builds the app whenever the commit checked out needs it.
 #
-#   mkdir -p ~/.config/systemd/user && ln -sf ~/projects/desk/desk.service ~/.config/systemd/user/desk.service
-#   fuser -k 8790/tcp; systemctl --user daemon-reload && systemctl --user enable --now desk
+#   cp ~/projects/desk/desk.service ~/.config/systemd/user/desk.service
+#   systemctl --user daemon-reload && systemctl --user enable --now desk
 [Unit]
-Description=desk
+Description=desk, the issue workspace on 127.0.0.1:8790
 
 [Service]
+Type=simple
 WorkingDirectory=%h/projects/desk
-ExecStart=%h/projects/desk/.venv/bin/uvicorn desk.app:app --port 8790
+# claude, kitty, hyprctl and git live outside systemd's default PATH, and node and pnpm in volta's
+Environment=PATH=%h/.local/bin:%h/.cargo/bin:%h/.volta/bin:/usr/local/bin:/usr/bin
+ExecStart=%h/.volta/bin/node apps/server/src/main.ts
 Restart=always
 RestartSec=1
-# claude, kitty, hyprctl and git live outside systemd's default PATH
-Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin
 
 [Install]
 WantedBy=default.target

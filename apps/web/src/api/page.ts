@@ -1,4 +1,4 @@
-// A page's JSON from desk (app.py, /api/page/...), fetched again whenever an issue changes (the sync socket's seq)
+// A page's JSON from desk (pages.ts, /api/page/...), fetched again whenever an issue changes (the sync socket's seq)
 // and when an action registered with onReload asks. The last answer stays on screen while the next one comes, so a
 // change redraws only what differs: no blank frame, no lost scroll or open fold.
 import { useCallback, useEffect, useRef, useState } from "react";

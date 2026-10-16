@@ -1,4 +1,4 @@
-// desk stops the background sessions nobody needs any more (desk/reaper.py). Claude Code keeps a background session's
+// desk stops the background sessions nobody needs any more (ported from desk/reaper.py). Claude Code keeps a background session's
 // process alive between turns for good, and on 16 Oct five of desk's sat idle, about 2 GB together. The user, 16 Oct:
 // "since human controls issue's status, session's status also change accordingly to that".
 //

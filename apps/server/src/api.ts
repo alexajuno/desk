@@ -1,4 +1,4 @@
-// desk's JSON API, for the desk agent and for any Claude Code session (desk/api.py; the desk skill, skill/SKILL.md,
+// desk's JSON API, for the desk agent and for any Claude Code session (ported from desk/api.py; the desk skill, skill/SKILL.md,
 // documents it for them).
 //
 //     GET    /api/issues?q=&state=      list and search issues
