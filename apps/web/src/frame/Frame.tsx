@@ -5,8 +5,9 @@ import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
 import { Outlet, useLocation } from "react-router";
 import { deskPath, go } from "../app/nav";
-import { openWindow, remove, setField, undo, undoList } from "../issues/actions";
+import { openWindow, remove, removeMany, setField, undo, undoList } from "../issues/actions";
 import { fieldMenu } from "../issues/menus";
+import { selectable, selectAll, selection, SelectionBar, selectionField } from "../issues/selection";
 import { listView } from "../lists/current";
 import { noteAppPath, SettingsNav } from "../settings/SettingsPage";
 import { filterMenu } from "../lists/parts";
@@ -64,6 +65,7 @@ function onKeyDown(e: KeyboardEvent) {
   if (e.key === "Escape" && ui.keysOpen) { ui.setKeys(false); return; }
   if (e.key === "Escape" && sideOpen()) { closeSide(); return; } // before an issue's Esc goes back
   if (e.key === "Escape" && listView.displayOpen) { listView.setDisplay(false); return; }
+  if (e.key === "Escape" && ui.selected.size && !typing(e.target)) { ui.clearSelection(); return; } // before Esc goes back
   if (typing(e.target)) { if (e.key === "Escape") (e.target as HTMLElement).blur(); return; }
   const key = e.key.toLowerCase();
 
@@ -72,6 +74,9 @@ function onKeyDown(e: KeyboardEvent) {
     const step = keyOf(e) === "Enter" && document.querySelector<HTMLButtonElement>(".strip .strip-go:not(:disabled)");
     if (step) { step.click(); e.preventDefault(); }
     else if (key === "z" && undoList().length) { undo(); e.preventDefault(); }
+    // Linear's Ctrl A: the whole list on screen, filtered as it is.
+    else if (key === "a" && document.querySelector(".tree .item[data-slug]")) { selectAll(); e.preventDefault(); }
+    else if ((e.key === "Delete" || e.key === "Backspace") && ui.selected.size) { removeMany(selection()); e.preventDefault(); }
     else if (e.key === ",") { go("/settings"); e.preventDefault(); } // the usual key for an app's settings
     else if ((e.key === "Delete" || e.key === "Backspace") && target()) { remove(target()!, page()?.slug ?? null); e.preventDefault(); }
     return;
@@ -87,7 +92,14 @@ function onKeyDown(e: KeyboardEvent) {
   if (key === "g") { gPressed = Date.now(); return; }
 
   const focused = focusedRow();
-  if (key === "j" || e.key === "ArrowDown" || key === "k" || e.key === "ArrowUp") {
+  // Linear's Shift ↑ ↓: the selection grows from the row in focus, a row at a time.
+  if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp") && selectable(ui.focused)) {
+    ui.select([ui.focused!]);
+    moveFocus(e.key === "ArrowDown" ? 1 : -1);
+    if (selectable(ui.focused)) ui.select([ui.focused!]);
+    e.preventDefault();
+  }
+  else if (key === "j" || e.key === "ArrowDown" || key === "k" || e.key === "ArrowUp") {
     moveFocus(key === "j" || e.key === "ArrowDown" ? 1 : -1);
     const now = ui.focused && document.querySelector<HTMLElement>(`.inbox-row[data-slug="${CSS.escape(ui.focused)}"]`);
     if (now) go(now.getAttribute("href")!); // Linear's Inbox opens as you move
@@ -98,6 +110,7 @@ function onKeyDown(e: KeyboardEvent) {
     else go(focused.getAttribute("href")!);
   }
   else if (key === "c") { ui.openCreator(); e.preventDefault(); }
+  else if (key === "x" && selectable(ui.focused)) { ui.toggleSelect(ui.focused!); e.preventDefault(); }
   // Linear's F and Shift+V (linear.app/docs/filters, linear.app/docs/display-options).
   else if (key === "f" && !e.shiftKey && document.querySelector(".filter-open")) { filterMenu({ anchor: document.querySelector(".filter-open") }); e.preventDefault(); }
   else if (key === "v" && e.shiftKey && document.querySelector(".display-open")) { listView.setDisplay(!listView.displayOpen); e.preventDefault(); }
@@ -112,6 +125,14 @@ function onKeyDown(e: KeyboardEvent) {
   // Linear's Triage key: 2 declines a chat's issue that came to nothing, as Dropped. The chat itself stays open.
   else if (key === "2" && (focused ?? document.querySelector<HTMLElement>(".issue"))?.dataset.state === "triage") {
     setField(target()!, "state", "dropped").then(() => toast("Declined: nothing to do."));
+    e.preventDefault();
+  }
+  else if ((key === "s" || key === "p") && ui.selected.size) {
+    // With a selection, S and P change every selected issue, from the menu at the row in focus or at the bar.
+    const field = key === "s" ? "state" : "priority";
+    const at = (focused && ui.selected.has(focused.dataset.slug ?? "") && focused.querySelector(`.icon[data-field=${field}]`))
+      || document.querySelector(".select-bar");
+    selectionField(field, { anchor: at });
     e.preventDefault();
   }
   else if (key === "s" || key === "p") {
@@ -171,6 +192,7 @@ function onMouseMove(e: MouseEvent) {
 export const Frame = observer(function Frame() {
   const { pathname, search } = useLocation();
   useEffect(() => noteAppPath(pathname + search), [pathname, search]);
+  useEffect(() => ui.clearSelection(), [pathname]); // a selection belongs to its page's list
   useEffect(() => {
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("click", onClick);
@@ -188,6 +210,7 @@ export const Frame = observer(function Frame() {
       <div className="panel"><Outlet /></div>
       <Corner />
       <KeysPanel />
+      <SelectionBar />
       <CreatorHost />
       <MenuHost />
       <ToastHost />

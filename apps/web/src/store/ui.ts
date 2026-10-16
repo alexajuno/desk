@@ -1,5 +1,6 @@
-// What the app's screen holds besides the data: the row in focus (hover, or J and K, as in Linear), an open editor,
-// the shortcuts panel, the new issue panel, and changes shown before the server has them.
+// What the app's screen holds besides the data: the row in focus (hover, or J and K, as in Linear), the rows selected
+// (X, Shift-click, Shift ↑ ↓, Ctrl A, as in Linear), an open editor, the shortcuts panel, the new issue panel, and
+// changes shown before the server has them.
 import { action, makeObservable, observable, observableRef } from "mobx";
 import type { Field } from "../lib/desk";
 
@@ -15,6 +16,8 @@ export interface CreatorPreset {
 
 class UI {
   focused: string | null = null; // the slug of the row in focus
+  selected = observable.set<string>(); // the slugs of the rows selected, which S, P, right-click and the bar act on
+  anchor: string | null = null; // where a Shift-click's range starts: the row last selected
   byMouse = false;
   editing = false;
   keysOpen = false;
@@ -24,13 +27,33 @@ class UI {
   constructor() {
     makeObservable(this, {
       focused: observable, byMouse: observable, editing: observable, keysOpen: observable, creator: observableRef,
-      focus: action, setEditing: action, setKeys: action, openCreator: action, closeCreator: action, paint: action, unpaint: action,
+      focus: action, select: action, toggleSelect: action, unselect: action, clearSelection: action, setEditing: action, setKeys: action, openCreator: action, closeCreator: action, paint: action, unpaint: action,
     });
   }
 
   focus(slug: string | null, byMouse = false) {
     this.focused = slug;
     this.byMouse = byMouse;
+  }
+
+  select(slugs: string[]) {
+    for (const slug of slugs) this.selected.add(slug);
+    if (slugs.length) this.anchor = slugs[slugs.length - 1];
+  }
+
+  toggleSelect(slug: string) {
+    if (this.selected.has(slug)) this.selected.delete(slug);
+    else this.selected.add(slug);
+    this.anchor = slug;
+  }
+
+  unselect(slugs: string[]) {
+    for (const slug of slugs) this.selected.delete(slug);
+  }
+
+  clearSelection() {
+    this.selected.clear();
+    this.anchor = null;
   }
 
   setEditing(on: boolean) {

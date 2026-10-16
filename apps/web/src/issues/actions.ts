@@ -24,6 +24,8 @@ export async function setFields(slugs: string[], field: Settable, value: string)
   else if (!autoClosed(await res.json())) toast(`${slugs.length} issues changed`);
   await reloadPages();
   for (const slug of slugs) ui.unpaint(slug);
+  // An issue the change took off the list, such as one dropped, leaves the selection.
+  ui.unselect(slugs.filter((slug) => !document.querySelector(`.tree .item[data-slug="${CSS.escape(slug)}"]`)));
 }
 
 // Says what Settings › Workflows & automations closed along with a change, if anything.
@@ -81,13 +83,36 @@ export async function remove(slug: string, here: string | null) {
   else await reloadPages();
 }
 
-export async function undo() {
-  const list = undoList(), last = list.pop();
-  if (!last) return;
-  sessionStorage.undo = JSON.stringify(list);
-  const res = await post(`/trash/${last.slug}/restore`);
-  if (!res.ok) return toast(await reason(res));
-  toast("Issue restored");
+// A list's selection, each with its sub-issues; Undo brings them all back, Ctrl Z one at a time.
+export async function removeMany(slugs: string[]) {
+  const gone: string[] = [], undone: Undo[] = [];
+  for (const slug of slugs) {
+    if (gone.includes(slug)) continue; // went with a selected parent
+    const res = await post(`/issue/${slug}/delete`);
+    if (!res.ok) { toast(await reason(res)); break; }
+    gone.push(...((await res.json()) as { deleted: string[] }).deleted);
+    undone.push({ slug, back: null, to: null });
+  }
+  sessionStorage.undo = JSON.stringify([...undoList(), ...undone].slice(-20));
+  ui.clearSelection();
+  if (ui.focused && gone.includes(ui.focused)) ui.focus(null);
+  if (undone.length) toast(`${gone.length} issues deleted`, { label: "Undo", kbd: "Ctrl Z", run: () => undo(undone.length) });
+  await reloadPages();
+}
+
+export async function undo(times = 1) {
+  let restored = 0, last: Undo | undefined;
+  for (let n = 0; n < times; n++) {
+    const list = undoList();
+    last = list.pop();
+    if (!last) break;
+    sessionStorage.undo = JSON.stringify(list);
+    const res = await post(`/trash/${last.slug}/restore`);
+    if (!res.ok) return toast(await reason(res));
+    restored++;
+  }
+  if (!restored || !last) return;
+  toast(restored > 1 ? `${restored} issues restored` : "Issue restored");
   if (last.back && deskPath() === last.to) go(last.back, { replace: true });
   else await reloadPages();
 }

@@ -120,11 +120,11 @@ function Workflow() {
   return (
     <Section title="Auto-close automations" about="Automate closing issues based on status changes to related issues.">
       <Row id="parent_auto_close" title="Auto-close parent issues"
-        about="Automatically close an open parent issue when its last sub-issue is closed, as Done if any of them is">
+        about="Automatically close an open parent issue when its last sub-issue is closed">
         <Switch id="parent_auto_close" on={shown.parent_auto_close} change={(on) => change("parent_auto_close", on)} />
       </Row>
       <Row id="sub_issue_auto_close" title="Auto-close sub-issues"
-        about="Automatically close all sub-issues when their parent issue is closed, as Done or Dropped like the parent">
+        about="Automatically close all sub-issues when their parent issue is closed">
         <Switch id="sub_issue_auto_close" on={shown.sub_issue_auto_close} change={(on) => change("sub_issue_auto_close", on)} />
       </Row>
     </Section>

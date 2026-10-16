@@ -60,6 +60,8 @@
   --shadow-card: lch(100% 0 0 / 0.083) 0 0 0 0.5px, lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
   --hairline: lch(100% 0 0 / 0.083);
   --switch-off: lch(47.551% 0.913 272);
+  --bg-selected: lch(12.5% 6 282);         /* a selected row (the Selection block below), not measured */
+  --bg-selected-hover: lch(15% 8 282);
   /* a group's triangle at rest (--text-2 under the mouse), and Linear's tooltip with its key caps: one shade
      everywhere, a lighter one over the list's raised group header (the .tip block below) */
   --group-toggle: lch(20.032% 7 270.292);
@@ -131,6 +133,8 @@
   --shadow-card: lch(0 0 0 / 0.09) 0 0 0 0.5px, lch(0 0 0 / 0.04) 0 1px 2px;
   --hairline: lch(0% 0 0 / 0.09);
   --switch-off: lch(80% 1.25 282);
+  --bg-selected: lch(93% 5 282);
+  --bg-selected-hover: lch(90.5% 7 282);
   --group-toggle: lch(80.94% 12 279.067); /* the list's group triangle and its tooltip, measured 2026-10-15 */
   --bg-tip: lch(100% 0 282);
   --border-tip: lch(91.9% 0 282);
@@ -726,3 +730,27 @@ button.chip-part:hover { background: var(--bg-hover); color: var(--text-1); }
 .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 button.set-pick { height: 30px; padding: 0 8px 0 10px; border-radius: 6px; font-size: 13px; color: var(--text-1); box-shadow: var(--shadow-card); }
 button.set-pick svg { color: var(--text-3); }
+
+/* Selection, as Linear's lists: a selected row tinted, a 14px checkbox in the row's left gutter under the mouse, on
+   every row once one is selected; and the bar of what to do with them, floating over the foot of the panel. Rows with
+   no gutter (an issue's sub-issues, a project's issues) select with X and Shift-click only. */
+.tree .item { position: relative; }
+.item.selected { background: var(--bg-selected); }
+.item.selected:hover, .item.selected.focus { background: var(--bg-selected-hover); }
+.item .select-box { display: none; }
+.tree .item .select-box { position: absolute; left: 5px; top: 50%; translate: 0 -50%; display: grid; place-items: center; box-sizing: border-box;
+                          width: 14px; height: 14px; border: 1px solid var(--border-3); border-radius: 4px; background: var(--bg-panel);
+                          color: transparent; cursor: pointer; opacity: 0; }
+.tree .tree .item .select-box { left: 1px; }
+.issue .tree .item .select-box, .project-page .tree .item .select-box { display: none; }
+.tree .item:hover .select-box, .item.selected .select-box, :root:has(.item.selected) .tree .item .select-box { opacity: 1; }
+.item.selected .select-box { border-color: var(--accent); background: var(--accent); color: var(--on-accent); } /* as a menu's ticked box */
+.select-bar { position: fixed; bottom: 24px; left: calc(244px + (100vw - 252px) / 2); translate: -50% 0; z-index: 30; display: flex;
+              align-items: center; gap: 4px; height: 40px; padding: 0 6px 0 14px; box-sizing: border-box; background: var(--bg-pop);
+              border: 0.5px solid var(--border-pop); border-radius: 10px; box-shadow: var(--shadow-pop); white-space: nowrap; }
+.side-collapsed .select-bar { left: 50%; }
+.select-count { font-weight: 500; color: var(--text-1); }
+.select-bar .select-clear { width: 24px; padding: 0; justify-content: center; }
+.select-sep { width: 0.5px; height: 20px; margin: 0 4px; background: var(--border-pop); }
+.select-bar button svg { width: 14px; height: 14px; }
+@media (max-width: 900px) { .select-bar { left: 50%; } }
