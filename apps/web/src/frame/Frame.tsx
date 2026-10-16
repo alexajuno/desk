@@ -3,11 +3,12 @@
 // across the page live here, as desk.js read them on the document.
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
-import { Outlet } from "react-router";
+import { Outlet, useLocation } from "react-router";
 import { deskPath, go } from "../app/nav";
 import { openWindow, remove, setField, undo, undoList } from "../issues/actions";
 import { fieldMenu } from "../issues/menus";
 import { listView } from "../lists/current";
+import { noteAppPath, SettingsNav } from "../settings/SettingsPage";
 import { filterMenu } from "../lists/parts";
 import { type Field } from "../lib/desk";
 import { keyOf, typing } from "../lib/keys";
@@ -71,6 +72,7 @@ function onKeyDown(e: KeyboardEvent) {
     const step = keyOf(e) === "Enter" && document.querySelector<HTMLButtonElement>(".strip .strip-go:not(:disabled)");
     if (step) { step.click(); e.preventDefault(); }
     else if (key === "z" && undoList().length) { undo(); e.preventDefault(); }
+    else if (e.key === ",") { go("/settings"); e.preventDefault(); } // the usual key for an app's settings
     else if ((e.key === "Delete" || e.key === "Backspace") && target()) { remove(target()!, page()?.slug ?? null); e.preventDefault(); }
     return;
   }
@@ -167,6 +169,8 @@ function onMouseMove(e: MouseEvent) {
 }
 
 export const Frame = observer(function Frame() {
+  const { pathname, search } = useLocation();
+  useEffect(() => noteAppPath(pathname + search), [pathname, search]);
   useEffect(() => {
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("click", onClick);
@@ -179,7 +183,8 @@ export const Frame = observer(function Frame() {
   }, []);
   return (
     <>
-      <Sidebar />
+      {/* Settings has its own sidebar, as Linear's. */}
+      {pathname.startsWith("/settings") ? <SettingsNav /> : <Sidebar />}
       <div className="panel"><Outlet /></div>
       <Corner />
       <KeysPanel />

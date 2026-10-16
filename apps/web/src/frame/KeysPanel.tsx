@@ -9,7 +9,7 @@ import { ui } from "../store/ui";
 
 const GROUPS: [string, [string, string][]][] = [
   ["General", [["Open search", "/"], ["Create an issue", "C"], ["View keyboard shortcuts", "Ctrl /"], ["Close, or go back from an issue", "Esc"], ["Undo a delete", "Ctrl Z"]]],
-  ["Navigation", [["Toggle left sidebar", "["], ["Go to inbox", "G then I"], ["Go to sessions", "G then S"], ["Go to backlog", "G then B"], ["Go to projects", "G then P"]]],
+  ["Navigation", [["Toggle left sidebar", "["], ["Go to inbox", "G then I"], ["Go to sessions", "G then S"], ["Go to backlog", "G then B"], ["Go to projects", "G then P"], ["Open settings", "Ctrl ,"]]],
   ["List", [["Move down", "J or ↓"], ["Move up", "K or ↑"], ["Open the issue", "Enter"], ["Collapse or expand the group", "T"], ["Collapse or expand all of them", "Alt Click"], ["Filter", "F"], ["Display options", "Shift V"]]],
   ["Issues", [["Next step: Plan, Approve", "Ctrl Enter"], ["Open chat", "O"], ["Decline, in Triage", "2"], ["Change status", "S"], ["Change priority", "P"], ["Delete the issue", "Ctrl Delete"], ["Actions on a row", "Right-click"], ["Save the title", "Enter"], ["Save the description", "Ctrl Enter"]]],
   ["Sessions", [["New session, from any page", "Ctrl ⇧ O"], ["Search the sessions", "Ctrl F"], ["From the search into the list", "↓"], ["Open the session", "Enter"], ["Clear the search, then go back", "Esc"]]],

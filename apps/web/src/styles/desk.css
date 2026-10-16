@@ -55,6 +55,11 @@
   --avatar-session: lch(58% 45 290);       /* the Inbox's avatar for an issue's session */
   --shadow-keys: lch(0 0 0 / 0.125) 0 3px 8px, lch(0 0 0 / 0.125) 0 2px 5px, lch(0 0 0 / 0.125) 0 1px 1px; /* the shortcuts panel */
   --overlay: lch(0 0 0 / 0.5);
+  /* Settings' cards and switches (the Settings block below), measured on Linear's Settings on 2026-10-17 */
+  --bg-card: lch(9.232% 0.85 272);
+  --shadow-card: lch(100% 0 0 / 0.083) 0 0 0 0.5px, lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
+  --hairline: lch(100% 0 0 / 0.083);
+  --switch-off: lch(47.551% 0.913 272);
   /* a group's triangle at rest (--text-2 under the mouse), and Linear's tooltip with its key caps: one shade
      everywhere, a lighter one over the list's raised group header (the .tip block below) */
   --group-toggle: lch(20.032% 7 270.292);
@@ -122,6 +127,10 @@
   --shadow-keys: var(--shadow-pop);
   --avatar-session: lch(58% 45 290);
   --overlay: lch(0% 0 0 / 0.25);          /* bgModalOverlay */
+  --bg-card: lch(100% 0 282);             /* Settings' cards and switches: not measured in light, set to match */
+  --shadow-card: lch(0 0 0 / 0.09) 0 0 0 0.5px, lch(0 0 0 / 0.04) 0 1px 2px;
+  --hairline: lch(0% 0 0 / 0.09);
+  --switch-off: lch(80% 1.25 282);
   --group-toggle: lch(80.94% 12 279.067); /* the list's group triangle and its tooltip, measured 2026-10-15 */
   --bg-tip: lch(100% 0 282);
   --border-tip: lch(91.9% 0 282);
@@ -687,3 +696,33 @@ button.chip-part:hover { background: var(--bg-hover); color: var(--text-1); }
 .dp-reset { height: 24px; padding: 0 8px; border: 0; border-radius: 9999px; background: none; color: var(--text-1); font: 500 12px var(--font); }
 .dp-reset:hover { background: var(--bg-active); }
 .menu.options { width: 160px; }
+
+/* Settings, as Linear's, measured on linear.app's Settings pages on 2026-10-17 (dark): its own sidebar with Back to
+   app; a 640px column whose title, 24px on 32px at weight 500 and -0.16px, sits 64px under the panel's top; each
+   section a 15px on 23px heading with an optional 13px on 22px note, 16px above its card, 48px under the card before
+   it. A card is --bg-card with 10px corners and a 0.5px ring; its rows are 16px padded and at least 60px high, parted
+   by a 0.5px hairline 16px in from each side; a row's name is 13px at weight 500 and its note 12px, 2px under it.
+   The switch is a 30x20 pill, --btn-primary when on, its 14px knob 3px in from the end, moving in 0.15s. */
+.settings-side .settings-back { margin-bottom: 8px; color: var(--text-2); }
+.settings { width: 640px; max-width: calc(100% - 32px); margin: 0 auto; padding: 19px 0 120px; }
+.settings h1 { margin: 0 16px; font-size: 24px; font-weight: 500; line-height: 32px; letter-spacing: -0.16px; color: var(--text-1); }
+.settings .set-lead { margin: 0 16px; font-size: 13px; line-height: 22px; color: var(--text-3); }
+.set-section { margin-top: 32px; }
+.set-section + .set-section { margin-top: 48px; }
+.set-section h3 { margin: 0 16px; font-size: 15px; font-weight: 500; line-height: 23px; color: var(--text-1); }
+.set-about { margin: 0 16px; font-size: 13px; line-height: 22px; color: var(--text-3); }
+.set-card { margin: 16px 0 0; padding: 0; list-style: none; background: var(--bg-card); border-radius: 10px; box-shadow: var(--shadow-card); }
+.set-row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 60px; box-sizing: border-box; padding: 16px; }
+.set-row + .set-row::before { content: ""; position: absolute; top: 0; left: 16px; right: 16px; border-top: 0.5px solid var(--hairline); }
+.set-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.set-text label { font-size: 13px; font-weight: 500; color: var(--text-1); }
+.set-text span { font-size: 12px; line-height: normal; color: var(--text-3); }
+.switch { appearance: none; position: relative; flex: none; width: 30px; height: 20px; margin: 0 6px 0 0; border-radius: 72px;
+          background: var(--switch-off); cursor: pointer; transition: background-color 0.15s ease-out; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 7px;
+                 background: var(--btn-primary-text); transition: left 0.15s ease-out; }
+.switch:checked { background: var(--btn-primary); }
+.switch:checked::after { left: 13px; }
+.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.set-pick { height: 30px; padding: 0 8px 0 10px; border-radius: 6px; font-size: 13px; color: var(--text-1); box-shadow: var(--shadow-card); }
+button.set-pick svg { color: var(--text-3); }

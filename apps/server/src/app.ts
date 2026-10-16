@@ -226,7 +226,7 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/version", async (_req, reply) => reply.type("text/plain; charset=utf-8").send(pages.version()));
 
   // desk's pages are the app's: each address answers with it, and the app asks /api/page/... for the data.
-  for (const path of ["/backlog", "/projects", "/project/:slug", "/inbox", "/search", "/issue/:slug", "/sessions", "/settings"])
+  for (const path of ["/backlog", "/projects", "/project/:slug", "/inbox", "/search", "/issue/:slug", "/sessions", "/settings", "/settings/:section"])
     app.get(path, async (_req, reply) => web.index(reply));
   app.get("/", async (_req, reply) => reply.redirect("/backlog", 307));
   app.get("/park", async (_req, reply) => reply.redirect("/backlog", 307));

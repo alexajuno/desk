@@ -5,12 +5,32 @@ import type { Field } from "../lib/desk";
 import { toast } from "../ui/toast";
 import { reloadPages, ui } from "../store/ui";
 
-export async function setField(slug: string, field: Field | "title" | "body" | "waiting_on" | "project" | "parent", value: string) {
+type Settable = Field | "title" | "body" | "waiting_on" | "project" | "parent";
+
+export async function setField(slug: string, field: Settable, value: string) {
   if (field === "state" || field === "priority" || field === "protocol") ui.paint(slug, field, value);
   const res = await post(`/issue/${slug}/set`, { field, value });
   if (!res.ok) toast(await reason(res));
+  else autoClosed(await res.json());
   await reloadPages();
   ui.unpaint(slug);
+}
+
+// The same field on every issue of a list's selection, saved whole or not at all.
+export async function setFields(slugs: string[], field: Settable, value: string) {
+  if (field === "state" || field === "priority") for (const slug of slugs) ui.paint(slug, field, value);
+  const res = await postJson("/issues/set", { slugs, field, value });
+  if (!res.ok) toast(await reason(res));
+  else if (!autoClosed(await res.json())) toast(`${slugs.length} issues changed`);
+  await reloadPages();
+  for (const slug of slugs) ui.unpaint(slug);
+}
+
+// Says what Settings › Workflows & automations closed along with a change, if anything.
+function autoClosed({ closed }: { closed?: string[] }): boolean {
+  if (!closed?.length) return false;
+  toast(`Auto-closed ${closed.length} more issue${closed.length > 1 ? "s" : ""}`);
+  return true;
 }
 
 export async function setFolder(slug: string, folder: string) {

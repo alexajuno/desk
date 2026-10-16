@@ -10,6 +10,7 @@ import { ProjectsPage } from "../lists/ProjectsPage";
 import { listUrl } from "../lists/useList";
 import { SearchPage } from "../search/SearchPage";
 import { SessionsPage } from "../sessions/SessionsPage";
+import { SettingsPage } from "../settings/SettingsPage";
 
 // Each page's loader fetches its JSON before the router moves to it, so the page on screen stays until the next one can
 // draw whole (api/page.ts, prime). The first page desk opens on draws at once, as before, and fetches its own.
@@ -35,5 +36,7 @@ export const router = createBrowserRouter(
     }) },
     { path: "/search", element: <SearchPage /> },
     { path: "/sessions", element: <SessionsPage /> },
+    { path: "/settings", element: <Navigate to="/settings/preferences" replace /> },
+    { path: "/settings/:section", element: <SettingsPage />, loader: at(() => "/api/settings") },
   ] }],
 );
