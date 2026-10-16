@@ -21,7 +21,9 @@ export function run(argv: string[], opts: { cwd?: string; env?: NodeJS.ProcessEn
       const code = error ? (typeof error.code === "number" ? error.code : 1) : 0;
       resolve({ code, stdout, stderr });
     });
-    if (opts.input !== undefined) child.stdin?.end(opts.input);
+    // Ended even with no input, as Python's run inherited desk.service's /dev/null: `claude --bg` waits about 3 s for a
+    // prompt on a stdin left open before it starts the session (Claude Code 2.1.300, 17 Oct).
+    child.stdin?.end(opts.input);
   });
 }
 
