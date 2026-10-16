@@ -66,9 +66,8 @@ export const InboxPage = observer(function InboxPage() {
   const { data, reload } = usePage<InboxData>(`/api/page/inbox${i ? `?i=${encodeURIComponent(i)}` : ""}`);
   const open = data?.open && data.open.issue.slug === i ? data.open : data?.open ?? null;
   const seen = useSeen(data?.items, open?.issue.slug ?? null);
-  // A session that replies, waits for you or writes its plan changes no issue, so the sync socket says nothing; the
-  // sidebar's ask every 3 s (store/frame.ts) sees it in the Inbox's rows, and the page asks again when they changed,
-  // as desk.js refreshed the page.
+  // A session that replies, waits for you or writes its plan changes no issue, so the sync socket's changes say
+  // nothing; the frame desk sends then (store/frame.ts) has the Inbox's rows, and the page asks again when they changed.
   const rows = frame.data?.rows.map((n) => `${n.slug}:${n.why}`).join(" ");
   const shownRows = useRef(rows);
   useEffect(() => {

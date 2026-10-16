@@ -4,18 +4,22 @@
 //
 //     {"type": "snapshot", "seq": 7, "issues": [<issue>, ...], "projects": [<project>, ...]}   first, on every connect
 //     {"type": "changes",  "seq": 8, "upsert": [<issue>, ...], "delete": [<slug>, ...], "projects": [...]}
+//     {"type": "frame", "frame": <frame>}                                                       on connect, then when it changed
 //
 // An <issue> is what GET /api/issues lists (api.ts, asJson); a <project> is {slug, title, state}. "projects" comes in a
-// change only when a project changed, as the whole list.
+// change only when a project changed, as the whole list. A <frame> is the sidebar and the Inbox's rows, with each open
+// issue's session state (pages.ts, framePage).
 //
 // desk's own saves tell this module at once (issues.onChange). An editor's change to an issue.md or project.md is seen
 // on the folders, read into the database (reconcile), and sent the same way.
-import { mkdirSync, watch } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, watch } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { WebSocket } from "ws";
+import * as agents from "./agents.ts";
 import { asJson } from "./api.ts";
-import { ISSUES_DIR, PROJECTS_DIR } from "./config.ts";
+import { HOME, ISSUES_DIR, PROJECTS_DIR } from "./config.ts";
 import * as store from "./issues.ts";
+import * as pages from "./pages.ts";
 import * as projects from "./projects.ts";
 
 let issues = new Map<string, string>(); // slug: the issue as the apps were last told, as JSON
@@ -32,8 +36,29 @@ async function listProjects(): Promise<string> {
   return JSON.stringify(all.map((p) => ({ slug: p.slug, title: p.title, state: p.state })));
 }
 
-// One check at a time, and one more after it when something changed meanwhile.
-let checking: Promise<void> | null = null, again = false;
+// One run at a time, and one more after it when asked meanwhile.
+function serial(name: string, work: () => Promise<void>): () => Promise<void> {
+  let running: Promise<void> | null = null, again = false;
+  return () => {
+    if (running) {
+      again = true;
+      return running;
+    }
+    running = (async () => {
+      try {
+        do {
+          again = false;
+          await work();
+        } while (again);
+      } catch (error) {
+        console.error(name, error);
+      } finally {
+        running = null;
+      }
+    })();
+    return running;
+  };
+}
 
 // Read every issue again and tell the apps what differs from what they were told.
 async function checkNow() {
@@ -49,24 +74,60 @@ async function checkNow() {
   for (const ws of listeners) ws.send(message);
 }
 
-export function check(): Promise<void> {
-  if (checking) {
-    again = true;
-    return checking;
+export const check = serial("sync", checkNow);
+
+// --- the frame ---------------------------------------------------------------------------------------------------------
+// A session that starts or stops working, or writes its plan, questions or result, changes no issue, yet the Inbox and
+// the strips say it. Claude Code rewrites ~/.claude/sessions/<pid>.json the moment a session's turn starts or ends
+// ("status": busy or idle; `claude agents` reads it there) and removes it when the process ends, so desk watches those
+// and the files a session writes beside issue.md, and sends the frame again when it changed. A tick catches what no
+// file shows: time (a landing stuck for a minute) and the window in front (a chat's reply read as it came).
+
+const SESSIONS = join(HOME, ".claude", "sessions");
+const AGENT_FILES = ["plan.md", "questions.md", "result.md"];
+const TICK = 5000; // ms
+
+let frameText = ""; // the frame as the apps were last told
+
+async function frameNow() {
+  if (!listeners.size) {
+    frameText = ""; // an app that connects next is told afresh
+    return;
   }
-  checking = (async () => {
+  await agents.live(true); // the frame's own asks reuse this answer
+  const text = JSON.stringify(await pages.framePage());
+  if (text === frameText) return;
+  frameText = text;
+  const message = `{"type":"frame","frame":${text}}`;
+  for (const ws of listeners) ws.send(message);
+}
+
+const frame = serial("sync frame", frameNow);
+
+// What each running session is doing, as its state file says.
+function sessionStates(): string {
+  let names: string[];
+  try {
+    names = readdirSync(SESSIONS).filter((n) => n.endsWith(".json")).sort();
+  } catch {
+    return "";
+  }
+  return names.map((n) => {
     try {
-      do {
-        again = false;
-        await checkNow();
-      } while (again);
-    } catch (error) {
-      console.error("sync", error);
-    } finally {
-      checking = null;
+      const s = JSON.parse(readFileSync(join(SESSIONS, n), "utf8"));
+      return `${s.sessionId}:${s.status}`;
+    } catch {
+      return n; // written as we read: its next write tells again
     }
-  })();
-  return checking;
+  }).join(" ");
+}
+
+// Gathers a burst of writes into one call of fn.
+function soon(fn: () => void, ms = 50): () => void {
+  let timer: NodeJS.Timeout | null = null;
+  return () => {
+    if (!timer) timer = setTimeout(() => { timer = null; fn(); }, ms);
+  };
 }
 
 // An issue's or a project's own file, or its folder coming or going (a new issue, a delete into the trash). Files a
@@ -74,35 +135,57 @@ export function check(): Promise<void> {
 const interesting = (path: string) =>
   [store.MAIN, projects.MAIN].includes(basename(path)) || [ISSUES_DIR, PROJECTS_DIR].includes(dirname(path));
 
-// Watch the folders for changes desk did not make, read them in, and tell the apps.
+// Watch the folders for changes desk did not make, read them in, and tell the apps; watch the sessions, and tell the
+// apps the frame.
 export async function start() {
   issues = await snapshot();
   projectList = await listProjects();
-  store.onChange(() => void check());
-  projects.onChange(() => void check());
-  let timer: NodeJS.Timeout | null = null;
-  const fire = async () => {
-    timer = null;
+  const changed = () => {
+    void check();
+    void frame();
+  };
+  store.onChange(changed);
+  projects.onChange(changed);
+  const readIn = soon(async () => {
     try {
       const a = await store.reconcile(), b = await projects.reconcile();
-      if (a || b) await check();
+      if (a || b) changed();
     } catch (error) {
       console.error("sync watcher", error);
     }
-  };
+  });
+  const agentWrote = soon(() => void frame());
   for (const root of [ISSUES_DIR, PROJECTS_DIR]) {
     mkdirSync(root, { recursive: true });
     watch(root, { recursive: true }, (_event, name) => {
-      if (!name || !interesting(join(root, name.toString()))) return;
-      if (!timer) timer = setTimeout(fire, 50);
+      if (!name) return;
+      const path = join(root, name.toString());
+      if (interesting(path)) readIn();
+      else if (root === ISSUES_DIR && AGENT_FILES.includes(basename(path))) agentWrote();
     });
   }
+  mkdirSync(SESSIONS, { recursive: true });
+  let states = sessionStates();
+  const moved = soon(() => {
+    const now = sessionStates();
+    if (now === states) return; // a write that changed no session's state, such as its name
+    states = now;
+    void frame();
+  });
+  watch(SESSIONS, (_event, name) => {
+    if (name?.toString().endsWith(".json")) moved();
+  });
+  setInterval(() => {
+    if (listeners.size) void frame();
+  }, TICK);
 }
 
-// A connected app: the snapshot first, then each change until it leaves.
+// A connected app: the snapshot and the frame first, then each change until it leaves.
 export function connect(ws: WebSocket) {
   listeners.add(ws);
   ws.send(`{"type":"snapshot","seq":${seq},"issues":[${[...issues.values()].join(",")}],"projects":${projectList}}`);
+  if (frameText) ws.send(`{"type":"frame","frame":${frameText}}`);
+  void frame(); // what it was told may be from before the last app left
   ws.on("close", () => listeners.delete(ws));
   ws.on("error", () => listeners.delete(ws));
 }

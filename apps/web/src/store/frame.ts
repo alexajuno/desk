@@ -1,16 +1,13 @@
-// The sidebar on every page and the Inbox's rows (pages.ts, /api/page/frame). A session that starts or stops working
-// changes no file, so besides each sync change the app asks every 3 s, as the old pages ask /api/inbox; the timer
-// ticks in a worker, since Chrome checks a page's own timers once a minute once it has been hidden for 5 minutes
-// (developer.chrome.com/blog/timer-throttling-in-chrome-88), and desk waits in the background by design.
+// The sidebar on every page, the Inbox's rows, and where each open issue's session stands (pages.ts, framePage). desk
+// sends it over the sync socket (sync/socket.ts) when it connects and whenever it changed, the moment a session starts
+// or stops working; an action asks for it once more, as it asks for its page.
 //
-// A row no desk tab has seen becomes a desktop notification, unless a desk tab has the focus, where the count shows
-// it. The tabs, old pages included, share what they have seen in localStorage.inboxNotified as "<slug>:<why>" keys,
-// with the time of the last ask: one event notifies once, and a tab that finds no other asked lately (desk was
-// closed) takes the rows it finds as seen.
-import { makeAutoObservable, observableRef, reaction, runInAction } from "mobx";
+// A row no desk tab had becomes a desktop notification, unless a desk tab has the focus, where the count shows it.
+// The tabs share the rows they last had in localStorage.inboxNotified as "<slug>:<why>" keys, so one event notifies
+// once; the rows a tab finds when it opens are not news.
+import { makeAutoObservable, observableRef } from "mobx";
 import type { IssueRow } from "../lib/desk";
 import { post } from "../api/http";
-import { issues } from "./issues";
 import { onReload } from "./ui";
 
 export interface InboxRow {
@@ -32,55 +29,57 @@ export interface FrameData {
   line: { slug: string; branch: string; for: string; issue: IssueRow }[];
   projects: { slug: string; title: string }[];
   rows: InboxRow[];
+  live: Record<string, string>; // slug: where its session stands, for each open issue with one
 }
-
-const EVERY = 3000;
 
 class Frame {
   data: FrameData | null = null;
   private text = "";
-  private asking = false;
 
   constructor() {
-    makeAutoObservable<Frame, "text" | "asking">(this, { data: observableRef, text: false, asking: false });
+    makeAutoObservable<Frame, "text">(this, { data: observableRef, text: false });
+  }
+
+  take(data: FrameData) {
+    const text = JSON.stringify(data);
+    if (text === this.text) return;
+    notifyNew(data.rows);
+    this.text = text;
+    this.data = data;
   }
 
   async load() {
-    if (this.asking) return;
-    this.asking = true;
     try {
       const res = await fetch("/api/page/frame", { cache: "no-store" });
-      if (!res.ok) return;
-      const text = await res.text();
-      if (text === this.text) return;
-      const data = JSON.parse(text) as FrameData;
-      notifyNew(data.rows);
-      runInAction(() => {
-        this.text = text;
-        this.data = data;
-      });
+      if (res.ok) this.take(await res.json());
     } catch {
-      // desk restarting: the next tick asks again
-    } finally {
-      this.asking = false;
+      // desk restarting: the sync socket's frame on reconnect brings it
     }
   }
 }
 
 export const frame = new Frame();
 
-addEventListener("focus", () => { localStorage.deskFocus = Date.now(); });
+// Whether a desk tab has the focus: "1" from its focus until its blur, or until it closes.
+addEventListener("focus", () => { localStorage.deskFocus = 1; });
 addEventListener("blur", () => { localStorage.deskFocus = 0; });
+addEventListener("pagehide", () => { if (document.hasFocus()) localStorage.deskFocus = 0; });
+
+let mine: Set<string> | null = null; // the rows this tab last had
 
 function notifyNew(rows: InboxRow[]) {
   const keys = rows.map((row) => `${row.slug}:${row.why}`);
   const shared = JSON.parse(localStorage.inboxNotified ?? "null");
-  const known = new Set<string>(shared && Date.now() - shared.at < 4 * EVERY ? shared.keys : keys);
+  const told = new Set<string>(Array.isArray(shared?.keys) ? shared.keys : []); // what another tab took first
+  const had = mine ?? new Set(keys);
+  mine = new Set(keys);
   localStorage.inboxNotified = JSON.stringify({ at: Date.now(), keys });
-  if (document.hasFocus()) localStorage.deskFocus = Date.now();
-  const watched = Date.now() - Number(localStorage.deskFocus ?? 0) < 2 * EVERY;
+  const watched = document.hasFocus() || localStorage.deskFocus === "1";
   if (!watched && window.Notification?.permission === "granted")
-    for (const row of rows) if (!known.has(`${row.slug}:${row.why}`)) notify(row);
+    for (const row of rows) {
+      const key = `${row.slug}:${row.why}`;
+      if (!had.has(key) && !told.has(key)) notify(row);
+    }
 }
 
 // The notification reads as the Inbox's row: the issue's title, then what its session did. A newer one for the same
@@ -97,9 +96,6 @@ function notify(row: InboxRow) {
 }
 
 export function startFrame() {
-  const ticker = new Worker(URL.createObjectURL(new Blob([`setInterval(() => postMessage(0), ${EVERY})`])));
-  ticker.onmessage = () => frame.load();
-  reaction(() => issues.seq, () => frame.load());
   onReload(() => frame.load()); // an action redraws the sidebar with its page, as the old soft refresh swapped both
   frame.load();
 }

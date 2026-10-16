@@ -286,8 +286,8 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
 
 // --- the pages ---------------------------------------------------------------------------------------------------------
 
-// The sidebar on every page, and the Inbox's rows, which the app asks for every few seconds: a session that stops
-// working changes no file.
+// The sidebar on every page, the Inbox's rows, and where each open issue's session stands (live, which its strip says):
+// sync.ts sends it to the app whenever it changed.
 export async function framePage() {
   const all = await store.loadAll();
   const [needs, review] = await inboxItems(all, await agents.live());
@@ -308,6 +308,8 @@ export async function framePage() {
     line: line.filter((w) => all.has(w.slug)).map((w) => ({ slug: w.slug, branch: w.branch ?? null, for: w.for ?? null, issue: issueJson(all.get(w.slug)!) })),
     projects: active.map((p) => ({ slug: p.slug, title: p.title })),
     rows: await inboxRows(),
+    live: Object.fromEntries([...all.values()].filter((i) => i.session && !CLOSED.has(i.state))
+      .map((i) => [i.slug, agents.status(live.get(i.session!) || {})])),
   };
 }
 

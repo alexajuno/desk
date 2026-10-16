@@ -224,13 +224,6 @@ export async function create(): Promise<FastifyInstance> {
   // The Inbox's rows, newest first; every open tab asks every few seconds.
   app.get("/api/inbox", async () => pages.inboxRows());
 
-  // Where the issue's session stands, which its strip says; a session that starts or stops working changes no file.
-  app.get("/issue/:slug/live", async (req: Req, reply) => {
-    await mustExist(req.params.slug, "Not Found");
-    const i = await store.load(req.params.slug);
-    return reply.type("text/plain; charset=utf-8").send(agents.status(await agents.liveRow(i.session)));
-  });
-
   // An issue's own file: Markdown and D2 open as a document, the app's file page; anything else is served as is.
   app.get("/issue/:slug/f/:name", async (req: Req, reply) => {
     const path = pages.issueFile(req.params.slug, req.params.name);
