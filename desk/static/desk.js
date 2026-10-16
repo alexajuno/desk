@@ -1331,6 +1331,11 @@ document.addEventListener("keydown", (e) => {
   // O opens the issue's chat, as its Open chat button does: back to its session once it is done ("approve is ctrl
   // enter right. how about open chat", the user, 15 Oct). An issue with no session says so in a toast.
   else if (key === "o" && target()) { openWindow(`/issue/${target()}/window`); e.preventDefault(); }
+  // Linear's Triage key: 2 declines a chat's issue that came to nothing, as Dropped. The chat itself stays open.
+  else if (key === "2" && (focused?.dataset.slug ? focused : $(".issue"))?.dataset.state === "triage") {
+    setField(target(), "state", "dropped").then(() => toast("Declined: nothing to do."));
+    e.preventDefault();
+  }
   else if (key === "t") {
     const group = $(".group[data-group]:hover") ?? (focused && groupOf(focused));
     if (group) toggleGroup(group);
