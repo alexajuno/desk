@@ -23,7 +23,7 @@ An issue's fields:
 - `parent`: the slug of the issue it belongs under, or null
 - `project`: the slug of the project it belongs to, or null. A project is ongoing work that is never done, such as desk itself; its issues finish, it does not. It is a separate thing from `parent`, which is for sub-issues
 - `folder`: where its session works, usually a repo, such as `~/projects/desk`
-- `protocol`: how much plan it gets, and whether its session waits for the user's "go": `quick` (a three-line brief, then the work at once), `brief` (the same brief, then "go") or `design` (a design doc talked through, then "go"). Pick one when you file: quick for a fix or a small feature, brief where a wrong guess costs more than a redo (a team repo, real data, anything outside), design when the user wants to discuss it. An issue with none runs design. Every protocol ends in the review card and the user's Approve
+- `protocol`: how much plan it gets, and whether its session waits for the user's "go": `quick` (a three-line brief, then the work at once), `brief` (the same brief, then "go") or `design` (planned in the chat in short words and a sketch, then "go"). Pick one when you file: quick for a fix or a small feature, brief where a wrong guess costs more than a redo (a team repo, real data, anything outside), design when the user wants to discuss it. An issue with none runs design. Every protocol ends in the review card and the user's Approve
 
 List the open issues, or search them by the words in their title or body, best match first. Add `&state=all` to include done and dropped ones, or pick states with a list such as `state=running,review`:
 
@@ -72,7 +72,7 @@ desk's own agent chat works an issue itself; it starts no other session. Bind th
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/work" --json '{"chat": "<chat id>"}'
 ```
 
-Then work it by its protocol, in the chat: write `plan.md` in the issue's folder, a three-line brief for quick and brief, a mini design doc ending with Done when and What you may decide alone for design. Go straight on for quick; for the others, wait for the user's "go". Carry the work out in the chat, write `result.md` with the review card, and stop; the issue shows In review, and the user's Approve sends the chat a message to land the work by the repo's rules.
+Then work it by its protocol, in the chat: write `plan.md` in the issue's folder, a three-line brief for quick and brief, and for design a sketch built with the user in short words, as the design-doc skill says, ending with Done when and Decide alone. Go straight on for quick; for the others, wait for the user's "go". Carry the work out in the chat, write `result.md` with the review card, and stop; the issue shows In review, and the user's Approve sends the chat a message to land the work by the repo's rules.
 
 Any other Claude Code session (not the agent chat) can still start an issue's own background session. Send a plan: Direction (what to do, and which way), Done when, and What you may decide alone. A quick or brief issue may start with no plan, `--json '{}'`: its session writes its own brief, then works at once (quick) or waits for the user's "go" (brief). Only a backlog issue, or one in progress whose session has only planned it, can start. If the call answers 409 "Workspace not trusted", tell the user to press Trust folder on the issue's page, then start again.
 

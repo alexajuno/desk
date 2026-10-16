@@ -20,7 +20,7 @@ export const PROTOCOL_NAMES: Record<Protocol, string> = { quick: "Quick", brief:
 export const PROTOCOL_HINTS: Record<Protocol, string> = {
   quick: "A 3-line brief, then the work, no go",
   brief: "A 3-line brief, then waits for go",
-  design: "A design doc you talk through, then go",
+  design: "Talked through with a sketch, then go",
 };
 
 export type Field = "state" | "priority" | "protocol";

@@ -170,7 +170,7 @@ export async function sessionId(short: string): Promise<string> {
   return (await live(true)).get(short)?.sessionId ?? short;
 }
 
-// The session's first prompt, by the issue's protocol: a design doc planned with the user, or a brief, after which it
+// The session's first prompt, by the issue's protocol: a sketch planned with the user, or a brief, after which it
 // waits for "go" or goes on at once. chat is the Agent chat it came from, if any.
 export function planPrompt(i: Issue, folder: string, chat = ""): string {
   const p = paths(i, folder);
