@@ -18,7 +18,7 @@ import { dayAndTime } from "./when.ts";
 
 const TAG = "penguin"; // 🐧, desk's own mark (apps/web/public/favicon.svg), which the user had never reacted with
 const EVERY = 60; // s between two looks; reactions.list allows 20+ a minute ("Tier 2", docs.slack.dev/reference/methods/reactions.list)
-// The user's latest reactions, newest first. The user made 943 from 5 May to 17 Oct, so 100 reach back about two weeks.
+// The user's latest reactions, newest first. The user made 943 from 5 May to 17 Oct, so 100 reach back about two and a half weeks.
 const LATEST = "100";
 // The user's own token, from pass. Its gpg key has no passphrase (gpg-agent's keyinfo: protection C, 17 Oct), so
 // reading it each minute never asks.
@@ -81,7 +81,7 @@ export async function look(base: string) {
     seen.filed.push(key);
     // Written before the chat starts, so a chat that fails to start leaves its issue filed once, not once a minute.
     writeFileSync(STATE, JSON.stringify(seen, null, 1) + "\n", "utf8");
-    if (i) await startChat(i, m, author, i.link!, base);
+    if (i) await startChat(i, m, author, base);
   }
 }
 
@@ -99,8 +99,8 @@ async function file(m: Message, author: string, link: string): Promise<store.Iss
 }
 
 // The chat that reads the message's thread, bound to its issue.
-async function startChat(i: store.Issue, m: Message, author: string, link: string, base: string) {
-  const message = fill(SLACK_PROMPT, { title: i.title, base, slug: i.slug, author, date: when(m), link, quote: quoted(m) });
+async function startChat(i: store.Issue, m: Message, author: string, base: string) {
+  const message = fill(SLACK_PROMPT, { title: i.title, base, slug: i.slug, author, date: when(m), link: i.link!, quote: quoted(m) });
   const chat = await chats.newWindowChat(base, { issue: i, message });
   await store.move(i, { session: chat.session }); // onto the issue as it is now, which the chat may have retitled already
 }
