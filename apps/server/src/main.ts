@@ -1,12 +1,13 @@
 // desk: one place to park, plan, run and review issues with Claude. Run: node apps/server/src/main.ts (PORT picks the
-// port, default 8790; DESK_DATA the data folder, default ~/.local/share/desk; DESK_CLOCK=0 leaves the line's clock off,
-// as a second desk for testing should).
+// port, default 8790; DESK_DATA the data folder, default ~/.local/share/desk; DESK_CLOCK=0 leaves the line's clock and the
+// reaper off, as a second desk for testing should).
 import { create } from "./app.ts";
 import { PORT } from "./config.ts";
 import * as db from "./db.ts";
 import * as store from "./issues.ts";
 import * as land from "./land.ts";
 import * as projects from "./projects.ts";
+import * as reaper from "./reaper.ts";
 import * as sessions from "./sessions.ts";
 import * as sync from "./sync.ts";
 import * as web from "./web.ts";
@@ -18,7 +19,10 @@ await projects.reconcile();
 await web.build();
 const app = await create();
 await sync.start();
-if (process.env.DESK_CLOCK !== "0") land.startClock(); // the line for desk's own checkout moves on its own
+if (process.env.DESK_CLOCK !== "0") {
+  land.startClock(); // the line for desk's own checkout moves on its own
+  reaper.startClock(); // sessions nobody needs any more are stopped on their own
+}
 
 let stopping = false;
 async function stop() {
