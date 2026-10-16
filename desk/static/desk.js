@@ -446,7 +446,7 @@ document.addEventListener("click", (e) => {
   const v = view(), select = t.closest(".dp-select");
   if (select && justClosed !== select) { // a click on the open one closes it
     const key = select.dataset.key;
-    openMenu({ anchor: select, items: () => Object.entries(DISPLAY[key].options).map(([value, name]) => ({
+    openMenu({ anchor: select, className: "options", items: () => Object.entries(DISPLAY[key].options).map(([value, name]) => ({
       label: name, current: value === v[key], run: () => setView({ [key]: value }),
     })) });
   }

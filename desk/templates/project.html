@@ -17,7 +17,7 @@
     </details>
     <div class="section-label">Issues<button class="project-add add-sub" type="button" title="New issue in this project">{{ plus() }}</button></div>
     {{ filter_bar(list) }}
-    {{ groups(list, request.url.path, "No issues yet. A project never ends; its issues do.", pr) }}
+    {{ groups(list, request.url.path, "No issues yet. A project never ends; its issues do.", add=false) }}
   </div>
   <aside class="props">
     <div class="label">Status</div>

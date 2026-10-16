@@ -48,20 +48,19 @@
 {%- endif %}
 {%- endmacro %}
 
-{#- The groups. A group's + opens the new issue panel with what the group says, where the panel can take it: its
-    priority, its project, or Backlog; `project` is the page's own project, which a new issue joins. Folding a group
-    is remembered per page and grouping, under the bare page for its default grouping, as before views. #}
-{% macro groups(list, path, empty, project=none) -%}
+{#- The groups. On the Backlog a group's + opens the new issue panel with what the group says, where the panel can
+    take it: its priority, its project, or Backlog. A project page has its own + above its list. Folding a group is
+    remembered per page and grouping, under the bare page for its default grouping, as before views. #}
+{% macro groups(list, path, empty, add=true) -%}
 {%- set v = list.view %}
 <div class="issue-list" data-collapse-key="{{ path }}{{ '' if v.group == list.data.defaults.group else ' ' ~ v.group }}">
   {%- for g in list.groups %}
   {%- if v.group != "none" %}
-  {%- set add = {"priority": {"priority": g.value}, "status": {"state": g.value} if g.value == "backlog" else none,
-                 "project": {"project": g.value, "project-title": g.label} if g.value != "none" else none}.get(v.group) %}
+  {%- set preset = add and {"priority": {"priority": g.value}, "status": {"state": g.value} if g.value == "backlog" else none,
+                            "project": {"project": g.value, "project-title": g.label} if g.value != "none" else none}.get(v.group) %}
   <div class="group" data-group="{{ g.value }}">{{ toggle() }}{{ value_icon(v.group, g.value) }}{{ g.label }}<span class="count">{{ g.count }}</span>
-    {%- if add is mapping %}
-    <button class="group-add" type="button" title="New issue"{% for k, x in add.items() %} data-{{ k }}="{{ x }}"{% endfor %}
-      {%- if project and "project" not in add %} data-project="{{ project.slug }}" data-project-title="{{ project.title }}"{% endif %}>{{ plus() }}</button>
+    {%- if preset is mapping %}
+    <button class="group-add" type="button" title="New issue"{% for k, x in preset.items() %} data-{{ k }}="{{ x }}"{% endfor %}>{{ plus() }}</button>
     {%- endif %}</div>
   {%- endif %}
   {{ tree(g.items, g.kids_of, g.context) }}
