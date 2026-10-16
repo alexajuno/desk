@@ -502,6 +502,70 @@ def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: st
     return context
 
 
+# --- JSON for the new app (apps/web) ---------------------------------------------------------------
+# What each Jinja template gets, as data, so the new app draws the same pages from the same logic. Dates come
+# formatted as the templates format them (short_date, waited), so both say the same.
+
+def short_date(iso) -> str:
+    return datetime.fromisoformat(str(iso)).strftime("%b %-d") if iso else ""
+
+
+def issue_json(i: store.Issue) -> dict:
+    return {"slug": i.slug, "title": i.title, "state": i.state, "priority": i.priority, "parent": i.parent,
+            "project": i.project, "folder": i.folder, "protocol": i.runs, "link": i.link, "session": i.session,
+            "waiting_on": i.waiting_on, "waiting_since": i.waiting_since,
+            "waiting_since_short": short_date(i.waiting_since), "waited": waited(i.waiting_since) if i.state == "waiting" else "",
+            "created": i.created, "created_short": short_date(i.created)}
+
+
+def tree_json(items: list[store.Issue], kids_of) -> list[dict]:
+    """macros.html's tree: each issue with how many of its sub-issues are open, and its sub-issues under it."""
+    return [issue_json(p) | {"open": sum(k.state not in CLOSED for k in kids_of(p.slug)), "kids": tree_json(kids_of(p.slug), kids_of)}
+            for p in items]
+
+
+@app.get("/api/page/frame")
+def frame_page(request: Request):
+    """The sidebar on every page (sidebar()), and the Inbox's rows, which the app asks for every few seconds as the
+    old pages ask /api/inbox: a session that stops working changes no file."""
+    side = sidebar(request)["sidebar"]
+    trying = side["trying"]
+    return {
+        "backlog": side["backlog"], "inbox": side["inbox"],
+        "triage": [issue_json(i) | {"now": now} for i, now in side["triage"]],
+        "running": [issue_json(i) for i in side["running"]],
+        "landing": [issue_json(i) for i in side["landing"]],
+        "waiting": [issue_json(i) for i in side["waiting"]],
+        "trying": trying and {"slug": trying.get("slug"), "branch": trying.get("branch"),
+                              "issue": trying["issue"] and issue_json(trying["issue"])},
+        "line": [{"slug": w["slug"], "branch": w.get("branch"), "for": w.get("for"), "issue": issue_json(w["issue"])}
+                 for w in side["line"] if w.get("issue")],
+        "projects": [{"slug": p.slug, "title": p.title} for p in side["projects"]],
+        "rows": inbox_rows(),
+    }
+
+
+@app.get("/api/page/issue/{slug}")
+def issue_page(request: Request, slug: str):
+    """issue_view.html's context: the issue, its strip and button, its sections drawn as HTML, and its properties."""
+    all_issues = store.load_all()
+    if slug not in all_issues:
+        raise HTTPException(404, "That issue is gone.")
+    inbox_items(all_issues, agents.live())  # moves it on first, as the page does (show)
+    c = issue_context(request, all_issues, slug)
+    i, pr = c["p"], c["project"]
+    return {
+        "issue": issue_json(i), "body": i.body.strip(), "body_html": c["body"],
+        "project": pr and {"slug": pr.slug, "title": pr.title},
+        "all_projects": [{"slug": x.slug, "title": x.title, "state": x.state} for x in c["all_projects"]],
+        "trail": [{"slug": t.slug, "title": t.title} for t in c["trail"]],
+        "kids": tree_json(c["kids"], c["kids_of"]), "progress": list(c["progress"]),
+        "files": c["files"], "agent_files": c["agent_files"], "card": c.get("card"),
+        "session_kind": c["session"].get("kind"), "live": c["live"],
+        "strip": c["strip"], "trial": c["trial"],
+    }
+
+
 @app.get("/issue/{slug}/live", response_class=PlainTextResponse)
 def live_state(slug: str):
     """Where the issue's session stands (agents.status), which its strip says. A session that starts or stops working
