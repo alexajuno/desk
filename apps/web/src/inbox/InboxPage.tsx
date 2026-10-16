@@ -11,7 +11,9 @@ import { Bar } from "../frame/Bar";
 import { IssueView, type IssuePageData } from "../issues/IssueView";
 import { actionsMenu } from "../issues/menus";
 import { painted } from "../issues/painted";
+import { useLive } from "../issues/useLive";
 import type { IssueRow } from "../lib/desk";
+import { frame } from "../store/frame";
 import { ui } from "../store/ui";
 import { StateIcon } from "../ui/icons";
 import { toggled } from "../ui/menu";
@@ -61,9 +63,20 @@ function NotifyAsk() {
 export const InboxPage = observer(function InboxPage() {
   const [params] = useSearchParams();
   const i = params.get("i") ?? "";
-  const { data } = usePage<InboxData>(`/api/page/inbox${i ? `?i=${encodeURIComponent(i)}` : ""}`);
+  const { data, reload } = usePage<InboxData>(`/api/page/inbox${i ? `?i=${encodeURIComponent(i)}` : ""}`);
   const open = data?.open && data.open.issue.slug === i ? data.open : data?.open ?? null;
   const seen = useSeen(data?.items, open?.issue.slug ?? null);
+  // A session that replies, waits for you or writes its plan changes no issue, so the sync socket says nothing; the
+  // sidebar's ask every 3 s (store/frame.ts) sees it in the Inbox's rows, and the page asks again when they changed,
+  // as desk.js refreshed the page.
+  const rows = frame.data?.rows.map((n) => `${n.slug}:${n.why}`).join(" ");
+  const shownRows = useRef(rows);
+  useEffect(() => {
+    if (rows === shownRows.current) return;
+    shownRows.current = rows;
+    reload();
+  }, [rows, reload]);
+  useLive(open, reload);
   const pane = useRef<HTMLDivElement>(null);
   useEffect(() => { document.title = "Inbox · desk"; }, []);
   // The open issue's pane starts at its top for each notification, and keeps its place while the same one redraws.

@@ -9,6 +9,7 @@ import { toggled } from "../ui/menu";
 import { painted } from "./painted";
 import { IssueView, type IssuePageData } from "./IssueView";
 import { actionsMenu } from "./menus";
+import { useLive } from "./useLive";
 
 export const IssuePage = observer(function IssuePage() {
   const { slug = "" } = useParams();
@@ -21,22 +22,7 @@ export const IssuePage = observer(function IssuePage() {
 
   useEffect(() => { scroll.current?.scrollTo(0, 0); }, [shownSlug]);
   useEffect(() => { if (shown) document.title = `${shown.issue.title} · desk`; }, [shown]);
-
-  // A session that starts or stops working changes no file, so the sync socket misses it, yet the strip says it:
-  // an open issue with a session asks for its state every 3 s and draws again when it changed (desk.js did the same).
-  const live = shown?.issue.session && !["done", "dropped"].includes(shown.issue.state) ? shown.live : null;
-  useEffect(() => {
-    if (live === null) return;
-    const timer = setInterval(async () => {
-      try {
-        const now = await (await fetch(`/issue/${encodeURIComponent(slug)}/live`, { cache: "no-store" })).text();
-        if (now !== live) reload();
-      } catch {
-        // desk restarting
-      }
-    }, 3000);
-    return () => clearInterval(timer);
-  }, [slug, live, reload]);
+  useLive(shown, reload);
 
   const p = shown && painted(shown.issue);
   return (
