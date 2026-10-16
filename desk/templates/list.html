@@ -51,7 +51,7 @@
     <button class="chip-part chip-op" type="button" title="{{ 'Change to is' if c.not else 'Change to is not' }}">{{ "is not" if c.not else "is either of" if n > 1 else "is" }}</button>
     <button class="chip-part chip-values" type="button" title="Change the values">
       {%- for icon in (c["values"] | map(attribute=2) | unique | list)[:3] %}{{ icon_of(icon) }}{% endfor %}
-      <span>{{ c["values"] | map("last") | join(", ") if n < 3 else n ~ " " ~ {"status": "statuses", "priority": "priorities"}.get(c.name, c.name ~ "s") }}</span></button>
+      <span>{{ c["values"] | map(attribute=1) | join(", ") if n < 3 else n ~ " " ~ {"status": "statuses", "priority": "priorities"}.get(c.name, c.name ~ "s") }}</span></button>
     <button class="chip-part chip-remove" type="button" title="Remove filter">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2.97 2.97a.75.75 0 0 1 1.06 0L8 6.94l3.97-3.97a.75.75 0 1 1 1.06 1.06L9.06 8l3.97 3.97a.75.75 0 1 1-1.06 1.06L8 9.06l-3.97 3.97a.75.75 0 0 1-1.06-1.06L6.94 8 2.97 4.03a.75.75 0 0 1 0-1.06z"/></svg></button>
   </span>
