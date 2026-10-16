@@ -4,7 +4,7 @@ import { Link } from "react-router";
 // The app lives at /app beside the old pages until it takes them over (sub-issue 5). Each page moves when it is
 // built; until then a link to it loads the old page. Paths here are desk's own (/issue/x), never /app/...
 export const BASE = "/app";
-const PORTED = [/^\/issue\/[\w-]+$/];
+const PORTED = [/^\/issue\/[\w-]+$/, /^\/backlog$/, /^\/projects$/, /^\/project\/[\w-]+$/, /^\/$/];
 
 export const ported = (path: string) => PORTED.some((re) => re.test(new URL(path, location.origin).pathname));
 

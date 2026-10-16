@@ -11,6 +11,7 @@ import { makeAutoObservable, observableRef, reaction, runInAction } from "mobx";
 import type { IssueRow } from "../lib/desk";
 import { post } from "../api/http";
 import { issues } from "./issues";
+import { onReload } from "./ui";
 
 export interface InboxRow {
   slug: string;
@@ -99,5 +100,6 @@ export function startFrame() {
   const ticker = new Worker(URL.createObjectURL(new Blob([`setInterval(() => postMessage(0), ${EVERY})`])));
   ticker.onmessage = () => frame.load();
   reaction(() => issues.seq, () => frame.load());
+  onReload(() => frame.load()); // an action redraws the sidebar with its page, as the old soft refresh swapped both
   frame.load();
 }

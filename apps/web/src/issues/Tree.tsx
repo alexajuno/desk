@@ -39,13 +39,13 @@ export const Row = observer(function Row({ issue, context = false, here = null, 
   );
 });
 
-export function Tree({ items, context = [], here = null }: { items: TreeRow[]; context?: string[]; here?: string | null }) {
+export function Tree({ items, context = [], here = null }: { items: (TreeRow & { context?: boolean })[]; context?: string[]; here?: string | null }) {
   return (
     <ul className="tree">
       {items.map((p) => (
         <li key={p.slug}>
-          <Row issue={p} context={context.includes(p.slug)} here={here}>
-            {p.open > 0 && <span className="pill">{p.open} open</span>}
+          <Row issue={p} context={p.context || context.includes(p.slug)} here={here}>
+            {p.open > 0 && <span className="pill">{`${p.open} open`}</span>}
             <span className="spacer" /><span className="date">{p.created_short}</span>
           </Row>
           {p.kids.length > 0 && <Tree items={p.kids} context={context} here={here} />}

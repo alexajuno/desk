@@ -566,6 +566,59 @@ def issue_page(request: Request, slug: str):
     }
 
 
+def listing_json(listing: views.Listing, path: str, add: bool) -> dict:
+    """list.html's groups, chips and view, as data. A group's + (add) opens the new issue panel with what the group
+    says, where the panel can take it: its priority, its project, or Backlog."""
+    v = listing.view
+
+    def node(p: store.Issue, g: views.Group) -> dict:
+        kids = g.kids_of(p.slug)
+        return issue_json(p) | {"open": sum(k.state not in CLOSED for k in kids), "context": p.slug in g.context,
+                                "kids": [node(k, g) for k in kids]}
+
+    groups = []
+    for g in listing.groups:
+        preset = None
+        if add and v.group != "none":
+            preset = {"priority": {"priority": g.value}, "status": {"state": g.value} if g.value == "backlog" else None,
+                      "project": {"project": g.value, "projectTitle": g.label} if g.value != "none" else None}.get(v.group)
+        groups.append({"value": g.value, "label": g.label, "icon": g.icon, "count": g.count, "preset": preset,
+                       "items": [node(p, g) for p in g.items]})
+    return {"view": listing.data, "grouped": v.group != "none", "groups": groups, "hidden": listing.hidden,
+            "chips": [{"name": c["name"], "label": c["label"], "not": c["not"], "values": [list(x) for x in c["values"]]}
+                      for c in listing.chips],
+            # Folding a group is remembered per page and grouping, under the bare page for its default grouping.
+            "collapse_key": path + ("" if v.group == listing.data["defaults"]["group"] else f" {v.group}")}
+
+
+@app.get("/api/page/backlog")
+def backlog_page(request: Request):
+    """backlog.html's list; the view is the query itself (views.parse), as the app keeps each page's last view."""
+    all_issues = store.load_all()
+    listing = views.build(views.parse("backlog", request.url.query), list(all_issues.values()), all_issues, projects.load_all())
+    return listing_json(listing, "/backlog", add=True)
+
+
+@app.get("/api/page/project/{slug}")
+def project_json(request: Request, slug: str):
+    if not projects.exists(slug):
+        raise HTTPException(404, "That project is gone.")
+    p = projects.load(slug)
+    all_issues = store.load_all()
+    listing = views.build(views.parse("project", request.url.query), projects.issues_of(all_issues, slug), all_issues,
+                          projects.load_all())
+    return {"project": {"slug": p.slug, "title": p.title, "state": p.state, "body": p.body, "body_html": to_html(p.body)},
+            "list": listing_json(listing, f"/project/{slug}", add=False)}
+
+
+@app.get("/api/page/projects")
+def projects_json():
+    everyone = sorted(projects.load_all().values(), key=lambda p: (p.state != "active", p.created))
+    all_issues = store.load_all()
+    return [{"slug": p.slug, "title": p.title, "state": p.state, "created_short": short_date(p.created),
+             "open": sum(i.state not in CLOSED for i in projects.issues_of(all_issues, p.slug))} for p in everyone]
+
+
 @app.get("/issue/{slug}/live", response_class=PlainTextResponse)
 def live_state(slug: str):
     """Where the issue's session stands (agents.status), which its strip says. A session that starts or stops working

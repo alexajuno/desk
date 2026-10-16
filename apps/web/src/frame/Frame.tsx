@@ -7,6 +7,8 @@ import { Outlet } from "react-router";
 import { deskPath, go } from "../app/nav";
 import { openWindow, remove, setField, undo, undoList } from "../issues/actions";
 import { fieldMenu } from "../issues/menus";
+import { listView } from "../lists/current";
+import { filterMenu } from "../lists/parts";
 import { type Field } from "../lib/desk";
 import { keyOf, typing } from "../lib/keys";
 import { ui } from "../store/ui";
@@ -22,8 +24,12 @@ import { closeSide, sideOpen, toggleSide } from "./side";
 
 // The issue this page shows, on an issue page.
 const page = () => (document.querySelector(".issue") as HTMLElement | null)?.dataset;
-// What S, P, O and Ctrl+Delete act on: the row in focus, else the page's issue.
-const target = () => ui.focused ?? page()?.slug ?? null;
+// A row's key in ui.focused: an issue row's slug, or another row's own key (a project's, a session's).
+const keyOfRow = (row: HTMLElement) => row.dataset.slug ?? row.dataset.key ?? null;
+const focusedRow = () => ui.focused
+  ? document.querySelector<HTMLElement>(`.item[data-slug="${CSS.escape(ui.focused)}"], .item[data-key="${CSS.escape(ui.focused)}"]`) : null;
+// What S, P, O and Ctrl+Delete act on: the issue row in focus, else the page's issue.
+const target = () => focusedRow()?.dataset.slug ?? page()?.slug ?? null;
 
 // The rows J and K move through: in the Inbox, its notifications only, not the open issue's sub-issues; never the
 // rows of a collapsed group.
@@ -32,9 +38,9 @@ const rows = () => [...(document.querySelector(".inbox-list") ?? document).query
 function moveFocus(step: number) {
   const all = rows();
   if (!all.length) return;
-  const i = all.findIndex((row) => row.dataset.slug === ui.focused);
+  const i = all.findIndex((row) => keyOfRow(row) === ui.focused);
   const next = all[Math.max(0, Math.min(all.length - 1, i + step))];
-  ui.focus(next.dataset.slug ?? null);
+  ui.focus(keyOfRow(next));
   next.scrollIntoView({ block: "nearest" });
 }
 
@@ -56,6 +62,7 @@ function onKeyDown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyO") { newSession(); e.preventDefault(); return; }
   if (e.key === "Escape" && ui.keysOpen) { ui.setKeys(false); return; }
   if (e.key === "Escape" && sideOpen()) { closeSide(); return; } // before an issue's Esc goes back
+  if (e.key === "Escape" && listView.displayOpen) { listView.setDisplay(false); return; }
   if (typing(e.target)) { if (e.key === "Escape") (e.target as HTMLElement).blur(); return; }
   const key = e.key.toLowerCase();
 
@@ -77,7 +84,7 @@ function onKeyDown(e: KeyboardEvent) {
   }
   if (key === "g") { gPressed = Date.now(); return; }
 
-  const focused = ui.focused ? document.querySelector<HTMLElement>(`.item[data-slug="${CSS.escape(ui.focused)}"]`) : null;
+  const focused = focusedRow();
   if (key === "j" || e.key === "ArrowDown" || key === "k" || e.key === "ArrowUp") {
     moveFocus(key === "j" || e.key === "ArrowDown" ? 1 : -1);
     const now = ui.focused && document.querySelector<HTMLElement>(`.inbox-row[data-slug="${CSS.escape(ui.focused)}"]`);
@@ -89,6 +96,15 @@ function onKeyDown(e: KeyboardEvent) {
     else go(focused.getAttribute("href")!);
   }
   else if (key === "c") { ui.openCreator(); e.preventDefault(); }
+  // Linear's F and Shift+V (linear.app/docs/filters, linear.app/docs/display-options).
+  else if (key === "f" && !e.shiftKey && document.querySelector(".filter-open")) { filterMenu({ anchor: document.querySelector(".filter-open") }); e.preventDefault(); }
+  else if (key === "v" && e.shiftKey && document.querySelector(".display-open")) { listView.setDisplay(!listView.displayOpen); e.preventDefault(); }
+  // T folds the group under the mouse, or the focused row's.
+  else if (key === "t") {
+    const groups = [...document.querySelectorAll<HTMLElement>(".group[data-group]")];
+    const group = document.querySelector<HTMLElement>(".group[data-group]:hover") ?? (focused && groups.find((g) => g.nextElementSibling?.contains(focused)));
+    group?.querySelector<HTMLElement>(".group-toggle")?.click();
+  }
   // O opens the issue's chat, as its Open chat button does; an issue with no session says so in a toast.
   else if (key === "o" && target()) { openWindow(`/issue/${target()}/window`); e.preventDefault(); }
   // Linear's Triage key: 2 declines a chat's issue that came to nothing, as Dropped. The chat itself stays open.

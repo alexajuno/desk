@@ -117,7 +117,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
           {/* Sub-issues sit right under the title, so a long description or plan never pushes them down the page. */}
           <section className="sec" data-sec="sub-issues">
             <div className="section-label sec-head"><Fold />Sub-issues
-              {data.progress[1] > 0 && <span className="pill">{data.progress[0]}/{data.progress[1]} done</span>}
+              {data.progress[1] > 0 && <span className="pill">{`${data.progress[0]}/${data.progress[1]} done`}</span>}
               <button className="add-sub" type="button" title="Add sub-issue" onClick={() => ui.openCreator({ parent: p.slug, parentTitle: p.title })}>{PLUS}</button>
             </div>
             <div className="sec-body">{data.kids.length > 0 && <Tree items={data.kids} />}</div>
@@ -214,7 +214,7 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ color: "var(--text-3)" }} stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><circle cx="8" cy="8" r="5.75" /><path d="M8 5v3l2 1.25" /></svg>
             <span className={p.waiting_on ? undefined : "muted"}>{p.waiting_on || "Who or what?"}</span>
           </button>
-          <div className="prop static muted">since {p.waiting_since_short}{p.waited !== "today" && ` · ${p.waited}`}</div>
+          <div className="prop static muted">{`since ${p.waiting_since_short}${p.waited !== "today" ? ` · ${p.waited}` : ""}`}</div>
         </>
       )}
       {/* How much plan the issue gets, and whether its session waits for go (issues.PROTOCOLS). */}
