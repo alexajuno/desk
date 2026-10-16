@@ -60,27 +60,42 @@ function OpenChat({ slug, primary }: { slug: string; primary: boolean }) {
   );
 }
 
+// The strip of an issue landing (pages.ts, strip), drawn at once on Approve.
+const LANDING: IssuePageData["strip"] = { text: "Landing, by the repo's rules.", button: { label: "Landing…", disabled: true } };
+
 export const IssueView = observer(function IssueView({ data, inInbox = false }: { data: IssuePageData; inInbox?: boolean }) {
   const p = painted(data.issue);
   const [note, setNote] = useState<{ slug: string; msg: string | null; trust: boolean }>({ slug: p.slug, msg: null, trust: false });
   const msg = note.slug === p.slug ? note.msg : null, trust = note.slug === p.slug && note.trust;
-  const b = data.strip.button, t = data.trial;
+  // Approve shows Landing while the server is still handing the work to the session, which takes a second or more.
+  const landing = p.state === "landing" && data.issue.state !== "landing";
+  const strip = landing ? LANDING : data.strip;
+  const b = strip.button, t = landing ? null : data.trial;
 
   // A form route of the old pages: Plan, Start, Approve, Try, Trust folder. Its redirect may say something for the
   // strip. From the Inbox, Approve moves on as Linear does: the next notification opens, and a toast says what
   // happened (app.ts, onward).
   async function act(action: string) {
-    const res = await post(`/issue/${p.slug}/${action}`, inInbox ? { src: "inbox" } : {});
-    const to = new URL(res.url), note = to.searchParams.get("note");
-    if (inInbox && to.pathname === "/inbox" && note) {
-      toast(note);
-      const next = to.searchParams.get("i");
-      go(next ? `/inbox?i=${encodeURIComponent(next)}` : "/inbox", { replace: true });
-    } else {
-      const { msg: m, trust: tr } = said(res);
-      setNote({ slug: p.slug, msg: m, trust: tr });
+    const slug = p.slug;
+    if (action === "approve") {
+      ui.paint(slug, "state", "landing");
+      setNote({ slug, msg: null, trust: false });
     }
-    await reloadPages();
+    try {
+      const res = await post(`/issue/${slug}/${action}`, inInbox ? { src: "inbox" } : {});
+      const to = new URL(res.url), note = to.searchParams.get("note");
+      if (inInbox && to.pathname === "/inbox" && note) {
+        toast(note);
+        const next = to.searchParams.get("i");
+        go(next ? `/inbox?i=${encodeURIComponent(next)}` : "/inbox", { replace: true });
+      } else {
+        const { msg: m, trust: tr } = said(res);
+        setNote({ slug, msg: m, trust: tr });
+      }
+      await reloadPages();
+    } finally {
+      ui.unpaint(slug);
+    }
   }
 
   useLayoutEffect(() => showFolded());
@@ -91,7 +106,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
       <div className="strip" data-slug={p.slug} {...(live ? { "data-live": data.live } : {})}>
         <div className="strip-in">
           <span className="strip-state"><StateIcon state={p.state} /></span>
-          <span className={`strip-what${msg ? " strip-msg" : ""}`}>{msg || data.strip.text}</span>
+          <span className={`strip-what${msg ? " strip-msg" : ""}`}>{msg || strip.text}</span>
           {p.session && !(b && b.chat) && <OpenChat slug={p.slug} primary={false} />}
           {/* Try, in review: runs the issue's branch in the desk you use (app.try_button). Quiet: Approve stays the step. */}
           {t && (t.disabled
