@@ -5,12 +5,13 @@
 import { observer } from "mobx-react-lite";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { post, said } from "../api/http";
-import { Go } from "../app/nav";
+import { go, Go } from "../app/nav";
 import { PRIORITY_NAMES, PROTOCOL_NAMES, STATE_NAMES, type Field, type IssueRow, type Priority, type Protocol, type State, type TreeRow } from "../lib/desk";
 import { keyOf } from "../lib/keys";
 import { fieldIcon, PLUS, PrioIcon, ProtoIcon, StateIcon, TRIANGLE } from "../ui/icons";
 import { toggled } from "../ui/menu";
 import { showFolded } from "../ui/folds";
+import { toast } from "../ui/toast";
 import { reloadPages, ui } from "../store/ui";
 import { openWindow, setField } from "./actions";
 import { fieldMenu, folderMenu, projectPicker, waitingMenu } from "./menus";
@@ -65,11 +66,20 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
   const msg = note.slug === p.slug ? note.msg : null, trust = note.slug === p.slug && note.trust;
   const b = data.strip.button, t = data.trial;
 
-  // A form route of the old pages: Plan, Start, Approve, Try, Trust folder. Its redirect may say something for the strip.
+  // A form route of the old pages: Plan, Start, Approve, Try, Trust folder. Its redirect may say something for the
+  // strip. From the Inbox, Approve moves on as Linear does: the next notification opens, and a toast says what
+  // happened (app.py, onward).
   async function act(action: string) {
     const res = await post(`/issue/${p.slug}/${action}`, inInbox ? { src: "inbox" } : {});
-    const { msg: m, trust: tr } = said(res);
-    setNote({ slug: p.slug, msg: m, trust: tr });
+    const to = new URL(res.url), note = to.searchParams.get("note");
+    if (inInbox && to.pathname === "/inbox" && note) {
+      toast(note);
+      const next = to.searchParams.get("i");
+      go(next ? `/inbox?i=${encodeURIComponent(next)}` : "/inbox", { replace: true });
+    } else {
+      const { msg: m, trust: tr } = said(res);
+      setNote({ slug: p.slug, msg: m, trust: tr });
+    }
     await reloadPages();
   }
 

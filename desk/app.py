@@ -547,11 +547,15 @@ def frame_page(request: Request):
 
 @app.get("/api/page/issue/{slug}")
 def issue_page(request: Request, slug: str):
-    """issue_view.html's context: the issue, its strip and button, its sections drawn as HTML, and its properties."""
     all_issues = store.load_all()
     if slug not in all_issues:
         raise HTTPException(404, "That issue is gone.")
     inbox_items(all_issues, agents.live())  # moves it on first, as the page does (show)
+    return issue_page_json(request, all_issues, slug)
+
+
+def issue_page_json(request: Request, all_issues: dict[str, store.Issue], slug: str) -> dict:
+    """issue_view.html's context: the issue, its strip and button, its sections drawn as HTML, and its properties."""
     c = issue_context(request, all_issues, slug)
     i, pr = c["p"], c["project"]
     return {
@@ -617,6 +621,58 @@ def projects_json():
     all_issues = store.load_all()
     return [{"slug": p.slug, "title": p.title, "state": p.state, "created_short": short_date(p.created),
              "open": sum(i.state not in CLOSED for i in projects.issues_of(all_issues, p.slug))} for p in everyone]
+
+
+@app.get("/api/page/inbox")
+def inbox_page(request: Request, i: str = ""):
+    """inbox.html's rows, newest first, and the one picked (?i=<slug>) as its issue page shows it."""
+    all_issues = store.load_all()
+    items = [issue_json(n["p"]) | {"why": n["why"], "says": n["says"], "kind": n["kind"],
+                                   "seen": f"{n['p'].slug}:{n['why']}:{int(n['at'].timestamp())}",
+                                   "ago": ago(n["at"]), "at": n["at"].strftime("%b %-d, %H:%M")}
+             for n in notifications(all_issues)]
+    return {"items": items, "open": issue_page_json(request, all_issues, i) if i in all_issues else None}
+
+
+@app.get("/api/page/search")
+def search_page(q: str = ""):
+    """search_rows.html's hits, best match first, their matched words marked."""
+    return [{"issue": issue_json(h.issue), "title": str(h.title), "snippet": str(h.snippet)} for h in find(store.load_all(), q)]
+
+
+@app.get("/api/page/sessions")
+def sessions_page_json(request: Request, q: str = "", kind: str = "", offset: int = 0, limit: int = sessions.PAGE):
+    """sessions_rows.html's rows, a page at a time, with the list's view (views.py), as sessions._page draws them."""
+    view = views.parse("sessions", request.url.query)
+    listing, found = sessions.arrange(view, sessions.rows(q, kind if kind in sessions.KINDS else ""))
+    counts: dict[str, int] = {}
+    for r in found:
+        counts[r["group"]] = counts.get(r["group"], 0) + 1
+    limit = max(sessions.PAGE, limit)
+    return {
+        "view": listing.data, "hidden": listing.hidden,
+        "chips": [{"name": c["name"], "label": c["label"], "not": c["not"], "values": [list(x) for x in c["values"]]}
+                  for c in listing.chips],
+        "collapse_key": "/sessions" + ("" if view.group == "time" else f" {view.group}"),
+        "rows": [{"id": r["id"], "kind": r["kind"], "kind_name": sessions.KINDS.get(r["kind"], r["kind"]), "state": r["state"],
+                  "title": r["title"], "marked": str(r["marked"]), "folder": r["folder"], "cwd": r["cwd"],
+                  "issue": r["issue"] and {"slug": r["issue"].slug, "title": r["issue"].title},
+                  "ago": ago(r["moved"]), "group": r["group"], "group_icon": r.get("group_icon")}
+                 for r in found[offset:offset + limit]],
+        "counts": counts, "total": len(found), "next": offset + limit if offset + limit < len(found) else None,
+    }
+
+
+@app.get("/api/page/file/{slug}/{name}")
+def file_page(slug: str, name: str):
+    """file.html: an issue's Markdown or D2 file drawn as a document, with its contents."""
+    path = (store.folder(slug) / name).resolve()
+    if path.parent != store.folder(slug).resolve() or not path.is_file() or path.suffix not in (".md", ".d2"):
+        raise HTTPException(404, "No such file.")
+    text = path.read_text(encoding="utf-8")
+    body, toc = to_html_with_toc(f"```d2\n{text}\n```" if path.suffix == ".d2" else text, base=f"/issue/{slug}/f/")
+    i = store.load(slug)
+    return {"issue": {"slug": i.slug, "title": i.title}, "name": name, "body": body, "toc": toc}
 
 
 @app.get("/issue/{slug}/live", response_class=PlainTextResponse)
