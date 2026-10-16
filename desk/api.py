@@ -6,7 +6,8 @@ documents it for them).
     POST   /api/issues                create one: title, body, priority, state, parent, project, folder, protocol
     PATCH  /api/issues/<slug>         set any of those fields
     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
-    POST   /api/issues/<slug>/work    the Agent chat works it itself: the chat becomes the issue's session
+    POST   /api/issues/<slug>/work    the Agent chat works it itself: the chat becomes the issue's session; a Triage
+                                      issue with no folder binds where the chat runs
     POST   /api/issues/<slug>/try     run the issue's branch in its folder's checkout, to test it: branch; in desk's
                                       own, while another branch runs, the issue joins the line (land.py)
     POST   /api/issues/<slug>/back-to-main   and back, handing desk's checkout to the next in line
@@ -236,19 +237,26 @@ class Work(BaseModel):
 @router.post("/issues/{slug}/work")
 def work_issue(request: Request, slug: str, work: Work):
     """The Agent chat works this issue itself: the chat's session becomes the issue's session, the chat moves into the
-    issue's folder (a window chat once its turn ends), and the issue shows In progress. No other session starts."""
+    issue's folder (a window chat once its turn ends), and the issue shows In progress. No other session starts.
+    A chat's own issue in Triage with no folder yet binds where the chat runs and stays in Triage; once the chat
+    accepts it as work, it sets the folder and binds again. A chat that binds to another issue leaves its Triage one
+    behind as a duplicate of it, dropped."""
     i = _load(slug)
-    if i.state not in ("backlog", "running"):
-        raise HTTPException(409, f"{slug} is {i.state}; only a backlog issue, or one in progress, can be worked.")
+    if i.state not in ("triage", "backlog", "running"):
+        raise HTTPException(409, f"{slug} is {i.state}; only an issue in triage, the backlog or in progress can be worked.")
     if not chats.exists(work.chat):
         raise HTTPException(404, "No such chat")
     chat = chats.load(work.chat)
     if i.session and i.session != chat["session"]:
         raise HTTPException(409, f"{slug} already has its own session; open its page to talk to it.")
-    if not i.folder or not Path(agents.workdir(i)).is_dir():
+    triage = i.state == "triage" and not i.folder
+    if not triage and (not i.folder or not Path(agents.workdir(i)).is_dir()):
         raise HTTPException(422, "Set the issue's folder first (PATCH folder; find it with /api/folders?q=<name>).")
-    i.session, i.state = chat["session"], "running"
+    i.session, i.state = chat["session"], "triage" if triage else "running"
     store.save(i)
+    was = chat.get("issue")
+    if was and was != slug and store.exists(was) and (old := store.load(was)).state == "triage":
+        store.move(old, state="dropped", link=f"/issue/{slug}")
     chats.bind(chat, i, str(request.base_url).rstrip("/"))
     return as_json(i)
 

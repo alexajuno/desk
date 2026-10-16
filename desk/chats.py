@@ -101,8 +101,9 @@ def transcript(chat_id: str) -> str:
 
 def bind(chat: dict, issue: store.Issue, base: str) -> None:
     """The chat becomes the issue's session, and desk moves it into the issue's folder once its turn ends. Its session
-    is an ordinary background session, which desk lists, messages and lands as any other."""
-    chat["issue"], chat["folder"] = issue.slug, str(Path(agents.workdir(issue)))
+    is an ordinary background session, which desk lists, messages and lands as any other. An issue in Triage has no
+    folder yet, so the chat stays where it runs."""
+    chat["issue"], chat["folder"] = issue.slug, str(Path(agents.workdir(issue))) if issue.folder else runs_in(chat)
     save(chat)
     if not _same(chat["folder"], runs_in(chat)) and chat["id"] not in MOVING:
         MOVING.add(chat["id"])
