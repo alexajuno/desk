@@ -31,7 +31,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 from watchfiles import watch
 
-from . import agents, chats, window
+from . import agents, chats, views, window
 from . import issues as store
 from .search import _mark, _pattern
 
@@ -240,6 +240,74 @@ def rows(query: str = "", kind: str = "") -> list[dict]:
     return found
 
 
+# --- its view: Filter and Display options, as on the issue lists (views.py) ------------------------
+
+STATES = {"working": "Working", "waiting": "Waiting for you", "open": "Open", "closed": "Closed"}
+STATE_ICONS = {"working": "state-running", "waiting": "state-review", "open": "session-open", "closed": "state-backlog"}
+HAS_ISSUE = {"yes": "Works an issue", "no": "No issue"}
+
+
+def _value(row: dict, name: str) -> str:
+    if name == "status":
+        return row["state"]
+    if name == "folder":
+        return row["folder"] or "none"
+    if name == "issue":
+        return "yes" if row["issue"] else "no"
+    return row["kind"]
+
+
+def _label(name: str, v: str) -> str:
+    if name == "status":
+        return STATES.get(v, v)
+    if name == "issue":
+        return HAS_ISSUE.get(v, v)
+    if name == "kind":
+        return KINDS.get(v, v)
+    return "No folder" if v == "none" else v
+
+
+def _icon(name: str, v: str | None) -> str | None:
+    if name == "status":
+        return STATE_ICONS.get(v, "state-running")
+    if name == "folder":
+        return "glyph-folder"
+    return "state-backlog" if v is None else None  # an issue's circle beside Issue in Filter; none beside yes or no
+
+
+def arrange(view: views.View, found: list[dict]) -> tuple[views.Listing, list[dict]]:
+    """The rows the view keeps, ordered and grouped. Each group's rows sit together, since the list is drawn a page at
+    a time: Last moved and Folder groups come newest first, the others in their own order."""
+    kept = [r for r in found if view.matches(lambda name: _value(r, name))]
+    if view.order == "moved":
+        kept.sort(key=lambda r: r["moved"], reverse=not view.reverse)
+    else:
+        kept.sort(key=lambda r: r["title"].casefold(), reverse=view.reverse)
+    if view.group != "time":
+        for r in kept:
+            v = "" if view.group == "none" else _value(r, view.group)
+            r["group"], r["group_icon"] = (_label(view.group, v), _icon(view.group, v)) if v else ("", None)
+    rank: dict[str, object] = {}
+    if view.group in ("time", "folder"):
+        for r in sorted(kept, key=lambda r: r["moved"], reverse=True):
+            rank.setdefault(r["group"], len(rank))
+    else:
+        own = {"kind": KINDS, "status": STATES, "issue": HAS_ISSUE}.get(view.group, {})
+        rank = {name: i for i, name in enumerate(own.values())}
+    kept.sort(key=lambda r: rank.get(r["group"], 0))  # stable: the order within each group stays
+
+    def values_of(name: str) -> list[str]:
+        if name == "folder":  # the busiest first: a week of jobs leaves a long tail of one-session folders
+            used = {}
+            for r in found:
+                used[_value(r, "folder")] = used.get(_value(r, "folder"), 0) + 1
+            return sorted(used, key=lambda f: (-used[f], f.casefold()))
+        return list({"status": STATES, "issue": HAS_ISSUE}[name])
+
+    chips, fields = views.filtering(view, found, _value, _label, _icon, values_of)
+    return views.Listing(view, [], len(found) - len(kept), chips, fields), kept
+
+
 # --- opening one -----------------------------------------------------------------------------------
 
 def open_session(sid: str) -> None:
@@ -356,13 +424,15 @@ def start_watcher() -> None:
 # --- routes ----------------------------------------------------------------------------------------
 
 def _page(request: Request, name: str, query: str, kind: str, offset: int = 0, limit: int = PAGE):
-    found = rows(query, kind if kind in KINDS else "")
+    view = views.from_request("sessions", request.url.query, request.cookies.get("view"))
+    listing, found = arrange(view, rows(query, kind if kind in KINDS else ""))
     groups: dict[str, int] = {}
     for r in found:
         groups[r["group"]] = groups.get(r["group"], 0) + 1
     return request.app.state.templates.TemplateResponse(request, name, {
-        "q": query, "kind": kind, "kinds": KINDS, "rows": found[offset:offset + limit], "counts": groups,
-        "next": offset + limit if offset + limit < len(found) else None, "total": len(found)})
+        "q": query, "kind": kind, "kinds": KINDS, "rows": found[offset:offset + limit], "counts": groups, "list": listing,
+        "offset": offset, "next": offset + limit if offset + limit < len(found) else None, "total": len(found),
+        "collapse_key": "/sessions" + ("" if view.group == "time" else f" {view.group}")})
 
 
 @router.get("/sessions")

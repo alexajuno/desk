@@ -9,16 +9,22 @@ const list = document.getElementById("session-rows");
 const clear = document.querySelector(".search-clear");
 let kind = new URLSearchParams(location.search).get("kind") ?? "", asked = 0, watcher = null;
 
-const query = () => new URLSearchParams({ ...(box.value.trim() && { q: box.value.trim() }), ...(kind && { kind }) });
+// The address's words: the list's view (desk.js's setView keeps it there), then what is typed and the pill.
+function query() {
+  const q = new URLSearchParams(location.search);
+  for (const [name, value] of [["q", box.value.trim()], ["kind", kind]]) value ? q.set(name, value) : q.delete(name);
+  return q;
+}
 const open = (row) => row && openWindow(`/sessions/${row.dataset.session}/open`);
 
 async function search() {
   const mine = ++asked, q = query();
-  history.replaceState(null, "", q.size ? `/sessions?${q}` : "/sessions");
+  history.replaceState(null, "", q.size ? `/sessions?${readable(q)}` : "/sessions");
   clear.hidden = !box.value;
   const html = await (await fetch(`/sessions/rows?${q}`)).text();
   if (mine !== asked) return;
   list.innerHTML = html;
+  showCollapsed();
   focusRow(null);
   watchEnd();
 }
@@ -117,8 +123,10 @@ events.addEventListener("hello", () => { if (connected) redraw(); connected = tr
 events.addEventListener("changed", redraw);
 
 // A change to the issues redraws only the sidebar here (desk.js's soft refresh), so the rows loaded and what is
-// typed stay; a state circle is as fresh as the page or the last search.
+// typed stay; a state circle is as fresh as the page or the last search. A change to the view (Filter, Display
+// options) draws the rows again with it, from the address desk.js set.
 window.onIssuesChanged = () => {};
+window.onViewChanged = search;
 
 box.focus();
 box.setSelectionRange(box.value.length, box.value.length);

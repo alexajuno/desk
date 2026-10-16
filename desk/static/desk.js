@@ -318,18 +318,28 @@ function projectPicker(current, where, choose) {
   });
 }
 
-// --- list views: Linear's Filter and Display options on the Backlog and a project page (views.py) --------------------
-// The page carries its view as #view-data. A change writes the page's new query and goes there by the soft refresh;
-// the cookie keeps it for the page, so the sidebar's bare /backlog opens it again, and views.py reads it there.
+// --- list views: Linear's Filter and Display options on the Backlog, a project page and Sessions (views.py) ---------
+// The page carries its view as #view-data, with what it offers. A change writes the page's new query and goes there by
+// the soft refresh, or, on a page that redraws its own rows (Sessions), sets the address and asks it to
+// (window.onViewChanged). The cookie keeps the view for the page, so the sidebar's bare /backlog opens it again, and
+// views.py reads it there.
 const view = () => { const data = $("#view-data"); return data && JSON.parse(data.textContent); };
-const VIEW_KEYS = ["group", "order", "done", "subs", "reverse", "empty"];
-const FIELD_ICON = () => ({ status: icon("state", "backlog"), priority: icon("priority", "high"), project: GLYPH.project,
-                            folder: GLYPH.folder, protocol: icon("protocol", "quick") });
-const valueIcon = (name, v) => ({ status: () => icon("state", v), priority: () => icon("priority", v),
-                                  protocol: () => icon("protocol", v) }[name]?.() ?? GLYPH[name]);
+// An icon by the key views.py gives it: state-running, priority-high, protocol-quick, session-open, glyph-folder.
+const iconOf = (key) => !key ? "" : key.startsWith("glyph-") ? GLYPH[key.slice(6)] ?? ""
+  : ICONS.querySelector(`[data-k="${key}"]`)?.innerHTML ?? "";
+// The words views.py writes keep their slashes, tildes, commas and colons, as in folder=genai/api.
+const readable = (params) => params.toString().replace(/%2F/gi, "/").replace(/%7E/gi, "~").replace(/%2C/gi, ",").replace(/%3A/gi, ":");
 
 function rememberView(path, query) {
   document.cookie = `view=${encodeURIComponent(query)}; path=${path}; max-age=${query ? 31536000 : 0}; samesite=lax`;
+}
+
+// The page's address for a view's query, with the page's own words that are no view's, such as the Sessions search.
+function addressOf(path, query, keep = []) {
+  const here = new URLSearchParams(location.search), own = new URLSearchParams();
+  for (const name of keep) if (here.has(name)) own.set(name, here.get(name));
+  const all = [query, readable(own)].filter(Boolean).join("&");
+  return path + (all ? `?${all}` : "");
 }
 
 // After a page draws: its view in its address, and in the cookie. Returns the address, or null off a list.
@@ -337,7 +347,7 @@ function keepView(path = location.pathname) {
   const v = view();
   if (!v) return null;
   rememberView(path, v.query);
-  return path + (v.query ? `?${v.query}` : "");
+  return addressOf(path, v.query, v.keep);
 }
 
 // changes: a URL word to its new value; null, false or the page's default drops it from the address.
@@ -347,10 +357,12 @@ async function setView(changes) {
     if (value == null || value === false || value === v.defaults[name]) params.delete(name);
     else params.set(name, value === true ? "1" : value);
   }
-  // The words views.py writes keep their slashes, tildes, commas and colons, as in folder=genai/api.
-  const query = params.toString().replace(/%2F/gi, "/").replace(/%7E/gi, "~").replace(/%2C/gi, ",").replace(/%3A/gi, ":");
+  const query = readable(params), url = addressOf(location.pathname, query, v.keep);
   rememberView(location.pathname, query);
-  await go(location.pathname + (query ? `?${query}` : ""));
+  if (window.onViewChanged) { history.replaceState(null, "", url); await onViewChanged(); }
+  else await go(url);
+  const dot = $(".view-dot"), now = view();
+  if (dot && now) dot.hidden = now.default;
   if (display) drawDisplay();
 }
 
@@ -371,10 +383,10 @@ function filterMenu(where) {
     ...where, filter: "keys", kbd: "F", placeholder: "Add filter…", className: "wide",
     items: (q) => {
       const words = fold(q).split(/\s+/).filter(Boolean), hit = (text) => words.every((w) => fold(text).includes(w));
-      const props = v.fields.filter((f) => hit(f.label)).map((f) => ({ group: 0, icon: FIELD_ICON()[f.name], label: f.label,
+      const props = v.fields.filter((f) => hit(f.label)).map((f) => ({ group: 0, icon: iconOf(f.icon), label: f.label,
         more: true, run: () => valuesMenu(f.name, where) }));
       if (!words.length) return props;
-      const values = v.fields.flatMap((f) => f.values.filter((x) => hit(x.label)).map((x) => ({ group: 1, icon: valueIcon(f.name, x.value),
+      const values = v.fields.flatMap((f) => f.values.filter((x) => hit(x.label)).map((x) => ({ group: 1, icon: iconOf(x.icon),
         label: x.label, hint: f.label, current: v.filters[f.name]?.values.includes(x.value), run: () => toggleValue(f.name, x.value) })));
       return [...props, ...values];
     },
@@ -387,20 +399,15 @@ function valuesMenu(name, where) {
   openMenu({
     ...where, filter: "keys", placeholder: `${f.label}…`, className: "wide",
     items: (q) => f.values.filter((x) => fold(x.label).includes(fold(q))).map((x) => ({
-      icon: valueIcon(name, x.value), label: x.label, hint: `${x.count} issue${x.count === 1 ? "" : "s"}`,
+      icon: iconOf(x.icon), label: x.label, hint: `${x.count} ${v.noun}${x.count === 1 ? "" : "s"}`,
       current: on.includes(x.value), run: () => toggleValue(name, x.value),
     })),
   });
 }
 
 // Shift+V: Linear's Display options panel, its rows measured on linear.app (16 Oct): a 300px panel, 12px labels on the
-// left, 24px selects on the right, the direction button beside Ordering, a 22x14 switch, and Reset at its foot.
-const DISPLAY = {
-  group: { label: "Grouping", options: { none: "No grouping", status: "Status", priority: "Priority", project: "Project", folder: "Folder" } },
-  order: { label: "Ordering", options: { priority: "Priority", status: "Status", created: "Created", updated: "Updated", title: "Title" } },
-  done: { label: "Completed issues", options: { none: "None", day: "Past day", week: "Past week", month: "Past month", all: "All" } },
-  subs: { label: "Sub-issues", options: { nested: "Nested", rows: "Flat", hidden: "Hidden" } },
-};
+// left, 24px selects on the right, the direction button beside Ordering, a 22x14 switch, and Reset at its foot. Its
+// choices are the page's own (views.py PAGES): Grouping and Ordering first, the rest under a line.
 const SELECT_CHEV = '<svg width="9" height="5" viewBox="0 0 9 5" fill="currentColor"><path d="M.5.5h8L4.5 4.5z"/></svg>';
 // Linear's Direction icon: an arrow beside bars that shorten. Reversed, it flips.
 const DIRECTION = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M8.23 3.674a.75.75 0 0 1-.961 1.152l-1.77-1.475V14.25a.75.75 0 0 1-1.5 0V3.351L2.23 4.826a.75.75 0 1 1-.96-1.152l3-2.5a.75.75 0 0 1 .96 0z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M6.999 7.25a.75.75 0 0 1 .75-.75h6.5a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1-.75-.75M6.999 10.25a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75M6.999 13.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75"/></svg>';
@@ -409,13 +416,13 @@ let display = null;
 function drawDisplay() {
   const v = view(), anchor = $(".display-open");
   if (!v || !anchor) { closeDisplay(); return; }
-  const select = (key) => `<button class="dp-select" type="button" data-key="${key}">${esc(DISPLAY[key].options[v[key]])}${SELECT_CHEV}</button>`;
-  const row = (key, extra = "") => `<div class="dp-row"><span>${DISPLAY[key].label}</span>${extra}${select(key)}</div>`;
-  display.innerHTML = row("group") +
-    row("order", `<button class="dp-dir${v.reverse ? " reversed" : ""}" type="button" title="${v.reverse ? "Reversed" : "Reverse the order"}">${DIRECTION}</button>`) +
-    '<hr>' + row("done") + row("subs") +
-    `<label class="dp-row switch"><span>Show empty groups</span><input type="checkbox" role="switch" data-key="empty"${v.empty ? " checked" : ""}></label>` +
-    '<footer><button class="dp-reset" type="button">Reset</button></footer>';
+  const dir = `<button class="dp-dir${v.reverse ? " reversed" : ""}" type="button" title="${v.reverse ? "Reversed" : "Reverse the order"}">${DIRECTION}</button>`;
+  const row = (d) => `<div class="dp-row"><span>${esc(d.label)}</span>${d.key === "order" ? dir : ""}` +
+    `<button class="dp-select" type="button" data-key="${d.key}">${esc(d.options[v[d.key]])}${SELECT_CHEV}</button></div>`;
+  const first = v.display.filter((d) => d.key === "group" || d.key === "order"), rest = v.display.filter((d) => !first.includes(d));
+  const switches = v.switches.map(() => `<label class="dp-row switch"><span>Show empty groups</span><input type="checkbox" role="switch" data-key="empty"${v.empty ? " checked" : ""}></label>`);
+  display.innerHTML = first.map(row).join("") + (rest.length || switches.length ? "<hr>" : "") + rest.map(row).join("") +
+    switches.join("") + '<footer><button class="dp-reset" type="button">Reset</button></footer>';
   const box = anchor.getBoundingClientRect();
   display.style.top = `${box.bottom + 6}px`;
   display.style.left = `${Math.max(8, box.right - display.offsetWidth)}px`;
@@ -446,12 +453,12 @@ document.addEventListener("click", (e) => {
   const v = view(), select = t.closest(".dp-select");
   if (select && justClosed !== select) { // a click on the open one closes it
     const key = select.dataset.key;
-    openMenu({ anchor: select, className: "options", items: () => Object.entries(DISPLAY[key].options).map(([value, name]) => ({
+    openMenu({ anchor: select, className: "options", items: () => Object.entries(v.display.find((d) => d.key === key).options).map(([value, name]) => ({
       label: name, current: value === v[key], run: () => setView({ [key]: value }),
     })) });
   }
   else if (t.closest(".dp-dir")) setView({ reverse: !v.reverse });
-  else if (t.closest(".dp-reset")) setView(Object.fromEntries(VIEW_KEYS.map((k) => [k, v.defaults[k] ?? null])));
+  else if (t.closest(".dp-reset")) setView({ ...v.defaults, reverse: false, empty: false });
 });
 
 document.addEventListener("change", (e) => {
