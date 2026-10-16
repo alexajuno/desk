@@ -10,12 +10,12 @@
    emulated over CDP (Linear follows the system): the same elements' computed colours, and Linear's own
    theme objects for the colours it sets in JS. Linear gives the sidebar, the content and popovers each
    their own light palette; the values below say which they come from. desk follows the system, unless
-   a theme is pinned from the sidebar's foot; the script in base.html sets html[data-theme] either way. */
+   a theme is pinned from the sidebar's foot; the script in apps/web/index.html sets html[data-theme] either way. */
 
 /* Linear serves its own "Inter Variable" web font (document.fonts showed it loaded, 2026-10-14) with
    -webkit-font-smoothing: antialiased and text-rendering: optimizeLegibility. desk serves Inter too, so
    no browser falls back to another font. InterVariable.ttf is from Arch's inter-font, under the SIL OFL. */
-@font-face { font-family: "Inter Variable"; src: url("/static/fonts/InterVariable.ttf") format("truetype");
+@font-face { font-family: "Inter Variable"; src: url("/fonts/InterVariable.ttf") format("truetype");
              font-weight: 100 900; font-style: normal; font-display: block; }
 
 :root {

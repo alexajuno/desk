@@ -31,7 +31,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 from watchfiles import watch
 
-from . import agents, chats, views, window
+from . import agents, chats, views, web, window
 from . import issues as store
 from .search import _mark, _pattern
 
@@ -423,28 +423,10 @@ def start_watcher() -> None:
 
 # --- routes ----------------------------------------------------------------------------------------
 
-def _page(request: Request, name: str, query: str, kind: str, offset: int = 0, limit: int = PAGE):
-    view = views.from_request("sessions", request.url.query, request.cookies.get("view"))
-    listing, found = arrange(view, rows(query, kind if kind in KINDS else ""))
-    groups: dict[str, int] = {}
-    for r in found:
-        groups[r["group"]] = groups.get(r["group"], 0) + 1
-    return request.app.state.templates.TemplateResponse(request, name, {
-        "q": query, "kind": kind, "kinds": KINDS, "rows": found[offset:offset + limit], "counts": groups, "list": listing,
-        "offset": offset, "next": offset + limit if offset + limit < len(found) else None, "total": len(found),
-        "collapse_key": "/sessions" + ("" if view.group == "time" else f" {view.group}")})
-
-
 @router.get("/sessions")
-def sessions_page(request: Request, q: str = "", kind: str = ""):
-    return _page(request, "sessions.html", q, kind)
-
-
-@router.get("/sessions/rows")
-def sessions_rows(request: Request, q: str = "", kind: str = "", offset: int = 0, limit: int = PAGE):
-    """Just the rows, for the search as you type, for the next page as you scroll and for a redraw of all the rows
-    loaded (limit); no sidebar, whose `claude agents` call would slow every key."""
-    return _page(request, "sessions_rows.html", q, kind, max(0, offset), max(PAGE, limit))
+def sessions_page():
+    """The page is the app's (apps/web); its rows come from /api/page/sessions (app.py)."""
+    return web.index()
 
 
 @router.get("/sessions/events")

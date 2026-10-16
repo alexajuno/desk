@@ -8,10 +8,8 @@ import { ProjectPage } from "../lists/ProjectPage";
 import { ProjectsPage } from "../lists/ProjectsPage";
 import { SearchPage } from "../search/SearchPage";
 import { SessionsPage } from "../sessions/SessionsPage";
-import { BASE } from "./nav";
 
-// desk's pages, at the paths the old pages have (under /app until the app takes them over). A page not built here
-// yet is a plain link to the old one (nav.ts, ported).
+// desk's pages, at the addresses they always had.
 export const router = createBrowserRouter(
   [{ element: <Frame />, children: [
     { path: "/", element: <Navigate to="/backlog" replace /> },
@@ -24,5 +22,4 @@ export const router = createBrowserRouter(
     { path: "/search", element: <SearchPage /> },
     { path: "/sessions", element: <SessionsPage /> },
   ] }],
-  { basename: BASE },
 );

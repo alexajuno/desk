@@ -8,9 +8,9 @@ import { startFrame } from "./store/frame";
 import { issues } from "./store/issues";
 import { connect } from "./sync/socket";
 import { installTooltips } from "./ui/tooltip";
-// desk's own stylesheets, shared with the old pages while both exist, so both look the same.
-import "../../../desk/static/desk.css";
-import "../../../desk/static/sessions.css";
+// desk's look: one global stylesheet, Linear's themes as measured (styles/desk.css), and the Sessions page's own.
+import "./styles/desk.css";
+import "./styles/sessions.css";
 import "./index.css";
 
 watchTheme();

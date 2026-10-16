@@ -1,8 +1,0 @@
-{% extends "base.html" %}
-{% block title %}{{ p.title }} · desk{% endblock %}
-{% block crumb %}{% if project %}<a href="/project/{{ project.slug }}">{{ project.title }}</a>{% else %}<a href="/backlog">Backlog</a>{% endif %}{% for a in trail %}<span class="sep">›</span><a href="/issue/{{ a.slug }}">{{ a.title }}</a>{% endfor %}<span class="sep">›</span><span>{{ p.title }}</span>{% endblock %}
-{% block tools %}<button class="more" title="Actions">
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="12.5" cy="8" r="1.25"/></svg></button>{% endblock %}
-{% block main %}
-{% include "issue_view.html" %}
-{% endblock %}

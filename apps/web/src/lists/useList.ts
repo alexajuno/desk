@@ -19,7 +19,7 @@ export function useList<T>(path: string, api: string, viewOf: (data: T) => ViewD
     listView.set(path, view);
     remember(path, view.query);
     const address = addressOf(path, view.query, view.keep);
-    if (address !== location.pathname.replace(/^\/app/, "") + location.search) go(address, { replace: true });
+    if (address !== location.pathname + location.search) go(address, { replace: true });
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => listView.clear(), []);
   return page;

@@ -1,6 +1,6 @@
 # desk
 
-desk is the user's own vibe-coded workspace: FastAPI, Jinja templates, plain JS. Its design doc is a file of the desk issue: `~/.local/share/desk/issues/desk/design.md`.
+desk is the user's own vibe-coded workspace: a React app (`apps/web`: TypeScript, React, MobX, React Router, built with Vite in a pnpm workspace) on a FastAPI server (`desk/`). Every page address answers with the app, which reads its data from `/api/page/...` and gets each change pushed over `/api/sync`; the agents' JSON API (`/api/issues`...) is unchanged. desk builds the app itself when it starts, whenever `apps/web` changed (`desk/web.py`). Its design doc is a file of the desk issue: `~/.local/share/desk/issues/desk/design.md`; the move to this stack is planned on the issue "desk on Linear's stack".
 
 ## Working on desk's code
 

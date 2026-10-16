@@ -16,9 +16,7 @@ from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
 from . import agents, api, chats, land, projects, sessions, sync, terminal, views, web, window
 from . import issues as store
@@ -54,17 +52,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
-
-
-@app.middleware("http")
-async def revalidate_static(request: Request, call_next):
-    """With no Cache-Control a browser may keep desk.js for a while on its own guess, so a tab
-    opened before a merge runs old code; no-cache makes it ask each time (a 304 when unchanged)."""
-    response = await call_next(request)
-    if request.url.path.startswith("/static/"):
-        response.headers["Cache-Control"] = "no-cache"
-    return response
 
 
 @app.get("/version", response_class=PlainTextResponse)
@@ -178,21 +165,6 @@ def sidebar(request: Request) -> dict:
                                            key=lambda p: p.created)}, "version": version()}
 
 
-templates = Jinja2Templates(directory=HERE / "templates", context_processors=[sidebar])
-templates.env.globals.update(
-    priorities=store.PRIORITIES, states=store.STATES,
-    state_names=store.STATE_NAMES, prio_names=store.PRIORITY_NAMES,
-    protocols=store.PROTOCOLS, proto_names=store.PROTOCOL_NAMES,
-    # What each protocol does, under its name in the picker.
-    proto_hints={"quick": "A 3-line brief, then the work, no go", "brief": "A 3-line brief, then waits for go",
-                 "design": "A design doc you talk through, then go"},
-)
-# desk.css and desk.js carry their file's time in the URL: a tab that cached them before the
-# no-cache header still fetches a changed file, since its URL is new.
-templates.env.globals["asset"] = lambda name: f"/static/{name}?v={(HERE / 'static' / name).stat().st_mtime_ns}"
-templates.env.filters["short_date"] = lambda iso: datetime.fromisoformat(str(iso)).strftime("%b %-d") if iso else ""
-
-
 def ago(when: datetime) -> str:
     """How long ago, as Linear's Inbox writes it: now, 5m, 13h, 3d, 2w."""
     seconds = (datetime.now() - when).total_seconds()
@@ -202,17 +174,12 @@ def ago(when: datetime) -> str:
     return "now"
 
 
-templates.env.filters["ago"] = ago
-
 
 def waited(iso: str | None) -> str:
     """How long a wait has lasted, in days, as a wait is chased: today, then 3d, 2w."""
     when = datetime.fromisoformat(iso) if iso else datetime.now()
     return "today" if when.date() == datetime.now().date() else ago(when)
 
-
-templates.env.filters["waited"] = waited
-app.state.templates = templates  # the Sessions pages (sessions.py) render with these too
 
 
 app.include_router(api.router)
@@ -247,24 +214,15 @@ def old_link(rest: str):
     return RedirectResponse(f"/issue/{rest}")
 
 
+# desk's pages are the app's (apps/web): each address answers with it, and the app asks /api/page/... for the data.
 @app.get("/backlog")
-def backlog(request: Request):
-    """Every issue, open ones by priority unless the page's view (views.py) says otherwise."""
-    all_issues = store.load_all()
-    return templates.TemplateResponse(request, "backlog.html", {"list": listing(request, "backlog", list(all_issues.values()), all_issues)})
-
-
-def listing(request: Request, page: str, mine: list[store.Issue], all_issues: dict[str, store.Issue]) -> views.Listing:
-    view = views.from_request(page, request.url.query, request.cookies.get("view"))
-    return views.build(view, mine, all_issues, projects.load_all())
-
-
 @app.get("/projects")
-def project_list(request: Request):
-    everyone = sorted(projects.load_all().values(), key=lambda p: (p.state != "active", p.created))
-    all_issues = store.load_all()
-    counts = {p.slug: projects.issues_of(all_issues, p.slug) for p in everyone}
-    return templates.TemplateResponse(request, "projects.html", {"projects": everyone, "counts": counts})
+@app.get("/project/{slug}")
+@app.get("/inbox")
+@app.get("/search")
+@app.get("/issue/{slug}")
+def page():
+    return web.index()
 
 
 @app.post("/projects")
@@ -275,17 +233,6 @@ def project_create(title: str = Form("")):
     p = projects.Project(slug=projects.new_slug(title), title=title)
     projects.save(p)
     return RedirectResponse(f"/project/{p.slug}", status_code=303)
-
-
-@app.get("/project/{slug}")
-def project_page(request: Request, slug: str):
-    if not projects.exists(slug):
-        raise HTTPException(404)
-    p = projects.load(slug)
-    all_issues = store.load_all()
-    mine = projects.issues_of(all_issues, slug)
-    return templates.TemplateResponse(request, "project.html", {
-        "pr": p, "body": to_html(p.body), "list": listing(request, "project", mine, all_issues)})
 
 
 @app.post("/project/{slug}/set")
@@ -340,16 +287,6 @@ def onward(before: list[str], slug: str, note: str) -> RedirectResponse:
                             status_code=303)
 
 
-@app.get("/inbox")
-def inbox(request: Request, i: str = ""):
-    """Linear's Inbox: the notifications on the left, newest first, and the one picked (?i=<slug>) on the right."""
-    all_issues = store.load_all()
-    context = {"items": notifications(all_issues), "open": None}
-    if i in all_issues:
-        context |= issue_context(request, all_issues, i) | {"open": i, "in_inbox": True}
-    return templates.TemplateResponse(request, "inbox.html", context)
-
-
 @app.get("/api/inbox")
 def inbox_rows():
     """The Inbox's rows, newest first. Every open tab asks every few seconds (desk.js), since a session that goes idle
@@ -369,29 +306,6 @@ def raise_browser(title: str = Form()):
     except RuntimeError as e:
         raise HTTPException(503, str(e))
     return {"ok": True}
-
-
-@app.get("/search")
-def search(request: Request, q: str = ""):
-    return templates.TemplateResponse(request, "search.html", {"q": q, "hits": find(store.load_all(), q)})
-
-
-@app.get("/search/rows", response_class=HTMLResponse)
-def search_rows(q: str = ""):
-    """The results alone, which search.js swaps in as you type. Rendered without the sidebar, whose
-    session list runs `claude agents` and would slow every keystroke."""
-    return templates.get_template("search_rows.html").render(q=q, hits=find(store.load_all(), q))
-
-
-@app.get("/issue/{slug}")
-def show(request: Request, slug: str):
-    all_issues = store.load_all()
-    if slug not in all_issues:
-        raise HTTPException(404)
-    # Move the issue on first, as the Inbox does, so its strip says where it stands now and not before the sidebar
-    # moved it (15 Oct: "Your turn in the chat" on an issue already in review).
-    inbox_items(all_issues, agents.live())
-    return templates.TemplateResponse(request, "issue.html", issue_context(request, all_issues, slug))
 
 
 DETAILS = re.compile(r"^## Details[ \t]*$", re.M)
@@ -503,8 +417,8 @@ def issue_context(request: Request, all_issues: dict[str, store.Issue], slug: st
 
 
 # --- JSON for the new app (apps/web) ---------------------------------------------------------------
-# What each Jinja template gets, as data, so the new app draws the same pages from the same logic. Dates come
-# formatted as the templates format them (short_date, waited), so both say the same.
+# What each page shows, as data, from the same logic the Jinja pages used before the app took them over. Dates come
+# formatted as those pages formatted them (short_date, waited).
 
 def short_date(iso) -> str:
     return datetime.fromisoformat(str(iso)).strftime("%b %-d") if iso else ""
@@ -686,16 +600,13 @@ def live_state(slug: str):
 
 
 @app.get("/issue/{slug}/f/{name}")
-def issue_file(request: Request, slug: str, name: str):
-    """An issue's own file: Markdown and D2 render as a document, anything else is served as is."""
+def issue_file(slug: str, name: str):
+    """An issue's own file: Markdown and D2 open as a document, the app's file page (/api/page/file draws it);
+    anything else is served as is."""
     path = (store.folder(slug) / name).resolve()
     if path.parent != store.folder(slug).resolve() or not path.is_file():
         raise HTTPException(404)
-    if path.suffix not in (".md", ".d2"):
-        return FileResponse(path)
-    text = path.read_text(encoding="utf-8")
-    body, toc = to_html_with_toc(f"```d2\n{text}\n```" if path.suffix == ".d2" else text)
-    return templates.TemplateResponse(request, "file.html", {"p": store.load(slug), "name": name, "body": body, "toc": toc})
+    return web.index() if path.suffix in (".md", ".d2") else FileResponse(path)
 
 
 @app.post("/issue/{slug}/set")

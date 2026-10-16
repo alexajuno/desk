@@ -6,8 +6,8 @@ issue lists (sessions.py arranges its own rows with the same view).
 
 A view lives in the page's query, in words: /backlog?folder=muse&priority=not:low,none&group=status. Only what differs
 from the page's defaults is written, so a list with nothing picked has a bare URL and looks as it did before views.
-desk.js keeps each page's last query in a cookie scoped to the page's path; a page opened with no view in its URL (from
-the sidebar, or G then B) reads that.
+The app keeps each page's last query in the browser (apps/web/src/lists/view.ts); a page opened with no view in its URL
+(from the sidebar, or G then B) asks for that one.
 """
 
 from __future__ import annotations
@@ -113,13 +113,6 @@ def parse(page: str, query: str) -> View:
         elif name == "reverse" or (name == "empty" and spec.empty):
             setattr(view, name, value == "1")
     return view
-
-
-def from_request(page: str, query: str, cookie: str | None) -> View:
-    """The view in the URL, or the page's last one when the URL has none."""
-    if not {name for name, _ in parse_qsl(query)} & KEYS:
-        query = unquote(cookie or "")
-    return parse(page, query)
 
 
 @dataclass

@@ -1,9 +1,0 @@
-{% extends "base.html" %}
-{% from "macros.html" import read_toggle %}
-{% block title %}{{ name }} · {{ p.title }} · desk{% endblock %}
-{% block crumb %}<a href="/backlog">Backlog</a><span class="sep">›</span><a href="/issue/{{ p.slug }}">{{ p.title }}</a><span class="sep">›</span><span>{{ name }}</span>{% endblock %}
-{% block tools %}{{ read_toggle() }}{% endblock %}
-{% block main %}
-{% if "<li>" in toc %}<aside class="onpage"><div class="onpage-label">On this page</div>{{ toc | safe }}</aside>{% endif %}
-<div class="doc">{{ body | safe }}</div>
-{% endblock %}
