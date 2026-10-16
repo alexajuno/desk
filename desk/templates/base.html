@@ -105,13 +105,14 @@ function showFolded(url = location.pathname) {
     <svg viewBox="0 0 16 16"><path d="M8 2l5.5 3v6L8 14l-5.5-3V5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
     <span class="nav-title">{{ pr.title }}</span></a>
   {%- endfor %}
-  {#- The chats not settled yet, each with its icon saying where its session stands: In progress's half circle while
-      it works, Triage's own once it waits for you. #}
+  {#- The chats not settled yet, each with Triage's icon whether its chat works or waits: In progress's half circle
+      on a working one read as the wrong state, and the inbox already says when a chat replied (16 Oct). Hovering
+      still says where its chat stands. #}
   {%- if sidebar.triage %}
   <div class="nav-label">Triage</div>
   {%- for p, now in sidebar.triage %}
   <a class="nav-item {{ 'here' if here == '/issue/' ~ p.slug }}" href="/issue/{{ p.slug }}" title="{{ {'working': 'Its chat is working', 'idle': 'Its chat waits for you'}.get(now, 'Its chat is closed') }}">
-    {{- state("running" if now == "working" else "triage") }}<span class="nav-title">{{ p.title }}</span></a>
+    {{- state("triage") }}<span class="nav-title">{{ p.title }}</span></a>
   {%- endfor %}
   {%- endif %}
   {%- if sidebar.running %}
