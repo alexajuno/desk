@@ -13,6 +13,7 @@
 .sessions-search input::placeholder { color: var(--text-4); }
 .search-clear { width: 24px; height: 24px; padding: 0; justify-content: center; border: 0; background: none; color: var(--text-3); }
 .search-clear:hover { background: var(--bg-raised); color: var(--text-1); }
+.search-clear[hidden] { display: none; }  /* desk.css's buttons are inline-flex, which beats [hidden] */
 
 .session-bar { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 6px; padding: 10px 20px;
                background: var(--bg-panel); }
