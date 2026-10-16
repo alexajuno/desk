@@ -7,11 +7,20 @@ import { go } from "../app/nav";
 import { listView } from "./current";
 import { addressOf, hasView, lastView, remember, type ViewData } from "./view";
 
+// The view a list page draws: the one in the address, else the page's last one.
+const storedView = (path: string, search: string) => !hasView(search) && lastView(path);
+
+// The address of a list page's JSON, which its route's loader fetches first (api/page.ts, prime).
+export const listUrl = (path: string, api: string, search: string) => {
+  const stored = storedView(path, search);
+  return `${api}${stored ? `?${stored}` : search}`;
+};
+
 export function useList<T>(path: string, api: string, viewOf: (data: T) => ViewData) {
   const { search } = useLocation();
-  const stored = !hasView(search) && lastView(path);
+  const stored = storedView(path, search);
   useEffect(() => { if (stored) go(`${path}?${stored}`, { replace: true }); }, [path, stored]);
-  const page = usePage<T>(`${api}${stored ? `?${stored}` : search}`);
+  const page = usePage<T>(listUrl(path, api, search));
   const data = page.data;
   useEffect(() => {
     if (!data) return;
