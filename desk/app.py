@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import agents, api, chats, land, projects, sessions, terminal, views, web, window
+from . import agents, api, chats, land, projects, sessions, sync, terminal, views, web, window
 from . import issues as store
 from .render import to_html, to_html_with_toc
 from .search import find
@@ -219,6 +219,7 @@ app.include_router(api.router)
 app.include_router(sessions.router)
 app.include_router(terminal.router)
 app.include_router(web.router)
+app.include_router(sync.router)
 
 
 def all_kids(all_issues: dict[str, store.Issue]):
