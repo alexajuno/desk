@@ -59,7 +59,7 @@ def sweep() -> None:
         if any(chats.said(chat)):
             _stop(row, watched, f"{chat['id']} has no issue")
         elif row.get("status") != "busy" and row.get("id") not in watched:
-            if row:
+            if row.get("id"):  # an interactive session, opened with `claude --resume`, lists with no id
                 subprocess.run(["claude", "rm", row["id"]], capture_output=True, timeout=30)
             (chats.CHATS_DIR / f"{chat['id']}.json").unlink(missing_ok=True)
             log.info("reaper: removed %s, a chat with nothing typed in it", chat["id"])
