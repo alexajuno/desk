@@ -1,5 +1,5 @@
 // The Sessions list (ported from desk/sessions.py): every Claude Code session on this laptop in one list, grouped by when each last
-// moved, and each opened in a floating kitty window over desk.
+// moved, and each opened in desk's panel.
 //
 // Claude Code keeps each session as a transcript, ~/.claude/projects/<the folder it ran in, as a name>/<session>.jsonl,
 // one JSON event per line, written as it runs. desk keeps one row per transcript with only what the list shows, saved
@@ -15,7 +15,6 @@ import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import { markWords, patternOf } from "./search.ts";
 import * as views from "./views.ts";
-import * as window from "./window.ts";
 import { ago } from "./when.ts";
 
 export const PROJECTS = join(HOME, ".claude", "projects");
@@ -184,6 +183,12 @@ export function title(row: TableRow, i: Issue | null = null): string {
   return row.ai_title || i?.title || row.first_prompt || custom || "Untitled session";
 }
 
+// The session's title as the list shows it, or nothing when it has no transcript yet.
+export function titleOf(sid: string): string {
+  const row = refresh().get(sid);
+  return row ? title(row) : "";
+}
+
 // The folder, short: "desk" for ~/projects/desk, "~" for home.
 export function folder(cwd: string | undefined): string {
   if (!cwd) return "";
@@ -220,7 +225,7 @@ async function issuesBySession(): Promise<Map<string, Issue>> {
   const everything = await store.loadAll();
   const found = new Map<string, Issue>();
   for (const i of everything.values()) if (i.session) found.set(i.session, i);
-  for (const chat of chats.windowChats()) if (chat.issue && everything.has(chat.issue)) found.set(chat.session, everything.get(chat.issue)!);
+  for (const chat of chats.agentChats()) if (chat.issue && everything.has(chat.issue)) found.set(chat.session, everything.get(chat.issue)!);
   return found;
 }
 
@@ -321,35 +326,11 @@ export function arrange(view: views.View, found: SessionRow[]): [views.Listing, 
 
 // --- opening one -----------------------------------------------------------------------------------------------------
 
-export class NoSession extends Error {}
-
-// The session's window, brought to the user or opened. An issue's session opens as its Open chat does, and an agent
-// chat as its own window, so one session never runs in two windows desk opened. Any other: `claude attach` while it
-// lists as a background session, which also wakes a stopped one, else `claude --resume` in the folder it started in.
-export async function openSession(sid: string) {
-  const row = refresh().get(sid);
-  if (!row) throw new NoSession("No such session.");
-  const i = (await issuesBySession()).get(sid);
-  if (i) return window.issue(i);
-  const chat = await chats.windowOf(sid);
-  if (chat) return chats.openWindow(chat, title(row));
-  const name = `desk-session-${sid.slice(0, 8)}`;
-  if (await window.focus(name)) return;
-  const live = await agents.liveRow(sid, true);
-  if (live.kind === "interactive" && live.pid) throw new Error("This session is open in another terminal. Close that one first.");
-  const cwd = row.cwd || HOME;
-  if (!existsSync(cwd)) throw new Error(`Its folder, ${cwd}, is gone, and Claude Code resumes a session only from the folder it started in.`);
-  const argv = live.kind === "background" ? ["claude", "attach", live.id!] : ["claude", "--resume", sid];
-  await window.launch(name, `desk · ${title(row)}`, cwd, argv);
-}
-
-// Ctrl Shift O and New session: an agent chat in a window over desk. The newest one is reused while nobody has typed in
-// it yet, so pressing it twice leaves no empty session behind.
+// Ctrl Shift O and New session: an agent chat in desk's panel. The newest one is reused while nobody has typed in it
+// yet, so pressing it twice leaves no empty session behind.
 export async function newSession(base: string): Promise<chats.Chat> {
-  const newest = chats.windowChats()[0];
-  if (!newest || newest.issue || [...chats.said(newest)].length) return chats.openNewWindowChat(base);
-  await chats.openWindow(newest);
-  return newest;
+  const newest = chats.agentChats()[0];
+  return newest && !newest.issue && ![...chats.said(newest)].length ? newest : await chats.newChat(base);
 }
 
 // The corner's history menu: the newest sessions, or those matching what is typed.

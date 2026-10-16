@@ -4,6 +4,7 @@
 import { create } from "./app.ts";
 import { PORT } from "./config.ts";
 import * as db from "./db.ts";
+import * as hosted from "./hosted.ts";
 import * as store from "./issues.ts";
 import * as land from "./land.ts";
 import * as projects from "./projects.ts";
@@ -20,6 +21,8 @@ await projects.reconcile();
 await web.build();
 const app = await create();
 await sync.start();
+// A session host left from older code gives way to one of this code once none of its sessions works.
+setInterval(() => void hosted.keepCurrent().catch(() => {}), 60_000);
 if (process.env.DESK_CLOCK !== "0") {
   land.startClock(); // the line for desk's own checkout moves on its own
   reaper.startClock(); // sessions nobody needs any more are stopped on their own

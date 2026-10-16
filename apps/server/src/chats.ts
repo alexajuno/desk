@@ -1,21 +1,21 @@
 // desk's agent (ported from desk/chats.py): a Claude Code session with desk's own skills, which files issues and works them itself,
-// in a floating kitty window over desk. It starts in DESK_DATA and reaches desk through curl to its API. Work on an issue
+// in desk's session panel. It starts in DESK_DATA and reaches desk through curl to its API. Work on an issue
 // is done in the chat: the chat binds itself to the issue (POST /api/issues/<slug>/work), which makes the chat's session
 // the issue's session, and desk then moves the chat into the issue's folder, so that Claude Code loads that folder's
 // CLAUDE.md, rules, skills, agents and settings.
 //
 // A chat is a JSON file in DESK_DATA/chats/.
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import * as agents from "./agents.ts";
-import { CHATS_DIR, DATA_DIR, HOME, REPO } from "./config.ts";
+import { CHATS_DIR, DATA_DIR, HOME, PORT, REPO } from "./config.ts";
+import * as hosted from "./hosted.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
-import { run, which } from "./proc.ts";
-import { fill, MOVED, NOT_MOVED, PLAN_RULES, PROMPT, PROTOCOLS, REATTACH, UNTRUSTED, WINDOW_FLAGS, WINDOW_RULES, WORK } from "./prompts.ts";
-import * as window from "./window.ts";
+import { run } from "./proc.ts";
+import { fill, MOVED, NOT_MOVED, PLAN_RULES, PROMPT, PROTOCOLS, WINDOW_RULES, WORK } from "./prompts.ts";
+import * as transcripts from "./transcript.ts";
 
 const SKILL = join(REPO, "skill", "SKILL.md");
 const SKILL_BASE = "http://127.0.0.1:8790"; // the address SKILL.md is written for; each chat swaps in its own
@@ -99,94 +99,56 @@ export async function agentPrompt(chat: Chat, base: string): Promise<string> {
   return prompt;
 }
 
-// --- chats in a window -------------------------------------------------------------------------------------------
-// A window chat is a Claude Code background session desk starts in DESK_DATA with the agent's prompt, shown in a
-// floating kitty window Hyprland opens over desk (chats.py, in git history, said what was checked, 15 Oct).
+// --- the chats ---------------------------------------------------------------------------------------------------
+// A chat is a session in the host (host.ts), started in DESK_DATA with the agent's prompt. Chats from before the panel
+// (kind "window") ran in Claude Code's daemon, shown in a floating kitty window; the host takes one in with its next
+// message.
 
-const WINDOW = "window";
-// Where Claude Code keeps the transcripts of the sessions started in DESK_DATA: the folder's path, each character other
-// than a letter or a digit made "-".
-const TRANSCRIPTS = join(HOME, ".claude", "projects", DATA_DIR.replace(/[^A-Za-z0-9]/g, "-"));
+const KINDS = new Set(["panel", "window"]);
+const BASE = `http://127.0.0.1:${PORT}`; // the address a chat reaches desk at, as SKILL.md's examples do
 
-// Start a window chat's session, idle until the user types in its window. started hears the session's short id, which
-// `claude attach` takes, as soon as Claude Code prints it. Given an issue in Triage and a first message, as for a Slack
-// message the user tagged (slack.ts), the chat starts bound to the issue and works on the message at once.
-export async function newWindowChat(base: string, { id = newChatId(), started, issue, message }:
-  { id?: string; started?: (short: string) => void; issue?: Issue; message?: string } = {}): Promise<Chat> {
+// The agent's settings, as the Agent tab had them: Opus at extra high effort, no permission prompts, and a few commands
+// no chat should run.
+const OPTIONS = { model: "opus", effort: "xhigh", permissionMode: "bypassPermissions", disallowedTools: ["Bash(sudo *)", "Bash(rm -rf /*)", "Bash(rm -rf ~*)"] } as const;
+
+// How the host starts the chat's session again: where it runs, with its prompt and settings.
+export async function hostOptions(chat: Chat, cwd = runsIn(chat)): Promise<hosted.StartOptions> {
+  return { id: chat.session, resume: true, cwd, ...OPTIONS, disallowedTools: [...OPTIONS.disallowedTools], additionalDirectories: adds(cwd),
+    append: await agentPrompt(chat, BASE) };
+}
+
+// Start a chat's session in the host, idle until the user writes in its panel. Given an issue in Triage and a first
+// message, as for a Slack message the user tagged (slack.ts), the chat starts bound to the issue and works on the
+// message at once.
+export async function newChat(base: string, start?: { issue: Issue; message: string }): Promise<Chat> {
   // strftime's %b in the C locale: Sep, never Sept.
   const d = new Date(), month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
-  const chat: Chat = { id, kind: WINDOW, title: issue?.title ?? "New chat", created: now(), session: "", messages: [],
-    ...(issue && { issue: issue.slug, folder: DATA_DIR }) }; // where bind() leaves a chat whose issue has no folder
+  const chat: Chat = { id: `chat-${randomBytes(4).toString("hex")}`, kind: "panel", title: start?.issue.title ?? "New chat", created: now(), session: "", messages: [],
+    ...(start && { issue: start.issue.slug, folder: DATA_DIR }) }; // where bind() leaves a chat whose issue has no folder
   const name = `desk chat ${d.getDate()} ${month} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const short = await agents.background(DATA_DIR, ["claude", "--bg", "-n", name, ...WINDOW_FLAGS, "--append-system-prompt", await agentPrompt(chat, base),
-    ...(message ? [message] : [])]);
-  started?.(short);
-  chat.session = await agents.sessionId(short);
+  const row = await hosted.start({ cwd: DATA_DIR, title: name, ...OPTIONS, disallowedTools: [...OPTIONS.disallowedTools], append: await agentPrompt(chat, base),
+    ...(start ? { message: start.message } : {}) });
+  chat.session = row.id;
   save(chat);
   return chat;
 }
 
-const newChatId = () => `chat-${randomBytes(4).toString("hex")}`;
-
-// A new chat's window waits, up to a minute, for its session's short id in the file $2, then attaches as REATTACH does;
-// an empty file, left when Claude Code did not start the session, closes it.
-const AWAIT_ATTACH = `i=0; while [ ! -e "$2" ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done; id=$(cat "$2" 2>/dev/null); rm -f "$2"; [ -n "$id" ] || exit 1; set -- "$1" "$id" "$3"; ${REATTACH}`;
-
-// Ctrl Shift O's new chat, whose window opens at once instead of after `claude --bg` has started the session (about
-// 0.7 s), and attaches as soon as it has.
-export async function openNewWindowChat(base: string): Promise<Chat> {
-  const id = newChatId(), handoff = join(tmpdir(), `desk-${id}.session`);
-  const hand = (short: string) => {
-    writeFileSync(`${handoff}.part`, short);
-    renameSync(`${handoff}.part`, handoff); // whole, so the window never reads it half written
-  };
-  const starting = newWindowChat(base, { id, started: hand }).catch((error) => {
-    hand("");
-    throw error;
-  });
-  const opening = window.launch(`desk-agent-${id}`, "desk · New chat", DATA_DIR, ["sh", "-c", AWAIT_ATTACH, "sh", which("claude") ?? "claude", handoff, moving(id)]);
-  return (await Promise.all([starting, opening]))[0];
-}
-
-// The user's words and the agent's, in order, from a window chat's transcript.
+// The user's words and the agent's, in order, from a chat's transcript.
 export function* said(chat: Chat): Generator<[string, string]> {
-  const file = join(TRANSCRIPTS, `${chat.session}.jsonl`);
-  if (!existsSync(file)) return;
-  for (const line of readFileSync(file, "utf8").split("\n")) {
-    if (!line.trim()) continue;
-    let event;
-    try {
-      event = JSON.parse(line);
-    } catch {
-      continue; // a line Claude Code is still writing
-    }
-    if (!["user", "assistant"].includes(event.type) || event.isMeta) continue;
-    const content = event.message.content;
-    const text: string = typeof content === "string" ? content
-      : content.filter((b: { type: string }) => b.type === "text").map((b: { text?: string }) => b.text ?? "").join("\n");
-    if (text.trim() && !text.trimStart().startsWith("<")) yield [event.type, text.trim()]; // a tool result, or a slash command's own lines
+  const path = transcripts.pathOf(chat.session);
+  if (!path) return;
+  for (const item of transcripts.read(path, 0)[0].flatMap(transcripts.itemsOf)) {
+    if (item.t === "you" && item.text) yield ["user", item.text];
+    else if (item.t === "text" && item.text) yield ["assistant", item.text.trim()];
   }
 }
 
-// When a window chat last moved: its transcript's last write, or its start.
+// When a chat last moved: its transcript's last write, or its start.
 export function activity(chat: Chat): string {
-  const file = join(TRANSCRIPTS, `${chat.session}.jsonl`);
-  if (!existsSync(file)) return chat.created;
+  const file = transcripts.pathOf(chat.session);
+  if (!file) return chat.created;
   const d = statSync(file).mtime, pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-// The chat's window, brought to the user or opened: `claude attach` while its session lists, which also wakes a
-// stopped one, else `claude --resume`. An open window comes forward before desk asks Claude Code about the session.
-export async function openWindow(chat: Chat, title = "") {
-  const name = `desk-agent-${chat.id}`;
-  if (await window.focus(name)) return;
-  const row = await agents.liveRow(chat.session, true);
-  if (row.kind === "interactive") throw new Error("This chat is open in another terminal. Close that one first.");
-  const argv = row.kind === "background"
-    ? ["sh", "-c", REATTACH, "sh", which("claude") ?? "claude", row.id!, moving(chat.id)]
-    : ["claude", "--resume", chat.session];
-  await window.launch(name, `desk · ${title || chat.title}`, runsIn(chat), argv);
 }
 
 function chats(): Chat[] {
@@ -194,20 +156,9 @@ function chats(): Chat[] {
   return readdirSync(CHATS_DIR).filter((n) => n.endsWith(".json")).map((n) => JSON.parse(readFileSync(join(CHATS_DIR, n), "utf8")));
 }
 
-// The window chat whose session this is, if any.
-export async function windowOf(session: string | null | undefined): Promise<Chat | null> {
-  return session ? chats().find((c) => c.kind === WINDOW && c.session === session) ?? null : null;
-}
-
-// Whether the window chat whose session this is sits in front, where the user reads its reply as it comes.
-export async function readNow(session: string | null | undefined): Promise<boolean> {
-  const chat = await windowOf(session);
-  if (!chat) return false;
-  try {
-    return (await window.inFront()) === `desk-agent-${chat.id}`;
-  } catch {
-    return false; // no Hyprland, so no window in front
-  }
+// The agent chat whose session this is, if any.
+export function agentChatOf(session: string | null | undefined): Chat | null {
+  return session ? chats().find((c) => KINDS.has(c.kind ?? "") && c.session === session) ?? null : null;
 }
 
 // The folder the chat's session runs in: DESK_DATA, where every chat starts, until desk moves it.
@@ -219,9 +170,9 @@ export async function sessionRunsIn(session: string | null | undefined): Promise
   return chat ? runsIn(chat) : null;
 }
 
-// The window chats, the one that moved last first.
-export function windowChats(): Chat[] {
-  return chats().filter((c) => c.kind === WINDOW).sort((a, b) => (activity(a) < activity(b) ? 1 : activity(a) > activity(b) ? -1 : 0));
+// The agent chats, the one that moved last first.
+export function agentChats(): Chat[] {
+  return chats().filter((c) => KINDS.has(c.kind ?? "")).sort((a, b) => (activity(a) < activity(b) ? 1 : activity(a) > activity(b) ? -1 : 0));
 }
 
 // --- moving a chat -------------------------------------------------------------------------------------------------
@@ -231,16 +182,13 @@ export function windowChats(): Chat[] {
 const MOVING = new Set<string>(); // the chats a move waits on, so a second bind does not start a second move
 const MOVE_WAIT = 4 * 3600; // seconds a move waits for the chat's turn to end
 
-// The file that is there while desk moves the chat, holding the folder it moves to.
-const moving = (id: string) => join(CHATS_DIR, `${id}.moving`);
-
 function same(a: string, b: string): boolean {
   const real = (p: string) => { const full = resolve(p.startsWith("~") ? join(HOME, p.slice(1)) : p); try { return realpathSync(full); } catch { return full; } };
   return real(a) === real(b);
 }
 
-// --add-dir for desk's data folder, which holds the issues' files, unless the chat runs in it.
-const adds = (cwd: string) => (same(DATA_DIR, cwd) || !existsSync(DATA_DIR) ? [] : ["--add-dir", DATA_DIR]);
+// Desk's data folder, which holds the issues' files, for a chat that runs elsewhere.
+const adds = (cwd: string) => (same(DATA_DIR, cwd) || !existsSync(DATA_DIR) ? [] : [DATA_DIR]);
 
 async function move(id: string, base: string) {
   try {
@@ -252,62 +200,44 @@ async function move(id: string, base: string) {
   }
 }
 
-// Drop Claude Code's record of the chat's session, which also ends it and would otherwise wake it in its old folder, and
-// resume it in the issue's folder, telling it to carry on. When the folder will not take it, resume it where it was,
-// telling it why. Its window attaches again by itself (REATTACH).
+// End the chat's process once its turn is over, and start it again in the issue's folder, telling it to carry on.
+// When the folder will not take it, start it where it was, telling it why. Its panel follows by itself: the host
+// holds the same session id again.
 async function carryOver(id: string, base: string) {
   const began = performance.now() / 1000;
   let row: agents.Row;
-  while ((row = await agents.liveRow(load(id).session, true)).status === "busy") {
+  while ((row = await agents.liveRow(load(id).session, true)).status === "busy" || row.status === "waiting") {
     const waited = performance.now() / 1000 - began;
     if (waited > MOVE_WAIT) return;
     await new Promise((r) => setTimeout(r, waited < 60 ? 200 : 2000)); // the turn usually ends right after the bind
   }
   let chat = load(id);
-  if (row.kind === "interactive" || same(chat.folder!, runsIn(chat))) return;
-  if (!Object.keys(row).length) { // nothing runs, so the next resume starts it in the folder
+  if ((row.kind === "interactive" && row.pid) || same(chat.folder!, runsIn(chat))) return;
+  if (!Object.keys(row).length) { // nothing runs, so the next message starts it in the folder
     chat.cwd = chat.folder;
     save(chat);
     return;
   }
-  const name = `desk-agent-${chat.id}`, i = await store.load(chat.issue!);
-  let shown = false;
-  try {
-    shown = await window.isOpen(name);
-  } catch {
-    // no Hyprland
-  }
-  const words = { folder: chat.folder!, title: i.title, base, slug: i.slug };
-  writeFileSync(moving(id), chat.folder!, "utf8");
-  let moved: boolean;
-  try {
+  if (row.kind === "host") {
+    await hosted.close(chat.session).catch(() => {});
+    await hosted.released(chat.session);
+  } else {
+    // From before the panel: drop the daemon's record of it, which would otherwise wake it in its old folder.
     await run(["claude", "rm", row.id!], { timeout: 30 });
     if (row.pid) await agents.exited(row.pid);
-    try {
-      await resumeIn(chat, row, chat.folder!, fill(MOVED, words), base);
-      moved = true;
-    } catch (error) {
-      const why = error instanceof agents.TrustError ? fill(UNTRUSTED, words) : String((error as Error).message);
-      await resumeIn(chat, row, runsIn(chat), fill(NOT_MOVED, { why, ...words }), base);
-      moved = false;
-    }
-  } finally {
-    try { unlinkSync(moving(id)); } catch { /* gone */ }
+  }
+  const i = await store.load(chat.issue!);
+  const words = { folder: chat.folder!, title: i.title, base, slug: i.slug };
+  let moved = false;
+  try {
+    await hosted.start({ ...(await hostOptions(chat, chat.folder!)), message: fill(MOVED, words) });
+    moved = true;
+  } catch (error) {
+    await hosted.start({ ...(await hostOptions(chat)), message: fill(NOT_MOVED, { why: (error as Error).message, ...words }) });
   }
   chat = load(id);
   if (moved) {
     chat.cwd = chat.folder;
     save(chat);
-  }
-  if (shown && (await window.closed(name, 1))) await openWindow(chat);
-}
-
-// Resume the chat's session in the folder with the message, as the same session and with the flags it started with.
-async function resumeIn(chat: Chat, row: agents.Row, folder: string, message: string, base: string) {
-  const short = await agents.background(folder, ["claude", "--bg", "--resume", chat.session, "-n", row.name || chat.title,
-    ...WINDOW_FLAGS, ...adds(folder), "--append-system-prompt", await agentPrompt(chat, base), message]);
-  if (!chat.session.startsWith(short)) {
-    await run(["claude", "stop", short], { timeout: 30 });
-    throw new Error(`Claude Code started a copy (${short}) instead of continuing the session; desk stopped it.`);
   }
 }

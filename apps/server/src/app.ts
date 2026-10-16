@@ -13,6 +13,7 @@ import { HOME } from "./config.ts";
 import * as store from "./issues.ts";
 import { byRank, CLOSED, runs } from "./issues.ts";
 import * as land from "./land.ts";
+import * as live from "./live.ts";
 import * as pages from "./pages.ts";
 import { HttpError } from "./pages.ts";
 import * as projects from "./projects.ts";
@@ -226,7 +227,7 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/version", async (_req, reply) => reply.type("text/plain; charset=utf-8").send(pages.version()));
 
   // desk's pages are the app's: each address answers with it, and the app asks /api/page/... for the data.
-  for (const path of ["/backlog", "/projects", "/project/:slug", "/inbox", "/search", "/issue/:slug", "/sessions", "/settings", "/settings/:section"])
+  for (const path of ["/backlog", "/projects", "/project/:slug", "/inbox", "/search", "/issue/:slug", "/sessions", "/sessions/:id", "/settings", "/settings/:section"])
     app.get(path, async (_req, reply) => web.index(reply));
   app.get("/", async (_req, reply) => reply.redirect("/backlog", 307));
   app.get("/park", async (_req, reply) => reply.redirect("/backlog", 307));
@@ -459,36 +460,13 @@ export async function create(): Promise<FastifyInstance> {
     return back(reply, req.params.slug, message, false, field(req, "src") === "inbox");
   });
 
-  // Open chat: the issue's session in a floating kitty window over desk.
-  app.post("/issue/:slug/window", async (req: Req) => {
-    await mustExist(req.params.slug);
-    const i = await store.load(req.params.slug);
-    if (!i.session) throw new HttpError(409, "This issue has no session yet.");
-    try {
-      await window.issue(i);
-    } catch (error) {
-      throw new HttpError(502, (error as Error).message);
-    }
-    return { ok: true };
-  });
-
-  app.post("/issue/:slug/jump", async (req: Req, reply) => {
-    const i = await store.load(req.params.slug);
-    if (!i.session) return back(reply, i.slug);
-    try {
-      await agents.jumpBack(i);
-    } catch (error) {
-      return back(reply, i.slug, (error as Error).message);
-    }
-    return back(reply, i.slug);
-  });
-
   // --- the Sessions list
   app.get("/sessions/events", async (_req, reply) => {
     reply.hijack();
     sessions.events(reply.raw);
   });
   app.get("/sessions/recent", async (req: Req) => sessions.recent(req.query.q ?? ""));
+  // New session: an agent chat, opened in the panel.
   app.post("/sessions/new", async (req) => {
     try {
       return { id: (await sessions.newSession(api.baseOf(req))).session };
@@ -496,16 +474,52 @@ export async function create(): Promise<FastifyInstance> {
       throw new HttpError(502, (error as Error).message);
     }
   });
-  app.post("/sessions/:sid/open", async (req: Req) => {
-    const sid = req.params.sid;
-    if (!/^[0-9a-f-]{8,36}$/.test(sid)) throw new HttpError(404, "No such session.");
+
+  // --- the session panel (live.ts): its socket, and what it sends. Only desk's own page may write into a session.
+  const sessionOf = (req: Req) => {
+    if (!live.SESSION_ID.test(req.params.id)) throw new HttpError(404, "No such session.");
+    return req.params.id;
+  };
+  const mustBePage = (req: Req) => {
+    if (!fromPage(req)) throw new HttpError(403, "Only desk's page writes into a session.");
+  };
+  app.get("/api/live/:id", {
+    websocket: true,
+    preValidation: async (req, reply) => {
+      if (!fromDesk(req) || !live.SESSION_ID.test((req.params as { id: string }).id)) await reply.code(403).send();
+    },
+  }, (socket, req) => void live.connect(socket, (req.params as { id: string }).id));
+  app.post("/api/live/:id/send", async (req: Req) => {
+    mustBePage(req);
+    const body = (req.body ?? {}) as unknown as live.Sent;
+    if (!body.text?.trim() && !body.images?.length) throw new HttpError(422, "Nothing to send.");
     try {
-      await sessions.openSession(sid);
+      return await live.send(sessionOf(req), body);
     } catch (error) {
-      throw new HttpError(error instanceof sessions.NoSession ? 404 : 502, (error as Error).message);
+      throw new HttpError(409, (error as Error).message);
     }
-    return { id: sid };
   });
+  app.post("/api/live/:id/interrupt", async (req: Req) => {
+    mustBePage(req);
+    try {
+      await live.interrupt(sessionOf(req));
+    } catch (error) {
+      throw new HttpError(409, (error as Error).message);
+    }
+    return { ok: true };
+  });
+  app.post("/api/live/:id/answer", async (req: Req) => {
+    mustBePage(req);
+    const body = (req.body ?? {}) as unknown as { ask: string; result: Record<string, unknown> };
+    try {
+      await live.answer(sessionOf(req), body.ask, body.result);
+    } catch (error) {
+      throw new HttpError(409, (error as Error).message);
+    }
+    return { ok: true };
+  });
+  app.get("/api/live/:id/files", async (req: Req) => live.files(sessionOf(req), req.query.q ?? ""));
+  app.get("/api/live/:id/commands", async (req: Req) => live.commands(sessionOf(req)));
 
   // --- the app's live sync; a WebSocket is not bound by CORS, so another site could otherwise read every issue
   app.get("/api/sync", {

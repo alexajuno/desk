@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { WebSocket } from "ws";
 import { HOME, PORT, REPO } from "./config.ts";
 import { sleep, which } from "./proc.ts";
+import { pathOf } from "./transcript.ts";
 
 export const SOCKET = join(process.env.XDG_RUNTIME_DIR || "/tmp", `desk-host-${PORT}.sock`);
 const HOST = join(REPO, "apps", "server", "src", "host.ts");
@@ -85,8 +86,9 @@ async function version(): Promise<string | null> {
   }
 }
 
-// Start a host in a systemd scope of its own, so that desk.service's restart leaves it and its sessions running, as
-// agents.ownScope does for Claude Code's daemon; its output goes to LOG.
+// Start a host in a systemd scope of its own, so that desk.service's restart, which stops everything in its cgroup,
+// leaves it and its sessions running (on 15 Oct one restart of desk killed every session it had started); its output
+// goes to LOG.
 async function launch() {
   mkdirSync(dirname(LOG), { recursive: true });
   const out = openSync(LOG, "a");
@@ -158,6 +160,8 @@ export async function holds(id: string | null | undefined): Promise<HostRow | nu
 }
 
 export async function start(o: StartOptions): Promise<HostRow> {
+  // A session that never got a message has no transcript to resume: it starts afresh, under the same id.
+  if (o.resume && o.id && !pathOf(o.id)) o = { ...o, resume: false };
   await ensure();
   const row = await call<HostRow>("POST", "/sessions", o);
   cached = [0, []];

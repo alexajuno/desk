@@ -9,6 +9,7 @@ import { ISSUES_DIR, PROJECTS_DIR } from "./config.ts";
 import * as store from "./issues.ts";
 import { byRank, CLOSED, runs, type Issue } from "./issues.ts";
 import * as land from "./land.ts";
+import * as live_ from "./live.ts";
 import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
 import { toHtml, toHtmlWithToc } from "./render.ts";
@@ -113,7 +114,7 @@ export async function inboxItems(all: Map<string, Issue>, live: Map<string, agen
     } else if (i.state === "running" && now === "idle" && !hasResult && store.hasPlan(i)) {
       needs.push([i, runs(i) === "quick" ? "waiting for you" : "plan ready"]);
     } else if (i.state === "triage") {
-      if (now === "idle" && !(await chats.readNow(i.session))) needs.push([i, "chat replied"]);
+      if (now === "idle" && !live_.watching(i.session)) needs.push([i, "chat replied"]);
     } else if (row.state === "blocked" && row.pid && !CLOSED.has(i.state) && i.state !== "waiting") {
       needs.push([i, "waiting for you"]);
     }
@@ -136,7 +137,7 @@ export async function notifications(all: Map<string, Issue>): Promise<Notice[]> 
   const [needs, review] = await inboxItems(all, await agents.live());
   const changed = async (i: Issue) => {
     // A chat in Triage changes no file when it replies: its transcript says when, so each reply shows unread.
-    const chat = i.state === "triage" ? await chats.windowOf(i.session) : null;
+    const chat = i.state === "triage" ? chats.agentChatOf(i.session) : null;
     const at = store.changed(i.slug);
     return chat ? Math.max(at, parseLocal(chats.activity(chat)).getTime() / 1000) : at;
   };

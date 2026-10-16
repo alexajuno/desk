@@ -139,7 +139,7 @@ async function file(m: Message, author: string, link: string): Promise<store.Iss
 // The chat that reads the message's thread, bound to its issue.
 async function startChat(i: store.Issue, m: Message, author: string, base: string) {
   const message = fill(SLACK_PROMPT, { title: i.title, base, slug: i.slug, author, date: when(m), link: i.link!, quote: quoted(m) });
-  const chat = await chats.newWindowChat(base, { issue: i, message });
+  const chat = await chats.newChat(base, { issue: i, message });
   await store.move(i, { session: chat.session }); // onto the issue as it is now, which the chat may have retitled already
 }
 

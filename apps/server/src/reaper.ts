@@ -5,7 +5,7 @@
 // Once a minute, a background session that is not working and that nobody has open is stopped when
 // - every issue that holds it is Done or Dropped. A chat's Triage issue dropped as a duplicate keeps the session's id
 //   while the session works the issue it joined, so one open issue keeps it running;
-// - it is a window chat with no issue, a minute old or more. One with nothing typed in it holds nothing, so desk
+// - it is an agent chat with no issue, a minute old or more. One with nothing typed in it holds nothing, so desk
 //   removes it, chat and session.
 //
 // Stopping loses nothing: "Stop a background session. Its conversation is kept; resume it later with `claude attach
@@ -17,6 +17,7 @@ import * as chats from "./chats.ts";
 import { CHATS_DIR } from "./config.ts";
 import * as store from "./issues.ts";
 import { CLOSED } from "./issues.ts";
+import * as hosted from "./hosted.ts";
 import { run } from "./proc.ts";
 import { parseLocal } from "./when.ts";
 
@@ -48,7 +49,7 @@ export async function sweep(dry = false) {
   }
   for (const [session, held] of states)
     if ([...held].every((s) => CLOSED.has(s))) await stop(live.get(session) ?? {}, watched, `its issue is ${[...held].sort().join("/")}`, dry);
-  for (const chat of chats.windowChats()) {
+  for (const chat of chats.agentChats()) {
     if (chat.issue || Date.now() - parseLocal(chat.created).getTime() < YOUNG * 1000) continue;
     const row = live.get(chat.session) ?? {};
     if (!chats.said(chat).next().done) await stop(row, watched, `${chat.id} has no issue`, dry);
@@ -58,6 +59,7 @@ export async function sweep(dry = false) {
         continue;
       }
       if (row.id) await run(["claude", "rm", row.id], { timeout: 30 }).catch(() => {}); // an interactive session, opened with `claude --resume`, lists with no id
+      if (row.kind === "host") await hosted.close(chat.session).catch(() => {});
       rmSync(join(CHATS_DIR, `${chat.id}.json`), { force: true });
       console.log(`reaper: removed ${chat.id}, a chat with nothing typed in it`);
     }

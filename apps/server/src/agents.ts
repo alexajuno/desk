@@ -1,18 +1,20 @@
 // The one Claude Code session bound to an issue, from its plan to its landing (ported from desk/agents.py, which said
 // how each step works and what was checked on Claude Code 2.1.285 and 2.1.300).
 //
-//   Plan       claude --bg in the issue's folder, with no -w: the repo's own rules say where the session works. The
-//              session plans by the issue's protocol and keeps the plan in plan.md.
-//   "go"       said in the chat: the same session carries out the plan, then writes its review card in result.md.
-//   Approve    the same session lands the work by the repo's rules (`claude stop`, then `claude --bg --resume <id>
-//              "<land it>"`, with no other flags).
-//   Jump back  focus the session's kitty tab if it is open, else open one.
+//   Plan       a session in the session host (host.ts), in the issue's folder: the repo's own rules say where the
+//              session works. The session plans by the issue's protocol and keeps the plan in plan.md.
+//   "go"       said in its panel: the same session carries out the plan, then writes its review card in result.md.
+//   Approve    the same session lands the work by the repo's rules: desk sends it the message, which waits its turn
+//              when the session is working.
+//
+// A session from before the host, still in Claude Code's background daemon, moves into the host with its next message.
 import { existsSync, readFileSync, renameSync, statSync, chmodSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { HOME } from "./config.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
-import { detach, run, shJoin, sleep, which } from "./proc.ts";
+import * as hosted from "./hosted.ts";
+import { run, sleep, which } from "./proc.ts";
 import { BRIEF_PROMPT, BRIEF_STEPS, CHAT_PLAN_PROMPT, fill, GO_PROMPT, LAND_PROMPT, PLAN_PROMPT, TOLD } from "./prompts.ts";
 
 export async function git(cwd: string, ...args: string[]): Promise<string | null> {
@@ -22,15 +24,6 @@ export async function git(cwd: string, ...args: string[]): Promise<string | null
   } catch {
     return null; // no folder, or no git
   }
-}
-
-// `claude --bg` and `claude attach` start Claude Code's daemon as their child when none is running, and every
-// background session then runs under that daemon. desk runs as desk.service, whose restart stops everything in its
-// cgroup, so on 15 Oct one restart of desk killed every running session; in a scope of its own the daemon outlives desk.
-// --expand-environment=no: systemd-run otherwise expands "$" in the arguments, the prompt included.
-export function ownScope(command: string[], slice = "agents.slice"): string[] {
-  if (!which("systemd-run")) return command;
-  return ["systemd-run", "--user", "--scope", `--slice=${slice}`, "--collect", "--quiet", "--expand-environment=no", "--", ...command];
 }
 
 // Hyprland's start hook imports these into the user manager at login; desk.service starts at boot, before that, and
@@ -78,6 +71,15 @@ export async function live(fresh = false): Promise<Map<string, Row>> {
   }
   const byKey = new Map<string, Row>();
   for (const row of rows) for (const key of [row.id, row.sessionId]) if (key) byKey.set(key, row);
+  // The host's sessions list as interactive, the way Claude Code lists any process it was not started in the
+  // background as: say whose they are, and whether one waits on the user, which only the host knows.
+  for (const h of await hosted.sessions(fresh)) {
+    const listed = byKey.get(h.id);
+    const row: Row = { ...listed, sessionId: h.id, kind: "host", cwd: listed?.cwd ?? h.cwd, name: listed?.name ?? h.title,
+      pid: listed?.pid ?? -1, status: h.asks ? "waiting" : h.working ? "busy" : "idle", ...(h.asks ? { state: "blocked" } : {}) };
+    delete row.id; // no short id: `claude stop` and `claude attach` are for the daemon's sessions
+    byKey.set(h.id, row);
+  }
   seen = [performance.now() / 1000, byKey];
   return byKey;
 }
@@ -93,44 +95,10 @@ export function status(row: Row): string {
   return row.pid ? "idle" : "stopped";
 }
 
-// kitty.conf has `listen_on unix:/tmp/mykitty`, and kitty adds -<its pid> to the socket, so each running kitty answers
-// on one of these.
-async function kittySockets(): Promise<string[]> {
-  const { readdirSync } = await import("node:fs");
-  try {
-    return readdirSync("/tmp").filter((n) => n.startsWith("mykitty-")).map((n) => `/tmp/${n}`).sort();
-  } catch {
-    return [];
-  }
-}
-
-// Run a remote control command in one kitty; when it works, bring that kitty to the front.
-async function kitty(socket: string, ...args: string[]): Promise<boolean> {
-  if ((await run(["kitty", "@", "--to", `unix:${socket}`, ...args], { timeout: 10 })).code) return false;
-  // Hyprland 0.56 takes Lua after `dispatch`.
-  const pid = socket.slice(socket.lastIndexOf("-") + 1);
-  const focus = await run(["hyprctl", "dispatch", `hl.dsp.focus({ window = "pid:${pid}" })`], { timeout: 10, env: await sessionEnv() });
-  if (focus.code) throw new Error(`Opened in kitty, but Hyprland did not switch to it: ${focus.stdout.trim()}`);
-  return true;
-}
-
-// Focus the kitty tab desk opened for the issue, if it is still open.
-async function focusTab(i: Issue): Promise<boolean> {
-  for (const socket of await kittySockets()) if (await kitty(socket, "focus-tab", "--match", `var:^desk_issue$=^${i.slug}$`)) return true;
-  return false;
-}
-
-// Run the command in a new tab of the running kitty, marked with the issue's slug so focusTab finds it; with no kitty
-// running, in a new kitty window, marked the same way through a session.
-async function terminal(cwd: string, i: Issue, ...command: string[]) {
-  const launch = ["--tab-title", i.title, "--cwd", cwd, "--var", `desk_issue=${i.slug}`, ...command];
-  for (const socket of await kittySockets()) if (await kitty(socket, "launch", "--type=tab", ...launch)) return;
-  detach(ownScope(["kitty", "--title", i.title, "--session", "-"], "app.slice"), { env: await sessionEnv(), input: `launch ${shJoin(launch)}\n` });
-}
-
 const paths = (i: Issue, folder: string) => ({ title: i.title, file: join(folder, "issue.md"), plan: join(folder, "plan.md"), dir: folder });
 
-// Claude Code refused to start a session because nobody accepted its trust prompt in the folder.
+// Claude Code refused to start a session because nobody accepted its trust prompt in the folder. The host runs
+// Claude Code headless, which asks no trust, so only a page's Trust folder press still meets it.
 export class TrustError extends Error {}
 
 const CLAUDE_JSON = join(HOME, ".claude.json");
@@ -153,22 +121,8 @@ export function trust(folder: string) {
     throw new Error("Claude Code rewrote its settings at the same moment and dropped the change. Press Trust folder again.");
 }
 
-export async function background(cwd: string, command: string[]): Promise<string> {
-  const r = await run(ownScope(command), { cwd, timeout: 60, env: await sessionEnv() });
-  // With FORCE_COLOR set, the id comes wrapped in colour codes: "backgrounded · \x1b[36mf72e9ccb\x1b[39m · <name>".
-  const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, "");
-  if (out.toLowerCase().includes("workspace not trusted")) throw new TrustError(`Workspace not trusted: ${cwd}`);
-  const m = /backgrounded · ([0-9a-f]{8})/.exec(out);
-  if (!m) throw new Error(out.trim() || "claude --bg printed no id");
-  return m[1];
-}
-
-// Start the issue's session in the background in its folder, whose repo's rules say where to work; the short id.
-const newSession = (i: Issue, prompt: string) => background(workdir(i), ["claude", "--bg", "-n", [...i.title].slice(0, 40).join(""), prompt]);
-
-export async function sessionId(short: string): Promise<string> {
-  return (await live(true)).get(short)?.sessionId ?? short;
-}
+// Start the issue's session in the host, in its folder, whose repo's rules say where to work; its session id.
+const newSession = async (i: Issue, prompt: string) => (await hosted.start({ cwd: workdir(i), title: [...i.title].slice(0, 40).join(""), message: prompt })).id;
 
 // The session's first prompt, by the issue's protocol: a sketch planned with the user, or a brief, after which it
 // waits for "go" or goes on at once. chat is the Agent chat it came from, if any.
@@ -182,36 +136,55 @@ export function planPrompt(i: Issue, folder: string, chat = ""): string {
 }
 
 // Plan, or Start: the issue's session plans it by its protocol; its session id.
-export const start = async (i: Issue, folder: string) => sessionId(await newSession(i, planPrompt(i, folder)));
+export const start = (i: Issue, folder: string) => newSession(i, planPrompt(i, folder));
 // Start the issue's session straight on its written plan, as the desk agent does; its session id.
-export const runPlan = async (i: Issue, folder: string) => sessionId(await newSession(i, fill(GO_PROMPT, paths(i, folder))));
+export const runPlan = (i: Issue, folder: string) => newSession(i, fill(GO_PROMPT, paths(i, folder)));
 // Start the issue's session to plan from the Agent chat, then wait, or go on at once for a quick issue.
-export const planFromChat = async (i: Issue, folder: string, chat: string) => sessionId(await newSession(i, planPrompt(i, folder, chat)));
+export const planFromChat = (i: Issue, folder: string, chat: string) => newSession(i, planPrompt(i, folder, chat));
 // The desk agent starts an issue that already has a session: the same session carries out the plan.
-export const go = (i: Issue, folder: string) => carryOn(i, fill(GO_PROMPT, paths(i, folder)));
+export const go = (i: Issue, folder: string) => tell(i.session!, fill(GO_PROMPT, paths(i, folder)));
 // Approve: the issue's own session lands its work by the repo's rules.
-export const land = (i: Issue, folder: string) => carryOn(i, fill(LAND_PROMPT, paths(i, folder)));
+export const land = (i: Issue, folder: string) => tell(i.session!, fill(LAND_PROMPT, paths(i, folder)));
 // Give the issue's session one message, as the user would in its chat.
-export const say = (i: Issue, message: string) => carryOn(i, message);
+export const say = (i: Issue, message: string) => tell(i.session!, message);
 
-// Give the issue's own session its next message, in the background, as the same session.
-async function carryOn(i: Issue, prompt: string) {
-  const row = await liveRow(i.session, true);
-  if (row.kind === "interactive") throw new Error("This session is open in a terminal. Close that tab, then try again.");
-  // `state` stays "working" while a session waits for you between turns; `status` busy is a turn actually running.
-  if (row.status === "busy") throw new Error("The session is still working. Wait until it is done, then try again.");
-  if (row.pid) {
-    await run(["claude", "stop", row.id!], { timeout: 30 });
-    // `claude stop` returns about half a second before the process exits; a resume in that gap "started a copy".
+// Give a session its next message, as the user would in its panel. The host holds it, or takes it in: from the folder
+// it runs in, and from Claude Code's daemon when it ran in the background before. A message to a session at work waits
+// its turn, as Enter does in its terminal.
+export async function tell(session: string, content: hosted.Content) {
+  if (await hosted.holds(session)) {
+    try {
+      await hosted.send(session, content);
+      return;
+    } catch (error) {
+      if (!(error instanceof hosted.HostError && error.status === 404)) throw error; // closed as we asked: start it again
+    }
+  }
+  const row = await liveRow(session, true);
+  if (row.kind === "interactive" && row.pid) throw new Error("This session is open in a terminal. Close it there, then try again.");
+  if (row.status === "busy") throw new Busy("This session is still working in the background, where it ran before desk's panel. Wait until it is done, then try again.");
+  if (row.pid && row.id) {
+    await run(["claude", "stop", row.id], { timeout: 30 });
+    // `claude stop` returns about half a second before the process exits; a resume in that gap would start a copy.
     await exited(row.pid);
   }
-  const { sessionRunsIn } = await import("./chats.ts");
-  const short = await background((await sessionRunsIn(i.session)) ?? workdir(i), ["claude", "--bg", "--resume", i.session!, prompt]);
-  if (!i.session!.startsWith(short)) {
-    // Left running, the copy would work on the issue's branch where desk cannot see it (15 Oct).
-    await run(["claude", "stop", short], { timeout: 30 });
-    throw new Error(`Claude Code started a copy (${short}) instead of continuing the session; desk stopped the copy. Try again.`);
-  }
+  await hosted.start({ ...(await resumeOptions(session)), message: content });
+}
+
+// The session works in Claude Code's daemon, which takes no message mid-turn.
+export class Busy extends Error {}
+
+// How the host brings a session back: in the folder it runs in, and a desk agent chat with its own prompt and flags.
+export async function resumeOptions(session: string): Promise<hosted.StartOptions> {
+  const chats = await import("./chats.ts");
+  const chat = chats.agentChatOf(session);
+  if (chat) return chats.hostOptions(chat);
+  const i = [...(await store.loadAll()).values()].find((x) => x.session === session);
+  if (i) return { id: session, resume: true, cwd: await resumeDir(i) };
+  const { cwdOf } = await import("./transcript.ts");
+  const cwd = cwdOf(session);
+  if (!cwd || !existsSync(cwd)) throw new Error(`Its folder${cwd ? `, ${cwd},` : ""} is gone, and Claude Code resumes a session only from the folder it ran in.`);
+  return { id: session, resume: true, cwd };
 }
 
 // Wait, up to the given seconds, for a process to exit.
@@ -227,17 +200,8 @@ export async function exited(pid: number, seconds = 15) {
   }
 }
 
-// Focus the issue's session in kitty, or open it there.
-export async function jumpBack(i: Issue) {
-  if (await focusTab(i)) return;
-  const row = await liveRow(i.session);
-  if (row.kind === "background" && (row.state === "working" || row.state === "done")) await terminal(row.cwd || workdir(i), i, "claude", "attach", row.id!);
-  else if (row.kind === "interactive") throw new Error("This session is already open in a terminal.");
-  else await terminal(await resumeDir(i), i, "claude", "--resume", i.session!);
-}
-
-// Where to `claude --resume` the issue's session: the folder an Agent chat's runs in, the worktree desk made with
-// `claude -w` for an old one's, else the issue's folder.
+// Where to resume the issue's session: the folder an agent chat's runs in, the worktree desk made with `claude -w` for
+// an old one's, else the issue's folder.
 export async function resumeDir(i: Issue): Promise<string> {
   const { sessionRunsIn } = await import("./chats.ts");
   const worktree = join(workdir(i), ".claude", "worktrees", `desk-${i.slug.slice(0, 40)}`);
