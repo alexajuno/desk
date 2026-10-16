@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { ISSUES_DIR, TRASH_DIR } from "./config.ts";
 import { sql } from "./db.ts";
 import { asText, dump, split } from "./frontmatter.ts";
+import * as settings from "./settings.ts";
 
 export const MAIN = "issue.md";
 export const PLAN = "plan.md"; // the plan, kept by the issue's session while the user plans with it
@@ -173,7 +174,7 @@ export function locked<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-async function saveNow(i: Issue) {
+async function write(i: Issue) {
   // The wait's note belongs to the wait: one that ends drops it, so a later wait starts afresh. So does Landing's time.
   if (i.state !== "waiting") i.waiting_on = i.waiting_since = null;
   else if (!i.waiting_since) i.waiting_since = now();
@@ -185,9 +186,49 @@ async function saveNow(i: Issue) {
   await upsert(parse(i.slug, text), text); // as a load reads it back from the file, as the Python's did
 }
 
-export async function save(i: Issue) {
-  await locked(() => saveNow(i));
+// Linear's two Workflow automations (linear.app/docs/parent-and-sub-issues#status-automation), each a toggle in
+// Settings, run on every save that closes an open issue, whoever made it: a page, an agent's curl, a session landing.
+// Returns the slugs they closed besides the issue.
+async function autoClose(i: Issue, was: string | undefined): Promise<string[]> {
+  if (was === undefined || CLOSED.has(was) || !CLOSED.has(i.state)) return [];
+  const on = settings.load();
+  if (!on.sub_issue_auto_close && !on.parent_auto_close) return [];
+  const all = await loadAll(), closed: string[] = [];
+  all.set(i.slug, i);
+  const close = async (other: Issue, state: string) => {
+    other.state = state;
+    await write(other);
+    closed.push(other.slug);
+  };
+  // Down: every open sub-issue, at any depth, closes as the parent did. One landing is left to finish its merge.
+  if (on.sub_issue_auto_close)
+    for (const slug of descendants(all, i.slug)) {
+      const kid = all.get(slug)!;
+      if (!CLOSED.has(kid.state) && kid.state !== "landing") await close(kid, i.state);
+    }
+  // Up: a parent whose sub-issues are now all closed closes too, as Done if any of them is, else as Dropped, and so on up.
+  if (on.parent_auto_close)
+    for (let up = i.parent ? all.get(i.parent) : undefined; up && !CLOSED.has(up.state) && up.state !== "landing";
+      up = up.parent ? all.get(up.parent) : undefined) {
+      const kids = children(all, up.slug);
+      if (!kids.every((k) => CLOSED.has(k.state))) break;
+      await close(up, kids.some((k) => k.state === "done") ? "done" : "dropped");
+    }
+  return closed;
+}
+
+// Write the issue, then close what its new state closes by the automations; returns those slugs.
+async function saveNow(i: Issue): Promise<string[]> {
+  const was = (await sql().query<{ state: string }>("select state from issues where slug = $1", [i.slug])).rows[0]?.state;
+  await write(i);
+  return autoClose(i, was);
+}
+
+// Save the issue; returns the slugs the Workflow automations closed with it.
+export async function save(i: Issue): Promise<string[]> {
+  const closed = await locked(() => saveNow(i));
   changed_();
+  return closed;
 }
 
 // Set fields on the issue as it is now, if its state and landing are still those of `i`, a copy read a moment ago;

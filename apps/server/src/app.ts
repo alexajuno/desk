@@ -91,6 +91,48 @@ async function mustExist(slug: string, detail = "That issue is gone.") {
   if (!(await store.exists(slug))) throw new HttpError(404, detail);
 }
 
+// The value a page asked to set, as desk keeps it, or why it cannot be.
+async function checked(i: store.Issue, name: string, given: string): Promise<string | null> {
+  let value: string | null = given;
+  if (name === "priority" || name === "state" || name === "protocol") {
+    const allowed = { priority: store.PRIORITIES, state: store.STATES, protocol: store.PROTOCOLS }[name];
+    if (!allowed.includes(value)) throw new HttpError(422, `${name} cannot be ${value}`);
+    if (name === "state" && value === "landing" && i.state !== "landing") throw new HttpError(422, "Only Approve lands an issue.");
+  } else if (name === "title") {
+    value = words(value);
+    if (!value) throw new HttpError(422, "A title cannot be empty.");
+  } else if (name === "body") value = value.replace(/\r\n/g, "\n");
+  else if (name === "waiting_on") {
+    value = words(value) || null;
+    if (i.state !== "waiting") throw new HttpError(422, "Only a waiting issue says who it waits on.");
+  } else if (name === "project") {
+    value = value || null;
+    if (value && !(await projects.exists(value))) throw new HttpError(422, `No project ${value}.`);
+  } else if (name === "parent") {
+    value = value || null;
+    if (value === i.slug || (value && store.descendants(await store.loadAll(), i.slug).includes(value)))
+      throw new HttpError(422, "An issue cannot sit under itself or its own sub-issue.");
+    if (value && !(await store.exists(value))) throw new HttpError(422, `No issue ${value}.`);
+  } else throw new HttpError(422, `No field ${name}.`);
+  return value;
+}
+
+// Set the field on each issue, all checked before any is saved, so a selection changes whole or not at all. Returns
+// the slugs the Workflow automations closed besides them.
+async function setFields(slugs: string[], name: string, given: string): Promise<string[]> {
+  for (const slug of slugs) {
+    await mustExist(slug);
+    await checked(await store.load(slug), name, given);
+  }
+  const closed = new Set<string>();
+  for (const slug of slugs) {
+    const i = await store.load(slug); // as it is now: an earlier one's automations may have closed it
+    (i as unknown as Record<string, string | null>)[name] = await checked(i, name, given);
+    for (const other of await store.save(i)) closed.add(other);
+  }
+  return [...closed].filter((s) => !slugs.includes(s));
+}
+
 // --- Works in: your repos, and path completion ---------------------------------------------------------------------
 
 const SKIP = new Set(["node_modules", "vendor", ".venv", "venv", "__pycache__", "dist", "build", ".git"]);
@@ -184,7 +226,7 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/version", async (_req, reply) => reply.type("text/plain; charset=utf-8").send(pages.version()));
 
   // desk's pages are the app's: each address answers with it, and the app asks /api/page/... for the data.
-  for (const path of ["/backlog", "/projects", "/project/:slug", "/inbox", "/search", "/issue/:slug", "/sessions"])
+  for (const path of ["/backlog", "/projects", "/project/:slug", "/inbox", "/search", "/issue/:slug", "/sessions", "/settings"])
     app.get(path, async (_req, reply) => web.index(reply));
   app.get("/", async (_req, reply) => reply.redirect("/backlog", 307));
   app.get("/park", async (_req, reply) => reply.redirect("/backlog", 307));
@@ -271,36 +313,16 @@ export async function create(): Promise<FastifyInstance> {
     return reply.redirect(`/project/${slug}`, 303);
   });
 
-  // --- an issue's fields
-  app.post("/issue/:slug/set", async (req: Req, reply) => {
-    const slug = req.params.slug;
-    await mustExist(slug);
-    const i = await store.load(slug);
-    const name = field(req, "field", null);
-    let value: string | null = field(req, "value");
-    if (name === "priority" || name === "state" || name === "protocol") {
-      const allowed = { priority: store.PRIORITIES, state: store.STATES, protocol: store.PROTOCOLS }[name];
-      if (!allowed.includes(value)) throw new HttpError(422, `${name} cannot be ${value}`);
-      if (name === "state" && value === "landing" && i.state !== "landing") throw new HttpError(422, "Only Approve lands an issue.");
-    } else if (name === "title") {
-      value = words(value);
-      if (!value) throw new HttpError(422, "A title cannot be empty.");
-    } else if (name === "body") value = value.replace(/\r\n/g, "\n");
-    else if (name === "waiting_on") {
-      value = words(value) || null;
-      if (i.state !== "waiting") throw new HttpError(422, "Only a waiting issue says who it waits on.");
-    } else if (name === "project") {
-      value = value || null;
-      if (value && !(await projects.exists(value))) throw new HttpError(422, `No project ${value}.`);
-    } else if (name === "parent") {
-      value = value || null;
-      if (value === slug || (value && store.descendants(await store.loadAll(), slug).includes(value)))
-        throw new HttpError(422, "An issue cannot sit under itself or its own sub-issue.");
-      if (value && !(await store.exists(value))) throw new HttpError(422, `No issue ${value}.`);
-    } else throw new HttpError(422, `No field ${name}.`);
-    (i as unknown as Record<string, string | null>)[name] = value;
-    await store.save(i);
-    return reply.type("text/plain; charset=utf-8").send("ok");
+  // --- an issue's fields: one, or the same one on every issue of a list's selection (slugs, field and value as JSON).
+  // Each answers with the issues the Workflow automations closed besides them, for the page to say so.
+  app.post("/issue/:slug/set", async (req: Req) => ({ closed: await setFields([req.params.slug], field(req, "field", null), field(req, "value")) }));
+
+  app.post("/issues/set", async (req) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const slugs = Array.isArray(body.slugs) ? body.slugs.filter((s): s is string => typeof s === "string") : [];
+    if (!slugs.length) throw new HttpError(422, "slugs is required");
+    if (typeof body.field !== "string") throw new HttpError(422, "field is required");
+    return { closed: await setFields(slugs, body.field, typeof body.value === "string" ? body.value : "") };
   });
 
   // Moves the issue and its sub-issues to the trash; POST /trash/<slug>/restore undoes it.

@@ -13,6 +13,8 @@
 //     GET    /api/projects/<slug>       one project, with its description and issues
 //     POST   /api/projects              create one: title, body
 //     PATCH  /api/projects/<slug>       set title, body, state (active or archived)
+//     GET    /api/settings              desk's settings (settings.ts)
+//     PATCH  /api/settings              set any of them, true or false
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -26,6 +28,7 @@ import { HttpError } from "./pages.ts";
 import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
 import { find } from "./search.ts";
+import * as settings from "./settings.ts";
 
 const OPEN = store.STATES.filter((s) => s !== "done" && s !== "dropped");
 
@@ -131,11 +134,24 @@ export function routes(app: FastifyInstance) {
     return reply.code(201).send(asJson(i, true));
   });
 
+  // closed: the issues Settings > Workflow's automations closed with it, when there are any.
   app.patch("/api/issues/:slug", async (req: Req) => {
     const i = await loadIssue(req.params.slug);
     await apply(i, given(req.body, FIELDS));
-    await store.save(i);
-    return asJson(i, true);
+    const closed = await store.save(i);
+    return { ...asJson(i, true), ...(closed.length ? { closed } : {}) };
+  });
+
+  app.get("/api/settings", async () => settings.load());
+
+  app.patch("/api/settings", async (req) => {
+    const body = req.body;
+    if (!body || typeof body !== "object" || Array.isArray(body)) throw new HttpError(422, 'Send the settings to change as JSON, such as {"parent_auto_close": true}.');
+    try {
+      return settings.set(body as Record<string, unknown>);
+    } catch (error) {
+      throw new HttpError(422, (error as Error).message);
+    }
   });
 
   // Active projects unless state=archived or state=all.
