@@ -1,5 +1,6 @@
-// Linear-style menus, row actions, inline edits, the new issue panel, delete with undo, and a full-screen
-// diagram viewer. Shortcuts: S status, P priority, C a new issue, T collapse a group, J/K or arrows to move,
+// Linear-style menus, row actions, inline edits, the new issue panel, delete with undo, a list's Filter and Display
+// options, and a full-screen diagram viewer. Shortcuts: S status, P priority, C a new issue, T collapse a group,
+// F filter, Shift+V display options, J/K or arrows to move,
 // Enter to open, right-click for a row's actions, Ctrl+Delete to delete and Ctrl+Z to undo it, / search,
 // G then B backlog, G then S sessions, G then P projects, Ctrl+Shift+O a new session, [ the sidebar, Ctrl+/ the shortcuts, Esc to
 // close (on an issue, Esc goes back). The list is keys.html. Ctrl+/ is Linear's, not ?, which would type
@@ -317,6 +318,146 @@ function projectPicker(current, where, choose) {
   });
 }
 
+// --- list views: Linear's Filter and Display options on the Backlog and a project page (views.py) --------------------
+// The page carries its view as #view-data. A change writes the page's new query and goes there by the soft refresh;
+// the cookie keeps it for the page, so the sidebar's bare /backlog opens it again, and views.py reads it there.
+const view = () => { const data = $("#view-data"); return data && JSON.parse(data.textContent); };
+const VIEW_KEYS = ["group", "order", "done", "subs", "reverse", "empty"];
+const FIELD_ICON = () => ({ status: icon("state", "backlog"), priority: icon("priority", "high"), project: GLYPH.project,
+                            folder: GLYPH.folder, protocol: icon("protocol", "quick") });
+const valueIcon = (name, v) => ({ status: () => icon("state", v), priority: () => icon("priority", v),
+                                  protocol: () => icon("protocol", v) }[name]?.() ?? GLYPH[name]);
+
+function rememberView(path, query) {
+  document.cookie = `view=${encodeURIComponent(query)}; path=${path}; max-age=${query ? 31536000 : 0}; samesite=lax`;
+}
+
+// After a page draws: its view in its address, and in the cookie. Returns the address, or null off a list.
+function keepView(path = location.pathname) {
+  const v = view();
+  if (!v) return null;
+  rememberView(path, v.query);
+  return path + (v.query ? `?${v.query}` : "");
+}
+
+// changes: a URL word to its new value; null, false or the page's default drops it from the address.
+async function setView(changes) {
+  const v = view(), params = new URLSearchParams(v.query);
+  for (const [name, value] of Object.entries(changes)) {
+    if (value == null || value === false || value === v.defaults[name]) params.delete(name);
+    else params.set(name, value === true ? "1" : value);
+  }
+  // The words views.py writes keep their slashes, tildes, commas and colons, as in folder=genai/api.
+  const query = params.toString().replace(/%2F/gi, "/").replace(/%7E/gi, "~").replace(/%2C/gi, ",").replace(/%3A/gi, ":");
+  rememberView(location.pathname, query);
+  await go(location.pathname + (query ? `?${query}` : ""));
+  if (display) drawDisplay();
+}
+
+function setFilter(name, filter) {
+  setView({ [name]: filter?.values.length ? (filter.not ? "not:" : "") + filter.values.join(",") : null });
+}
+
+function toggleValue(name, value) {
+  const was = view().filters[name] ?? { not: false, values: [] };
+  setFilter(name, { ...was, values: was.values.includes(value) ? was.values.filter((x) => x !== value) : [...was.values, value] });
+}
+
+// F: the properties, each opening its values. Typing finds values straight away too, as Linear's quick filters
+// do: "high", "muse".
+function filterMenu(where) {
+  const v = view();
+  openMenu({
+    ...where, filter: "keys", kbd: "F", placeholder: "Add filter…", className: "wide",
+    items: (q) => {
+      const words = fold(q).split(/\s+/).filter(Boolean), hit = (text) => words.every((w) => fold(text).includes(w));
+      const props = v.fields.filter((f) => hit(f.label)).map((f) => ({ group: 0, icon: FIELD_ICON()[f.name], label: f.label,
+        more: true, run: () => valuesMenu(f.name, where) }));
+      if (!words.length) return props;
+      const values = v.fields.flatMap((f) => f.values.filter((x) => hit(x.label)).map((x) => ({ group: 1, icon: valueIcon(f.name, x.value),
+        label: x.label, hint: f.label, current: v.filters[f.name]?.values.includes(x.value), run: () => toggleValue(f.name, x.value) })));
+      return [...props, ...values];
+    },
+  });
+}
+
+// A property's values, each with how many of the list's issues have it; a pick adds it to the filter, or takes it out.
+function valuesMenu(name, where) {
+  const v = view(), f = v.fields.find((x) => x.name === name), on = v.filters[name]?.values ?? [];
+  openMenu({
+    ...where, filter: "keys", placeholder: `${f.label}…`, className: "wide",
+    items: (q) => f.values.filter((x) => fold(x.label).includes(fold(q))).map((x) => ({
+      icon: valueIcon(name, x.value), label: x.label, hint: `${x.count} issue${x.count === 1 ? "" : "s"}`,
+      current: on.includes(x.value), run: () => toggleValue(name, x.value),
+    })),
+  });
+}
+
+// Shift+V: Linear's Display options panel, its rows measured on linear.app (16 Oct): a 300px panel, 12px labels on the
+// left, 24px selects on the right, the direction button beside Ordering, a 22x14 switch, and Reset at its foot.
+const DISPLAY = {
+  group: { label: "Grouping", options: { none: "No grouping", status: "Status", priority: "Priority", project: "Project", folder: "Folder" } },
+  order: { label: "Ordering", options: { priority: "Priority", status: "Status", created: "Created", updated: "Updated", title: "Title" } },
+  done: { label: "Completed issues", options: { none: "None", day: "Past day", week: "Past week", month: "Past month", all: "All" } },
+  subs: { label: "Sub-issues", options: { nested: "Nested", rows: "Flat", hidden: "Hidden" } },
+};
+const SELECT_CHEV = '<svg width="9" height="5" viewBox="0 0 9 5" fill="currentColor"><path d="M.5.5h8L4.5 4.5z"/></svg>';
+// Linear's Direction icon: an arrow beside bars that shorten. Reversed, it flips.
+const DIRECTION = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M8.23 3.674a.75.75 0 0 1-.961 1.152l-1.77-1.475V14.25a.75.75 0 0 1-1.5 0V3.351L2.23 4.826a.75.75 0 1 1-.96-1.152l3-2.5a.75.75 0 0 1 .96 0z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M6.999 7.25a.75.75 0 0 1 .75-.75h6.5a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1-.75-.75M6.999 10.25a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75M6.999 13.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75"/></svg>';
+let display = null;
+
+function drawDisplay() {
+  const v = view(), anchor = $(".display-open");
+  if (!v || !anchor) { closeDisplay(); return; }
+  const select = (key) => `<button class="dp-select" type="button" data-key="${key}">${esc(DISPLAY[key].options[v[key]])}${SELECT_CHEV}</button>`;
+  const row = (key, extra = "") => `<div class="dp-row"><span>${DISPLAY[key].label}</span>${extra}${select(key)}</div>`;
+  display.innerHTML = row("group") +
+    row("order", `<button class="dp-dir${v.reverse ? " reversed" : ""}" type="button" title="${v.reverse ? "Reversed" : "Reverse the order"}">${DIRECTION}</button>`) +
+    '<hr>' + row("done") + row("subs") +
+    `<label class="dp-row switch"><span>Show empty groups</span><input type="checkbox" role="switch" data-key="empty"${v.empty ? " checked" : ""}></label>` +
+    '<footer><button class="dp-reset" type="button">Reset</button></footer>';
+  const box = anchor.getBoundingClientRect();
+  display.style.top = `${box.bottom + 6}px`;
+  display.style.left = `${Math.max(8, box.right - display.offsetWidth)}px`;
+}
+
+function toggleDisplay() {
+  if (display) { closeDisplay(); return; }
+  if (!view()) return;
+  display = Object.assign(document.createElement("div"), { className: "display-panel" });
+  display.setAttribute("role", "dialog");
+  display.setAttribute("aria-label", "Display options");
+  document.body.append(display);
+  drawDisplay();
+}
+
+function closeDisplay() {
+  display?.remove();
+  display = null;
+}
+
+document.addEventListener("mousedown", (e) => {
+  if (display && !display.contains(e.target) && !e.target.closest(".menu, .display-open")) closeDisplay();
+}, true);
+
+document.addEventListener("click", (e) => {
+  const t = e.target;
+  if (!display?.contains(t)) return;
+  const v = view(), select = t.closest(".dp-select");
+  if (select && justClosed !== select) { // a click on the open one closes it
+    const key = select.dataset.key;
+    openMenu({ anchor: select, items: () => Object.entries(DISPLAY[key].options).map(([value, name]) => ({
+      label: name, current: value === v[key], run: () => setView({ [key]: value }),
+    })) });
+  }
+  else if (t.closest(".dp-dir")) setView({ reverse: !v.reverse });
+  else if (t.closest(".dp-reset")) setView(Object.fromEntries(VIEW_KEYS.map((k) => [k, v.defaults[k] ?? null])));
+});
+
+document.addEventListener("change", (e) => {
+  if (e.target.closest?.(".display-panel input[data-key]")) setView({ [e.target.dataset.key]: e.target.checked });
+});
+
 // [ or the sidebar's toggle hides and shows it. A wide window collapses it, remembered in this browser
 // (base.html sets the class before the page draws). At 900px and under it opens over the page as a
 // drawer instead, until Esc, a click outside it or a link in it, and it starts each page closed.
@@ -507,15 +648,16 @@ async function refresh(url = location.pathname + location.search) {
   }
 }
 
-// Moves to another page the same way; the page left behind, a deleted issue, leaves the history.
+// Moves to another page the same way; the page left behind, a deleted issue, leaves the history. A list's address
+// ends with its view, the one it drew.
 async function go(url) {
-  if (await refresh(url)) history.replaceState(null, "", url);
+  if (await refresh(url)) history.replaceState(null, "", keepView(new URL(url, location.href).pathname) ?? url);
   else location.href = url;
 }
 
 // Agents and the user's editor change issues too: poll /version and refresh, unless a menu, an
 // editor or a text box is in use; the refresh then waits for the next tick after it.
-const busy = () => menu || viewer || editing || typing(document.activeElement);
+const busy = () => menu || display || viewer || editing || typing(document.activeElement);
 
 setInterval(async () => {
   try {
@@ -730,7 +872,7 @@ const groups = () => [...document.querySelectorAll(".group[data-group]")];
 const groupOf = (row) => groups().find((group) => group.nextElementSibling?.contains(row));
 
 function toggleGroup(group, all = false) {
-  const closing = !group.classList.contains("collapsed"), here = location.pathname + location.search;
+  const closing = !group.classList.contains("collapsed"), here = collapseKey();
   const remembered = JSON.parse(localStorage.collapsed ?? "{}"), shut = new Set(remembered[here]);
   for (const g of all ? groups() : [group]) closing ? shut.add(g.dataset.group) : shut.delete(g.dataset.group);
   if (shut.size) remembered[here] = [...shut]; else delete remembered[here];
@@ -874,7 +1016,20 @@ document.addEventListener("click", (e) => {
   const groupToggle = t.closest(".group-toggle");
   if (groupToggle) { toggleGroup(groupToggle.closest(".group"), e.altKey); return; }
   const groupAdd = t.closest(".group-add");
-  if (groupAdd) { openCreator({ priority: groupAdd.dataset.priority }); return; }
+  if (groupAdd) {
+    const { priority, state, project, projectTitle } = groupAdd.dataset;
+    openCreator({ ...(priority && { priority }), ...(state && { state }), ...(project && { project, projectTitle }) });
+    return;
+  }
+  const filterAt = t.closest(".filter-open, .filter-add");
+  if (filterAt) { if (!toggled(filterAt)) filterMenu({ anchor: filterAt }); return; }
+  if (t.closest(".display-open")) { toggleDisplay(); return; }
+  if (t.closest(".filter-clear")) { setView(Object.fromEntries(Object.keys(view().filters).map((name) => [name, null]))); return; }
+  const chip = t.closest(".chip"), name = chip?.dataset.name, was = chip && view().filters[name];
+  if (t.closest(".chip-op")) { setFilter(name, { ...was, not: !was.not }); return; }
+  if (t.closest(".chip-remove")) { setFilter(name, null); return; }
+  const values = t.closest(".chip-values");
+  if (values) { if (!toggled(values)) valuesMenu(name, { anchor: values }); return; }
   const projectAdd = t.closest(".project-add");
   if (projectAdd) { const d = projectAdd.closest(".project-page").dataset; openCreator({ project: d.project, projectTitle: d.title }); return; }
   if (t.closest(".issue .add-sub")) { openCreator({ parent: page().slug, parentTitle: raw().title }); return; }
@@ -1109,6 +1264,7 @@ document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyO") { newSession(); e.preventDefault(); return; }
   if (e.key === "Escape" && !$("#keys").hidden) { toggleKeys(false); return; }
   if (e.key === "Escape" && sideOpen()) { closeSide(); return; } // before an issue's Esc goes back
+  if (e.key === "Escape" && display) { closeDisplay(); return; }
   if (typing(e.target)) { if (e.key === "Escape") e.target.blur(); return; }
   const key = e.key.toLowerCase();
 
@@ -1143,6 +1299,9 @@ document.addEventListener("keydown", (e) => {
     else location.href = focused.getAttribute("href");
   }
   else if (key === "c") { openCreator(); e.preventDefault(); }
+  // Linear's F and Shift+V (linear.app/docs/filters, linear.app/docs/display-options).
+  else if (key === "f" && !e.shiftKey && $(".filter-open")) { filterMenu({ anchor: $(".filter-open") }); e.preventDefault(); }
+  else if (key === "v" && e.shiftKey && $(".display-open")) { toggleDisplay(); e.preventDefault(); }
   // O opens the issue's chat, as its Open chat button does: back to its session once it is done ("approve is ctrl
   // enter right. how about open chat", the user, 15 Oct). An issue with no session says so in a toast.
   else if (key === "o" && target()) { openWindow(`/issue/${target()}/window`); e.preventDefault(); }
@@ -1172,6 +1331,12 @@ document.addEventListener("change", async (e) => {
   const select = e.target.closest?.(".project-pick select");
   if (select && page()) await setField(page().slug, "project", select.value);
 });
+
+// A list opened with its view from the cookie shows the view in its address too.
+{
+  const url = keepView();
+  if (url && url !== location.pathname + location.search) history.replaceState(null, "", url + location.hash);
+}
 
 // A page reached after acting elsewhere says what happened in a toast (?note=, as the Inbox's review form leaves
 // it), once: the note leaves the address straight away, so a refresh does not say it again.

@@ -627,3 +627,52 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .project-edit textarea { height: auto; padding: 8px; resize: vertical; }
 .project-row.archived { color: var(--text-3); }
 .project-page .group { margin-top: 16px; }
+
+/* Filter and Display options on an issue list (list.html, views.py), measured on linear.app on 16 Oct: two 28px
+   round buttons in the top bar, the dot on Display when the list's display is not its default, a filter bar of
+   24px chips, and a 300px Display panel with 12px labels, 24px selects and a 22x14 switch. */
+.view-btn { position: relative; width: 28px; height: 28px; padding: 0; justify-content: center; border: 0; border-radius: 9999px;
+            background: var(--bg-icon-hover); color: var(--text-3); }
+.view-btn:hover { background: var(--bg-active); color: var(--text-1); }
+.view-dot { position: absolute; top: 0; right: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; margin: 0 0 4px;
+              border-radius: 8px; background: var(--bg-raised); font-size: 12px; }
+.chip { display: inline-flex; align-items: stretch; height: 24px; border: 0.5px solid var(--border-3); border-radius: 6px; overflow: hidden;
+        background: var(--bg-panel); }
+.chip-part { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border: 0; border-radius: 0; background: none;
+             color: var(--text-2); font: 500 12px var(--font); white-space: nowrap; }
+.chip-part + .chip-part { border-left: 0.5px solid var(--border-3); }
+.chip-op { color: var(--text-3); font-weight: 450; }
+.chip-values { max-width: 240px; } .chip-values span { overflow: hidden; text-overflow: ellipsis; }
+.chip-values svg { flex: none; width: 14px; height: 14px; }
+.chip-values svg + span { margin-left: 2px; }
+button.chip-part:hover { background: var(--bg-hover); color: var(--text-1); }
+.chip-remove { padding: 0 6px; color: var(--text-3); }
+.filter-add { width: 24px; height: 24px; padding: 0; justify-content: center; border: 0; border-radius: 6px; background: none; color: var(--text-3); }
+.filter-add:hover { background: var(--bg-active); color: var(--text-1); }
+.filter-clear { height: 24px; padding: 0 8px; border: 0; border-radius: 9999px; background: none; color: var(--text-2); font: 500 12px var(--font); }
+.filter-clear:hover { background: var(--bg-active); color: var(--text-1); }
+.filter-bar .filter-clear { margin-left: auto; }
+.filtered-out { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 24px 0; font-size: 13px; color: var(--text-3); }
+.filtered-out > span { color: var(--text-1); font-weight: 500; }
+.filtered-out .filter-clear { display: inline-flex; align-items: center; gap: 6px; color: var(--text-1); font-size: 13px; }
+.list-empty { padding: 16px; }
+/* A parent shown only for its matching sub-issues, greyed out as Linear's "Show matching" */
+.item.context { color: var(--text-3); }
+.item.context .icon, .item.context .pill, .item.context .date { opacity: 0.5; }
+.display-panel { position: fixed; z-index: 10; width: 300px; box-sizing: border-box; padding: 8px 16px 0; border-radius: 12px;
+                 background: var(--bg-tip); border: 0.5px solid var(--border-tip); box-shadow: var(--shadow-keys); }
+.dp-row { display: flex; align-items: center; gap: 4px; height: 32px; font-size: 12px; font-weight: 500; color: var(--text-3); }
+.dp-row > span { flex: 1; }
+.dp-row.switch { justify-content: space-between; }
+.dp-select { position: relative; min-width: 116px; height: 24px; padding: 1px 18px 1px 8px; border: 0; border-radius: 8px; justify-content: flex-start;
+             background: var(--bg-active); color: var(--text-1); font: 400 12px var(--font); }
+.dp-select svg { position: absolute; right: 7px; top: 10px; color: var(--text-3); }
+.dp-select:hover { background: var(--bg-pop-on); }
+.dp-dir { width: 24px; height: 24px; padding: 0; justify-content: center; border: 0; border-radius: 9999px; background: none; color: var(--text-3); }
+.dp-dir:hover { background: var(--bg-active); color: var(--text-1); }
+.dp-dir.reversed svg { transform: scaleY(-1); }
+.display-panel hr { height: 0.5px; margin: 8px -16px; border: 0; background: var(--border-tip); }
+.display-panel footer { display: flex; justify-content: flex-end; margin: 8px -16px 0; padding: 8px 12px; border-top: 0.5px solid var(--border-tip); }
+.dp-reset { height: 24px; padding: 0 8px; border: 0; border-radius: 9999px; background: none; color: var(--text-1); font: 500 12px var(--font); }
+.dp-reset:hover { background: var(--bg-active); }

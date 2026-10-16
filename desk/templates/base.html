@@ -28,9 +28,11 @@ function toggleReadMode(button) {
   scroll.scrollTop = at * room();
 }
 // Collapsed groups: the list groups folded on each page, remembered in this browser (localStorage.collapsed,
-// { "/backlog": ["low"], ... }). Set before the page draws, and again when a soft refresh redraws the list.
-function showCollapsed(url = location.pathname + location.search) {
-  const shut = JSON.parse(localStorage.collapsed ?? "{}")[url] ?? [];
+// { "/backlog": ["low"], ... }). Set before the page draws, and again when a soft refresh redraws the list. An issue
+// list keeps them per grouping (list.html's data-collapse-key), so filtering keeps what is folded.
+const collapseKey = (url = location.pathname + location.search) => document.querySelector("[data-collapse-key]")?.dataset.collapseKey ?? url;
+function showCollapsed(url) {
+  const shut = JSON.parse(localStorage.collapsed ?? "{}")[collapseKey(url)] ?? [];
   for (const group of document.querySelectorAll(".group[data-group]")) {
     const folded = shut.includes(group.dataset.group);
     group.classList.toggle("collapsed", folded);
