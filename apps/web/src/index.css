@@ -1,17 +1,2 @@
-/* The one CSS file the app imports: StyleX appends every component's styles to it at build time
-   (stylexjs.com/docs/learn/installation/vite/vite-react). Only what applies to the whole page lives here. */
-@font-face {
-  font-family: "Inter Variable";
-  src: url("/static/fonts/InterVariable.ttf") format("truetype");
-  font-weight: 100 900;
-  font-display: swap;
-}
-
-:root {
-  color-scheme: light dark;
-  font: 450 13px/1.5 "Inter Variable", system-ui, sans-serif;
-}
-
-body {
-  margin: 0;
-}
+/* The app's own CSS, after desk.css, which holds desk's look (StyleX appends components' styles here at build time,
+   stylexjs.com/docs/learn/installation/vite/vite-react). */

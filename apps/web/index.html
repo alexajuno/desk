@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
     <title>desk</title>
+    <script>
+      // Set before the page draws, as base.html does: the theme (the system's, unless pinned in this browser), read
+      // mode, and the sidebar collapsed on a wide window. frame/theme.ts and frame/side.ts keep them current.
+      document.documentElement.dataset.theme = ["light", "dark"].includes(localStorage.theme) ? localStorage.theme
+        : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      if (localStorage.readMode) document.documentElement.classList.add("read-mode");
+      if (localStorage.sideCollapsed) document.documentElement.classList.add("side-collapsed");
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -28,13 +28,20 @@ export const STATE_NAMES: Record<State, string> = {
 };
 const PRIORITY_ORDER: Priority[] = ["urgent", "high", "medium", "low", "none"];
 
+export interface Project {
+  slug: string;
+  title: string;
+  state: "active" | "archived";
+}
+
 export type SyncMessage =
-  | { type: "snapshot"; seq: number; issues: Issue[] }
-  | { type: "changes"; seq: number; upsert: Issue[]; delete: string[] };
+  | { type: "snapshot"; seq: number; issues: Issue[]; projects: Project[] }
+  | { type: "changes"; seq: number; upsert: Issue[]; delete: string[]; projects?: Project[] };
 
 // Every issue, in memory. The screen draws from here, and MobX redraws only what read a field that changed.
 export class IssueStore {
   bySlug = observable.map<string, Issue>();
+  projects: Project[] = [];
   connected = false;
   seq = -1;
 
@@ -49,6 +56,7 @@ export class IssueStore {
       for (const issue of message.upsert) this.bySlug.set(issue.slug, issue);
       for (const slug of message.delete) this.bySlug.delete(slug);
     }
+    if (message.projects) this.projects = message.projects;
     this.seq = message.seq;
   }
 
