@@ -18,7 +18,7 @@ from urllib.parse import urlencode, urlsplit
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
-from . import agents, api, chats, land, projects, sessions, sync, terminal, views, web, window
+from . import agents, api, chats, land, projects, reaper, sessions, sync, terminal, views, web, window
 from . import issues as store
 from .render import to_html, to_html_with_toc
 from .search import find
@@ -46,6 +46,7 @@ def _end_streams_on_stop() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     land.start_clock()  # the line for desk's own checkout moves on its own
+    reaper.start_clock()  # sessions nobody needs any more are stopped on their own
     _end_streams_on_stop()
     web.build()
     yield
