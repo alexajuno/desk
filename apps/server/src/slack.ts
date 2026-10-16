@@ -126,9 +126,8 @@ export async function look(base: string) {
 
 // The issue in Triage, with the message as its Context and its link.
 async function file(m: Message, author: string, link: string): Promise<store.Issue> {
-  const text = (m.text ?? "").trim();
-  // Slack writes a mention or a link as <...>; the agent's title replaces this one once it has read the thread.
-  const gist = text.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+  // The agent's title replaces this one once it has read the thread.
+  const gist = (m.text ?? "").replace(LINK, "$2").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
   const title = `${author}: ${gist.length > 60 ? `${gist.slice(0, 60).trimEnd()}…` : gist || "a Slack message"}`;
   const i = store.blank(await store.newSlug(title), title);
   Object.assign(i, { state: "triage", link, body: `## Context\n\n${author} in Slack, ${when(m)}:\n\n${quoted(m)}\n\nThe user tagged it with 🐧 for desk: ${link}\n` });
@@ -145,4 +144,8 @@ async function startChat(i: store.Issue, m: Message, author: string, base: strin
 }
 
 const when = (m: Message) => dayAndTime(new Date(Number(m.ts) * 1000));
-const quoted = (m: Message) => (m.text ?? "").trim().split("\n").map((line) => `> ${line}`).join("\n");
+// Slack writes a link with its label as <url|label> (docs.slack.dev/messaging/formatting-message-text), and a channel
+// mention that carries its name as <#C123|name>.
+const LINK = /<([^<>|]+)\|([^<>]+)>/g;
+const quoted = (m: Message) => (m.text ?? "").trim().replace(LINK, (_, url: string, label: string) => (url.startsWith("#") ? `#${label}` : `[${label}](${url})`))
+  .split("\n").map((line) => `> ${line}`).join("\n");
