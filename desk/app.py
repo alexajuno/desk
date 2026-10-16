@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import agents, api, land, projects, sessions, terminal, window
+from . import agents, api, land, projects, sessions, terminal, views, window
 from . import issues as store
 from .render import to_html, to_html_with_toc
 from .search import find
@@ -171,10 +171,8 @@ def sidebar(request: Request) -> dict:
 templates = Jinja2Templates(directory=HERE / "templates", context_processors=[sidebar])
 templates.env.globals.update(
     priorities=store.PRIORITIES, states=store.STATES,
-    state_names={"backlog": "Backlog", "running": "In progress", "waiting": "Waiting", "review": "In review",
-                 "landing": "Landing", "done": "Done", "dropped": "Dropped"},
-    prio_names={"urgent": "Urgent", "high": "High", "medium": "Medium", "low": "Low", "none": "No priority"},
-    protocols=store.PROTOCOLS, proto_names={"quick": "Quick", "brief": "Brief", "design": "Design"},
+    state_names=store.STATE_NAMES, prio_names=store.PRIORITY_NAMES,
+    protocols=store.PROTOCOLS, proto_names=store.PROTOCOL_NAMES,
     # What each protocol does, under its name in the picker.
     proto_hints={"quick": "A 3-line brief, then the work, no go", "brief": "A 3-line brief, then waits for go",
                  "design": "A design doc you talk through, then go"},
@@ -212,10 +210,6 @@ app.include_router(sessions.router)
 app.include_router(terminal.router)
 
 
-def open_kids(all_issues: dict[str, store.Issue]):
-    return lambda slug: [i for i in store.children(all_issues, slug) if i.state not in CLOSED]
-
-
 def all_kids(all_issues: dict[str, store.Issue]):
     """Open sub-issues first, then done and dropped ones, as Linear's sub-issue list."""
     return lambda slug: sorted(store.children(all_issues, slug), key=lambda i: i.state in CLOSED)
@@ -242,17 +236,15 @@ def old_link(rest: str):
 
 
 @app.get("/backlog")
-def backlog(request: Request, project: str = ""):
-    """The open issues by priority; ?project=<slug> keeps one project's, shown flat since their parents may sit outside it."""
+def backlog(request: Request):
+    """Every issue, open ones by priority unless the page's view (views.py) says otherwise."""
     all_issues = store.load_all()
-    kids_of = open_kids(all_issues)
-    if project:
-        if not projects.exists(project):
-            raise HTTPException(404)
-        top = [i for i in projects.issues_of(all_issues, project) if i.state not in CLOSED]
-        return templates.TemplateResponse(request, "backlog.html", {
-            "top": top, "kids_of": lambda slug: [], "project": projects.load(project)})
-    return templates.TemplateResponse(request, "backlog.html", {"top": kids_of(None), "kids_of": kids_of, "project": None})
+    return templates.TemplateResponse(request, "backlog.html", {"list": listing(request, "backlog", list(all_issues.values()), all_issues)})
+
+
+def listing(request: Request, page: str, mine: list[store.Issue], all_issues: dict[str, store.Issue]) -> views.Listing:
+    view = views.from_request(page, request.url.query, request.cookies.get("view"))
+    return views.build(view, mine, all_issues, projects.load_all())
 
 
 @app.get("/projects")
@@ -280,9 +272,8 @@ def project_page(request: Request, slug: str):
     p = projects.load(slug)
     all_issues = store.load_all()
     mine = projects.issues_of(all_issues, slug)
-    groups = [(s, [i for i in mine if i.state == s]) for s in store.STATES]
     return templates.TemplateResponse(request, "project.html", {
-        "pr": p, "body": to_html(p.body), "groups": [(s, g) for s, g in groups if g], "kids_of": lambda _: []})
+        "pr": p, "body": to_html(p.body), "list": listing(request, "project", mine, all_issues)})
 
 
 @app.post("/project/{slug}/set")
@@ -315,12 +306,8 @@ NOTICES = {"waiting for you": "is waiting for you", "plan ready": "wrote its pla
 def notifications(all_issues: dict[str, store.Issue]) -> list[dict]:
     """The Inbox's rows, newest first."""
     needs, review = inbox_items(all_issues, agents.live())
-
-    def changed(issue: store.Issue) -> float:  # when anything of the issue's last changed: its files are its record
-        return max((f.stat().st_mtime for f in store.folder(issue.slug).iterdir() if f.is_file()), default=0)
-
     return sorted(({"p": p, "why": why, "says": NOTICES.get(why, why), "kind": "review" if (p, why) in review else "needs",
-                    "at": datetime.fromtimestamp(changed(p))} for p, why in needs + review),
+                    "at": datetime.fromtimestamp(store.changed(p.slug))} for p, why in needs + review),
                   key=lambda item: item["at"], reverse=True)
 
 

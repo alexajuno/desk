@@ -42,6 +42,11 @@ STATES = ["backlog", "running", "waiting", "review", "landing", "done", "dropped
 # user, 15 Oct: "some tasks i just want it to fire and fix without me looking at the detail plan". An issue with none,
 # as every one filed before then, runs design, the loop it was filed under.
 PROTOCOLS = ["quick", "brief", "design"]
+# What the pages call them.
+STATE_NAMES = {"backlog": "Backlog", "running": "In progress", "waiting": "Waiting", "review": "In review",
+               "landing": "Landing", "done": "Done", "dropped": "Dropped"}
+PRIORITY_NAMES = {"urgent": "Urgent", "high": "High", "medium": "Medium", "low": "Low", "none": "No priority"}
+PROTOCOL_NAMES = {"quick": "Quick", "brief": "Brief", "design": "Design"}
 
 FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 _lock = threading.RLock()  # one save at a time, and move's read and save as one
@@ -122,6 +127,11 @@ def load_all() -> dict[str, Issue]:
 def files(slug: str) -> list[str]:
     """The issue's own files besides issue.md, by name."""
     return sorted(p.name for p in folder(slug).iterdir() if p.is_file() and p.name != MAIN)
+
+
+def changed(slug: str) -> float:
+    """When anything of the issue last changed, as a timestamp: its files are its record."""
+    return max((f.stat().st_mtime for f in folder(slug).iterdir() if f.is_file()), default=0)
 
 
 def has_plan(issue: Issue) -> bool:

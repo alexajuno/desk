@@ -1,7 +1,9 @@
 {% extends "base.html" %}
-{% from "macros.html" import tree, state, plus, toggle %}
+{% from "macros.html" import plus %}
+{% from "list.html" import tools, filter_bar, groups %}
 {% block title %}{{ pr.title }} · desk{% endblock %}
 {% block crumb %}<a href="/projects">Projects</a><span class="sep">›</span><span>{{ pr.title }}</span>{% endblock %}
+{% block tools %}{{ tools(list) }}{% endblock %}
 {% block main %}
 <div class="project-page" data-project="{{ pr.slug }}" data-title="{{ pr.title }}">
   <div>
@@ -14,10 +16,8 @@
         <textarea name="value" rows="8" aria-label="Description">{{ pr.body }}</textarea><button>Save description</button></form>
     </details>
     <div class="section-label">Issues<button class="project-add add-sub" type="button" title="New issue in this project">{{ plus() }}</button></div>
-    {%- for s, group in groups %}
-    <div class="group" data-group="{{ s }}">{{ toggle() }}{{ state(s) }}{{ state_names[s] }}<span class="count">{{ group | length }}</span></div>
-    {{ tree(group, kids_of) }}
-    {%- else %}<p class="muted">No issues yet. A project never ends; its issues do.</p>{% endfor %}
+    {{ filter_bar(list) }}
+    {{ groups(list, request.url.path, "No issues yet. A project never ends; its issues do.", pr) }}
   </div>
   <aside class="props">
     <div class="label">Status</div>
