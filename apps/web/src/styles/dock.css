@@ -35,6 +35,7 @@
 ::view-transition-old(page), ::view-transition-new(page) { animation-duration: 0.32s; }
 /* The chat is the same chat before and after, only wider or narrower: its new picture alone glides, at its own size
    and centred as its column is, so no line shows twice and no text zooms. */
+::view-transition-group(chat) { overflow: clip; border-radius: 12px; } /* the wide picture never spills over the sidebar */
 ::view-transition-old(chat) { animation: none; opacity: 0; }
 ::view-transition-new(chat) { animation: none; width: 100%; height: 100%; object-fit: none; object-position: center top; }
 /* (Chrome takes :only-child after these, not :not(:only-child), so the pair's rules above are the base.) */
