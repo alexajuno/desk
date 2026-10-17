@@ -23,6 +23,9 @@ function keep(url: string, data: unknown) {
   while (seen.size > KEEP) seen.delete(seen.keys().next().value!);
 }
 
+// A page's JSON as last fetched, by its address, or null when it was never seen.
+export const seenPage = <T>(url: string) => (seen.get(url)?.data as T | undefined) ?? null;
+
 async function fetchPage(url: string): Promise<Response | null> {
   try {
     return await fetch(url, { cache: "no-store" });

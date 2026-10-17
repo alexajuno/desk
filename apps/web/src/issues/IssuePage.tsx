@@ -10,7 +10,7 @@ import { issues } from "../store/issues";
 import { toggled } from "../ui/menu";
 import { GLYPH } from "../ui/icons";
 import { dock } from "../store/dock";
-import { toggleIssue } from "../sessions/Dock";
+import { offerIssue, readingOf, toggleIssue } from "../sessions/Dock";
 import { painted } from "./painted";
 import { IssueView, type IssuePageData } from "./IssueView";
 import { actionsMenu } from "./menus";
@@ -29,6 +29,10 @@ export const IssuePage = observer(function IssuePage() {
   useEffect(() => { scroll.current?.scrollTo(0, 0); }, [shownSlug]);
   useEffect(() => { if (shown) document.title = `${shown.issue.title} · desk`; }, [shown]);
   useLive(shown, reload);
+  // Beside its chat, the issue comes in when the agent writes it something new to read (store/dock.ts).
+  const chatHere = dock.center && dock.issue && shown?.issue.slug === slug && shown.issue.session === dock.session;
+  const reading = chatHere ? readingOf(shown) : null;
+  useEffect(() => { if (reading) void offerIssue(shown!.issue.session!, reading); }, [chatHere, reading?.mark, reading?.want]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const p = shown && painted(shown.issue);
   return (

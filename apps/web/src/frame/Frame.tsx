@@ -35,12 +35,16 @@ function openIssueSession(slug: string) {
   else say("This issue has no session yet.");
 }
 
-// The chat the page at this address is: an issue's, with the issue beside it, or a session's own page.
-function chatOf(pathname: string): { session: string | null; issue: boolean } {
+// The chat the page at this address is: an issue's, its issue beside it when it has something to read, or a
+// session's own page.
+function chatOf(pathname: string): { session: string | null; slug: string | null } {
   const issue = /^\/issue\/([^/]+)$/.exec(pathname);
-  if (issue) return { session: issues.bySlug.get(decodeURIComponent(issue[1]))?.session ?? null, issue: true };
+  if (issue) {
+    const slug = decodeURIComponent(issue[1]);
+    return { session: issues.bySlug.get(slug)?.session ?? null, slug };
+  }
   const session = /^\/sessions\/([^/]+)$/.exec(pathname);
-  return { session: session?.[1] ?? null, issue: false };
+  return { session: session?.[1] ?? null, slug: null };
 }
 
 // The issue this page shows, on an issue page.
@@ -214,7 +218,7 @@ export const Frame = observer(function Frame() {
   useEffect(() => noteAppPath(pathname + search), [pathname, search]);
   useEffect(() => ui.clearSelection(), [pathname]); // a selection belongs to its page's list
   const chat = chatOf(pathname);
-  useLayoutEffect(() => arrange(chat.session, chat.issue), [chat.session, chat.issue]);
+  useLayoutEffect(() => arrange(chat.session, chat.slug), [chat.session, chat.slug]);
   useEffect(() => {
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("click", onClick);

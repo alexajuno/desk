@@ -8,7 +8,9 @@ import { flushSync } from "react-dom";
 import { postJson, reason } from "../api/http";
 import { go } from "../app/nav";
 import { markdown } from "../lib/markdown";
-import { dock, SIDE_WIDTH } from "../store/dock";
+import { seenPage } from "../api/page";
+import type { IssuePageData } from "../issues/IssueView";
+import { dock, SIDE_WIDTH, type Layout, type Reading } from "../store/dock";
 import { issues } from "../store/issues";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { GLYPH, SIDE_ICON } from "../ui/icons";
@@ -39,13 +41,41 @@ export async function newSession() {
 // as its chat rises in the middle, and slides out when hidden (dock.css says how). Where the browser has none, or
 // motion is turned down, it changes at once.
 const still = matchMedia("(prefers-reduced-motion: reduce)");
-function move(next: string, change: () => void) {
+let moving: Promise<void> | null = null; // the move on screen, which the issue's own slide in waits for
+function move(next: Layout, change: () => void) {
   if (next === dock.layout || !document.startViewTransition || still.matches) return change();
-  document.startViewTransition(() => flushSync(change));
+  const t = document.startViewTransition(() => flushSync(change));
+  const done = moving = t.finished.catch(() => {}).then(() => { if (moving === done) moving = null; });
 }
 
-// What the page on screen asks for (the frame calls it as the address changes).
-export const arrange = (session: string | null, issue: boolean) => move(dock.layoutAfter(session, issue), () => dock.arrange(session, issue));
+// What an issue's page has to read beside its chat: its card in review, or its plan while it waits for go (the session
+// idle, no result yet). A mark of both tells when the agent wrote either anew.
+export function readingOf(data: IssuePageData): Reading {
+  const plan = data.agent_files["plan.md"], result = data.agent_files["result.md"], state = data.issue.state;
+  const want = state === "review" ? Boolean(result) : state === "running" && Boolean(plan) && !result && data.live !== "working";
+  return { want, has: Boolean(plan || result), mark: `${hash(plan ?? "")}.${hash(result ?? "")}` };
+}
+
+function hash(text: string) {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = (h * 33) ^ text.charCodeAt(i);
+  return (h >>> 0).toString(36);
+}
+
+// What the page on screen asks for (the frame calls it as the address changes): an issue page's chat comes with its
+// issue beside it when the page, as its route's loader just fetched it, has something to read.
+export function arrange(session: string | null, slug: string | null) {
+  const page = slug ? seenPage<IssuePageData>(`/api/page/issue/${slug}`) : null;
+  const reading = page && page.issue.session === session ? readingOf(page) : null;
+  move(dock.layoutAfter(session, Boolean(slug), reading), () => dock.arrange(session, Boolean(slug), reading));
+}
+
+// The issue's page came in, or in again: a plan or card the agent just wrote slides in beside its chat, once the
+// chat's own move is over.
+export async function offerIssue(session: string, reading: Reading) {
+  while (moving) await moving;
+  move(dock.layoutOffered(session, reading), () => dock.offer(session, reading));
+}
 
 // ] or the issue's title in the chat's head: the issue beside its chat, or the chat alone.
 export function toggleIssue() {
