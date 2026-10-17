@@ -32,12 +32,11 @@
 .dock { view-transition-name: chat; }
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
 ::view-transition-group(page), ::view-transition-group(chat) { animation-duration: 0.32s; animation-timing-function: var(--dock-ease); }
-/* Each picture keeps its own size as its box glides, so no text zooms: the page's to its left edge, the chat's
-   centred, as its column is. */
-::view-transition-old(page), ::view-transition-new(page), ::view-transition-old(chat), ::view-transition-new(chat) {
-  width: 100%; height: 100%; object-fit: none; animation-duration: 0.32s; }
-::view-transition-old(page), ::view-transition-new(page) { object-position: left top; }
-::view-transition-old(chat), ::view-transition-new(chat) { object-position: center top; }
+::view-transition-old(page), ::view-transition-new(page) { animation-duration: 0.32s; }
+/* The chat is the same chat before and after, only wider or narrower: its new picture alone glides, at its own size
+   and centred as its column is, so no line shows twice and no text zooms. */
+::view-transition-old(chat):not(:only-child) { display: none; }
+::view-transition-new(chat):not(:only-child) { animation: none; width: 100%; height: 100%; object-fit: none; object-position: center top; }
 ::view-transition-new(chat):only-child { animation: 0.32s var(--dock-ease) both dock-rise-in; }
 ::view-transition-old(chat):only-child { animation: 0.2s ease both dock-out; }
 ::view-transition-new(page):only-child { animation: 0.32s var(--dock-ease) both dock-slide-in; }
