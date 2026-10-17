@@ -5,6 +5,7 @@ paths:
 
 # How desk looks
 
+- Load the `linear-ui` skill before you build or style anything here: it holds Linear's design rules as desk measured them, the mistakes made so far, and how to measure linear.app. Claude Code lists it without its description, so it will not load on its own (18 Oct).
 - desk copies Linear's dark and light themes. The measured values and their sources are in the header of `apps/web/src/styles/desk.css`. Borrow a Linear component before inventing one.
 - Every colour is a variable: its dark value in `:root` and its light one in `:root[data-theme=light]`, in `desk.css` (or at the top of a page's own CSS, as `sessions.css` does). Write no colour into a rule, a component or an SVG; icons take theirs through `style={{ color: "var(--…)" }}`.
 - Fewer buttons: one primary button per view, for the next step.
