@@ -1,6 +1,7 @@
-// Linear's Issues page: three tabs in the top bar, All issues (every open issue, by priority unless the tab's view says
-// otherwise), Active (being worked, or waiting on someone) and Backlog (parked, not started). Each tab is a page of its
-// own, at its own address, so each keeps its own Filter, Display and Layout (lists/view.ts remembers them by path).
+// Linear's Issues page: the page's name in the top bar, and under it a row of three tabs, with Filter and Display at its
+// right end: All issues (every open issue, by priority unless the tab's view says otherwise), Active (being worked, or
+// waiting on someone) and Backlog (parked, not started). Each tab is a page of its own, at its own address, so each
+// keeps its own Filter, Display and Layout (lists/view.ts remembers them by path).
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
 import { Go } from "../app/nav";
@@ -29,13 +30,15 @@ export const IssuesPage = observer(function IssuesPage({ tab }: { tab: string })
   useEffect(() => { document.title = `${NAMES[tab]} · desk`; }, [tab]);
   return (
     <>
-      <Bar crumb={<span className="bar-title">Issues</span>} tools={data && <Tools view={data.view} />}>
+      <Bar crumb={<span className="bar-title">Issues</span>} />
+      <div className="view-bar">
         <nav className="tabs" aria-label="Views">
           {["", ...TABS].map((t) => (
             <Go key={t} className={`tab${t === tab ? " here" : ""}`} to={t ? `/issues/${t}` : "/issues"} aria-current={t === tab ? "page" : undefined}>{NAMES[t]}</Go>
           ))}
         </nav>
-      </Bar>
+        <span className="right">{data && <Tools view={data.view} />}</span>
+      </div>
       <div className="scroll">
         {data && <Listing list={data} empty={EMPTY[tab]} />}
       </div>

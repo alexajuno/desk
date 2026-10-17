@@ -44,6 +44,9 @@
   --btn: lch(10.149% 0.689 272);
   --btn-hover: lch(14.777% 1.075 272);
   --btn-ghost-hover: lch(14.006% 0.593 272);
+  --ring-btn: lch(100% 0 0 / 0.091);       /* the ring round a view tab or a round button, and under the mouse */
+  --ring-btn-hover: lch(100% 0 0 / 0.114);
+  --bg-tab-on: lch(16.706% 0.979 272);     /* the open view tab */
   --btn-primary: lch(47.918% 59.303 288.421);
   --btn-primary-hover: lch(52.418% 61.103 288.421);
   --btn-primary-text: lch(100% 5 288.421);
@@ -119,6 +122,9 @@
   --btn: lch(99.997% 0.5 282);
   --btn-hover: lch(95.883% 0.157 282);
   --btn-ghost-hover: lch(94.854% 0.5 282);
+  --ring-btn: lch(0% 0 0 / 0.105);
+  --ring-btn-hover: lch(0% 0 0 / 0.15);
+  --bg-tab-on: lch(93.483% 0.5 282);
   --btn-primary: lch(53% 52.26 286.91);
   --btn-primary-hover: lch(47% 50.26 286.91);
   --btn-primary-text: lch(100% 5 286.91);
@@ -179,10 +185,10 @@ kbd { font: 500 11px var(--font); color: var(--text-3); border: 1px solid var(--
 .side-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9999px; color: var(--text-3); }
 .side-icon:hover { background: var(--bg-icon-hover); color: var(--text-1); }
 .side-icon.here { background: var(--bg-active); color: var(--text-1); }
-/* New issue, Linear's pencil: the one sidebar button drawn raised, with a brighter icon */
+/* New issue, Linear's pencil: the one sidebar button filled, ringed like the view tabs (18 Oct), with a brighter icon */
 button.side-icon { padding: 0; border: 0; }
-.side-icon.new-issue { background: var(--bg-raised); box-shadow: 0 0 0 0.5px var(--border-3); color: var(--text-2); }
-.side-icon.new-issue:hover { background: var(--bg-active); color: var(--text-1); }
+.side-icon.new-issue { background: var(--btn); box-shadow: 0 0 0 1px var(--ring-btn), var(--shadow-panel); color: var(--text-2); }
+.side-icon.new-issue:hover { background: var(--btn-hover); box-shadow: 0 0 0 1px var(--ring-btn-hover), var(--shadow-panel); color: var(--text-1); }
 .nav-item { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 9px 0 6px; border-radius: 8px; color: var(--text-3);
             font-weight: 500; text-decoration: none; white-space: nowrap; }
 .nav-item svg { width: 16px; height: 16px; color: var(--text-3); }
@@ -222,13 +228,19 @@ a.nav-label { text-decoration: none; } a.nav-label:hover, a.nav-label.here { col
 .bar .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 .bar button.more { width: 28px; height: 24px; padding: 0; justify-content: center; background: none; border: 0; color: var(--text-3); }
 .bar button.more:hover { background: var(--bg-raised); color: var(--text-1); }
-/* Linear's view tabs beside the page's name (All issues, Active, Backlog): 24px pills, the one open raised with a hairline */
 .bar .bar-title { flex: none; color: var(--text-1); margin-right: 4px; }
-.bar .tabs { display: flex; gap: 2px; min-width: 0; overflow: hidden; }
-.bar a.tab { flex: none; display: flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 6px; font-size: 12px;
-             color: var(--text-2); box-shadow: inset 0 0 0 0.5px transparent; }
-.bar a.tab:hover { background: var(--btn-ghost-hover); color: var(--text-1); }
-.bar a.tab.here { background: var(--bg-raised); color: var(--text-1); box-shadow: inset 0 0 0 0.5px var(--border-3); }
+/* Linear's view row under the top bar of its Issues page, measured on linear.app on 18 Oct, dark and light: 43px, the
+   tabs (All issues, Active, Backlog) from its left, Filter and Display at its right end. A tab is a 28px pill, 12px at
+   weight 500, filled like a button, with a 1px ring and the panel's shadow; the open one is filled brighter, with the
+   ring alone. The ring sits outside the pill, so the tabs' row keeps 2px round them for it. */
+.view-bar { display: flex; align-items: center; gap: 4px; height: 43px; flex: none; padding: 0 10px 0 8px; }
+.view-bar .tabs { display: flex; gap: 4px; min-width: 0; overflow: hidden; padding: 2px; margin: -2px; }
+.view-bar a.tab { flex: none; display: flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 9999px;
+                  font-size: 12px; font-weight: 500; text-decoration: none; background: var(--btn); color: var(--text-3);
+                  box-shadow: 0 0 0 1px var(--ring-btn), var(--shadow-panel); transition: background-color 0.1s, color 0.1s; }
+.view-bar a.tab:hover { background: var(--btn-ghost-hover); color: var(--text-2); box-shadow: 0 0 0 1px var(--ring-btn-hover), var(--shadow-panel); }
+.view-bar a.tab.here { background: var(--bg-tab-on); color: var(--text-1); box-shadow: 0 0 0 1px var(--ring-btn); }
+.view-bar .right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .scroll { flex: 1; overflow: auto; }
 .page { padding: 12px 8px 120px; }
 
@@ -663,11 +675,11 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .project-page .group { margin-top: 16px; }
 
 /* Filter and Display options on an issue list (views.ts), measured on linear.app on 16 Oct: two 28px
-   round buttons in the top bar, the dot on Display when the list's display is not its default, a filter bar of
-   24px chips, and a 300px Display panel with 12px labels, 24px selects and a 22x14 switch. */
+   round buttons, ringed like the view tabs (18 Oct), the dot on Display when the list's display is not its default, a
+   filter bar of 24px chips, and a 300px Display panel with 12px labels, 24px selects and a 22x14 switch. */
 .view-btn { position: relative; width: 28px; height: 28px; padding: 0; justify-content: center; border: 0; border-radius: 9999px;
-            background: var(--bg-icon-hover); color: var(--text-3); }
-.view-btn:hover { background: var(--bg-active); color: var(--text-1); }
+            background: var(--btn); color: var(--text-3); box-shadow: 0 0 0 1px var(--ring-btn), var(--shadow-panel); }
+.view-btn:hover { background: var(--btn-hover); color: var(--text-2); box-shadow: 0 0 0 1px var(--ring-btn-hover), var(--shadow-panel); }
 .view-dot { position: absolute; top: 0; right: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; margin: 0 0 4px;
               border-radius: 8px; background: var(--bg-raised); font-size: 12px; }
