@@ -169,7 +169,8 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
   return (
     <>
       {rows.map((r, n) => {
-        if (r.kind === "you") return <You key={r.item.key} text={r.item.text ?? ""} images={r.item.images} queued={r.item.queued} />;
+        // One typed mid-turn is in the transcript once Claude takes it in, at its next step: by then it's sent, not queued.
+        if (r.kind === "you") return <You key={r.item.key} text={r.item.text ?? ""} images={r.item.images} />;
         if (r.kind === "text") return <Reply key={r.item.key} text={r.item.text ?? ""} />;
         if (r.kind === "note") return <p key={r.item.key} className="convo-note">{r.item.text}</p>;
         const running = n === rows.length - 1 && s.working ? liveSteps : [];

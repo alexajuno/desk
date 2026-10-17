@@ -17,7 +17,6 @@ export interface Item {
   input?: string;
   error?: boolean;
   images?: number;
-  queued?: boolean;
 }
 
 export interface Ask {
