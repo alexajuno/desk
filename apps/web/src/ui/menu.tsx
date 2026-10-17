@@ -29,6 +29,7 @@ export interface MenuItem {
   checked?: boolean;
   toggle?: () => unknown; // Linear's checkbox at the row's left: ticks it and leaves the menu open
   run?: () => unknown;
+  info?: boolean; // a line to read, not to pick, such as the usage under the chip's models
 }
 
 export interface MenuOptions {
@@ -194,7 +195,7 @@ function MenuView({ o }: { o: MenuOptions }) {
     else if (opens && i) rows.push(<li key={`d${i}`} className="divider" role="separator" />);
     group = item.group;
     rows.push(
-      <li key={i} className={`${i === at ? "on" : ""}${item.current ? " current" : ""}`} data-i={i} style={item.sub ? { height: 44 } : undefined}>
+      <li key={i} className={`${i === at ? "on" : ""}${item.current ? " current" : ""}${item.info ? " info" : ""}`} data-i={i} style={item.sub ? { height: 44 } : undefined}>
         {item.toggle && (
           <span className={`check${item.checked ? " checked" : ""}`} role="checkbox" aria-checked={!!item.checked}>{item.checked ? TICK : null}</span>
         )}

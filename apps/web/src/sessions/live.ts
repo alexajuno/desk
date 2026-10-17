@@ -40,6 +40,7 @@ export interface Meta {
   folder: string;
   issue: { slug: string; title: string; state: string } | null;
   chat: boolean;
+  runs: { model: string; name: string; effort: string }; // for the composer's chip
 }
 
 export interface Image {
@@ -74,7 +75,7 @@ export class LiveSession {
     this.id = id;
     makeObservable(this, {
       items: observableShallow, meta: observableRef, working: observable, since: observable, asks: observableRef, partial: observable,
-      pending: observable, connected: observable, loaded: observable, apply: action, sending: action, sent: action,
+      pending: observable, connected: observable, loaded: observable, apply: action, sending: action, sent: action, shows: action,
     });
   }
 
@@ -203,6 +204,21 @@ export class LiveSession {
   async interrupt() {
     const res = await postJson(`/api/live/${this.id}/interrupt`);
     if (!res.ok) toast(await reason(res));
+  }
+
+  // Pick the model or effort: the chip shows it at once, and the server's next meta confirms it.
+  async pick(set: { model?: string; effort?: string }, name?: string) {
+    const was = this.meta;
+    if (was) this.shows({ ...was, runs: { ...was.runs, ...set, ...(name ? { name } : {}) } });
+    const res = await postJson(`/api/live/${this.id}/model`, set);
+    if (!res.ok) {
+      if (was) this.shows(was);
+      toast(await reason(res));
+    }
+  }
+
+  shows(meta: Meta) {
+    this.meta = meta;
   }
 
   async answer(ask: string, result: Record<string, unknown>) {

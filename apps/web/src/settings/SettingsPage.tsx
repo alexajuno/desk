@@ -1,7 +1,8 @@
 // Settings, as Linear's (linear.app/<workspace>/settings, measured 17 Oct): its own sidebar in place of the app's, with
 // Back to app and a list of pages, and each page a 640px column of cards, one row per setting. desk keeps what it
-// has a setting for: Preferences (the theme) and Workflows & automations (the two
-// auto-close toggles, settings.ts on the server). Linear keeps the second under each team; desk has no teams.
+// has a setting for: Preferences (the theme, and the model and effort a new chat starts with) and Workflows &
+// automations (the two auto-close toggles). Both pages' server settings are settings.ts. Linear keeps the second
+// under each team; desk has no teams.
 import { observer } from "mobx-react-lite";
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation, useParams } from "react-router";
@@ -10,6 +11,7 @@ import { reason } from "../api/http";
 import { deskPath, Go } from "../app/nav";
 import { Bar } from "../frame/Bar";
 import { applyTheme } from "../frame/theme";
+import { EFFORTS, effortName, loadModels, type Model } from "../sessions/models";
 import { GLYPH } from "../ui/icons";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
@@ -17,6 +19,8 @@ import { toast } from "../ui/toast";
 interface Settings {
   sub_issue_auto_close: boolean;
   parent_auto_close: boolean;
+  chat_model: string;
+  chat_effort: string;
 }
 
 const PAGES: { group: string; pages: { slug: string; title: string; icon: ReactNode }[] }[] = [
@@ -80,6 +84,57 @@ function Switch({ id, on, change }: { id: string; on: boolean; change: (on: bool
 
 const THEMES: [string, string][] = [["system", "System preference"], ["light", "Light"], ["dark", "Dark"]];
 
+const CHEVRON_DOWN = <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>;
+
+// The settings, as the server has them, and a change that shows at once and goes back if the server refuses it.
+function useSettings(): [Settings | null, (changes: Partial<Settings>) => Promise<void>] {
+  const { data } = usePage<Settings>("/api/settings");
+  const [shown, setShown] = useState<Settings | null>(null);
+  useEffect(() => { if (data) setShown(data); }, [data]);
+  const change = async (changes: Partial<Settings>) => {
+    if (!shown) return;
+    setShown({ ...shown, ...changes });
+    const res = await fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(changes) });
+    if (!res.ok) {
+      toast(await reason(res));
+      setShown(shown);
+    } else setShown(await res.json());
+  };
+  return [shown, change];
+}
+
+// What a new chat starts on; the chip by a chat's Send changes it for that chat alone.
+function Chats() {
+  const [shown, change] = useSettings();
+  const [list, setList] = useState<Model[]>([]);
+  useEffect(() => { loadModels().then(setList, (e) => toast((e as Error).message)); }, []);
+  if (!shown) return null;
+  const model = list.find((m) => m.value === shown.chat_model);
+  const efforts = model ? EFFORTS.filter(([value]) => model.efforts.includes(value)) : EFFORTS;
+  return (
+    <Section title="Chats">
+      <Row id="chat_model" title="Model" about="The model a new chat starts with">
+        <button id="chat_model" type="button" className="set-pick" onClick={(e) => {
+          if (toggled(e.currentTarget)) return;
+          openMenu({ anchor: e.currentTarget, items: () => list.map((m) => ({ label: m.name, current: m.value === shown.chat_model, run: () => change({ chat_model: m.value }) })) });
+        }}>
+          {model?.name ?? shown.chat_model}
+          {CHEVRON_DOWN}
+        </button>
+      </Row>
+      <Row id="chat_effort" title="Effort" about="How hard a new chat thinks before it answers">
+        <button id="chat_effort" type="button" className="set-pick" onClick={(e) => {
+          if (toggled(e.currentTarget)) return;
+          openMenu({ anchor: e.currentTarget, items: () => efforts.map(([value, label]) => ({ label, current: value === shown.chat_effort, run: () => change({ chat_effort: value }) })) });
+        }}>
+          {effortName(shown.chat_effort)}
+          {CHEVRON_DOWN}
+        </button>
+      </Row>
+    </Section>
+  );
+}
+
 function Preferences() {
   const [theme, setTheme] = useState(() => (["light", "dark"].includes(localStorage.theme) ? localStorage.theme : "system"));
   const pick = (to: string) => {
@@ -97,7 +152,7 @@ function Preferences() {
             icon: GLYPH[value as keyof typeof GLYPH], label, current: value === theme, run: () => pick(value) })) });
         }}>
           {THEMES.find(([value]) => value === theme)?.[1]}
-          <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
+          {CHEVRON_DOWN}
         </button>
       </Row>
     </Section>
@@ -105,18 +160,9 @@ function Preferences() {
 }
 
 function Workflow() {
-  const { data } = usePage<Settings>("/api/settings");
-  const [shown, setShown] = useState<Settings | null>(null);
-  useEffect(() => { if (data) setShown(data); }, [data]);
+  const [shown, set] = useSettings();
   if (!shown) return null;
-  const change = async (name: keyof Settings, on: boolean) => {
-    setShown({ ...shown, [name]: on });
-    const res = await fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [name]: on }) });
-    if (!res.ok) {
-      toast(await reason(res));
-      setShown(shown);
-    } else setShown(await res.json());
-  };
+  const change = (name: "parent_auto_close" | "sub_issue_auto_close", on: boolean) => set({ [name]: on });
   return (
     <Section title="Auto-close automations" about="Automate closing issues based on status changes to related issues.">
       <Row id="parent_auto_close" title="Auto-close parent issues"
@@ -142,7 +188,7 @@ export function SettingsPage() {
         <div className="settings">
           <h1>{TITLES[section]}</h1>
           {section === "workflow" && <p className="set-lead">Manage issue automations and other workflows.</p>}
-          {section === "preferences" ? <Preferences /> : <Workflow />}
+          {section === "preferences" ? <><Preferences /><Chats /></> : <Workflow />}
         </div>
       </div>
     </>

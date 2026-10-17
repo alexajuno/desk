@@ -12,8 +12,10 @@ import { dock, SIDE_WIDTH } from "../store/dock";
 import { issues } from "../store/issues";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { GLYPH, SIDE_ICON } from "../ui/icons";
+import { toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { live, useLive, type Ask, type Block, type Image, type Item, type LiveSession } from "./live";
+import { effortName, runsMenu, warm } from "./models";
 
 // The chat whose composer takes the cursor: the one openSession opened. Its composer takes it as it comes on screen,
 // which a view transition can make a frame or more after the address changes, or at once when it is there already.
@@ -538,6 +540,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
         <span className="composer-hint">{s.working ? "Enter queues · Esc stops" : "Enter sends · Shift Enter for a new line"}</span>
+        <Runs s={s} />
         {s.working && (
           <button className="stop" type="button" title="Stop  Esc" onClick={() => void s.interrupt()}>
             <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><rect x="1" y="1" width="8" height="8" rx="1.5" /></svg>
@@ -550,3 +553,17 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
     </div>
   );
 });
+
+// The chip by Send: the model and effort the session runs on; its menu picks others and shows the usage.
+const Runs = observer(function Runs({ s }: { s: LiveSession }) {
+  const runs = s.meta?.runs;
+  if (!runs) return null;
+  return (
+    <button className="runs" type="button" title="Model and effort" onMouseEnter={warm} onFocus={warm}
+      onClick={(e) => { if (!toggled(e.currentTarget)) runsMenu(e.currentTarget, runs, (set, name) => void s.pick(set, name)); }}>
+      {runs.effort ? `${runs.name} · ${effortName(runs.effort)}` : runs.name}
+      <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
+    </button>
+  );
+});
+
