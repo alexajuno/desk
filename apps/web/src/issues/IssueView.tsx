@@ -140,8 +140,10 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
                 : <p className="muted">No result.md: this was done in a chat, so check the work itself.</p>}
             </div>
           )}
-          {/* What there is to read leads: the plan (in review, the card above). Then the sub-issues, which the agent files,
-              so the section shows only once there is one (Add sub-issue is in the ⋯ menu), then the Context, a line or two. */}
+          {/* What there is to read leads: the result (in review, the card above), then the plan. Then the sub-issues, which
+              the agent files, so the section shows only once there is one (Add sub-issue is in the ⋯ menu), then the
+              Context, a line or two, and the agent's saved questions. */}
+          {"result.md" in data.agent_files && p.state !== "review" && <AgentFile name="result.md" html={data.agent_files["result.md"]} />}
           {"plan.md" in data.agent_files && (
             <section className="sec" data-sec="plan.md">
               <div className="section-label sec-head"><Fold />Plan <Go className="muted" to={`/issue/${p.slug}/f/plan.md`} title="Open the plan on its own page, with its contents">plan.md</Go></div>
@@ -157,18 +159,23 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
             </section>
           )}
           <Description slug={p.slug} body={data.body} html={data.body_html} />
-          {Object.entries(data.agent_files).filter(([name]) => name !== "plan.md" && !(p.state === "review" && name === "result.md")).map(([name, html]) => (
-            <section className="sec" data-sec={name} key={name}>
-              <div className="section-label sec-head"><Fold />{name === "questions.md" ? "Saved questions" : "Result"} <span className="muted">from the agent · {name}</span></div>
-              <div className="sec-body"><Html className="body" html={html} /></div>
-            </section>
-          ))}
+          {"questions.md" in data.agent_files && <AgentFile name="questions.md" html={data.agent_files["questions.md"]} />}
         </div>
         <Properties data={data} p={p} />
       </div>
     </>
   );
 });
+
+// A file the issue's session writes, under its own head: its result, or the questions it saved for the user.
+function AgentFile({ name, html }: { name: string; html: string }) {
+  return (
+    <section className="sec" data-sec={name}>
+      <div className="section-label sec-head"><Fold />{name === "questions.md" ? "Saved questions" : "Result"} <span className="muted">from the agent · {name}</span></div>
+      <div className="sec-body"><Html className="body" html={html} /></div>
+    </section>
+  );
+}
 
 // A pick button: opens the status, priority or protocol menu under itself.
 function Pick({ className, slug, field, value, title, children }: { className: string; slug: string; field: Field; value: string; title: string; children: ReactNode }) {
