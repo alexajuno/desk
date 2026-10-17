@@ -248,11 +248,14 @@ export async function others() {
   const running = new Map<string, agents.Row>();
   for (const row of (await agents.live()).values()) if (row.sessionId && row.pid && !issues.has(row.sessionId)) running.set(row.sessionId, row);
   const found: { id: string; title: string; folder: string; state: string; started: number }[] = [];
+  const t = running.size ? refresh() : table;
   for (const [sid, row] of running) {
-    const chat = mine.get(sid);
+    const chat = mine.get(sid), kept = t.get(sid);
     if (chat ? chats.said(chat).next().done : entrypoint(row.pid) === "sdk-cli") continue;
-    found.push({ id: sid, title: (chat && chat.title !== "New chat" ? chat.title : "") || titleOf(sid) || row.name || "Untitled session",
-      folder: folder(row.cwd), state: state(row), started: Number(row.startedAt ?? 0) });
+    // A chat's own title, once it has one, else what was first said in it: its window's name, "desk chat 17 Oct 19:24",
+    // tells two chats apart by the minute only.
+    const name = chat ? (chat.title !== "New chat" && chat.title) || kept?.first_prompt : kept && title(kept);
+    found.push({ id: sid, title: name || row.name || "Untitled session", folder: folder(row.cwd), state: state(row), started: Number(row.startedAt ?? 0) });
   }
   return found.sort((a, b) => b.started - a.started);
 }
