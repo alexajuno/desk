@@ -24,7 +24,6 @@ export interface FrameData {
   triage: (IssueRow & { now: string })[];
   running: IssueRow[];
   landing: IssueRow[];
-  waiting: IssueRow[];
   trying: { slug: string; branch: string; issue: IssueRow | null } | null;
   line: { slug: string; branch: string; for: string; issue: IssueRow }[];
   projects: { slug: string; title: string }[];

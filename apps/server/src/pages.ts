@@ -297,7 +297,6 @@ export async function framePage() {
     triage: inState("triage").map((i) => ({ ...issueJson(i), now: agents.status((i.session && live.get(i.session)) || {}) })),
     running: inState("running").map(issueJson),
     landing: inState("landing").map(issueJson),
-    waiting: inState("waiting").map(issueJson),
     trying: now && { slug: now.slug, branch: now.branch, issue: (now.slug && all.has(now.slug)) ? issueJson(all.get(now.slug)!) : null },
     line: line.filter((w) => all.has(w.slug)).map((w) => ({ slug: w.slug, branch: w.branch ?? null, for: w.for ?? null, issue: issueJson(all.get(w.slug)!) })),
     projects: active.map((p) => ({ slug: p.slug, title: p.title })),

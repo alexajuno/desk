@@ -1,5 +1,6 @@
 // The sidebar on every page (templates/base.html's aside.side): Inbox, Sessions, Backlog and the projects, then the
-// lists to watch: the chats in Triage, what is in progress, landing and waiting, and what desk's checkout runs.
+// lists to watch: the chats in Triage, what is in progress and landing, and what desk's checkout runs. Waiting issues
+// stay in the Backlog, since waiting can last forever.
 import { observer } from "mobx-react-lite";
 import { useLocation } from "react-router";
 import { deskPath, Go } from "../app/nav";
@@ -74,17 +75,6 @@ export const Sidebar = observer(function Sidebar() {
           <div className="nav-label">Landing</div>
           {d.landing.map((p) => (
             <Go key={p.slug} className={`nav-item${at(`/issue/${p.slug}`)}`} to={`/issue/${p.slug}`}><StateIcon state="landing" /><span className="nav-title">{p.title}</span></Go>
-          ))}
-        </>
-      )}
-      {/* Someone else's move: the list to chase. */}
-      {d && d.waiting.length > 0 && (
-        <>
-          <div className="nav-label">Waiting</div>
-          {d.waiting.map((p) => (
-            <Go key={p.slug} className={`nav-item${at(`/issue/${p.slug}`)}`} to={`/issue/${p.slug}`} title={`Waiting on ${p.waiting_on || "someone else"}, ${p.waited}`}>
-              <StateIcon state="waiting" /><span className="nav-title">{p.title}</span>
-            </Go>
           ))}
         </>
       )}
