@@ -193,44 +193,37 @@ type Button = { label: string; action?: string; chat?: boolean; disabled?: boole
 export function strip(i: Issue, row: agents.Row, hasPlan: boolean, result: string): { text: string; button: Button } {
   const now = agents.status(row), hasResult = isFile(result);
   const chat = { label: "Open chat", chat: true };
-  const asleep = i.session ? "The session stopped. Open chat wakes it." : "";
+  const asleep = i.session ? "Session stopped" : "";
   if (i.state === "backlog") {
-    if (i.session) return { text: "In the backlog, with its chat.", button: chat };
-    if (runs(i) === "quick")
-      return { text: "Quick: Start sets its session going; it writes a 3-line brief, does the work, and you review.", button: { label: "Start", action: "start" } };
-    if (runs(i) === "brief") return { text: "Brief: Plan sets its session writing a 3-line brief, then it waits for your go.", button: { label: "Plan", action: "start" } };
-    return { text: "Plan opens the issue's chat, and its session plans it with you.", button: { label: "Plan", action: "start" } };
+    if (i.session) return { text: "Backlog", button: chat };
+    return { text: "Backlog", button: { label: runs(i) === "quick" ? "Start" : "Plan", action: "start" } };
   }
-  if (i.state === "triage") return { text: "Triage: its chat settles what this is, work, parked, a duplicate or nothing to do. 2 declines it.", button: chat };
+  if (i.state === "triage") return { text: "Triage", button: chat };
   if (i.state === "landing") {
-    if (!landingStuck(i, row, now)) return { text: "Landing, by the repo's rules.", button: { label: "Landing…", disabled: true } };
-    return { text: now === "idle" ? "Landing stopped: it waits for you in the chat." : asleep, button: chat };
+    if (!landingStuck(i, row, now)) return { text: "Landing", button: { label: "Landing…", disabled: true } };
+    return { text: now === "idle" ? "Landing stopped" : asleep, button: chat };
   }
   if (i.state === "running") {
-    if (!i.session) return { text: "In progress, in a chat outside desk.", button: null };
-    if (now === "working") return { text: "The session is working.", button: chat };
+    if (!i.session) return { text: "In progress, outside desk", button: null };
+    if (now === "working") return { text: "Working", button: chat };
     if (now === "idle") {
       const ready = hasPlan && !hasResult && runs(i) !== "quick";
-      return { text: ready ? "Plan ready: read it, then say go in the chat." : "Your turn in the chat.", button: chat };
+      return { text: ready ? "Plan ready: say go" : "Your turn", button: chat };
     }
     return { text: asleep, button: chat };
   }
   if (i.state === "waiting") {
     let since = waited(i.waiting_since);
     if (since !== "today") since = `${shortDate(i.waiting_since)} (${since})`;
-    const who = i.waiting_on || "someone else (say who under Waiting on)";
-    return { text: `Waiting on ${who}, since ${since}.`, button: i.session ? chat : null };
+    return { text: `Waiting on ${i.waiting_on || "someone"} since ${since}`, button: i.session ? chat : null };
   }
-  if (i.state === "review") {
-    const ask = i.session ? "Not yet? Say what to change in the chat." : "";
-    return { text: `In review: ${hasResult ? "read the card" : "check the work"}. ${ask}`.trim(), button: { label: "Approve", action: "approve" } };
-  }
+  if (i.state === "review") return { text: hasResult ? "In review" : "In review, no card", button: { label: "Approve", action: "approve" } };
   if (i.state === "done" && hasResult && landed(result)[0]) {
     // The session's own words on where it landed: the commit, or the pull request.
     const where = read(result).trim().split(/\r\n|\r|\n/)[0].replace(/^\*\*Landed:\*\*/, "");
-    return { text: `Done. Landed: ${[...where.replace(/`/g, "").trim()].slice(0, 160).join("")}`, button: null };
+    return { text: `Landed: ${[...where.replace(/`/g, "").trim()].slice(0, 160).join("")}`, button: null };
   }
-  return { text: i.state === "done" ? "Done." : "Dropped.", button: null };
+  return { text: i.state === "done" ? "Done" : "Dropped", button: null };
 }
 
 // Beside Approve, on an issue in review whose session tested its branch in desk's own checkout: Try runs that branch in

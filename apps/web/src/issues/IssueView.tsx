@@ -62,7 +62,7 @@ function OpenChat({ slug, session, primary }: { slug: string; session: string; p
 }
 
 // The strip of an issue landing (pages.ts, strip), drawn at once on Approve.
-const LANDING: IssuePageData["strip"] = { text: "Landing, by the repo's rules.", button: { label: "Landing…", disabled: true } };
+const LANDING: IssuePageData["strip"] = { text: "Landing", button: { label: "Landing…", disabled: true } };
 
 export const IssueView = observer(function IssueView({ data, inInbox = false }: { data: IssuePageData; inInbox?: boolean }) {
   const p = painted(data.issue);
