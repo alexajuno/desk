@@ -4,9 +4,8 @@ import { CLOSED, PROTOCOL_HINTS, PROTOCOLS, STATES, fold, nameOf, type Field, ty
 import { GLYPH, StateIcon, fieldIcon } from "../ui/icons";
 import { openMenu, type MenuItem, type MenuOptions } from "../ui/menu";
 import { ui } from "../store/ui";
-import { copy, openWindow, remove, setField, setFolder } from "./actions";
-import { post } from "../api/http";
-import { reloadPages } from "../store/ui";
+import { copy, remove, setField, setFolder } from "./actions";
+import { openSession } from "../sessions/Dock";
 
 type Where = Pick<MenuOptions, "anchor" | "x" | "y" | "onClose">;
 
@@ -66,10 +65,9 @@ export function actionsMenu(issue: ActionTarget, where: Where, here: string | nu
       if (to !== (issue.parent || "")) setField(issue.slug, "parent", to);
     }) },
     { group: 0, icon: GLYPH.plus, label: "Add sub-issue", run: () => ui.openCreator({ parent: issue.slug, parentTitle: issue.title }) },
-    // An issue's session: its chat in a window over desk (window.ts), or in a kitty tab (agents.ts, jumpBack).
+    // An issue's session, docked beside the page.
     ...(issue.session ? [
-      { group: 1, icon: GLYPH.chat, label: "Open chat", hint: "O", key: "o", run: () => openWindow(`/issue/${issue.slug}/window`) },
-      { group: 1, icon: GLYPH.terminal, label: "Open chat in kitty", run: async () => { await post(`/issue/${issue.slug}/jump`); await reloadPages(); } },
+      { group: 1, icon: GLYPH.chat, label: "Open chat", hint: "O", key: "o", run: () => openSession(issue.session!) },
     ] : []),
     { group: 1, icon: GLYPH.link, label: "Copy link", run: () => copy(`${location.origin}/issue/${issue.slug}`, "Link copied") },
     { group: 1, icon: GLYPH.id, label: "Copy ID", run: () => copy(issue.slug, "ID copied") },

@@ -10,8 +10,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { go, Go } from "../app/nav";
 import { Bar } from "../frame/Bar";
-import { newSession } from "../frame/Corner";
-import { openWindow } from "../issues/actions";
+import { newSession, openSession } from "./Dock";
 import { listView, setView } from "../lists/current";
 import { FilterBar, iconOf, Tools, type ListData } from "../lists/parts";
 import { addressOf, hasView, lastView, readable, remember, type ViewData } from "../lists/view";
@@ -194,7 +193,7 @@ export const SessionsPage = observer(function SessionsPage() {
                 else if (e.key === "Enter") {
                   e.preventDefault();
                   const id = ui.focused?.startsWith("session/") ? ui.focused.slice(8) : first?.dataset.session;
-                  if (id) openWindow(`/sessions/${id}/open`);
+                  if (id) openSession(id);
                 }
                 else if (e.key === "Escape") {
                   e.preventDefault();
@@ -223,7 +222,7 @@ export const SessionsPage = observer(function SessionsPage() {
             const t = e.target as Element;
             if (t.closest("a, .group")) return; // the issue's link opens the issue; a group's header folds it
             const row = t.closest<HTMLElement>(".session-row");
-            if (row) openWindow(`/sessions/${row.dataset.session}/open`);
+            if (row) openSession(row.dataset.session!);
           }}>
             {data && (
               <>

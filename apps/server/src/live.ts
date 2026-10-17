@@ -116,7 +116,7 @@ export async function connect(ws: WebSocket, id: string) {
     host = h;
     h.on("message", (data) => {
       const e = JSON.parse(data.toString());
-      if (e.type === "hello") say({ type: "working", working: e.working, asks: e.asks, partial: e.partial });
+      if (e.type === "hello") say({ type: "working", working: e.working, since: e.since, asks: e.asks, partial: e.partial });
       else if (e.type === "message") {
         const added = fresh(transcript.itemsOf(e.entry));
         if (added.length) say({ type: "items", items: added });

@@ -11,6 +11,7 @@ import { installTooltips } from "./ui/tooltip";
 // desk's look: one global stylesheet, Linear's themes as measured (styles/desk.css), and the Sessions page's own.
 import "./styles/desk.css";
 import "./styles/sessions.css";
+import "./styles/dock.css";
 import "./index.css";
 
 watchTheme();

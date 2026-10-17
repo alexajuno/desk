@@ -1,0 +1,169 @@
+/* The session panel (sessions/Dock.tsx): a session docked beside the page, as Linear's agent panel is, drawn the
+   way claude.ai draws a chat. It slides in from the right as the page narrows in the same motion, so nothing jumps;
+   ⤢ grows it leftward over the page; a hidden one leaves a pill in the corner. Colours are desk's variables. */
+
+:root { --dock-w: 440px; --dock-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+        --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace; }
+
+.dock { position: fixed; top: 8px; right: 8px; bottom: 8px; z-index: 5; width: var(--dock-w); box-sizing: border-box;
+        display: flex; flex-direction: column; overflow: hidden;
+        background: var(--bg-panel); border: 0.5px solid var(--border-2); border-radius: 12px; box-shadow: var(--shadow-panel);
+        transform: translateX(calc(100% + 16px)); visibility: hidden;
+        transition: transform 0.22s var(--dock-ease), width 0.26s var(--dock-ease), visibility 0s 0.26s; }
+.dock.on, .dock.full { transform: none; visibility: visible;
+                       transition: transform 0.22s var(--dock-ease), width 0.26s var(--dock-ease), visibility 0s; }
+.dock.full { width: calc(100vw - 244px - 16px); }
+.side-collapsed .dock.full { width: calc(100vw - 16px); }
+.panel { transition: left 0.2s ease, right 0.22s var(--dock-ease), opacity 0.2s ease; }
+.dock-open .panel { right: calc(var(--dock-w) + 16px); }
+.dock-full .panel { opacity: 0; pointer-events: none; }
+.corner { transition: right 0.22s var(--dock-ease); }
+.dock-open .corner { right: calc(var(--dock-w) + 16px); }
+.dock-full .corner { display: none; }
+@media (max-width: 1100px) { /* too narrow to share: the panel lies over the page */
+  .dock-open .panel { right: 8px; }
+  .dock.on { box-shadow: var(--shadow-pop); }
+}
+@media (max-width: 900px) { .dock.full { width: calc(100vw - 16px); } }
+
+/* The issue beside the panel is narrow: its properties go under its title as chips, as in the Inbox. */
+@container (max-width: 819px) {
+  .issue { grid-template-columns: minmax(0, 1fr); }
+  .issue .props { display: none; }
+  .issue .chips { display: flex; }
+}
+
+.session-view { display: flex; flex-direction: column; height: 100%; min-height: 0; animation: dock-fade 0.18s ease; }
+@keyframes dock-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dock-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes dock-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.8); } }
+@keyframes dock-blink { 50% { opacity: 0; } }
+
+/* its head: the live dot, the issue's title and folder, then hide, whole page and close */
+.dock-head { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px 0 14px;
+             border-bottom: 1px solid var(--border-1); }
+.dock-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; font: 500 13px var(--font); }
+.dock-title > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); text-decoration: none; }
+.dock-title a:hover { text-decoration: underline; }
+.dock-folder { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 450 12px var(--font); color: var(--text-3); }
+.dock-btn { flex: none; width: 28px; height: 28px; padding: 0; justify-content: center; border-radius: 6px; background: transparent; color: var(--text-3); }
+.dock-btn:hover { background: var(--bg-icon-hover); color: var(--text-1); }
+.live-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--text-4); transition: background-color 0.2s; }
+.live-dot.idle { background: var(--state-review); }
+.live-dot.working { background: var(--state-running); animation: dock-pulse 1.4s ease-in-out infinite; }
+.live-dot.asks { background: var(--state-waiting); }
+
+/* the conversation */
+.dock-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.convo { display: flex; flex-direction: column; gap: 14px; padding: 16px 16px 12px; }
+.dock.full .convo { max-width: 760px; margin: 0 auto; padding: 32px 24px 16px; }
+.convo > * { animation: dock-rise 0.18s ease both; }
+.convo-empty { margin: 48px 12px; text-align: center; font-size: 13px; color: var(--text-3); }
+.convo-note { margin: 0; text-align: center; font-size: 12px; color: var(--text-3); }
+
+.you { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.you-bubble { max-width: 85%; box-sizing: border-box; padding: 8px 12px; border-radius: 14px; background: var(--bg-raised);
+              font: 450 14px/21px var(--font); color: var(--text-1); white-space: pre-wrap; overflow-wrap: anywhere; }
+.you-images { display: block; font-size: 12px; color: var(--text-3); }
+.you.queued .you-bubble { background: transparent; border: 1px dashed var(--border-3); color: var(--text-2); }
+.you-queued { font-size: 11px; color: var(--text-3); }
+
+.reply.body { font-size: 14px; line-height: 22px; color: var(--text-1); overflow-wrap: anywhere; }
+.dock.full .reply.body { font-size: 15px; line-height: 24px; }
+.reply p, .reply ul, .reply ol, .reply pre, .reply table, .reply blockquote { margin: 0 0 10px; }
+.reply > :last-child { margin-bottom: 0; }
+.reply ul, .reply ol { padding-left: 22px; }
+.reply li { margin-bottom: 2px; }
+.reply h1, .reply h2, .reply h3 { font-size: 15px; line-height: 1.4; margin: 14px 0 6px; color: var(--text-1); }
+.reply code { font: 12.5px/1.5 var(--mono); padding: 1px 4px; border-radius: 4px; background: var(--bg-raised); }
+.reply pre { padding: 10px 12px; border-radius: 8px; background: var(--bg-raised); overflow-x: auto; }
+.reply pre code { padding: 0; background: none; }
+.reply.streaming > :last-child::after { content: ""; display: inline-block; width: 7px; height: 14px; margin-left: 3px; vertical-align: -2px;
+                                        border-radius: 1px; background: var(--text-3); animation: dock-blink 1s steps(2) infinite; }
+
+/* a fold of tool steps between two replies: one line, opened on a click */
+.steps { font-size: 13px; color: var(--text-3); }
+.steps-head { height: 26px; padding: 0 8px 0 2px; gap: 6px; border-radius: 6px; background: transparent; font: 450 13px var(--font); color: var(--text-3); }
+.steps-head:hover { background: var(--btn-ghost-hover); color: var(--text-2); }
+.steps-caret { flex: none; transition: transform 0.15s ease; }
+.steps.open .steps-caret { transform: rotate(90deg); }
+.steps-failed { color: var(--state-waiting); }
+.steps-now { margin: 0 0 0 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-4);
+             animation: dock-fade 0.2s ease; }
+.steps-list { display: flex; flex-direction: column; gap: 1px; margin: 4px 0 0 7px; padding-left: 10px; border-left: 1px solid var(--border-2);
+              animation: dock-fade 0.15s ease; }
+.step-line, .step.running:not(.thought) { width: 100%; height: 24px; justify-content: flex-start; gap: 8px; margin: 0; padding: 0 6px; border-radius: 6px;
+                                          background: transparent; font: 450 12px var(--font); color: var(--text-3); display: flex; align-items: center; }
+.step-line:hover { background: var(--btn-ghost-hover); }
+.step-name { flex: none; font-weight: 500; color: var(--text-2); }
+.step-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step.error .step-name { color: var(--state-waiting); }
+.step.running .step-name { animation: dock-pulse 1.4s ease-in-out infinite; }
+.step-detail pre { max-height: 240px; margin: 2px 0 6px 6px; padding: 8px 10px; overflow: auto; border-radius: 6px; background: var(--bg-raised);
+                   font: 11.5px/1.5 var(--mono); color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.step-result { color: var(--text-3); }
+.step.thought { padding: 4px 6px; }
+.thought-text { margin: 2px 0 4px; white-space: pre-wrap; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+
+.working { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; color: var(--text-3); }
+.spark { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: dock-pulse 1.2s ease-in-out infinite; }
+.working-key { margin-left: auto; font-size: 11px; color: var(--text-4); }
+
+/* what waits on the user, above the composer: a permission, or Claude's questions as buttons */
+.ask { flex: none; max-height: 45%; overflow: auto; margin: 0 12px 8px; padding: 12px; border: 1px solid var(--border-2); border-radius: 12px;
+       background: var(--bg-raised); animation: dock-rise 0.18s ease; }
+.dock.full .ask { width: min(760px, calc(100% - 48px)); margin: 0 auto 8px; box-sizing: border-box; }
+.ask-q + .ask-q { margin-top: 14px; }
+.ask-header { display: inline-block; margin-bottom: 4px; font: 500 11px var(--font); color: var(--text-3); }
+.ask-what { margin: 0 0 8px; font: 500 13px/1.45 var(--font); color: var(--text-1); }
+.ask-options { display: flex; flex-direction: column; gap: 6px; }
+.ask-option { height: auto; min-height: 36px; padding: 7px 12px; flex-direction: column; align-items: flex-start; gap: 2px; border-radius: 8px;
+              border: 1px solid var(--border-2); background: var(--bg-panel); white-space: normal; text-align: left; }
+.ask-option:hover { background: var(--bg-hover); }
+.ask-option.on { border-color: var(--accent); }
+.ask-label { font: 500 13px var(--font); color: var(--text-1); }
+.ask-desc { font: 450 12px/1.4 var(--font); color: var(--text-3); }
+.ask-other { height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border-2); background: var(--bg-panel); color: var(--text-1);
+             font: 450 13px var(--font); outline: 0; }
+.ask-other:focus { border-color: var(--border-3); }
+.ask-input { max-height: 160px; margin: 0; padding: 8px; overflow: auto; border-radius: 6px; background: var(--bg-panel);
+             font: 11.5px/1.5 var(--mono); color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ask-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+
+/* the composer: where you type; Enter sends, or queues while Claude works, and Esc stops it */
+.composer { position: relative; flex: none; margin: 0 12px 12px; padding: 10px 8px 6px 12px; border: 1px solid var(--border-2); border-radius: 14px;
+            background: var(--bg-raised); transition: border-color 0.15s; }
+.composer:focus-within { border-color: var(--border-3); }
+.dock.full .composer { width: min(760px, calc(100% - 48px)); margin: 0 auto 16px; box-sizing: border-box; }
+.composer textarea { display: block; width: 100%; max-height: 240px; box-sizing: border-box; padding: 0; border: 0; outline: 0; resize: none;
+                     background: transparent; font: 450 14px/21px var(--font); color: var(--text-1); }
+.composer textarea::placeholder { color: var(--text-4); }
+.composer-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.composer-hint { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--text-4); }
+.attach { cursor: pointer; display: inline-flex; align-items: center; }
+.send, .stop { flex: none; width: 28px; padding: 0; justify-content: center; border-radius: 50%; }
+.send { background: var(--btn-primary); color: var(--btn-primary-text); }
+.send:hover { background: var(--btn-primary-hover); }
+.send:disabled, .send:disabled:hover { background: var(--btn-primary); opacity: 0.35; }
+.stop { background: var(--btn-hover); color: var(--text-1); animation: dock-fade 0.15s ease; }
+.attached { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.thumb { position: relative; width: 56px; height: 56px; overflow: hidden; border-radius: 8px; border: 1px solid var(--border-2); animation: dock-rise 0.15s ease; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.thumb button { position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; padding: 0; justify-content: center; background: var(--bg-pop); color: var(--text-2); }
+.picks { position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 2; max-height: 280px; overflow: auto; padding: 4px;
+         border: 1px solid var(--border-pop); border-radius: 10px; background: var(--bg-pop); box-shadow: var(--shadow-pop); animation: dock-rise 0.12s ease; }
+.pick-row { width: 100%; height: auto; min-height: 30px; padding: 4px 8px; justify-content: flex-start; gap: 10px; border-radius: 6px; background: transparent; }
+.pick-row.on, .pick-row:hover { background: var(--bg-pop-on); }
+.pick-label { flex: none; font: 500 12.5px var(--mono); color: var(--text-1); }
+.pick-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 450 12px var(--font); color: var(--text-3); }
+
+/* a hidden panel's pill, in the corner beside New session */
+.corner .dock-pill { max-width: 280px; padding: 0 12px 0 10px; gap: 8px; border: 0.5px solid var(--border-2); background: var(--bg-raised); color: var(--text-2);
+                     animation: dock-rise 0.18s ease; }
+.corner .dock-pill:hover { background: var(--bg-hover); color: var(--text-1); }
+.dock-pill span:last-child { overflow: hidden; text-overflow: ellipsis; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dock, .dock.on, .dock.full, .panel, .corner { transition: none; }
+  .session-view, .convo > *, .ask, .live-dot.working, .spark, .step.running .step-name { animation: none; }
+}

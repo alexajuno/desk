@@ -3,7 +3,7 @@
 // the issue's session to you in a floating kitty window over desk; whenever it is not the step, a quiet Open chat
 // sits beside it. Ctrl+Enter presses the step and O opens the chat, as the buttons' tooltips say.
 import { observer } from "mobx-react-lite";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { post, said } from "../api/http";
 import { go, Go } from "../app/nav";
 import { fromSlack, PRIORITY_NAMES, PROTOCOL_NAMES, STATE_NAMES, type Field, type IssueRow, type Priority, type Protocol, type State, type TreeRow } from "../lib/desk";
@@ -13,7 +13,9 @@ import { toggled } from "../ui/menu";
 import { showFolded } from "../ui/folds";
 import { toast } from "../ui/toast";
 import { reloadPages, ui } from "../store/ui";
-import { openWindow, setField } from "./actions";
+import { setField } from "./actions";
+import { openSession } from "../sessions/Dock";
+import { dock } from "../store/dock";
 import { fieldMenu, folderMenu, projectPicker, waitingMenu } from "./menus";
 import { painted } from "./painted";
 import { Tree } from "./Tree";
@@ -52,11 +54,11 @@ const Fold = () => (
   <button className="sec-toggle" type="button" aria-label="Collapse section" aria-expanded="true">{TRIANGLE}</button>
 );
 
-function OpenChat({ slug, primary }: { slug: string; primary: boolean }) {
+function OpenChat({ slug, session, primary }: { slug: string; session: string; primary: boolean }) {
   return (
     <button className={`${primary ? "primary strip-go" : "ghost"} large open-chat`} type="button" data-slug={slug}
-      title={`Open the issue's chat in a window over desk  ${primary ? "Ctrl Enter or O" : "O"}`}
-      onClick={() => openWindow(`/issue/${slug}/window`)}>Open chat</button>
+      title={`Open the issue's chat beside it  ${primary ? "Ctrl Enter or O" : "O"}`}
+      onClick={() => openSession(session)}>Open chat</button>
   );
 }
 
@@ -99,6 +101,8 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
   }
 
   useLayoutEffect(() => showFolded());
+  // A docked panel follows the issue you open to its session; a hidden or closed one stays as it is.
+  useEffect(() => { if (p.session) dock.show(p.session); }, [p.slug, p.session]);
 
   const live = p.session && !["done", "dropped"].includes(p.state);
   return (
@@ -107,7 +111,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
         <div className="strip-in">
           <span className="strip-state"><StateIcon state={p.state} /></span>
           <span className={`strip-what${msg ? " strip-msg" : ""}`}>{msg || strip.text}</span>
-          {p.session && !(b && b.chat) && <OpenChat slug={p.slug} primary={false} />}
+          {p.session && !(b && b.chat) && <OpenChat slug={p.slug} session={p.session} primary={false} />}
           {/* Try, in review: runs the issue's branch in the desk you use (app.try_button). Quiet: Approve stays the step. */}
           {t && (t.disabled
             ? <button className="ghost large" type="button" disabled title={t.title}>{t.label}</button>
@@ -115,7 +119,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
           {trust ? (
             <button className="primary large strip-go" type="button" title="Tells Claude Code to trust this folder, as accepting its prompt does"
               onClick={() => act("trust")}>Trust folder</button>
-          ) : b?.chat ? <OpenChat slug={p.slug} primary />
+          ) : b?.chat && p.session ? <OpenChat slug={p.slug} session={p.session} primary />
             : b?.disabled ? <button className="primary large strip-go" type="button" disabled>{b.label}</button>
             : b ? <button className="primary large strip-go" type="button" title={`${b.label}  Ctrl Enter`} onClick={() => act(b.action!)}>{b.label}</button>
             : null}

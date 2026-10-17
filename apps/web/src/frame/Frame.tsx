@@ -1,11 +1,12 @@
-// Every page's frame (templates/base.html): the sidebar, the panel the page draws into, the corner's session buttons,
+// Every page's frame (templates/base.html): the sidebar, the panel the page draws into, the session docked beside it,
+// the corner's session buttons,
 // the shortcuts panel, the new issue panel, and the menus and toasts over them. desk's keys and the clicks that act
 // across the page live here, as desk.js read them on the document.
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
 import { Outlet, useLocation } from "react-router";
 import { deskPath, go } from "../app/nav";
-import { openWindow, remove, removeMany, setField, undo, undoList } from "../issues/actions";
+import { remove, removeMany, setField, undo, undoList } from "../issues/actions";
 import { fieldMenu } from "../issues/menus";
 import { selectable, selectAll, selection, SelectionBar, selectionField } from "../issues/selection";
 import { listView } from "../lists/current";
@@ -18,11 +19,21 @@ import { unfoldTo, toggleSection } from "../ui/folds";
 import { MenuHost, menus } from "../ui/menu";
 import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openViewer, viewerOpen } from "../ui/viewer";
-import { Corner, newSession } from "./Corner";
+import { Dock, newSession, openSession } from "../sessions/Dock";
+import { Corner } from "./Corner";
 import { CreatorHost } from "./Creator";
 import { KeysPanel } from "./KeysPanel";
 import { Sidebar } from "./Sidebar";
 import { closeSide, sideOpen, toggleSide } from "./side";
+import { issues } from "../store/issues";
+import { toast as say } from "../ui/toast";
+
+// The issue's session, docked; an issue with none yet says so.
+function openIssueSession(slug: string) {
+  const session = issues.bySlug.get(slug)?.session;
+  if (session) openSession(session);
+  else say("This issue has no session yet.");
+}
 
 // The issue this page shows, on an issue page.
 const page = () => (document.querySelector(".issue") as HTMLElement | null)?.dataset;
@@ -106,7 +117,7 @@ function onKeyDown(e: KeyboardEvent) {
     e.preventDefault();
   }
   else if (e.key === "Enter" && focused) {
-    if (focused.dataset.session) openWindow(`/sessions/${focused.dataset.session}/open`);
+    if (focused.dataset.session) openSession(focused.dataset.session);
     else go(focused.getAttribute("href")!);
   }
   else if (key === "c") { ui.openCreator(); e.preventDefault(); }
@@ -120,8 +131,8 @@ function onKeyDown(e: KeyboardEvent) {
     const group = document.querySelector<HTMLElement>(".group[data-group]:hover") ?? (focused && groups.find((g) => g.nextElementSibling?.contains(focused)));
     group?.querySelector<HTMLElement>(".group-toggle")?.click();
   }
-  // O opens the issue's chat, as its Open chat button does; an issue with no session says so in a toast.
-  else if (key === "o" && target()) { openWindow(`/issue/${target()}/window`); e.preventDefault(); }
+  // O opens the issue's session in the panel, as its Open chat button does; an issue with no session says so.
+  else if (key === "o" && target()) { openIssueSession(target()!); e.preventDefault(); }
   // Linear's Triage key: 2 declines a chat's issue that came to nothing, as Dropped. The chat itself stays open.
   else if (key === "2" && (focused ?? document.querySelector<HTMLElement>(".issue"))?.dataset.state === "triage") {
     setField(target()!, "state", "dropped").then(() => toast("Declined: nothing to do."));
@@ -208,6 +219,7 @@ export const Frame = observer(function Frame() {
       {/* Settings has its own sidebar, as Linear's. */}
       {pathname.startsWith("/settings") ? <SettingsNav /> : <Sidebar />}
       <div className="panel"><Outlet /></div>
+      <Dock />
       <Corner />
       <KeysPanel />
       <SelectionBar />

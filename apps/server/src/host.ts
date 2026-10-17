@@ -8,10 +8,10 @@
 // desk reads the finished messages there. What only the host knows it sends over each session's event stream: the words
 // as they stream, whether a turn runs, and the questions waiting on the user.
 //
-//     {"type": "hello", "working": true, "partial": [<block>, ...], "asks": [<ask>, ...]}   first, on connect
+//     {"type": "hello", "working": true, "since": <ms>, "partial": [<block>, ...], "asks": [...]}   first, on connect
 //     {"type": "stream", "msg": "msg_…", "index": 0, "kind": "text", "text": "…"}            a piece of a block
 //     {"type": "message", "entry": <the SDK's assistant or user message>}                    a block done
-//     {"type": "working", "working": false}                                                   a turn began or ended
+//     {"type": "working", "working": false, "since": <ms>}                                    a turn began or ended
 //     {"type": "asks", "asks": [<ask>, ...]}                                                  the questions changed
 //     {"type": "closed", "error": "…"}                                                        the process ended
 //
@@ -93,7 +93,7 @@ function setWorking(s: Session, working: boolean) {
   if (s.working === working) return;
   s.working = working;
   s.since = Date.now();
-  send(s, { type: "working", working });
+  send(s, { type: "working", working, since: s.since });
 }
 
 // The messages Claude Code reads, one at a time, as the user sends them; it reads the next while a turn runs and folds
@@ -175,6 +175,8 @@ async function read(s: Session) {
 }
 
 function take(s: Session, m: SDKMessage) {
+  // A turn Claude starts on its own, such as when a task it left running in the background finishes, works too.
+  if ((m.type === "stream_event" || m.type === "assistant") && !m.parent_tool_use_id) setWorking(s, true);
   if (m.type === "stream_event") {
     if (m.parent_tool_use_id) return; // a subagent's: the panel shows only its Agent step
     const e = m.event as { type: string; index?: number; message?: { id: string }; content_block?: { type: string; name?: string }; delta?: Record<string, string> };
@@ -194,8 +196,11 @@ function take(s: Session, m: SDKMessage) {
   }
   if ((m.type === "assistant" || m.type === "user") && !m.parent_tool_use_id) {
     if (m.type === "assistant") {
-      // Claude Code records each block of a reply as one message, in order: this block is done streaming.
-      for (const key of [...s.partial.keys()]) if (key.startsWith(`${m.message.id}:`)) { s.partial.delete(key); break; }
+      // Claude Code records each block of a reply as one message, in order: this block is done streaming, and so are
+      // the reply's blocks before it.
+      const kind = (m.message.content as { type: string }[])[0]?.type;
+      const done = [...s.partial.values()].find((b) => b.msg === m.message.id && b.kind === kind);
+      if (done) for (const [key, b] of s.partial) if (b.msg === done.msg && b.index <= done.index) s.partial.delete(key);
     }
     send(s, { type: "message", entry: m });
   } else if (m.type === "result") {
@@ -280,16 +285,19 @@ app.get<{ Params: { id: string } }>("/sessions/:id/events", { websocket: true },
     return;
   }
   s.watchers.add(ws);
-  ws.send(JSON.stringify({ type: "hello", working: s.working, partial: [...s.partial.values()], asks: asksOf(s) }));
+  ws.send(JSON.stringify({ type: "hello", working: s.working, since: s.since, partial: [...s.partial.values()], asks: asksOf(s) }));
   ws.on("close", () => {
     s.watchers.delete(ws);
     s.since = Math.max(s.since, Date.now() - IDLE_CLOSE / 2); // closing the panel leaves it a while before its process goes
   });
 });
 
-// desk asks the host to step down for a newer one, which it does only while nothing works.
+// desk asks the host to step down for a newer one, which it does only while nothing works, nor has for a while: a
+// session that just finished may have left a task running in the background, whose end starts its next turn.
+const QUIET = 10 * 60_000; // ms
 app.post("/quit", async (_req, reply) => {
-  if ([...sessions.values()].some((s) => s.working || s.asks.size)) return reply.code(409).send({ detail: "A session is working" });
+  if ([...sessions.values()].some((s) => s.working || s.asks.size || Date.now() - s.since < QUIET))
+    return reply.code(409).send({ detail: "A session is working" });
   setTimeout(stop, 50);
   return {};
 });

@@ -40,13 +40,6 @@ export async function setFolder(slug: string, folder: string) {
   await reloadPages();
 }
 
-// A session's chat, in a floating kitty window over desk (window.ts): the page stays as it is; a failure says why.
-export async function openWindow(url: string, body: unknown = {}) {
-  const res = await postJson(url, body);
-  if (!res.ok) toast(await reason(res));
-  return res.ok ? res.json() : null;
-}
-
 export async function copy(text: string, done: string) {
   try {
     await navigator.clipboard.writeText(text);
