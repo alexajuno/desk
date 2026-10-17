@@ -19,7 +19,7 @@ import { unfoldTo, toggleSection } from "../ui/folds";
 import { MenuHost, menus } from "../ui/menu";
 import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openViewer, viewerOpen } from "../ui/viewer";
-import { arrange, Dock, newSession, openSession, SideEdge, toggleIssue } from "../sessions/Dock";
+import { arrange, Dock, focusComposer, newSession, openSession, SideEdge, toggleIssue } from "../sessions/Dock";
 import { Corner } from "./Corner";
 import { CreatorHost } from "./Creator";
 import { KeysPanel } from "./KeysPanel";
@@ -145,6 +145,11 @@ function onKeyDown(e: KeyboardEvent) {
   }
   // O opens the issue's chat, as its Open chat button does; an issue with no session says so.
   else if (key === "o" && target()) { openIssueSession(target()!); e.preventDefault(); }
+  // I, as vim's insert: back into the chat's composer, or, where no chat is open, into the issue's as O opens it.
+  else if (key === "i") {
+    if (!focusComposer() && target()) openIssueSession(target()!);
+    e.preventDefault(); // so the i is not typed into the composer it lands in
+  }
   // Linear's Triage key: 2 declines a chat's issue that came to nothing, as Dropped. The chat itself stays open.
   else if (key === "2" && (focused ?? document.querySelector<HTMLElement>(".issue"))?.dataset.state === "triage") {
     setField(target()!, "state", "dropped").then(() => toast("Declined: nothing to do."));

@@ -1,6 +1,7 @@
 // A session's chat, in the middle of the screen, drawn as claude.ai draws a chat: replies stream in as Markdown, tool
 // steps fold under one line, questions come as buttons, and the composer queues a message while Claude works (Enter)
-// or stops it (Esc). Its issue sits beside it on the right, in the frame's panel (store/dock.ts says where each stands).
+// or stops it (Ctrl C); Esc leaves it for desk's keys and I comes back, as vim's modes. Its issue sits beside it on
+// the right, in the frame's panel (store/dock.ts says where each stands).
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -28,6 +29,13 @@ export function openSession(id: string, slug?: string | null) {
   slug ??= [...issues.bySlug.values()].find((i) => i.session === id)?.slug;
   go(slug ? `/issue/${slug}` : `/sessions/${id}`);
   runInAction(() => wantsFocus.set(id));
+}
+
+// I, as vim's insert: the cursor back into the composer of the chat in the middle. False when no chat is there.
+export function focusComposer() {
+  const box = document.querySelector<HTMLTextAreaElement>(".dock .composer textarea");
+  box?.focus();
+  return Boolean(box);
 }
 
 // New session: an agent chat, in the middle. Its issue comes beside it once the agent files one (SessionFullRoute).
@@ -448,6 +456,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   const box = useRef<HTMLTextAreaElement>(null);
   const commands = useRef<Pick[] | null>(null);
   const asked = useRef(0);
+  const [typing, setTyping] = useState(false); // the cursor is here: the hint says the keys of this mode
   const focus = wantsFocus.get() === s.id;
 
   useEffect(() => {
@@ -542,6 +551,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
       <textarea ref={box} rows={1} value={text} spellCheck={false}
         placeholder={s.working ? "Queue a message for when it's ready…" : "Reply…"}
         onChange={(e) => { setText(e.target.value); void complete(tokenAt(e.target.value, e.target.selectionStart)); }}
+        onFocus={() => setTyping(true)} onBlur={() => setTyping(false)}
         onPaste={(e) => {
           const files = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
           if (files.length) { e.preventDefault(); void attach(files); }
@@ -557,11 +567,13 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           } else if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             void send();
+          } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === "KeyC" && s.working && e.currentTarget.selectionStart === e.currentTarget.selectionEnd) {
+            e.preventDefault(); // a terminal's Ctrl C; with text selected it copies
+            void s.interrupt();
           } else if (e.key === "Escape") {
             e.preventDefault();
-            e.stopPropagation(); // the frame's Esc would leave the page
+            e.stopPropagation(); // the frame's Esc would also leave the page: that is the next Esc's to do
             if (picks.length) setPicks([]);
-            else if (s.working) void s.interrupt();
             else e.currentTarget.blur();
           }
         }} />
@@ -570,10 +582,10 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           {GLYPH.plus}
           <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
-        <span className="composer-hint">{s.working ? "Enter queues · Esc stops" : "Enter sends · Shift Enter for a new line"}</span>
+        <span className="composer-hint">{!typing ? "I to type" : s.working ? "Enter queues · Ctrl C stops" : "Enter sends · Shift Enter for a new line"}</span>
         <Runs s={s} />
         {s.working && (
-          <button className="stop" type="button" title="Stop  Esc" onClick={() => void s.interrupt()}>
+          <button className="stop" type="button" title="Stop  Ctrl C" onClick={() => void s.interrupt()}>
             <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><rect x="1" y="1" width="8" height="8" rx="1.5" /></svg>
           </button>
         )}
