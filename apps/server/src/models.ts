@@ -67,7 +67,8 @@ export function shown(session: string, chat: boolean): Shown {
   const s = settings.load();
   const base: Pick = chat ? { model: s.chat_model, effort: s.chat_effort } : claudeDefault();
   const { model = "default", effort = "" } = { ...base, ...pickOf(session) };
-  return { model, name: nameOf(model), effort };
+  const takes = entryOf(model)?.supportedEffortLevels; // none for a model without effort levels, such as Haiku
+  return { model, name: nameOf(model), effort: list && !takes?.length ? "" : effort };
 }
 
 // Pick the session's model or effort. A session the host holds takes it from its next request, the turn running now
@@ -115,13 +116,15 @@ async function all(): Promise<ModelInfo[]> {
   return asking;
 }
 
+const entryOf = (model: string) => list?.find((m) => m.value === model) ?? list?.find((m) => m.resolvedModel === model);
+
 // The model's name, as Claude Code's /model lists it; an alias desk has not looked up yet shows as itself.
 function nameOf(model: string): string {
   if (!list) {
     void all().catch(() => {});
     return model === "default" ? "Default" : model.charAt(0).toUpperCase() + model.slice(1);
   }
-  const found = list.find((m) => m.value === model) ?? list.find((m) => m.resolvedModel === model);
+  const found = entryOf(model);
   if (found?.value === "default") return list.find((m) => m.value !== "default" && m.resolvedModel === found.resolvedModel)?.displayName ?? found.displayName;
   return found?.displayName ?? model;
 }

@@ -560,7 +560,7 @@ const Runs = observer(function Runs({ s }: { s: LiveSession }) {
   if (!runs) return null;
   return (
     <button className="runs" type="button" title="Model and effort" onMouseEnter={warm} onFocus={warm}
-      onClick={(e) => { if (!toggled(e.currentTarget)) runsMenu(e.currentTarget, runs, (set, name) => void s.pick(set, name)); }}>
+      onClick={(e) => { if (!toggled(e.currentTarget)) runsMenu(e.currentTarget, runs, (set, shown) => void s.pick(set, shown)); }}>
       {runs.effort ? `${runs.name} · ${effortName(runs.effort)}` : runs.name}
       <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
     </button>

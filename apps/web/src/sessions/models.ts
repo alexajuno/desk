@@ -55,13 +55,13 @@ export interface Runs {
 }
 
 // The menu under the chip: the models, the efforts the current one takes, and the usage.
-export function runsMenu(anchor: Element, runs: Runs, pick: (set: { model?: string; effort?: string }, name?: string) => void) {
+export function runsMenu(anchor: Element, runs: Runs, pick: (set: { model?: string; effort?: string }, shown?: Partial<Runs>) => void) {
   openMenu({
     anchor, className: "runs-menu",
     items: async () => {
       const [list, usage] = await Promise.all([loadModels().catch((e) => (toast((e as Error).message), [] as Model[])), loadUsage().catch(() => null)]);
       const now = list.find((m) => m.value === runs.model || m.name === runs.name);
-      const items: MenuItem[] = list.map((m) => ({ label: m.name, group: 1, heading: "Model", current: m === now, run: () => pick({ model: m.value }, m.name) }));
+      const items: MenuItem[] = list.map((m) => ({ label: m.name, group: 1, heading: "Model", current: m === now, run: () => pick({ model: m.value }, { name: m.name, ...(m.efforts.length ? {} : { effort: "" }) }) }));
       const efforts = now ? now.efforts : EFFORTS.map(([value]) => value);
       for (const [value, label] of EFFORTS)
         if (efforts.includes(value)) items.push({ label, group: 2, heading: "Effort", current: value === runs.effort, run: () => pick({ effort: value }) });

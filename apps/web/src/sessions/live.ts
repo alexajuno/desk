@@ -207,9 +207,9 @@ export class LiveSession {
   }
 
   // Pick the model or effort: the chip shows it at once, and the server's next meta confirms it.
-  async pick(set: { model?: string; effort?: string }, name?: string) {
+  async pick(set: { model?: string; effort?: string }, shown: Partial<Meta["runs"]> = {}) {
     const was = this.meta;
-    if (was) this.shows({ ...was, runs: { ...was.runs, ...set, ...(name ? { name } : {}) } });
+    if (was) this.shows({ ...was, runs: { ...was.runs, ...set, ...shown } });
     const res = await postJson(`/api/live/${this.id}/model`, set);
     if (!res.ok) {
       if (was) this.shows(was);

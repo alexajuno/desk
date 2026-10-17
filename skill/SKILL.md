@@ -56,6 +56,8 @@ curl -s "http://127.0.0.1:8790/api/settings"
 curl -s "http://127.0.0.1:8790/api/settings" -X PATCH --json '{"parent_auto_close": true}'
 ```
 
+The same settings hold `chat_model` and `chat_effort`, the model (an alias such as `opus` or `sonnet`) and the effort (`low`, `medium`, `high`, `xhigh` or `max`) a new desk chat starts on, from Settings › Preferences.
+
 Projects have a `title`, a `body` (their description) and a `state`, active or archived, never done. List the active ones (`?state=archived` or `?state=all` for others), read one with its issues, create one, or archive one; put an issue in one with `"project": "<slug>"` as above, and list a project's issues with `/api/issues?project=<slug>&state=all`. Its page is `http://127.0.0.1:8790/project/<slug>`:
 
 ```bash
