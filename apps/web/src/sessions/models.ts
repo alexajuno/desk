@@ -42,9 +42,10 @@ async function loadUsage(): Promise<Usage | null> {
   return res.ok ? ((await res.json()) as Usage) : null;
 }
 
-// When a window resets: the time today, or the day and time when it is further off.
+// When a window resets, to the nearest minute (it says 05:59:59.9 for 06:00): the time today, or the day and time when
+// it is further off.
 function resets(iso: string): string {
-  const at = new Date(iso), time = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  const at = new Date(Math.round(new Date(iso).getTime() / 60_000) * 60_000), time = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
   return at.getTime() - Date.now() < 20 * 3600_000 ? time : `${at.toLocaleDateString([], { weekday: "short" })} ${time}`;
 }
 
