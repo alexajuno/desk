@@ -179,6 +179,12 @@ export function title(row: TableRow, i: Issue | null = null): string {
   return row.ai_title || i?.title || row.first_prompt || custom || "Untitled session";
 }
 
+// desk names each session it starts in the host, which keeps the name as the session's title: a chat "desk chat 17 Oct
+// 19:24", an issue's its title cut short. Its issue's whole title, or what was first said in it, reads better.
+function shown(row: TableRow, i: Issue | null, desks: boolean): string {
+  return desks || i ? i?.title || row.ai_title || row.first_prompt || title(row) : title(row);
+}
+
 // The session's title as the list shows it, or nothing when it has no transcript yet.
 export function titleOf(sid: string): string {
   const row = refresh().get(sid);
@@ -215,10 +221,11 @@ async function issuesBySession(): Promise<Map<string, Issue>> {
 // every word of it, where a word starts.
 export async function rows(query = "") {
   const t = refresh(), issues = await issuesBySession(), live = await agents.live();
+  const desks = new Set(chats.agentChats().map((c) => c.session));
   const patterns = query.split(/\s+/).filter(Boolean).map((w) => patternOf([w]));
   const found: { id: string; title: string; folder: string; moved: Date; state: string }[] = [];
   for (const row of [...t.values()].sort((a, b) => (b.moved ?? 0) - (a.moved ?? 0))) {
-    const sid = row.id, i = issues.get(sid) ?? null, name = title(row, i);
+    const sid = row.id, i = issues.get(sid) ?? null, name = shown(row, i, desks.has(sid));
     if (patterns.length) {
       const text = [name, row.cwd, i && `${i.slug} ${i.title}`, row.first_prompt, row.last_prompt].filter(Boolean).join(" ");
       if (!patterns.every((p) => { p.lastIndex = 0; return p.test(text); })) continue;
@@ -252,10 +259,7 @@ export async function others() {
   for (const [sid, row] of running) {
     const chat = mine.get(sid), kept = t.get(sid);
     if (chat ? chats.said(chat).next().done : entrypoint(row.pid) === "sdk-cli") continue;
-    // A chat's own title, once it has one, else what was first said in it: its window's name, "desk chat 17 Oct 19:24",
-    // tells two chats apart by the minute only.
-    const name = chat ? (chat.title !== "New chat" && chat.title) || kept?.first_prompt : kept && title(kept);
-    found.push({ id: sid, title: name || row.name || "Untitled session", folder: folder(row.cwd), state: state(row), started: Number(row.startedAt ?? 0) });
+    found.push({ id: sid, title: (kept && shown(kept, null, Boolean(chat))) || row.name || "Untitled session", folder: folder(row.cwd), state: state(row), started: Number(row.startedAt ?? 0) });
   }
   return found.sort((a, b) => b.started - a.started);
 }
