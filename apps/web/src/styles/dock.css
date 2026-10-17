@@ -8,6 +8,7 @@
 .dock { position: fixed; top: 8px; right: 8px; bottom: 8px; left: 244px; z-index: 5; box-sizing: border-box;
         display: none; flex-direction: column; overflow: hidden;
         background: var(--bg-panel); border: 0.5px solid var(--border-2); border-radius: 12px; box-shadow: var(--shadow-panel); }
+.dock { transition: left 0.2s ease; } /* as the panel follows the sidebar */
 .side-collapsed .dock { left: 8px; }
 .chat-center .dock { display: flex; }
 /* the issue beside its chat: the panel the page draws into, narrowed to the right */
@@ -31,14 +32,16 @@
 .dock { view-transition-name: chat; }
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
 ::view-transition-group(page), ::view-transition-group(chat) { animation-duration: 0.32s; animation-timing-function: var(--dock-ease); }
-::view-transition-old(page), ::view-transition-new(page) { height: 100%; object-fit: cover; object-position: left top; }
-::view-transition-old(page) { animation: 0.2s ease both dock-out; }
-::view-transition-new(page) { animation: 0.26s ease both dock-in; }
+/* Each picture keeps its own size as its box glides, so no text zooms: the page's to its left edge, the chat's
+   centred, as its column is. */
+::view-transition-old(page), ::view-transition-new(page), ::view-transition-old(chat), ::view-transition-new(chat) {
+  width: 100%; height: 100%; object-fit: none; animation-duration: 0.32s; }
+::view-transition-old(page), ::view-transition-new(page) { object-position: left top; }
+::view-transition-old(chat), ::view-transition-new(chat) { object-position: center top; }
 ::view-transition-new(chat):only-child { animation: 0.32s var(--dock-ease) both dock-rise-in; }
 ::view-transition-old(chat):only-child { animation: 0.2s ease both dock-out; }
 ::view-transition-new(page):only-child { animation: 0.32s var(--dock-ease) both dock-slide-in; }
 ::view-transition-old(page):only-child { animation: 0.26s var(--dock-ease) both dock-slide-out; }
-@keyframes dock-in { from { opacity: 0; } }
 @keyframes dock-out { to { opacity: 0; } }
 @keyframes dock-rise-in { from { opacity: 0; transform: translateY(12px) scale(0.99); } }
 @keyframes dock-slide-in { from { transform: translateX(calc(100% + 16px)); } }
@@ -69,7 +72,16 @@
              border-bottom: 1px solid var(--border-1); }
 .dock-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; font: 500 13px var(--font); }
 .dock-title > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); text-decoration: none; }
-.dock-title a:hover { text-decoration: underline; }
+/* its issue's title, which shows or hides the issue beside it: a chip while the chat stands alone */
+.dock-issue { display: block; min-width: 0; height: 26px; margin-left: -8px; padding: 0 8px; overflow: hidden; text-overflow: ellipsis;
+              border-radius: 6px; background: transparent; font: 500 13px/26px var(--font); color: var(--text-1); }
+.dock-issue:hover { background: var(--btn-ghost-hover); }
+.dock-issue:not(.on) { margin-left: 0; border-color: var(--border-2); background: var(--bg-raised); }
+.dock-issue:not(.on):hover { background: var(--bg-hover); }
+/* the sidebar's toggle, while the sidebar is hidden, as a page's top bar has it */
+.dock-head .side-toggle { display: none; flex: none; margin-left: -6px; }
+.side-collapsed .dock-head .side-toggle { display: grid; }
+@media (max-width: 900px) { .dock-head .side-toggle { display: grid; } }
 .dock-folder { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 450 12px var(--font); color: var(--text-3); }
 .dock-btn { flex: none; width: 28px; height: 28px; padding: 0; justify-content: center; border-radius: 6px; background: transparent; color: var(--text-3); }
 .dock-btn:hover { background: var(--bg-icon-hover); color: var(--text-1); }
@@ -187,13 +199,18 @@
 .pick-label { flex: none; font: 500 12.5px var(--mono); color: var(--text-1); }
 .pick-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 450 12px var(--font); color: var(--text-3); }
 
-/* a hidden panel's pill, in the corner beside New session */
-.corner .dock-pill { max-width: 280px; padding: 0 12px 0 10px; gap: 8px; border: 0.5px solid var(--border-2); background: var(--bg-raised); color: var(--text-2);
-                     animation: dock-rise 0.18s ease; }
-.corner .dock-pill:hover { background: var(--bg-hover); color: var(--text-1); }
-.dock-pill span:last-child { overflow: hidden; text-overflow: ellipsis; }
+/* the pill the chat you left waits as, in the corner beside New session; its × shows on hover */
+.dock-pill { display: inline-flex; align-items: center; max-width: 300px; border: 0.5px solid var(--border-2); border-radius: 9999px;
+             background: var(--bg-raised); animation: dock-rise 0.18s ease; }
+.dock-pill:hover { background: var(--bg-hover); }
+.corner .dock-pill button { min-width: 0; gap: 8px; background: none; color: var(--text-2); }
+.corner .dock-pill button:first-child { padding: 0 4px 0 10px; }
+.corner .dock-pill button:hover { color: var(--text-1); }
+.dock-pill button span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.corner .dock-pill .dock-pill-x { flex: none; width: 24px; padding: 0; justify-content: center; opacity: 0; transition: opacity 0.1s; }
+.dock-pill:hover .dock-pill-x { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
-  .dock, .dock.on, .dock.full, .panel, .corner { transition: none; }
+  .dock, .panel { transition: none; }
   .session-view, .convo > *, .ask, .live-dot.working, .spark, .step.running .step-name { animation: none; }
 }
