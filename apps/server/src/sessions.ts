@@ -326,11 +326,11 @@ export function arrange(view: views.View, found: SessionRow[]): [views.Listing, 
 
 // --- opening one -----------------------------------------------------------------------------------------------------
 
-// Ctrl Shift O and New session: an agent chat in desk's panel. The newest one is reused while nobody has typed in it
-// yet, so pressing it twice leaves no empty session behind.
+// Ctrl Shift O and New session: an agent chat in desk's panel. One nobody has written in yet is reused, so empty chats
+// never pile up and none is ever removed: desk's reaper used to remove them, and on 17 Oct a restart, which forgot the
+// open panels, took one while the user wrote its first message ("Its folder is gone").
 export async function newSession(base: string): Promise<chats.Chat> {
-  const newest = chats.agentChats()[0];
-  return newest && !newest.issue && ![...chats.said(newest)].length ? newest : await chats.newChat(base);
+  return chats.agentChats().find(chats.empty) ?? (await chats.newChat(base));
 }
 
 // The corner's history menu: the newest sessions, or those matching what is typed.

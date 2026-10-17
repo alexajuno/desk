@@ -26,16 +26,10 @@ import type { Item } from "./transcript.ts";
 export const SESSION_ID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 
 const visible = new Map<WebSocket, string>(); // the panels showing now, and their sessions
-const panels = new Map<WebSocket, string>(); // every open panel, in a tab shown or not, and its session
 
 // Whether a panel the user looks at shows the session now.
 export function watching(session: string | null | undefined): boolean {
   return Boolean(session) && [...visible.values()].includes(session!);
-}
-
-// Whether a panel has the session open, even in a hidden tab: the user may be writing its first message there.
-export function panelOpen(session: string | null | undefined): boolean {
-  return Boolean(session) && [...panels.values()].includes(session!);
 }
 
 interface Meta {
@@ -68,8 +62,6 @@ async function meta(id: string): Promise<Meta> {
 // --- the socket ------------------------------------------------------------------------------------------------------
 
 export async function connect(ws: WebSocket, id: string) {
-  panels.set(ws, id);
-  ws.on("close", () => panels.delete(ws)); // here, not in end(): a panel may close while the hello below is made
   const sent = new Set<string>(); // the items' keys the panel has, so each comes once from whichever source is first
   let path: string | null = null, readTo = 0, file: FSWatcher | null = null, host: WebSocket | null = null, closed = false;
   let lastMeta = "";

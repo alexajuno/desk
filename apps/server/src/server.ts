@@ -1,6 +1,6 @@
 // desk's server, started by main.ts once the packages match the commit checked out. PORT picks the port (default 8790),
-// DESK_DATA the data folder (default ~/.local/share/desk), and DESK_CLOCK=0 leaves the line's clock, the reaper and the
-// Slack connection off, as a second desk for testing should.
+// DESK_DATA the data folder (default ~/.local/share/desk), and DESK_CLOCK=0 leaves the line's clock and the Slack
+// connection off, as a second desk for testing should.
 import { create } from "./app.ts";
 import { PORT } from "./config.ts";
 import * as db from "./db.ts";
@@ -8,7 +8,6 @@ import * as hosted from "./hosted.ts";
 import * as store from "./issues.ts";
 import * as land from "./land.ts";
 import * as projects from "./projects.ts";
-import * as reaper from "./reaper.ts";
 import * as sessions from "./sessions.ts";
 import * as slack from "./slack.ts";
 import * as sync from "./sync.ts";
@@ -25,7 +24,6 @@ await sync.start();
 setInterval(() => void hosted.keepCurrent().catch(() => {}), 60_000);
 if (process.env.DESK_CLOCK !== "0") {
   land.startClock(); // the line for desk's own checkout moves on its own
-  reaper.startClock(); // sessions nobody needs any more are stopped on their own
   slack.connect(); // Slack pushes each 🐧 the user adds, and its message comes into Triage
 }
 

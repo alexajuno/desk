@@ -153,6 +153,9 @@ export function* said(chat: Chat): Generator<[string, string]> {
   }
 }
 
+// A chat nobody has written in yet: no issue, and no transcript, which its session writes only from its first message.
+export const empty = (chat: Chat) => !chat.issue && !transcripts.pathOf(chat.session);
+
 // When a chat last moved: its transcript's last write, or its start.
 export function activity(chat: Chat): string {
   const file = transcripts.pathOf(chat.session);
