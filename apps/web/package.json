@@ -5,11 +5,23 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "check:markdown": "node scripts/check-markdown.ts"
   },
   "dependencies": {
     "@stylexjs/stylex": "^0.19.1",
+    "@tiptap/core": "3.32.0",
+    "@tiptap/extension-image": "3.32.0",
+    "@tiptap/extension-link": "3.32.0",
+    "@tiptap/extension-list": "3.32.0",
+    "@tiptap/extension-table": "3.32.0",
+    "@tiptap/extensions": "3.32.0",
+    "@tiptap/markdown": "3.32.0",
+    "@tiptap/pm": "3.32.0",
+    "@tiptap/react": "3.32.0",
+    "@tiptap/starter-kit": "3.32.0",
     "markdown-it": "^15.0.3",
+    "marked": "17.0.6",
     "mobx": "^7.0.6",
     "mobx-react-lite": "^5.1.0",
     "react": "^19.3.1",
