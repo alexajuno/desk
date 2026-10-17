@@ -14,6 +14,7 @@ import * as store from "./issues.ts";
 import { byRank, CLOSED, runs } from "./issues.ts";
 import * as land from "./land.ts";
 import * as live from "./live.ts";
+import * as models from "./models.ts";
 import * as pages from "./pages.ts";
 import { HttpError } from "./pages.ts";
 import * as projects from "./projects.ts";
@@ -517,6 +518,31 @@ export async function create(): Promise<FastifyInstance> {
       throw new HttpError(409, (error as Error).message);
     }
     return { ok: true };
+  });
+  app.post("/api/live/:id/model", async (req: Req) => {
+    mustBePage(req);
+    const { model, effort } = (req.body ?? {}) as unknown as models.Pick;
+    try {
+      await models.change(sessionOf(req), { ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
+    } catch (error) {
+      throw new HttpError(422, (error as Error).message);
+    }
+    return { ok: true };
+  });
+  // The chip's menu: the models to pick from, and the plan's 5-hour and weekly usage.
+  app.get("/api/models", async () => {
+    try {
+      return await models.menu();
+    } catch (error) {
+      throw new HttpError(502, `Claude Code did not list its models: ${(error as Error).message}`);
+    }
+  });
+  app.get("/api/usage", async () => {
+    try {
+      return await models.used();
+    } catch (error) {
+      throw new HttpError(502, `Claude Code did not say the usage: ${(error as Error).message}`);
+    }
   });
   app.get("/api/live/:id/files", async (req: Req) => live.files(sessionOf(req), req.query.q ?? ""));
   app.get("/api/live/:id/commands", async (req: Req) => live.commands(sessionOf(req)));

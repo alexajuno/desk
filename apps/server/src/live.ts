@@ -6,7 +6,7 @@
 //     {"type": "stream", "msg": …, "index": 0, "kind": "text", "text": "…"}   a piece of a reply (host.ts)
 //     {"type": "working", "working": true}
 //     {"type": "asks", "asks": [...]}
-//     {"type": "meta", "meta": <meta>}                           its title, folder or issue changed
+//     {"type": "meta", "meta": <meta>}                           its title, folder, issue, model or effort changed
 //
 // An <item> is transcript.ts's. The app sends {"type": "visible", "visible": true} as its tab shows or hides, so desk
 // knows whether the user reads a chat's reply as it comes (the Inbox then leaves it out).
@@ -19,6 +19,7 @@ import * as chats from "./chats.ts";
 import { HOME } from "./config.ts";
 import * as hosted from "./hosted.ts";
 import * as store from "./issues.ts";
+import * as models from "./models.ts";
 import * as transcript from "./transcript.ts";
 import type { Item } from "./transcript.ts";
 
@@ -38,6 +39,7 @@ interface Meta {
   folder: string;
   issue: { slug: string; title: string; state: string } | null;
   chat: boolean;
+  runs: models.Shown; // the model and effort, for the composer's chip
 }
 
 const tilde = (path: string) => (path.startsWith(HOME) ? `~${path.slice(HOME.length)}` : path);
@@ -53,6 +55,7 @@ async function meta(id: string): Promise<Meta> {
     id, cwd, folder: tilde(cwd), chat: Boolean(chat),
     title: issue?.title || (chat && chat.title !== "New chat" ? chat.title : "") || titleOf(id) || "New session",
     issue: issue ? { slug: issue.slug, title: issue.title, state: issue.state } : null,
+    runs: models.shown(id, Boolean(chat)),
   };
 }
 

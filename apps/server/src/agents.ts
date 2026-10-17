@@ -179,12 +179,13 @@ export async function resumeOptions(session: string): Promise<hosted.StartOption
   const chats = await import("./chats.ts");
   const chat = chats.agentChatOf(session);
   if (chat) return chats.hostOptions(chat);
+  const picked = (await import("./models.ts")).pickOf(session); // the model and effort picked in its panel, if any
   const i = [...(await store.loadAll()).values()].find((x) => x.session === session);
-  if (i) return { id: session, resume: true, cwd: await resumeDir(i) };
+  if (i) return { id: session, resume: true, cwd: await resumeDir(i), ...picked };
   const { cwdOf } = await import("./transcript.ts");
   const cwd = cwdOf(session);
   if (!cwd || !existsSync(cwd)) throw new Error(`Its folder${cwd ? `, ${cwd},` : ""} is gone, and Claude Code resumes a session only from the folder it ran in.`);
-  return { id: session, resume: true, cwd };
+  return { id: session, resume: true, cwd, ...picked };
 }
 
 // Wait, up to the given seconds, for a process to exit.

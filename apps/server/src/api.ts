@@ -14,7 +14,7 @@
 //     POST   /api/projects              create one: title, body
 //     PATCH  /api/projects/<slug>       set title, body, state (active or archived)
 //     GET    /api/settings              desk's settings (settings.ts)
-//     PATCH  /api/settings              set any of them, true or false
+//     PATCH  /api/settings              set any of them
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { FastifyInstance, FastifyRequest } from "fastify";

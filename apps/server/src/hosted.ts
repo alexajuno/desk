@@ -176,6 +176,7 @@ export const interrupt = (id: string) => call("POST", `/sessions/${id}/interrupt
 export const answer = (id: string, ask: string, result: Record<string, unknown>) => call("POST", `/sessions/${id}/answer`, { ask, result });
 export const close = (id: string) => call("POST", `/sessions/${id}/close`, {});
 export const commands = (id: string) => call<{ name: string; description: string; argumentHint?: string }[]>("GET", `/sessions/${id}/commands`);
+export const settings = (id: string, set: { model?: string; effort?: StartOptions["effort"] }) => call<HostRow>("POST", `/sessions/${id}/settings`, set);
 
 // The session's event stream from the host (host.ts says what comes over it).
 export const events = (id: string) => new WebSocket(`ws+unix://${SOCKET}:/sessions/${id}/events`);

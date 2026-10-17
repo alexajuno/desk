@@ -276,6 +276,14 @@ app.post<{ Params: { id: string } }>("/sessions/:id/close", async (req) => {
   return {};
 });
 
+// The model and effort for the session's next request, the turn running now included, as /model and /effort do.
+app.post<{ Params: { id: string }; Body: { model?: string; effort?: StartOptions["effort"] } }>("/sessions/:id/settings", async (req) => {
+  const s = find(req.params.id), { model, effort } = req.body;
+  if (model) await s.q.setModel(model);
+  if (effort) await s.q.applyFlagSettings({ effortLevel: effort });
+  return row(s);
+});
+
 app.get<{ Params: { id: string } }>("/sessions/:id/commands", async (req) => {
   const s = find(req.params.id);
   return await s.q.supportedCommands();
