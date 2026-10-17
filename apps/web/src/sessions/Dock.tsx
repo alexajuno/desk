@@ -423,10 +423,12 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
     runInAction(() => wantsFocus.set(null));
   }, [focus]);
 
-  useLayoutEffect(() => { // grows with what is typed, up to a third of the panel
+  // Grows with what is typed, up to a third of the panel. A chat that opens hidden measures 0, which left the box 0px
+  // tall with nothing to click; it keeps its one row then, and measures again on the first keystroke.
+  useLayoutEffect(() => {
     const el = box.current!;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+    if (el.scrollHeight) el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
   }, [text]);
 
   async function complete(t: ReturnType<typeof tokenAt>) {
