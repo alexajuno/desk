@@ -195,7 +195,7 @@ function You({ text, images, queued }: { text: string; images?: number; queued?:
         {text}
       </div>
       {long && <button className="you-more" type="button" onClick={() => setAll(true)}>Show all</button>}
-      {queued && <span className="you-queued">Queued</span>}
+      {queued && <span className="you-queued">{GLYPH.clock}Queued</span>}
     </div>
   );
 }

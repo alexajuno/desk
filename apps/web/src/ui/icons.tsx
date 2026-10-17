@@ -115,6 +115,7 @@ export const GLYPH = {
   sliders: glyph(<path d="M2.5 4.5h3M9.5 4.5h4M2.5 11.5h6M12.5 11.5h1M7.5 3v3M10.5 10v3" />),
   keys: glyph(<><rect x="1.75" y="3.75" width="12.5" height="8.5" rx="1.5" /><path d="M4.5 6.5h.01M7 6.5h.01M9.5 6.5h.01M12 6.5h.01M5 9.5h6" /></>),
   close: glyph(<path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />),
+  clock: glyph(<><circle cx="8" cy="8" r="5.75" /><path d="M8 5v3.25l2 1.25" /></>),
 };
 
 export const TICK = (
