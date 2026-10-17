@@ -48,11 +48,12 @@ function move(next: Layout, change: () => void) {
   const done = moving = t.finished.catch(() => {}).then(() => { if (moving === done) moving = null; });
 }
 
-// What an issue's page has to read beside its chat: its card in review, or its plan while it waits for go (the session
-// idle, no result yet). A mark of both tells when the agent wrote either anew.
+// What an issue's page has to read beside its chat: its plan while it waits for go (the session idle, no result yet),
+// or its card from review on. A mark of both tells when the agent wrote either anew.
+const CARDED = ["review", "landing", "waiting", "done"];
 export function readingOf(data: IssuePageData): Reading {
   const plan = data.agent_files["plan.md"], result = data.agent_files["result.md"], state = data.issue.state;
-  const want = state === "review" ? Boolean(result) : state === "running" && Boolean(plan) && !result && data.live !== "working";
+  const want = result ? CARDED.includes(state) : state === "running" && Boolean(plan) && data.live !== "working";
   return { want, has: Boolean(plan || result), mark: `${hash(plan ?? "")}.${hash(result ?? "")}` };
 }
 
