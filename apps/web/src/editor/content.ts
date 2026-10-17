@@ -35,7 +35,7 @@ const BareLink = Link.extend({
 });
 
 export const extensions: AnyExtension[] = [
-  StarterKit.configure({ link: false }),
+  StarterKit.configure({ link: false, underline: false }), // underline has no Markdown but ++x++, which desk does not draw
   BareLink.configure({ openOnClick: false, autolink: true, HTMLAttributes: { target: null, rel: null } }),
   Image,
   TaskList,
@@ -62,11 +62,14 @@ export function parse(body: string): Parsed {
       if (blocks.length) blocks[blocks.length - 1].gap += t.raw;
       continue;
     }
-    const raw = t.raw.trimEnd();
+    // Blank lines a tokenizer took in before its block, as TipTap's task list does, belong to the gap before it.
+    const lead = /^(?:[ \t]*\n)*/.exec(t.raw)![0];
+    if (blocks.length) blocks[blocks.length - 1].gap += lead;
+    const raw = t.raw.slice(lead.length).trimEnd();
     const nodes = (md.parse(raw).content ?? []).map((n) => schema.nodeFromJSON(n).toJSON() as JSONContent);
     // What draws as nothing, such as a link reference definition, stays in the file, at its end.
     if (!nodes.length) { kept.push(raw); continue; }
-    blocks.push({ raw, gap: t.raw.slice(raw.length), keys: nodes.map(key) });
+    blocks.push({ raw, gap: t.raw.slice(lead.length + raw.length), keys: nodes.map(key) });
     content.push(...nodes);
   }
   return { doc: { type: "doc", content }, blocks, kept };

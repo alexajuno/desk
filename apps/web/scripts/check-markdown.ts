@@ -14,6 +14,8 @@ for (const slug of readdirSync(root).sort()) {
   bodies++;
   const parsed = parse(body);
   if (toMarkdown(parsed.doc, parsed) !== body) { changed++; console.log(`changed untouched: ${slug}`); }
+  // A block's own text starts and ends with text, so the space around an edited one is the "\n\n" toMarkdown puts in.
+  for (const b of parsed.blocks) if (/^[ \t]*\n|\n[ \t]*$/.test(b.raw)) { changed++; console.log(`blank lines in a block: ${slug}: ${JSON.stringify(b.raw.slice(0, 40))}`); }
   for (const node of parsed.doc.content ?? []) {
     blocks++;
     const fresh = toMarkdown({ type: "doc", content: [node] }, { doc: {}, blocks: [], kept: [] });

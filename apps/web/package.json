@@ -9,6 +9,7 @@
     "check:markdown": "node scripts/check-markdown.ts"
   },
   "dependencies": {
+    "@floating-ui/dom": "1.8.0",
     "@stylexjs/stylex": "^0.19.1",
     "@tiptap/core": "3.32.0",
     "@tiptap/extension-image": "3.32.0",

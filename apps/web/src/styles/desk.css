@@ -312,14 +312,8 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 
 /* problem page: content on the left, properties and agents on the right, as Linear's issue page */
 .issue, .project-page { display: grid; grid-template-columns: minmax(0, 1fr) 272px; gap: 48px; max-width: 1040px; margin: 0 auto; padding: 32px 24px 0; }
-.issue h1, .project-page h1, .issue input.title-edit { font: 600 24px/1.3 var(--font); margin: 0 0 16px; letter-spacing: -0.2px; }
-.issue h1.title, .description { cursor: text; }
-.issue input.title-edit { display: block; height: 1.3em; padding: 0; border: 0; background: none; color: var(--text-1); }
-.description.empty { color: var(--text-3); }
-.body-edit { display: block; width: 100%; box-sizing: border-box; min-height: 48px; margin: 0 0 12px; padding: 0; border: 0;
-             background: none; resize: none; overflow: hidden; outline: none; font: 450 15px/24px var(--font);
-             letter-spacing: -0.1px; color: var(--text-2); }
-.body-edit::placeholder { color: var(--text-3); }
+.issue h1, .project-page h1, .issue textarea.title { font: 600 24px/1.3 var(--font); margin: 0 0 16px; letter-spacing: -0.2px; }
+.description { cursor: text; }
 .body { font-size: 15px; line-height: 24px; color: var(--text-2); letter-spacing: -0.1px; }
 .body img { max-width: 100%; cursor: zoom-in; }  /* a screenshot in a plan is 1436px wide, and pushed the page sideways (15 Oct) */
 .body h2 { font-size: 18px; line-height: 1.4; font-weight: 600; color: var(--text-1); margin: 24px 0 6px; }
@@ -334,6 +328,9 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
    below it. The plan is a design doc whose title repeats the issue's, so its title is left out. */
 .sec-body > .body h2, .review .body h2 { font-size: 16px; } .sec-body > .body h3, .review .body h3 { font-size: 15px; }
 .plan > h1:first-child { display: none; }
+/* A code block as a chat reply draws one (dock.css .reply pre), rather than each line boxed as inline code. */
+.body pre { padding: 10px 12px; border-radius: 8px; background: var(--bg-raised); overflow-x: auto; font: 13px/20px var(--mono); }
+.body pre code { padding: 0; border: 0; background: none; font: inherit; }
 .body table { border-collapse: collapse; font-size: 13px; line-height: 20px; margin: 0 0 12px; }
 .body td, .body th { border: 1px solid var(--border-3); padding: 4px 8px; vertical-align: top; }
 .body blockquote { margin: 0 0 12px; background: var(--bg-raised); border-left: 3px solid var(--accent); padding: 6px 14px; border-radius: 0 8px 8px 0; }

@@ -1,0 +1,50 @@
+/* The description editor (src/editor/). It is the drawn description, editable, so it takes .body's look from desk.css
+   and adds only what editing needs. */
+.description.ProseMirror { outline: none; min-height: 48px; margin-bottom: 12px; }
+.description.ProseMirror > :last-child { margin-bottom: 0; }
+.description p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; color: var(--text-3); pointer-events: none; }
+.description .ProseMirror-selectednode { outline: 2px solid var(--accent); border-radius: 4px; }
+
+/* Sections fold from render.ts's triangle in the gutter (desk.css .sec-toggle). */
+.description .fold-head { position: relative; }
+.description .fold-head:hover .sec-toggle { color: var(--text-2); }
+.description .fold-head.folded .sec-toggle svg { transform: none; }
+.description .fold-hidden { display: none; }
+
+/* A list item and a table cell hold a paragraph here, where the drawn page has bare text: no gap under it. */
+.description li > p, .description li > div > p, .description td > p, .description th > p { margin: 0; }
+.description li > p + p { margin-top: 8px; }
+
+/* Checklists: TipTap's <label><input type=checkbox></label><div>text</div>, a ticked item dimmed as in Linear. */
+.description ul[data-type=taskList] { list-style: none; padding-left: 4px; }
+.description ul[data-type=taskList] ul[data-type=taskList] { padding-left: 24px; }
+.description ul[data-type=taskList] > li { display: flex; align-items: flex-start; gap: 8px; }
+.description ul[data-type=taskList] > li > label { flex: none; display: flex; height: 24px; align-items: center; }
+.description ul[data-type=taskList] > li > label input { margin: 0; accent-color: var(--accent); cursor: pointer; }
+.description ul[data-type=taskList] > li > div { flex: 1; min-width: 0; }
+.description ul[data-type=taskList] > li[data-checked=true] > div { color: var(--text-3); }
+
+/* A d2 block: its drawing, and under it its source while the caret is in it, or until it is drawn. */
+.d2-block { position: relative; }
+.d2-block .d2-edit { position: absolute; top: 8px; right: 8px; height: 24px; padding: 0 8px; border: 0.5px solid var(--border-pop);
+                     border-radius: 6px; background: var(--bg-pop); color: var(--text-2); font: 500 12px var(--font); cursor: pointer;
+                     opacity: 0; transition: opacity 0.15s; }
+.d2-block:hover .d2-edit { opacity: 1; }
+.d2-block .d2-edit:hover { color: var(--text-1); }
+.d2-block.editing .d2-edit, .d2-block.undrawn .d2-edit { display: none; }
+.d2-block:not(.editing):not(.undrawn) .d2-source { display: none; }
+.d2-block .d2-drawing:empty { display: none; }
+.d2-block .d2-drawing .d2 { margin-bottom: 8px; }
+.d2-source { margin: 0 0 12px; }
+
+/* Linear's toolbar over selected text. */
+.toolbar { display: flex; gap: 2px; padding: 4px; z-index: 10; background: var(--bg-pop); border: 0.5px solid var(--border-pop);
+           border-radius: 8px; box-shadow: var(--shadow-pop); }
+.toolbar button { display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 6px; border: 0; border-radius: 6px;
+                  background: none; color: var(--text-2); font: 500 13px var(--font); cursor: pointer; }
+.toolbar button:hover, .toolbar button.on { background: var(--bg-pop-on); color: var(--text-1); }
+.toolbar button code { background: none; border: 0; padding: 0; font-size: 12px; }
+
+/* The title, a text box that looks like the heading it was. */
+.issue textarea.title { display: block; width: 100%; box-sizing: border-box; resize: none; overflow: hidden; padding: 0; border: 0;
+                        background: none; color: var(--text-1); outline: none; }

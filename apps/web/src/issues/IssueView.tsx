@@ -18,6 +18,7 @@ import { openSession } from "../sessions/Dock";
 import { fieldMenu, folderMenu, projectPicker, waitingMenu } from "./menus";
 import { painted } from "./painted";
 import { Tree } from "./Tree";
+import { Description } from "../editor/Description";
 
 export interface StripButton {
   label: string;
@@ -158,7 +159,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
               <div className="sec-body"><Tree items={data.kids} /></div>
             </section>
           )}
-          <Description slug={p.slug} body={data.body} html={data.body_html} />
+          <Description key={p.slug} slug={p.slug} body={data.body} html={data.body_html} />
           {"questions.md" in data.agent_files && <AgentFile name="questions.md" html={data.agent_files["questions.md"]} />}
         </div>
         <Properties data={data} p={p} />
@@ -305,78 +306,31 @@ function useEditorKeys(isSave: (e: React.KeyboardEvent, k: string) => boolean, f
   };
 }
 
-// Click the title to edit it: Enter saves, Esc leaves it as it was, and clicking away saves.
+// The title, editable where it is, as Linear's: Enter or clicking away saves, Esc leaves it as it was.
 function Title({ slug, title }: { slug: string; title: string }) {
-  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(title);
-  const done = useRef(false);
+  const box = useRef<HTMLTextAreaElement>(null);
+  const done = useRef(true);
+  useEffect(() => { if (done.current) setValue(title); }, [title]);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  });
   function finish(keep: boolean) {
     if (done.current) return;
     done.current = true;
-    setEditing(false);
     ui.setEditing(false);
     const next = value.trim().replace(/\s+/g, " ");
     if (keep && next && next !== title) setField(slug, "title", next);
+    else setValue(title);
+    box.current?.blur();
   }
   const keys = useEditorKeys((_e, k) => k === "Enter", finish);
-  if (!editing)
-    return <h1 className="title" title="Click to edit" onClick={() => { done.current = false; setValue(title); setEditing(true); ui.setEditing(true); }}>{title}</h1>;
   return (
-    <input className="title-edit" type="text" value={value} autoFocus onChange={(e) => setValue(e.target.value)} onBlur={() => finish(true)}
-      onFocus={(e) => e.currentTarget.setSelectionRange(value.length, value.length)} {...keys} />
+    <textarea ref={box} className="title" rows={1} value={value} aria-label="Title" spellCheck={false}
+      onChange={(e) => setValue(e.target.value.replace(/\n/g, " "))}
+      onFocus={() => { done.current = false; ui.setEditing(true); }} onBlur={() => finish(true)} {...keys} />
   );
-}
-
-// The caret goes where you clicked, found by the text around that spot in the Markdown.
-function caretAt(e: React.MouseEvent, markdown: string) {
-  const spot = (document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null }).caretRangeFromPoint?.(e.clientX, e.clientY);
-  if (!spot || spot.startContainer.nodeType !== Node.TEXT_NODE) return markdown.length;
-  const text = spot.startContainer.textContent ?? "", i = spot.startOffset;
-  const before = text.slice(Math.max(0, i - 16), i), after = text.slice(i, i + 16);
-  for (const [probe, shift] of [[before + after, before.length], [after, 0], [before, before.length]] as const) {
-    const found = probe.trim() ? markdown.indexOf(probe) : -1;
-    if (found >= 0) return found + shift;
-  }
-  return markdown.length;
-}
-
-// Click the description to edit its Markdown: Ctrl+Enter saves, Esc leaves it, clicking away saves.
-function Description({ slug, body, html }: { slug: string; body: string; html: string }) {
-  const [editing, setEditing] = useState<number | null>(null); // the caret, while editing
-  const [value, setValue] = useState(body);
-  const box = useRef<HTMLTextAreaElement>(null);
-  const done = useRef(false);
-  function finish(keep: boolean) {
-    if (done.current) return;
-    done.current = true;
-    setEditing(null);
-    ui.setEditing(false);
-    if (keep && value.trim() !== body.trim()) setField(slug, "body", value);
-  }
-  const keys = useEditorKeys((e, k) => k === "Enter" && (e.ctrlKey || e.metaKey), finish);
-  useLayoutEffect(() => {
-    const el = box.current;
-    if (!el || editing === null) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight + 2}px`;
-  });
-  useLayoutEffect(() => {
-    if (editing === null || !box.current) return;
-    box.current.focus({ preventScroll: true });
-    box.current.setSelectionRange(editing, editing);
-  }, [editing === null]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (editing !== null)
-    return <textarea ref={box} className="body-edit" placeholder="Add description…" value={value} onChange={(e) => setValue(e.target.value)} onBlur={() => finish(true)} {...keys} />;
-  const open = (e: React.MouseEvent) => {
-    const t = e.target as Element;
-    if (t.closest("a, button, input, textarea, img, .d2, .sec-head") || getSelection()?.toString()) return;
-    done.current = false;
-    setValue(body);
-    setEditing(body.trim() ? caretAt(e, body) : 0);
-    ui.setEditing(true);
-  };
-  return body.trim()
-    ? <div className="body description" onClick={open} dangerouslySetInnerHTML={{ __html: html }} />
-    : <div className="body description empty" onClick={open}>Add description…</div>;
 }

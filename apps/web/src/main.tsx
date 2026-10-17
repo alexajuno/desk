@@ -10,6 +10,7 @@ import { connect } from "./sync/socket";
 import { installTooltips } from "./ui/tooltip";
 // desk's look: one global stylesheet, Linear's themes as measured (styles/desk.css), and the Sessions page's own.
 import "./styles/desk.css";
+import "./styles/editor.css";
 import "./styles/sessions.css";
 import "./styles/dock.css";
 import "./index.css";
