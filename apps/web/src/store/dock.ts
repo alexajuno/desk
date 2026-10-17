@@ -4,15 +4,17 @@
 //   docked  ── ⤢ ──▶  the whole page (/sessions/<id>)  ── ⤡ or Back ──▶  docked
 //   docked  ── × ──▶  closed
 //
-// The session it shows and whether it is docked or hidden are remembered in this browser, so a reload or desk's
-// restart brings it back as it was.
+// The session it shows, whether it is docked or hidden, and the width its left edge was dragged to are remembered in
+// this browser, so a reload or desk's restart brings it back as it was.
 import { action, makeObservable, observable } from "mobx";
 
 export type DockMode = "closed" | "docked" | "hidden";
 
+export const DOCK_WIDTH = 440; // the width it opens at, and a double-click on its edge goes back to
+
 const saved = (() => {
   try {
-    return JSON.parse(localStorage.dock ?? "{}") as { session?: string; mode?: DockMode };
+    return JSON.parse(localStorage.dock ?? "{}") as { session?: string; mode?: DockMode; width?: number };
   } catch {
     return {};
   }
@@ -22,13 +24,14 @@ class Dock {
   session: string | null = saved.session ?? null;
   mode: DockMode = saved.session ? saved.mode ?? "docked" : "closed";
   full = false; // the session fills the page, at /sessions/<id>
+  width: number = saved.width ?? DOCK_WIDTH;
 
   constructor() {
-    makeObservable(this, { session: observable, mode: observable, full: observable, open: action, hide: action, close: action, show: action, setFull: action });
+    makeObservable(this, { session: observable, mode: observable, full: observable, width: observable, open: action, hide: action, close: action, show: action, setFull: action, setWidth: action });
   }
 
   private save() {
-    localStorage.dock = JSON.stringify({ session: this.session, mode: this.mode });
+    localStorage.dock = JSON.stringify({ session: this.session, mode: this.mode, width: this.width });
   }
 
   // Dock the session beside the page.
@@ -62,6 +65,12 @@ class Dock {
     if (session) this.session = session;
     else if (this.full && this.session) this.mode = "docked";
     this.full = Boolean(session);
+    this.save();
+  }
+
+  // Wide enough for a reply, and never more than half the window, so the page beside it stays readable.
+  setWidth(px: number) {
+    this.width = Math.round(Math.min(Math.max(px, 360), window.innerWidth / 2));
     this.save();
   }
 }

@@ -6,7 +6,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import { postJson, reason } from "../api/http";
 import { go } from "../app/nav";
 import { markdown } from "../lib/markdown";
-import { dock } from "../store/dock";
+import { DOCK_WIDTH, dock } from "../store/dock";
 import { GLYPH } from "../ui/icons";
 import { toast } from "../ui/toast";
 import { live, useLive, type Ask, type Block, type Image, type Item, type LiveSession } from "./live";
@@ -30,14 +30,33 @@ export const Dock = observer(function Dock() {
     const root = document.documentElement;
     root.classList.toggle("dock-open", docked);
     root.classList.toggle("dock-full", dock.full);
-  }, [docked, dock.full]);
+    root.style.setProperty("--dock-w", `${dock.width}px`);
+  }, [docked, dock.full, dock.width]);
   return (
     <aside className={`dock${docked ? " on" : ""}${dock.full ? " full" : ""}`} aria-hidden={!docked && !dock.full}>
+      {docked && <Edge />}
       {/* Mounted while hidden too, so the pill at the bottom right keeps its live dot. */}
       {id && dock.mode !== "closed" || dock.full ? <SessionView key={id} id={id!} full={dock.full} /> : null}
     </aside>
   );
 });
+
+// The panel's left edge: drag it to make the panel wider or narrower, as Linear's panels are; a double-click gives back
+// the width it opens at. While it drags, the panel and the page beside it follow the pointer with no easing.
+function Edge() {
+  const drag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const edge = e.currentTarget, root = document.documentElement, from = e.clientX, width = dock.width;
+    const move = (m: PointerEvent) => dock.setWidth(width + from - m.clientX);
+    edge.setPointerCapture(e.pointerId);
+    root.classList.add("dock-resizing");
+    edge.addEventListener("pointermove", move);
+    edge.addEventListener("lostpointercapture", () => {
+      edge.removeEventListener("pointermove", move);
+      root.classList.remove("dock-resizing");
+    }, { once: true });
+  };
+  return <div className="dock-edge" title="Drag to resize" onPointerDown={drag} onDoubleClick={() => dock.setWidth(DOCK_WIDTH)} />;
+}
 
 // The pill a hidden panel leaves at the bottom right: the session's title and whether it works.
 export const DockPill = observer(function DockPill() {
