@@ -1,6 +1,7 @@
 // A session's chat, in the middle of the screen, drawn as claude.ai draws a chat: replies stream in as Markdown, tool
 // steps fold under one line, questions come as buttons, and the composer queues a message while Claude works (Enter)
 // or stops it (Esc). Its issue sits beside it on the right, in the frame's panel (store/dock.ts says where each stands).
+import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
@@ -14,13 +15,15 @@ import { GLYPH, SIDE_ICON } from "../ui/icons";
 import { toast } from "../ui/toast";
 import { live, useLive, type Ask, type Block, type Image, type Item, type LiveSession } from "./live";
 
-const focusComposer = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".dock .composer textarea")?.focus());
+// The chat whose composer takes the cursor: the one openSession opened. Its composer takes it as it comes on screen,
+// which a view transition can make a frame or more after the address changes, or at once when it is there already.
+const wantsFocus = observable.box<string | null>(null);
 
 // Open a session's chat in the middle: its issue's page when it has one, which shows the chat with the issue beside it.
 export function openSession(id: string, slug?: string | null) {
   slug ??= [...issues.bySlug.values()].find((i) => i.session === id)?.slug;
   go(slug ? `/issue/${slug}` : `/sessions/${id}`);
-  focusComposer();
+  runInAction(() => wantsFocus.set(id));
 }
 
 // New session: an agent chat, in the middle. Its issue comes beside it once the agent files one (SessionFullRoute).
@@ -412,6 +415,13 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   const box = useRef<HTMLTextAreaElement>(null);
   const commands = useRef<Pick[] | null>(null);
   const asked = useRef(0);
+  const focus = wantsFocus.get() === s.id;
+
+  useEffect(() => {
+    if (!focus) return;
+    box.current!.focus();
+    runInAction(() => wantsFocus.set(null));
+  }, [focus]);
 
   useLayoutEffect(() => { // grows with what is typed, up to a third of the panel
     const el = box.current!;
