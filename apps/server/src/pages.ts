@@ -87,6 +87,8 @@ type Item = [Issue, string];
 // once it wrote result.md and stopped working, back to In progress when you ask it for a change and it works again,
 // from Landing to Done once result.md says it landed, and from Waiting to In progress once you write in its chat after
 // the wait began. A chat's issue in Triage needs you once its chat has replied, unless its window is the one in front.
+// A session that is not working leaves the turn to you whether or not the host still holds it: one dropped by a restart
+// resumes on your next message (18 Oct: after a reboot, a plan waiting on its "go" left the Inbox).
 export async function inboxItems(all: Map<string, Issue>, live: Map<string, agents.Row>): Promise<[Item[], Item[]]> {
   const needs: Item[] = [], review: Item[] = [];
   for (const i of all.values()) {
@@ -111,10 +113,10 @@ export async function inboxItems(all: Map<string, Issue>, live: Map<string, agen
       if (landingStuck(i, row, now)) needs.push([i, "landing stuck"]);
     } else if (i.state === "running" && now !== "working" && hasQuestions(i)) {
       needs.push([i, "has questions"]);
-    } else if (i.state === "running" && now === "idle" && !hasResult && store.hasPlan(i)) {
+    } else if (i.state === "running" && i.session && now !== "working" && !hasResult && store.hasPlan(i)) {
       needs.push([i, runs(i) === "quick" ? "waiting for you" : "plan ready"]);
     } else if (i.state === "triage") {
-      if (now === "idle" && !live_.watching(i.session)) needs.push([i, "chat replied"]);
+      if (i.session && now !== "working" && !live_.watching(i.session)) needs.push([i, "chat replied"]);
     } else if (row.state === "blocked" && row.pid && !CLOSED.has(i.state) && i.state !== "waiting") {
       needs.push([i, "waiting for you"]);
     }
@@ -206,11 +208,8 @@ export function strip(i: Issue, row: agents.Row, hasPlan: boolean, result: strin
   if (i.state === "running") {
     if (!i.session) return { text: "In progress, outside desk", button: null };
     if (now === "working") return { text: "Working", button: chat };
-    if (now === "idle") {
-      const ready = hasPlan && !hasResult && runs(i) !== "quick";
-      return { text: ready ? "Plan ready: say go" : "Your turn", button: chat };
-    }
-    return { text: asleep, button: chat };
+    const ready = hasPlan && !hasResult && runs(i) !== "quick";
+    return { text: ready ? "Plan ready: say go" : "Your turn", button: chat };
   }
   if (i.state === "waiting") {
     let since = waited(i.waiting_since);

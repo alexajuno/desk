@@ -57,18 +57,21 @@ export interface Row {
 }
 
 let seen: [number, Map<string, Row>] = [0, new Map()];
+let listed: Row[] = []; // what `claude agents` last answered
 
 // Every session Claude Code knows, keyed by short id and by full session id. A page asks several times, so an answer
 // under a second old is reused (`claude agents` takes about 0.15 s); fresh asks again, as right after starting one.
+// When `claude agents` fails, its last answer stands: read as no session at all, every working one would land in the
+// Inbox as your turn.
 export async function live(fresh = false): Promise<Map<string, Row>> {
   if (!fresh && performance.now() / 1000 - seen[0] < 1) return seen[1];
-  let rows: Row[];
   try {
     const r = await run(["claude", "agents", "--json", "--all"], { timeout: 15 });
-    rows = JSON.parse(r.stdout || "[]");
+    listed = JSON.parse(r.stdout || "[]");
   } catch {
-    return new Map();
+    // keep the last answer
   }
+  const rows = listed;
   const byKey = new Map<string, Row>();
   for (const row of rows) for (const key of [row.id, row.sessionId]) if (key) byKey.set(key, row);
   // The host's sessions list as interactive, the way Claude Code lists any process it was not started in the

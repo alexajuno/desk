@@ -72,7 +72,7 @@ function call<T>(method: string, path: string, body?: unknown, timeout = 30_000)
         } else resolve(json as T);
       });
     });
-    req.on("timeout", () => req.destroy(new Error("The session host did not answer")));
+    req.on("timeout", () => req.destroy(new HostError("The session host did not answer", 504)));
     req.on("error", reject);
     req.end(data);
   });
@@ -142,14 +142,15 @@ export async function keepCurrent() {
 
 let cached: [number, HostRow[]] = [0, []];
 
-// The sessions the host holds now; none when no host runs (desk starts one only when a session needs it).
+// The sessions the host holds now; none when no host runs (desk starts one only when a session needs it). A host too
+// busy to answer in time still holds what it last listed: read as none, every working session would be your turn.
 export async function sessions(fresh = false): Promise<HostRow[]> {
   if (!fresh && performance.now() - cached[0] < 300) return cached[1];
   let rows: HostRow[] = [];
   try {
     rows = await call<HostRow[]>("GET", "/sessions", undefined, 3000);
-  } catch {
-    // no host
+  } catch (e) {
+    if (e instanceof HostError && e.status === 504) rows = cached[1]; // otherwise no host
   }
   cached = [performance.now(), rows];
   return rows;
