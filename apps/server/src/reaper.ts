@@ -6,7 +6,8 @@
 // - every issue that holds it is Done or Dropped. A chat's Triage issue dropped as a duplicate keeps the session's id
 //   while the session works the issue it joined, so one open issue keeps it running;
 // - it is an agent chat with no issue, a minute old or more. One with nothing typed in it holds nothing, so desk
-//   removes it, chat and session.
+//   removes it, chat and session, once no panel has it open: on 17 Oct a chat removed while the user wrote a long first
+//   message took it with "Its folder is gone" (agents.resumeOptions).
 //
 // Stopping loses nothing: "Stop a background session. Its conversation is kept; resume it later with `claude attach
 // <id>`" (`claude stop --help`, Claude Code 2.1.300), and Approve or a message from desk resumes one.
@@ -18,6 +19,7 @@ import { CHATS_DIR } from "./config.ts";
 import * as store from "./issues.ts";
 import { CLOSED } from "./issues.ts";
 import * as hosted from "./hosted.ts";
+import { panelOpen } from "./live.ts";
 import { run } from "./proc.ts";
 import { parseLocal } from "./when.ts";
 
@@ -53,7 +55,7 @@ export async function sweep(dry = false) {
     if (chat.issue || Date.now() - parseLocal(chat.created).getTime() < YOUNG * 1000) continue;
     const row = live.get(chat.session) ?? {};
     if (!chats.said(chat).next().done) await stop(row, watched, `${chat.id} has no issue`, dry);
-    else if (row.status !== "busy" && !(row.id && watched.has(row.id))) {
+    else if (row.status !== "busy" && !(row.id && watched.has(row.id)) && !panelOpen(chat.session)) {
       if (dry) {
         console.log(`reaper: would remove ${chat.id}${row.id ? `, and claude rm ${row.id}` : ""}`);
         continue;
