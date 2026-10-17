@@ -61,6 +61,7 @@ interface Session {
   partial: Map<string, Block>; // the blocks streaming now, by message and index
   watchers: Set<WebSocket>;
   closed: boolean;
+  ended: Promise<void>; // once its process has exited
   streaming: string; // the id of the reply streaming now, which its blocks' events leave out
 }
 
@@ -118,7 +119,7 @@ function userMessage(content: Content): SDKUserMessage {
 function start(o: StartOptions): Session {
   const id = o.id ?? randomUUID();
   const s: Session = { id, cwd: o.cwd, title: o.title ?? "", q: null as unknown as Query, inbox: [], wake: null, working: false, since: Date.now(),
-    asks: new Map(), partial: new Map(), watchers: new Set(), closed: false, streaming: "" };
+    asks: new Map(), partial: new Map(), watchers: new Set(), closed: false, ended: Promise.resolve(), streaming: "" };
   // The first message waits in the inbox before the SDK first reads it, which it does as query() starts.
   if (o.message) s.inbox.push(userMessage(o.message));
   s.q = query({
@@ -152,7 +153,7 @@ function start(o: StartOptions): Session {
     },
   });
   sessions.set(id, s);
-  void read(s);
+  s.ended = read(s);
   return s;
 }
 
@@ -240,6 +241,9 @@ app.get("/sessions", async () => [...sessions.values()].filter((s) => !s.closed)
 
 app.post<{ Body: StartOptions }>("/sessions", async (req) => {
   const o = req.body;
+  const before = o.id ? sessions.get(o.id) : undefined;
+  // One closing, as when desk moves a chat to another folder, is started again once its process has exited.
+  if (before?.closed) await Promise.race([before.ended, new Promise((r) => setTimeout(r, 15_000))]);
   if (o.id && sessions.has(o.id)) throw Object.assign(new Error("The host already holds this session"), { statusCode: 409 });
   if (!o.cwd || !existsSync(o.cwd)) throw Object.assign(new Error(`No folder ${o.cwd}`), { statusCode: 400 });
   return row(start(o));

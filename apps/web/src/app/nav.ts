@@ -4,7 +4,7 @@ import { Link } from "react-router";
 // desk's pages, all drawn by the app. A link to anything else under desk (a screenshot an issue keeps, a raw file)
 // loads it as a plain link.
 const PORTED = [/^\/issue\/[\w-]+$/, /^\/backlog$/, /^\/projects$/, /^\/project\/[\w-]+$/, /^\/$/,
-  /^\/inbox$/, /^\/search$/, /^\/sessions$/, /^\/settings(\/[\w-]+)?$/, /^\/issue\/[\w-]+\/f\/[^/]+\.(md|d2)$/];
+  /^\/inbox$/, /^\/search$/, /^\/sessions$/, /^\/sessions\/[0-9a-f-]{36}$/, /^\/settings(\/[\w-]+)?$/, /^\/issue\/[\w-]+\/f\/[^/]+\.(md|d2)$/];
 
 export const ported = (path: string) => PORTED.some((re) => re.test(new URL(path, location.origin).pathname));
 

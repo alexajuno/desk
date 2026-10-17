@@ -164,13 +164,18 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
   );
 });
 
+const LONG = 600; // characters past which a message shows its first lines only, as claude.ai shows a long paste
+
 function You({ text, images, queued }: { text: string; images?: number; queued?: boolean }) {
+  const [all, setAll] = useState(false);
+  const long = text.length > LONG && !all;
   return (
     <div className={`you${queued ? " queued" : ""}`}>
-      <div className="you-bubble">
+      <div className={`you-bubble${long ? " folded" : ""}`}>
         {images ? <span className="you-images">{images === 1 ? "1 image" : `${images} images`}</span> : null}
         {text}
       </div>
+      {long && <button className="you-more" type="button" onClick={() => setAll(true)}>Show all</button>}
       {queued && <span className="you-queued">Queued</span>}
     </div>
   );
