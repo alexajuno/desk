@@ -280,7 +280,8 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
 
 // --- the pages ---------------------------------------------------------------------------------------------------------
 
-// The sidebar on every page, the Inbox's rows, and where each open issue's session stands (live, which its strip says):
+// The sidebar on every page, with the sessions running that work no issue (others), the Inbox's rows, and where each
+// open issue's session stands (live, which its strip says):
 // sync.ts sends it to the app whenever it changed.
 export async function framePage() {
   const all = await store.loadAll();
@@ -300,6 +301,7 @@ export async function framePage() {
     trying: now && { slug: now.slug, branch: now.branch, issue: (now.slug && all.has(now.slug)) ? issueJson(all.get(now.slug)!) : null },
     line: line.filter((w) => all.has(w.slug)).map((w) => ({ slug: w.slug, branch: w.branch ?? null, for: w.for ?? null, issue: issueJson(all.get(w.slug)!) })),
     projects: active.map((p) => ({ slug: p.slug, title: p.title })),
+    others: await sessions.others(),
     rows: await inboxRows(),
     live: Object.fromEntries([...all.values()].filter((i) => i.session && !CLOSED.has(i.state))
       .map((i) => [i.slug, agents.status(live.get(i.session!) || {})])),
@@ -382,25 +384,6 @@ export async function inboxPage(picked: string) {
 // Search's hits, best match first, their matched words marked.
 export async function searchPage(q: string) {
   return find(await store.loadAll(), q).map((h) => ({ issue: issueJson(h.issue), title: h.title, snippet: h.snippet }));
-}
-
-// The Sessions list's rows, a page at a time, with the list's view.
-export async function sessionsPage(query: string, q: string, kind: string, offset: number, limit: number) {
-  const view = views.parse("sessions", query);
-  const [listing, found] = sessions.arrange(view, await sessions.rows(q, kind in sessions.KINDS ? kind : ""));
-  const counts: Record<string, number> = {};
-  for (const r of found) counts[r.group] = (counts[r.group] ?? 0) + 1;
-  limit = Math.max(sessions.PAGE, limit);
-  return {
-    view: views.data(listing), hidden: listing.hidden,
-    chips: listing.chips.map((c) => ({ name: c.name, label: c.label, not: c.not, values: c.values.map((x) => [...x]) })),
-    collapse_key: "/sessions" + (view.group === "time" ? "" : ` ${view.group}`),
-    rows: found.slice(Math.max(0, offset), Math.max(0, offset) + limit).map((r) => ({
-      id: r.id, kind: r.kind, kind_name: sessions.KINDS[r.kind] ?? r.kind, state: r.state, title: r.title, marked: r.marked, folder: r.folder,
-      cwd: r.cwd, issue: r.issue && { slug: r.issue.slug, title: r.issue.title }, ago: ago(r.moved), group: r.group, group_icon: r.group_icon ?? null,
-    })),
-    counts, total: found.length, next: offset + limit < found.length ? offset + limit : null,
-  };
 }
 
 // An issue's own file, by name, when it is one: null for anything outside its folder.

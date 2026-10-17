@@ -112,7 +112,7 @@ function onKeyDown(e: KeyboardEvent) {
   if (gPressed && Date.now() - gPressed < 1500) {
     gPressed = 0;
     // Linear's G E, G A and G B for its Issues tabs; desk has no teams, so G T is Triage's.
-    const to = { e: "/issues", a: "/issues/active", b: "/issues/backlog", t: "/triage", i: "/inbox", s: "/sessions", p: "/projects" }[key];
+    const to = { e: "/issues", a: "/issues/active", b: "/issues/backlog", t: "/triage", i: "/inbox", p: "/projects" }[key];
     if (to) go(to);
     return;
   }

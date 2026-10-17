@@ -8,7 +8,6 @@ import * as hosted from "./hosted.ts";
 import * as store from "./issues.ts";
 import * as land from "./land.ts";
 import * as projects from "./projects.ts";
-import * as sessions from "./sessions.ts";
 import * as slack from "./slack.ts";
 import * as sync from "./sync.ts";
 import * as web from "./web.ts";
@@ -31,9 +30,7 @@ let stopping = false;
 async function stop() {
   if (stopping) return;
   stopping = true;
-  // Event streams and sockets stay open as long as a tab does: end them, and the pages reconnect to the desk that comes
-  // next.
-  sessions.endStreams();
+  // Sockets stay open as long as a tab does: close them, and the pages reconnect to the desk that comes next.
   sync.closeAll();
   const late = setTimeout(() => process.exit(0), 5000);
   try {

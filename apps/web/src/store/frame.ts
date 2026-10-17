@@ -26,6 +26,7 @@ export interface FrameData {
   trying: { slug: string; branch: string; issue: IssueRow | null } | null;
   line: { slug: string; branch: string; for: string; issue: IssueRow }[];
   projects: { slug: string; title: string }[];
+  others: { id: string; title: string; folder: string; state: "working" | "waiting" | "open" }[]; // running, with no issue
   rows: InboxRow[];
   live: Record<string, string>; // slug: where its session stands, for each open issue with one
 }

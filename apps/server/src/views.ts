@@ -15,7 +15,7 @@ export interface Page {
   options: Record<string, Record<string, string>>; // Display choice: {value: its name}
   defaults: Record<string, string>;
   empty: boolean; // offers Show empty groups
-  keep: string[]; // the URL's words that are no view's, such as the Sessions search
+  keep: string[]; // the URL's words that are no view's
   noun: string; // what a row is, for the counts in Filter's menus
   holds?: string[]; // the statuses its issues are in, on an Issues tab that keeps to some
 }
@@ -38,8 +38,8 @@ const { layout: _layout, ...PROJECT_OPTIONS } = ISSUE_OPTIONS;
 export const ACTIVE = ["running", "waiting", "review", "landing"];
 
 // Each page opens as it looked before views: All issues (the Backlog until 17 Oct) by priority with sub-issues under
-// their parent; a project page by status, flat, with its done issues; Sessions by when each last moved. The Issues
-// tabs are Linear's: All issues, Active (being worked, or waiting on someone) and Backlog (parked, not started).
+// their parent; a project page by status, flat, with its done issues. The Issues tabs are Linear's: All issues, Active
+// (being worked, or waiting on someone) and Backlog (parked, not started).
 export const PAGES: Record<string, Page> = {
   issues: { filters: ISSUE_FILTERS, options: ISSUE_OPTIONS, defaults: { layout: "list", group: "priority", order: "priority", done: "none", subs: "nested" }, empty: true, keep: [], noun: "issue" },
   active: { filters: ISSUE_FILTERS, options: OPEN_OPTIONS, defaults: { layout: "list", group: "status", order: "priority", subs: "nested" }, empty: true, keep: [], noun: "issue", holds: ACTIVE },
@@ -47,14 +47,6 @@ export const PAGES: Record<string, Page> = {
   project: {
     filters: Object.fromEntries(Object.entries(ISSUE_FILTERS).filter(([k]) => k !== "project")), options: PROJECT_OPTIONS,
     defaults: { group: "status", order: "priority", done: "all", subs: "rows" }, empty: true, keep: [], noun: "issue",
-  },
-  sessions: {
-    filters: { status: "Status", folder: "Folder", issue: "Issue" },
-    options: {
-      group: { time: "Last moved", folder: "Folder", kind: "Kind", status: "Status", issue: "Issue", none: "No grouping" },
-      order: { moved: "Last moved", title: "Title" },
-    },
-    defaults: { group: "time", order: "moved" }, empty: false, keep: ["q", "kind"], noun: "session",
   },
 };
 const OPTION_NAMES: Record<string, string> = { layout: "Layout", group: "Grouping", order: "Ordering", done: "Completed issues", subs: "Sub-issues" };
@@ -140,7 +132,7 @@ export function parse(page: string, q: string): View {
 export interface Group {
   value: string;
   label: string;
-  icon: string | null; // an icon's key: state-running, priority-high, protocol-quick, session-open, glyph-folder
+  icon: string | null; // an icon's key: state-running, priority-high, protocol-quick, glyph-folder
   items: Issue[]; // its top rows
   kids: Map<string, Issue[]>; // the rows nested under each row
   context: Set<string>; // rows shown only as the parent of a match, greyed out

@@ -9,7 +9,6 @@ import { ProjectPage } from "../lists/ProjectPage";
 import { ProjectsPage } from "../lists/ProjectsPage";
 import { listUrl } from "../lists/useList";
 import { SearchPage } from "../search/SearchPage";
-import { SessionsPage } from "../sessions/SessionsPage";
 import { SettingsPage } from "../settings/SettingsPage";
 import { SessionFullRoute } from "../sessions/SessionFullRoute";
 import { TriagePage } from "../triage/TriagePage";
@@ -50,7 +49,8 @@ export const router = createBrowserRouter(
       return `/api/page/inbox${i ? `?i=${encodeURIComponent(i)}` : ""}`;
     }) },
     { path: "/search", element: <SearchPage /> },
-    { path: "/sessions", element: <SessionsPage /> },
+    // Sessions left the sidebar on 17 Oct: it lists what runs, and the corner's clock finds the rest.
+    { path: "/sessions", element: <Navigate to="/inbox" replace /> },
     { path: "/sessions/:id", element: <SessionFullRoute /> },
     { path: "/settings", element: <Navigate to="/settings/preferences" replace /> },
     { path: "/settings/:section", element: <SettingsPage />, loader: at(() => "/api/settings") },

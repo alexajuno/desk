@@ -1,12 +1,12 @@
-// The sidebar on every page (templates/base.html's aside.side): Inbox, Sessions, Triage, Issues and the projects, then
-// the lists to watch: what is in progress and landing, and what desk's checkout runs. Waiting issues stay in Issues,
-// since waiting can last forever.
+// The sidebar on every page (templates/base.html's aside.side): Inbox, Triage, Issues and the projects, then the lists
+// to watch: what is in progress and landing, the sessions running with no issue, and what desk's checkout runs.
+// Waiting issues stay in Issues, since waiting can last forever.
 import { observer } from "mobx-react-lite";
 import { useLocation } from "react-router";
 import { deskPath, Go } from "../app/nav";
 import { frame } from "../store/frame";
 import { ui } from "../store/ui";
-import { SIDE_ICON, StateIcon } from "../ui/icons";
+import { Ring, SIDE_ICON, StateIcon } from "../ui/icons";
 import { toggled } from "../ui/menu";
 import { helpMenu } from "./help";
 import { toggleSide } from "./side";
@@ -19,6 +19,7 @@ function triageTip(triage: { now: string }[]) {
 }
 const ISSUES_TIP = "All issues  G then E\nActive  G then A\nBacklog  G then B";
 const WHY = "desk runs this branch instead of main: a session's test, or your Try";
+const SAYS = { working: "Working", waiting: "Waiting for you", open: "Open, idle" };
 
 export const Sidebar = observer(function Sidebar() {
   const here = deskPath(useLocation().pathname);
@@ -39,10 +40,6 @@ export const Sidebar = observer(function Sidebar() {
       <Go className={`nav-item${at("/inbox")}`} to="/inbox" title="Go to inbox  G then I">
         <svg viewBox="0 0 16 16"><path d="M2 9h3l1 2h4l1-2h3M3 3h10l1 6v4H2V9z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
         Inbox{d?.inbox ? <span className="count">{d.inbox}</span> : null}
-      </Go>
-      <Go className={`nav-item${at("/sessions")}`} to="/sessions" title="Go to sessions  G then S">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" /><path d="M4.5 6l2 2-2 2M8 10.5h3.5" /></svg>
-        Sessions
       </Go>
       {/* Linear's team section: Triage, the chats not settled yet, with how many; then Issues and its tabs. */}
       <Go className={`nav-item${at("/triage")}`} to="/triage" title={triageTip(d?.triage ?? [])}>
@@ -74,6 +71,19 @@ export const Sidebar = observer(function Sidebar() {
           <div className="nav-label">Landing</div>
           {d.landing.map((p) => (
             <Go key={p.slug} className={`nav-item${at(`/issue/${p.slug}`)}`} to={`/issue/${p.slug}`}><StateIcon state="landing" /><span className="nav-title">{p.title}</span></Go>
+          ))}
+        </>
+      )}
+      {/* Sessions running that work no issue, such as a `claude` started in a terminal: shown only while one runs, each
+          with its state as an issue's would be. desk's own chats are in Triage or In progress from their first reply. */}
+      {d && d.others.length > 0 && (
+        <>
+          <div className="nav-label">Other sessions</div>
+          {d.others.map((s) => (
+            <Go key={s.id} className={`nav-item${at(`/sessions/${s.id}`)}`} to={`/sessions/${s.id}`} title={`${SAYS[s.state]}${s.folder ? `, in ${s.folder}` : ""}`}>
+              {s.state === "working" ? <StateIcon state="running" /> : s.state === "waiting" ? <StateIcon state="review" /> : <Ring />}
+              <span className="nav-title">{s.title}</span>
+            </Go>
           ))}
         </>
       )}

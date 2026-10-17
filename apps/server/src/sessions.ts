@@ -1,26 +1,22 @@
-// The Sessions list (ported from desk/sessions.py): every Claude Code session on this laptop in one list, grouped by when each last
-// moved, and each opened in desk's panel.
+// Claude Code's sessions on this laptop (ported from desk/sessions.py): the corner's history menu, which finds any of them
+// and opens it in desk's panel, and the sidebar's Other sessions, those running now that work no issue.
 //
 // Claude Code keeps each session as a transcript, ~/.claude/projects/<the folder it ran in, as a name>/<session>.jsonl,
 // one JSON event per line, written as it runs. desk keeps one row per transcript with only what the list shows, saved
 // in CACHE, and reads each file again only from where it stopped (on 15 Oct the first scan read 1,662 transcripts in
 // 4.0 s into 1 MB of cache, and after it a load took 10 ms). The cache has the same shape as the Python's.
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, statSync, watch, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
-import type { ServerResponse } from "node:http";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import * as agents from "./agents.ts";
 import * as chats from "./chats.ts";
 import { HOME } from "./config.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
-import { markWords, patternOf } from "./search.ts";
-import * as views from "./views.ts";
+import { patternOf } from "./search.ts";
 import { ago } from "./when.ts";
 
 export const PROJECTS = join(HOME, ".claude", "projects");
 const CACHE = join(HOME, ".cache", "desk", "sessions.json");
-export const PAGE = 200; // rows drawn at a time; the list asks for the next ones as you scroll to its end
-export const KINDS: Record<string, string> = { terminal: "Terminal", background: "Background", script: "Script" };
 
 interface TableRow {
   id: string;
@@ -173,7 +169,7 @@ export function refresh(): Map<string, TableRow> {
   return new Map(table);
 }
 
-// --- what the list shows ---------------------------------------------------------------------------------------------
+// --- what the corner's history and the sidebar show -------------------------------------------------------------------
 
 // A rename first; then Claude Code's own title; then the title of the issue it works; then the first thing typed. The
 // name `-n` gave a session at its start comes last, since desk names its own that way.
@@ -198,20 +194,6 @@ export function folder(cwd: string | undefined): string {
   return path.slice(HOME.length + 1).replace(/^projects\//, "");
 }
 
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-// The time group a session falls in by when it last moved: Today, Yesterday, Last 7 days, Last 30 days, then its month.
-export function group(moved: number, today = new Date()): string {
-  const day = new Date(moved * 1000);
-  const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diff = Math.round((midnight(today) - midnight(day)) / 86400000); // whole days, a summer hour either way
-  if (diff <= 0) return "Today";
-  if (diff === 1) return "Yesterday";
-  if (diff < 7) return "Last 7 days";
-  if (diff < 30) return "Last 30 days";
-  return day.getFullYear() === today.getFullYear() ? MONTHS[day.getMonth()] : `${MONTHS[day.getMonth()]} ${day.getFullYear()}`;
-}
-
 // Where a session stands, from its row in `claude agents --json --all`: working while a turn runs, waiting while it asks
 // you something (blocked), open while its process lives, closed otherwise.
 export function state(live: agents.Row): string {
@@ -229,99 +211,50 @@ async function issuesBySession(): Promise<Map<string, Issue>> {
   return found;
 }
 
-export interface SessionRow {
-  id: string;
-  title: string;
-  marked: string;
-  kind: string;
-  folder: string;
-  cwd: string;
-  issue: Issue | null;
-  moved: Date;
-  group: string;
-  state: string;
-  group_icon?: string | null;
-}
-
-// The sessions to list, the one that moved last first; with a query, only those whose title, folder, issue or prompts
-// hold every word of it, where a word starts.
-export async function rows(query = "", kind = ""): Promise<SessionRow[]> {
+// The sessions, the one that moved last first; with a query, only those whose title, folder, issue or prompts hold
+// every word of it, where a word starts.
+export async function rows(query = "") {
   const t = refresh(), issues = await issuesBySession(), live = await agents.live();
   const patterns = query.split(/\s+/).filter(Boolean).map((w) => patternOf([w]));
-  const found: SessionRow[] = [];
+  const found: { id: string; title: string; folder: string; moved: Date; state: string }[] = [];
   for (const row of [...t.values()].sort((a, b) => (b.moved ?? 0) - (a.moved ?? 0))) {
-    if (kind && (row.kind ?? "terminal") !== kind) continue;
     const sid = row.id, i = issues.get(sid) ?? null, name = title(row, i);
     if (patterns.length) {
       const text = [name, row.cwd, i && `${i.slug} ${i.title}`, row.first_prompt, row.last_prompt].filter(Boolean).join(" ");
       if (!patterns.every((p) => { p.lastIndex = 0; return p.test(text); })) continue;
     }
-    found.push({ id: sid, title: name, marked: markWords(name, patterns), kind: row.kind ?? "terminal", folder: folder(row.cwd), cwd: row.cwd ?? "",
-      issue: i, moved: new Date((row.moved ?? 0) * 1000), group: group(row.moved ?? 0), state: state(live.get(sid) ?? {}) });
+    found.push({ id: sid, title: name, folder: folder(row.cwd), moved: new Date((row.moved ?? 0) * 1000), state: state(live.get(sid) ?? {}) });
   }
   return found;
 }
 
-// --- its view: Filter and Display options, as on the issue lists ----------------------------------------------------
+const RUNNING = join(HOME, ".claude", "sessions"); // Claude Code's <pid>.json for each session whose process lives
 
-const STATES: Record<string, string> = { working: "Working", waiting: "Waiting for you", open: "Open", closed: "Closed" };
-const STATE_ICONS: Record<string, string> = { working: "state-running", waiting: "state-review", open: "session-open", closed: "state-backlog" };
-const HAS_ISSUE: Record<string, string> = { yes: "Works an issue", no: "No issue" };
-
-function valueOf(row: SessionRow, name: string): string {
-  if (name === "status") return row.state;
-  if (name === "folder") return row.folder || "none";
-  if (name === "issue") return row.issue ? "yes" : "no";
-  return row.kind;
+// What started the process: "cli" for `claude` in a terminal, "sdk-cli" for `claude -p`, "sdk-ts" for the Agent SDK,
+// which desk's host and anything it runs inherit. Claude Code's own state, read from the files on 17 Oct.
+function entrypoint(pid: number | undefined): string {
+  try {
+    return pid && pid > 0 ? JSON.parse(readFileSync(join(RUNNING, `${pid}.json`), "utf8")).entrypoint ?? "" : "";
+  } catch {
+    return ""; // it ended meanwhile
+  }
 }
 
-function labelOf(name: string, v: string): string {
-  if (name === "status") return STATES[v] ?? v;
-  if (name === "issue") return HAS_ISSUE[v] ?? v;
-  if (name === "kind") return KINDS[v] ?? v;
-  return v === "none" ? "No folder" : v;
-}
-
-function iconOf(name: string, v: string | null): string | null {
-  if (name === "status") return STATE_ICONS[v ?? ""] ?? "state-running";
-  if (name === "folder") return "glyph-folder";
-  return v === null ? "state-backlog" : null; // an issue's circle beside Issue in Filter; none beside yes or no
-}
-
-// The rows the view keeps, ordered and grouped. Each group's rows sit together, since the list is drawn a page at a time:
-// Last moved and Folder groups come newest first, the others in their own order.
-export function arrange(view: views.View, found: SessionRow[]): [views.Listing, SessionRow[]] {
-  const kept = found.filter((r) => views.matches(view, (name) => valueOf(r, name)));
-  if (view.order === "moved") kept.sort((a, b) => (view.reverse ? a.moved.getTime() - b.moved.getTime() : b.moved.getTime() - a.moved.getTime()));
-  else {
-    const t = (r: SessionRow) => r.title.toLowerCase();
-    kept.sort((a, b) => (t(a) < t(b) ? -1 : t(a) > t(b) ? 1 : 0) * (view.reverse ? -1 : 1));
+// The sidebar's Other sessions: those running now that work no issue, such as a `claude` started in a terminal or one
+// opened from the corner's history, the newest first. Not a script (`claude -p`), which ends on its own with nobody to
+// talk to it, nor an agent chat nobody has written in yet.
+export async function others() {
+  const issues = await issuesBySession(), mine = new Map(chats.agentChats().map((c) => [c.session, c]));
+  const running = new Map<string, agents.Row>();
+  for (const row of (await agents.live()).values()) if (row.sessionId && row.pid && !issues.has(row.sessionId)) running.set(row.sessionId, row);
+  const found: { id: string; title: string; folder: string; state: string; started: number }[] = [];
+  for (const [sid, row] of running) {
+    const chat = mine.get(sid);
+    if (chat ? chats.said(chat).next().done : entrypoint(row.pid) === "sdk-cli") continue;
+    found.push({ id: sid, title: (chat && chat.title !== "New chat" ? chat.title : "") || titleOf(sid) || row.name || "Untitled session",
+      folder: folder(row.cwd), state: state(row), started: Number(row.startedAt ?? 0) });
   }
-  if (view.group !== "time") {
-    for (const r of kept) {
-      const v = view.group === "none" ? "" : valueOf(r, view.group);
-      [r.group, r.group_icon] = v ? [labelOf(view.group, v), iconOf(view.group, v)] : ["", null];
-    }
-  }
-  const rank = new Map<string, number>();
-  if (view.group === "time" || view.group === "folder") {
-    for (const r of [...kept].sort((a, b) => b.moved.getTime() - a.moved.getTime())) if (!rank.has(r.group)) rank.set(r.group, rank.size);
-  } else {
-    const own = ({ kind: KINDS, status: STATES, issue: HAS_ISSUE } as Record<string, Record<string, string>>)[view.group] ?? {};
-    Object.values(own).forEach((name, i) => rank.set(name, i));
-  }
-  kept.sort((a, b) => (rank.get(a.group) ?? 0) - (rank.get(b.group) ?? 0)); // stable: the order within each group stays
-
-  const valuesOf = (name: string): string[] => {
-    if (name === "folder") { // the busiest first: a week of jobs leaves a long tail of one-session folders
-      const used = new Map<string, number>();
-      for (const r of found) used.set(valueOf(r, "folder"), (used.get(valueOf(r, "folder")) ?? 0) + 1);
-      return [...used.keys()].sort((a, b) => used.get(b)! - used.get(a)! || (a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0));
-    }
-    return Object.keys(({ status: STATES, issue: HAS_ISSUE } as Record<string, Record<string, string>>)[name]);
-  };
-  const { chips, fields } = views.filtering(view, found, valueOf, labelOf, iconOf, valuesOf);
-  return [{ view, groups: [], hidden: found.length - kept.length, chips, fields }, kept];
+  return found.sort((a, b) => b.started - a.started);
 }
 
 // --- opening one -----------------------------------------------------------------------------------------------------
@@ -336,90 +269,4 @@ export async function newSession(base: string): Promise<chats.Chat> {
 // The corner's history menu: the newest sessions, or those matching what is typed.
 export async function recent(q: string) {
   return (await rows(q)).slice(0, 30).map((r) => ({ id: r.id, title: r.title, folder: r.folder, state: r.state, age: ago(r.moved) }));
-}
-
-// --- telling the page --------------------------------------------------------------------------------------------------
-// desk tells the Sessions page when a session starts, moves or changes state: a watcher on the transcripts and the
-// background jobs' state, no timer.
-
-const JOBS = join(HOME, ".claude", "jobs");
-const DEBOUNCE = 100; // ms a burst of writes is gathered for, so a streaming session costs one check, not one per line
-const TRAILING = 1000; // ms after a change, once more: a turn ends with no write apart from the others' (idle)
-
-const listeners = new Set<ServerResponse>();
-let signature: string | null = null; // what the list looked like when the pages were last told
-let started = false;
-
-// What the list shows, without the ages: the sessions in order, each with its title, state and group.
-async function signed(): Promise<string> {
-  await agents.live(true);
-  return JSON.stringify((await rows()).map((r) => [r.id, r.title, r.state, r.group]));
-}
-
-const tell = (message: string) => { for (const res of listeners) res.write(`event: ${message}\ndata: -\n\n`); };
-
-// The process is stopping: end every open event stream (the pages reconnect to the desk that comes next).
-export function endStreams() {
-  for (const res of listeners) res.end();
-  listeners.clear();
-}
-
-// Look at the list again and tell the pages if it changed; whether it did.
-async function check(): Promise<boolean> {
-  if (!listeners.size) {
-    signature = null; // a page that connects next draws it afresh
-    return false;
-  }
-  const next = await signed();
-  if (next === signature) return false;
-  signature = next;
-  tell("changed");
-  return true;
-}
-
-// A transcript written (not a subagent's, a folder deeper), or a background job's state.
-const interesting = (path: string) =>
-  (path.endsWith(".jsonl") && dirname(dirname(path)) === PROJECTS) || basename(path) === "state.json";
-
-function startWatcher() {
-  if (started) return;
-  started = true;
-  mkdirSync(PROJECTS, { recursive: true });
-  mkdirSync(JOBS, { recursive: true });
-  let timer: NodeJS.Timeout | null = null, busy = false;
-  const fire = async () => {
-    timer = null;
-    if (busy) return;
-    busy = true;
-    try {
-      let changed = await check();
-      while (changed) { // the state a turn ends in shows only a moment after its last write
-        await new Promise((r) => setTimeout(r, TRAILING));
-        changed = await check();
-      }
-    } catch (error) {
-      console.error("sessions watcher", error);
-    } finally {
-      busy = false;
-    }
-  };
-  for (const root of [PROJECTS, JOBS]) {
-    watch(root, { recursive: true }, (_event, name) => {
-      if (!name || !interesting(join(root, name.toString()))) return;
-      if (!timer) timer = setTimeout(fire, DEBOUNCE);
-    });
-  }
-}
-
-// Server-sent events: "changed" whenever the list's rows or a state circle changed, "hello" when it connects.
-export function events(res: ServerResponse) {
-  startWatcher();
-  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
-  res.write("retry: 1000\nevent: hello\ndata: -\n\n");
-  listeners.add(res);
-  const alive = setInterval(() => res.write(": still here\n\n"), 20000); // lets a dead socket show up
-  res.on("close", () => {
-    clearInterval(alive);
-    listeners.delete(res);
-  });
 }

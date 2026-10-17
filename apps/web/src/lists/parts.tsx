@@ -6,7 +6,7 @@ import { observer } from "mobx-react-lite";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { fold, type Priority, type Protocol, type State, type TreeRow } from "../lib/desk";
 import { Tree } from "../issues/Tree";
-import { GLYPH, PLUS, PrioIcon, ProtoIcon, Ring, StateIcon, TRIANGLE } from "../ui/icons";
+import { GLYPH, PLUS, PrioIcon, ProtoIcon, StateIcon, TRIANGLE } from "../ui/icons";
 import { closeMenu, menus, openMenu, toggled, type MenuOptions } from "../ui/menu";
 import { showTip, tipShownFor } from "../ui/tooltip";
 import { ui, type CreatorPreset } from "../store/ui";
@@ -41,7 +41,7 @@ function ListGlyph({ name }: { name: string }) {
   );
 }
 
-// An icon by the key the server's views.ts gives it: state-running, priority-high, protocol-quick, session-open, glyph-folder.
+// An icon by the key the server's views.ts gives it: state-running, priority-high, protocol-quick, glyph-folder.
 // In a menu a property's glyph is desk.js's (menu = true); in the list it is list.html's.
 export function iconOf(key: string | null | undefined, menu = false): ReactNode {
   if (!key) return null;
@@ -49,7 +49,6 @@ export function iconOf(key: string | null | undefined, menu = false): ReactNode 
   if (kind === "state") return <StateIcon state={v as State} />;
   if (kind === "priority") return <PrioIcon level={v as Priority} />;
   if (kind === "protocol") return <ProtoIcon name={v as Protocol} />;
-  if (kind === "session") return <Ring />;
   return menu ? GLYPH[v as keyof typeof GLYPH] ?? null : <ListGlyph name={v} />;
 }
 

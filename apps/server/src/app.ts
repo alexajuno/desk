@@ -1,7 +1,6 @@
 // desk's server: every address desk answers (ported from desk/app.py and its routers). The pages are the app's (apps/web), which
 // asks /api/page/... for their data (pages.ts); the forms the pages post answer with a redirect that may carry ?msg=
-// for the strip; the agents' JSON API is api.ts; the app's live sync is sync.ts; the Sessions list's events are
-// sessions.ts's.
+// for the strip; the agents' JSON API is api.ts; the app's live sync is sync.ts.
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 import formbody from "@fastify/formbody";
@@ -228,7 +227,7 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/version", async (_req, reply) => reply.type("text/plain; charset=utf-8").send(pages.version()));
 
   // desk's pages are the app's: each address answers with it, and the app asks /api/page/... for the data.
-  for (const path of ["/issues", "/issues/:tab", "/triage", "/projects", "/project/:slug", "/inbox", "/search", "/issue/:slug", "/sessions", "/sessions/:id", "/settings", "/settings/:section"])
+  for (const path of ["/issues", "/issues/:tab", "/triage", "/projects", "/project/:slug", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
     app.get(path, async (_req, reply) => web.index(reply));
   app.get("/", async (_req, reply) => reply.redirect("/issues", 307));
   // The Backlog listed every open issue, and became All issues on 17 Oct; /park was its name before that.
@@ -239,8 +238,9 @@ export async function create(): Promise<FastifyInstance> {
     });
   }
   app.get("/p/*", async (req: Req, reply) => reply.redirect(`/issue/${req.params["*"]}`, 307)); // pages were /p/<slug> before issues were called issues
-  app.get("/agent", async (_req, reply) => reply.redirect("/sessions", 301)); // the Agent tab became Sessions on 15 Oct
-  app.get("/agent/:chat", async (_req, reply) => reply.redirect("/sessions", 301));
+  // The Agent tab became Sessions on 15 Oct, and Sessions left the sidebar on 17 Oct: the sidebar lists what runs, and
+  // the corner's clock finds the rest.
+  for (const path of ["/sessions", "/agent", "/agent/:chat"]) app.get(path, async (_req, reply) => reply.redirect("/inbox", 301));
   // The app lived at /app beside the old pages while they were ported (16 Oct); its addresses are desk's own now.
   for (const path of ["/app", "/app/*"]) {
     app.get(path, async (req: Req, reply) => {
@@ -265,15 +265,6 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/api/page/projects", async () => pages.projectsPage());
   app.get("/api/page/inbox", async (req: Req) => pages.inboxPage(req.query.i ?? ""));
   app.get("/api/page/search", async (req: Req) => pages.searchPage(req.query.q ?? ""));
-  app.get("/api/page/sessions", async (req: Req) => {
-    const number = (v: string | undefined, fallback: number) => {
-      if (v === undefined) return fallback;
-      if (!/^-?\d+$/.test(v.trim())) throw new HttpError(422, "offset and limit are whole numbers");
-      return Number(v);
-    };
-    const { q = "", kind = "", offset, limit } = req.query;
-    return pages.sessionsPage(rawQuery(req), q, kind, number(offset, 0), number(limit, sessions.PAGE));
-  });
   app.get("/api/page/file/:slug/:name", async (req: Req) => pages.filePage(req.params.slug, req.params.name));
   // The Inbox's rows, newest first; every open tab asks every few seconds.
   app.get("/api/inbox", async () => pages.inboxRows());
@@ -471,11 +462,7 @@ export async function create(): Promise<FastifyInstance> {
     return back(reply, req.params.slug, message, false, field(req, "src") === "inbox");
   });
 
-  // --- the Sessions list
-  app.get("/sessions/events", async (_req, reply) => {
-    reply.hijack();
-    sessions.events(reply.raw);
-  });
+  // --- sessions: the corner's history, and New session
   app.get("/sessions/recent", async (req: Req) => sessions.recent(req.query.q ?? ""));
   // New session: an agent chat, opened in the panel.
   app.post("/sessions/new", async (req) => {
