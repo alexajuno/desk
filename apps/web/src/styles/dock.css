@@ -1,40 +1,57 @@
-/* The session panel (sessions/Dock.tsx): a session docked beside the page, as Linear's agent panel is, drawn the
-   way claude.ai draws a chat. It slides in from the right as the page narrows in the same motion, so nothing jumps;
-   ⤢ grows it leftward over the page; a hidden one leaves a pill in the corner. Colours are desk's variables. */
+/* A session's chat (sessions/Dock.tsx), in the middle of the screen, drawn the way claude.ai draws a chat, with its issue
+   beside it on the right in the frame's panel, as claude.ai shows an artifact. Opening it, the issue page shrinks into
+   the side as the chat rises in the middle; hiding the issue slides it out. Colours are desk's variables. */
 
 :root { --dock-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
         --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace; }
 
-.dock { position: fixed; top: 8px; right: 8px; bottom: 8px; z-index: 5; width: var(--dock-w); box-sizing: border-box;
-        display: flex; flex-direction: column; overflow: hidden;
-        background: var(--bg-panel); border: 0.5px solid var(--border-2); border-radius: 12px; box-shadow: var(--shadow-panel);
-        transform: translateX(calc(100% + 16px)); visibility: hidden;
-        transition: transform 0.22s var(--dock-ease), width 0.26s var(--dock-ease), visibility 0s 0.26s; }
-.dock.on, .dock.full { transform: none; visibility: visible;
-                       transition: transform 0.22s var(--dock-ease), width 0.26s var(--dock-ease), visibility 0s; }
-.dock.full { width: calc(100vw - 244px - 16px); }
-.side-collapsed .dock.full { width: calc(100vw - 16px); }
-.panel { transition: left 0.2s ease, right 0.22s var(--dock-ease), opacity 0.2s ease; }
-.dock-open .panel { right: calc(var(--dock-w) + 16px); }
-.dock-full .panel { opacity: 0; pointer-events: none; }
-.corner { transition: right 0.22s var(--dock-ease); }
-.dock-open .corner { right: calc(var(--dock-w) + 16px); }
-.dock-full .corner { display: none; }
-@media (max-width: 1100px) { /* too narrow to share: the panel lies over the page */
-  .dock-open .panel { right: 8px; }
-  .dock.on { box-shadow: var(--shadow-pop); }
+.dock { position: fixed; top: 8px; right: 8px; bottom: 8px; left: 244px; z-index: 5; box-sizing: border-box;
+        display: none; flex-direction: column; overflow: hidden;
+        background: var(--bg-panel); border: 0.5px solid var(--border-2); border-radius: 12px; box-shadow: var(--shadow-panel); }
+.side-collapsed .dock { left: 8px; }
+.chat-center .dock { display: flex; }
+/* the issue beside its chat: the panel the page draws into, narrowed to the right */
+.chat-center .panel { left: auto; width: var(--side-w); }
+.chat-center:not(.side-off) .dock { right: calc(var(--side-w) + 16px); }
+.chat-center.side-off .panel { display: none; }
+.chat-center.side-off .corner { display: none; }
+.chat-center .panel .open-chat { display: none; } /* the chat is open beside it */
+.chat-center .panel .bar .side-toggle { display: none; } /* the chat's head has it */
+@media (max-width: 1100px) { /* too narrow to share: the chat stands alone, and ] lays the issue over it */
+  .chat-center:not(.side-off) .dock { right: 8px; }
+  .chat-center .panel { z-index: 6; width: min(var(--side-w), calc(100vw - 16px)); box-shadow: var(--shadow-pop); }
 }
-@media (max-width: 900px) { .dock.full { width: calc(100vw - 16px); } }
+@media (max-width: 900px) { .dock { left: 8px; } }
 
-/* Its left edge (Edge in Dock.tsx) sets --dock-w as it is dragged; a line shows where to grab it. */
-.dock-edge { position: absolute; top: 0; bottom: 0; left: 0; z-index: 1; width: 6px; cursor: col-resize; touch-action: none; }
-.dock-edge::after { content: ""; position: absolute; top: 12px; bottom: 12px; left: 0; width: 2px; border-radius: 1px;
+/* The move between layouts (Dock.tsx, move), one view transition: the issue's panel and the chat each carry a name, so
+   the panel's box glides from the middle into the side as the chat rises into the space it leaves. Only those two move;
+   the rest of the screen changes at once. A part with no partner comes or goes on its own: the chat rises or fades,
+   the issue slides in from the right edge or out to it. */
+.panel { view-transition-name: page; }
+.dock { view-transition-name: chat; }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+::view-transition-group(page), ::view-transition-group(chat) { animation-duration: 0.32s; animation-timing-function: var(--dock-ease); }
+::view-transition-old(page), ::view-transition-new(page) { height: 100%; object-fit: cover; object-position: left top; }
+::view-transition-old(page) { animation: 0.2s ease both dock-out; }
+::view-transition-new(page) { animation: 0.26s ease both dock-in; }
+::view-transition-new(chat):only-child { animation: 0.32s var(--dock-ease) both dock-rise-in; }
+::view-transition-old(chat):only-child { animation: 0.2s ease both dock-out; }
+::view-transition-new(page):only-child { animation: 0.32s var(--dock-ease) both dock-slide-in; }
+::view-transition-old(page):only-child { animation: 0.26s var(--dock-ease) both dock-slide-out; }
+@keyframes dock-in { from { opacity: 0; } }
+@keyframes dock-out { to { opacity: 0; } }
+@keyframes dock-rise-in { from { opacity: 0; transform: translateY(12px) scale(0.99); } }
+@keyframes dock-slide-in { from { transform: translateX(calc(100% + 16px)); } }
+@keyframes dock-slide-out { to { transform: translateX(calc(100% + 16px)); } }
+
+/* The issue's left edge (SideEdge in Dock.tsx) sets --side-w as it is dragged; a line shows where to grab it. */
+.side-edge { position: absolute; top: 0; bottom: 0; left: 0; z-index: 4; width: 6px; cursor: col-resize; touch-action: none; }
+.side-edge::after { content: ""; position: absolute; top: 12px; bottom: 12px; left: 0; width: 2px; border-radius: 1px;
                     background: var(--accent); opacity: 0; transition: opacity 0.15s ease; }
-.dock-edge:hover::after, .dock-resizing .dock-edge::after { opacity: 1; }
-.dock-resizing, .dock-resizing * { cursor: col-resize !important; user-select: none; }
-.dock-resizing .dock, .dock-resizing .panel, .dock-resizing .corner { transition: none; }
+.side-edge:hover::after, .side-resizing .side-edge::after { opacity: 1; }
+.side-resizing, .side-resizing * { cursor: col-resize !important; user-select: none; }
 
-/* The issue beside the panel is narrow: its properties go under its title as chips, as in the Inbox. */
+/* The issue beside its chat is narrow: its properties go under its title as chips, as in the Inbox. */
 @container (max-width: 819px) {
   .issue { grid-template-columns: minmax(0, 1fr); }
   .issue .props { display: none; }
@@ -63,8 +80,7 @@
 
 /* the conversation */
 .dock-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
-.convo { display: flex; flex-direction: column; gap: 14px; padding: 16px 16px 12px; }
-.dock.full .convo { max-width: 760px; margin: 0 auto; padding: 32px 24px 16px; }
+.convo { display: flex; flex-direction: column; gap: 14px; max-width: 760px; margin: 0 auto; padding: 32px 24px 16px; }
 .convo > * { animation: dock-rise 0.18s ease both; }
 .convo-empty { margin: 48px 12px; text-align: center; font-size: 13px; color: var(--text-3); }
 .convo-note { margin: 0; text-align: center; font-size: 12px; color: var(--text-3); }
@@ -84,8 +100,7 @@
 .you-queued { display: flex; align-items: center; gap: 4px; font: 500 12px var(--font); color: var(--text-3); }
 .you-queued .glyph { width: 13px; height: 13px; }
 
-.reply.body { font-size: 14px; line-height: 22px; color: var(--text-1); overflow-wrap: anywhere; }
-.dock.full .reply.body { font-size: 15px; line-height: 24px; }
+.reply.body { font-size: 15px; line-height: 24px; color: var(--text-1); overflow-wrap: anywhere; }
 .reply p, .reply ul, .reply ol, .reply pre, .reply table, .reply blockquote { margin: 0 0 10px; }
 .reply > :last-child { margin-bottom: 0; }
 .reply ul, .reply ol { padding-left: 22px; }
@@ -127,9 +142,8 @@
 .working-key { margin-left: auto; font-size: 11px; color: var(--text-4); }
 
 /* what waits on the user, above the composer: a permission, or Claude's questions as buttons */
-.ask { flex: none; max-height: 45%; overflow: auto; margin: 0 12px 8px; padding: 12px; border: 1px solid var(--border-2); border-radius: 12px;
-       background: var(--bg-raised); animation: dock-rise 0.18s ease; }
-.dock.full .ask { width: min(760px, calc(100% - 48px)); margin: 0 auto 8px; box-sizing: border-box; }
+.ask { flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); max-height: 45%; overflow: auto; margin: 0 auto 8px; padding: 12px;
+       border: 1px solid var(--border-2); border-radius: 12px; background: var(--bg-raised); animation: dock-rise 0.18s ease; }
 .ask-q + .ask-q { margin-top: 14px; }
 .ask-header { display: inline-block; margin-bottom: 4px; font: 500 11px var(--font); color: var(--text-3); }
 .ask-what { margin: 0 0 8px; font: 500 13px/1.45 var(--font); color: var(--text-1); }
@@ -148,10 +162,9 @@
 .ask-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 
 /* the composer: where you type; Enter sends, or queues while Claude works, and Esc stops it */
-.composer { position: relative; flex: none; margin: 0 12px 12px; padding: 10px 8px 6px 12px; border: 1px solid var(--border-2); border-radius: 14px;
-            background: var(--bg-raised); transition: border-color 0.15s; }
+.composer { position: relative; flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); margin: 0 auto 16px; padding: 10px 8px 6px 12px;
+            border: 1px solid var(--border-2); border-radius: 14px; background: var(--bg-raised); transition: border-color 0.15s; }
 .composer:focus-within { border-color: var(--border-3); }
-.dock.full .composer { width: min(760px, calc(100% - 48px)); margin: 0 auto 16px; box-sizing: border-box; }
 .composer textarea { display: block; width: 100%; max-height: 240px; box-sizing: border-box; padding: 0; border: 0; outline: 0; resize: none;
                      background: transparent; font: 450 14px/21px var(--font); color: var(--text-1); }
 .composer textarea::placeholder { color: var(--text-4); }

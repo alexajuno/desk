@@ -1,72 +1,100 @@
-// The session panel: a session docked beside the page, as Linear's agent panel sits, drawn as claude.ai draws a chat:
-// replies stream in as Markdown, tool steps fold under one line, questions come as buttons, and the composer queues
-// a message while Claude works (Enter) or stops it (Esc). ⤢ makes it the whole page, at /sessions/<id>.
+// A session's chat, in the middle of the screen, drawn as claude.ai draws a chat: replies stream in as Markdown, tool
+// steps fold under one line, questions come as buttons, and the composer queues a message while Claude works (Enter)
+// or stops it (Esc). Its issue sits beside it on the right, in the frame's panel (store/dock.ts says where each stands).
 import { observer } from "mobx-react-lite";
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { postJson, reason } from "../api/http";
 import { go } from "../app/nav";
 import { markdown } from "../lib/markdown";
-import { DOCK_WIDTH, dock } from "../store/dock";
-import { GLYPH } from "../ui/icons";
+import { dock, SIDE_WIDTH } from "../store/dock";
+import { issues } from "../store/issues";
+import { toggleSide as toggleSidebar } from "../frame/side";
+import { GLYPH, SIDE_ICON } from "../ui/icons";
 import { toast } from "../ui/toast";
 import { live, useLive, type Ask, type Block, type Image, type Item, type LiveSession } from "./live";
 
-// Open a session in the panel, docked beside the page.
-export function openSession(id: string) {
-  dock.open(id);
-  requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".dock .composer textarea")?.focus());
+const focusComposer = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".dock .composer textarea")?.focus());
+
+// Open a session's chat in the middle: its issue's page when it has one, which shows the chat with the issue beside it.
+export function openSession(id: string, slug?: string | null) {
+  slug ??= [...issues.bySlug.values()].find((i) => i.session === id)?.slug;
+  go(slug ? `/issue/${slug}` : `/sessions/${id}`);
+  focusComposer();
 }
 
-// New session: an agent chat, docked.
+// New session: an agent chat, in the middle. Its issue comes beside it once the agent files one (SessionFullRoute).
 export async function newSession() {
   const res = await postJson("/sessions/new");
   if (!res.ok) return toast(await reason(res));
   openSession((await res.json()).id);
 }
 
+// A change of layout moves as one piece, through the browser's view transitions: the issue page shrinks into the side
+// as its chat rises in the middle, and slides out when hidden (dock.css says how). Where the browser has none, or
+// motion is turned down, it changes at once.
+const still = matchMedia("(prefers-reduced-motion: reduce)");
+function move(next: string, change: () => void) {
+  if (next === dock.layout || !document.startViewTransition || still.matches) return change();
+  document.startViewTransition(() => flushSync(change));
+}
+
+// What the page on screen asks for (the frame calls it as the address changes).
+export const arrange = (session: string | null, issue: boolean) => move(dock.layoutAfter(session, issue), () => dock.arrange(session, issue));
+
+// ] or the issue's title in the chat's head: the issue beside its chat, or the chat alone.
+export function toggleIssue() {
+  if (!dock.center || !dock.issue) return;
+  move(dock.layout === "both" ? "chat" : "both", () => dock.toggleSide());
+}
+
 export const Dock = observer(function Dock() {
-  const id = dock.session, docked = Boolean(id) && dock.mode === "docked" && !dock.full;
+  const id = dock.center ? dock.session : null;
   useLayoutEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle("dock-open", docked);
-    root.classList.toggle("dock-full", dock.full);
-    root.style.setProperty("--dock-w", `${dock.width}px`);
-  }, [docked, dock.full, dock.width]);
+    root.classList.toggle("chat-center", Boolean(id));
+    root.classList.toggle("side-off", Boolean(id) && !dock.sideShown);
+    root.style.setProperty("--side-w", `${dock.width}px`);
+  }, [id, dock.sideShown, dock.width]);
   return (
-    <aside className={`dock${docked ? " on" : ""}${dock.full ? " full" : ""}`} aria-hidden={!docked && !dock.full}>
-      {docked && <Edge />}
-      {/* Mounted while hidden too, so the pill at the bottom right keeps its live dot. */}
-      {id && dock.mode !== "closed" || dock.full ? <SessionView key={id} id={id!} full={dock.full} /> : null}
+    <aside className="dock" aria-hidden={!id}>
+      {id ? <SessionView key={id} id={id} /> : null}
     </aside>
   );
 });
 
-// The panel's left edge: drag it to make the panel wider or narrower, as Linear's panels are; a double-click gives back
-// the width it opens at. While it drags, the panel and the page beside it follow the pointer with no easing.
-function Edge() {
+// The left edge of the issue beside its chat: drag it to make the issue wider or narrower, as Linear's panels are; a
+// double-click gives back the width it opens at.
+export const SideEdge = observer(function SideEdge() {
+  if (!dock.sideShown || dock.narrow) return null;
   const drag = (e: React.PointerEvent<HTMLDivElement>) => {
     const edge = e.currentTarget, root = document.documentElement, from = e.clientX, width = dock.width;
-    const move = (m: PointerEvent) => dock.setWidth(width + from - m.clientX);
+    const left = document.querySelector(".dock")!.getBoundingClientRect().left;
+    const resize = (m: PointerEvent) => dock.setWidth(width + from - m.clientX, left);
     edge.setPointerCapture(e.pointerId);
-    root.classList.add("dock-resizing");
-    edge.addEventListener("pointermove", move);
+    root.classList.add("side-resizing");
+    edge.addEventListener("pointermove", resize);
     edge.addEventListener("lostpointercapture", () => {
-      edge.removeEventListener("pointermove", move);
-      root.classList.remove("dock-resizing");
+      edge.removeEventListener("pointermove", resize);
+      root.classList.remove("side-resizing");
     }, { once: true });
   };
-  return <div className="dock-edge" title="Drag to resize" onPointerDown={drag} onDoubleClick={() => dock.setWidth(DOCK_WIDTH)} />;
-}
+  return <div className="side-edge" title="Drag to resize" onPointerDown={drag} onDoubleClick={() => dock.setWidth(SIDE_WIDTH, 0)} />;
+});
 
-// The pill a hidden panel leaves at the bottom right: the session's title and whether it works.
+// The pill the chat you left waits as, at the bottom right: its title and whether it works. A click takes you back to it.
 export const DockPill = observer(function DockPill() {
-  if (dock.mode !== "hidden" || !dock.session || dock.full) return null;
-  const s = live(dock.session);
+  const shown = dock.pill && !dock.center ? dock.session : null;
+  const s = useLive(shown);
+  if (!s) return null;
   return (
-    <button className="dock-pill" type="button" title="Show the session" onClick={() => openSession(dock.session!)}>
-      <Dot s={s} />
-      <span>{s.meta?.title ?? "Session"}</span>
-    </button>
+    <span className="dock-pill">
+      <button type="button" title="Back to the chat" onClick={() => openSession(s.id, s.meta?.issue?.slug)}>
+        <Dot s={s} />
+        <span>{s.meta?.title ?? "Session"}</span>
+      </button>
+      <button className="dock-pill-x" type="button" title="Dismiss" onClick={() => dock.dismiss()}>{GLYPH.close}</button>
+    </span>
   );
 });
 
@@ -75,15 +103,7 @@ const Dot = observer(function Dot({ s }: { s: LiveSession }) {
   return <span className={`live-dot ${state}`} title={{ asks: "Waiting for you", working: "Working", idle: "Idle", off: "Connecting…" }[state]} />;
 });
 
-// ⤡: back to where the whole page was opened from, the panel docked again.
-function shrink(s: LiveSession) {
-  const idx = (history.state as { idx?: number } | null)?.idx ?? 0;
-  dock.open(s.id);
-  if (idx > 0) history.back();
-  else go(s.meta?.issue ? `/issue/${s.meta.issue.slug}` : "/sessions");
-}
-
-const SessionView = observer(function SessionView({ id, full }: { id: string; full: boolean }) {
+const SessionView = observer(function SessionView({ id }: { id: string }) {
   const s = useLive(id)!;
   const scroller = useRef<HTMLDivElement>(null);
   const stuck = useRef(true); // following the bottom, as new words come
@@ -109,22 +129,7 @@ const SessionView = observer(function SessionView({ id, full }: { id: string; fu
 
   return (
     <div className="session-view">
-      <header className="dock-head">
-        <Dot s={s} />
-        <div className="dock-title">
-          {m?.issue ? <a href={`/issue/${m.issue.slug}`} title="Open its issue">{m.issue.title}</a> : <span>{m?.title ?? ""}</span>}
-          {m?.folder && <span className="dock-folder" title={m.cwd}>{m.folder}</span>}
-        </div>
-        {!full && <button className="dock-btn" type="button" title="Hide" onClick={() => dock.hide()}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><path d="M4 8h8" /></svg>
-        </button>}
-        <button className="dock-btn" type="button" title={full ? "Dock beside the page" : "Whole page"} onClick={() => (full ? shrink(s) : go(`/sessions/${id}`))}>
-          {full
-            ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2.5v4h4M6.5 13.5v-4h-4M9.5 6.5l4-4M6.5 9.5l-4 4" /></svg>
-            : <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2.5h3.5V6M6 13.5H2.5V10M13.5 2.5L9 7M2.5 13.5L7 9" /></svg>}
-        </button>
-        {!full && <button className="dock-btn" type="button" title="Close" onClick={() => dock.close()}>{GLYPH.close}</button>}
-      </header>
+      <ChatHead s={s} />
       <div className="dock-scroll" ref={scroller} onScroll={onScroll}>
         <div className="convo">
           {!s.loaded ? <p className="convo-empty">Connecting…</p>
@@ -136,6 +141,24 @@ const SessionView = observer(function SessionView({ id, full }: { id: string; fu
       {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
       <Composer s={s} />
     </div>
+  );
+});
+
+// The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, whether it works, its issue's
+// title, and its folder. The title shows or hides the issue beside it.
+const ChatHead = observer(function ChatHead({ s }: { s: LiveSession }) {
+  const m = s.meta;
+  return (
+    <header className="dock-head">
+      <button className="side-icon side-toggle" type="button" title="Show sidebar  [" onClick={toggleSidebar}>{SIDE_ICON}</button>
+      <Dot s={s} />
+      <div className="dock-title">
+        {dock.issue && m?.issue
+          ? <button type="button" className={`dock-issue${dock.sideShown ? " on" : ""}`} title={`${dock.sideShown ? "Hide" : "Show"} the issue  ]`} onClick={toggleIssue}>{m.issue.title}</button>
+          : <span>{m?.issue?.title ?? m?.title ?? ""}</span>}
+        {m?.folder && <span className="dock-folder" title={m.cwd}>{m.folder}</span>}
+      </div>
+    </header>
   );
 });
 
@@ -515,11 +538,3 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
     </div>
   );
 });
-
-export const SessionFullPage = function SessionFullPage({ id }: { id: string }) {
-  useEffect(() => {
-    dock.setFull(id);
-    return () => dock.setFull(null);
-  }, [id]);
-  return <Fragment />;
-};

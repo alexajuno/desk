@@ -1,7 +1,7 @@
 // An issue, as its page shows it (templates/issue_view.html); the Inbox's right pane shows the same. The strip: where
-// the issue stands, and its one button, the next step, pinned at the top while the issue scrolls. Open chat brings
-// the issue's session to you in a floating kitty window over desk; whenever it is not the step, a quiet Open chat
-// sits beside it. Ctrl+Enter presses the step and O opens the chat, as the buttons' tooltips say.
+// the issue stands, and its one button, the next step, pinned at the top while the issue scrolls. Open chat opens the
+// issue as its chat, in the middle, with the issue beside it; whenever it is not the step, a quiet Open chat sits
+// beside it, and it hides once the chat is open. Ctrl+Enter presses the step and O opens the chat, as the buttons' tooltips say.
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { post, said } from "../api/http";
@@ -15,7 +15,6 @@ import { toast } from "../ui/toast";
 import { reloadPages, ui } from "../store/ui";
 import { setField } from "./actions";
 import { openSession } from "../sessions/Dock";
-import { dock } from "../store/dock";
 import { fieldMenu, folderMenu, projectPicker, waitingMenu } from "./menus";
 import { painted } from "./painted";
 import { Tree } from "./Tree";
@@ -57,8 +56,8 @@ const Fold = () => (
 function OpenChat({ slug, session, primary }: { slug: string; session: string; primary: boolean }) {
   return (
     <button className={`${primary ? "primary strip-go" : "ghost"} large open-chat`} type="button" data-slug={slug}
-      title={`Open the issue's chat beside it  ${primary ? "Ctrl Enter or O" : "O"}`}
-      onClick={() => openSession(session)}>Open chat</button>
+      title={`Open the issue's chat  ${primary ? "Ctrl Enter or O" : "O"}`}
+      onClick={() => openSession(session, slug)}>Open chat</button>
   );
 }
 
@@ -101,8 +100,6 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
   }
 
   useLayoutEffect(() => showFolded());
-  // A docked panel follows the issue you open to its session; a hidden or closed one stays as it is.
-  useEffect(() => { if (p.session) dock.show(p.session); }, [p.slug, p.session]);
 
   const live = p.session && !["done", "dropped"].includes(p.state);
   return (

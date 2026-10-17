@@ -8,6 +8,9 @@ import { Bar } from "../frame/Bar";
 import { lineKey } from "../store/frame";
 import { issues } from "../store/issues";
 import { toggled } from "../ui/menu";
+import { GLYPH } from "../ui/icons";
+import { dock } from "../store/dock";
+import { toggleIssue } from "../sessions/Dock";
 import { painted } from "./painted";
 import { IssueView, type IssuePageData } from "./IssueView";
 import { actionsMenu } from "./menus";
@@ -39,10 +42,14 @@ export const IssuePage = observer(function IssuePage() {
           </>
         ) : null}
         tools={
-          <button className="more" type="button" title="Actions"
-            onClick={(e) => { if (shown && p && !toggled(e.currentTarget)) actionsMenu(p, { anchor: e.currentTarget }, p.slug); }}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25" /><circle cx="8" cy="8" r="1.25" /><circle cx="12.5" cy="8" r="1.25" /></svg>
-          </button>
+          <>
+            <button className="more" type="button" title="Actions"
+              onClick={(e) => { if (shown && p && !toggled(e.currentTarget)) actionsMenu(p, { anchor: e.currentTarget }, p.slug); }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25" /><circle cx="8" cy="8" r="1.25" /><circle cx="12.5" cy="8" r="1.25" /></svg>
+            </button>
+            {/* Beside its chat, × leaves the chat alone; the issue's title in the chat's head brings it back. */}
+            {dock.sideShown && <button className="more" type="button" title="Hide the issue  ]" onClick={toggleIssue}>{GLYPH.close}</button>}
+          </>
         }
       />
       <div className="scroll" ref={scroll}>

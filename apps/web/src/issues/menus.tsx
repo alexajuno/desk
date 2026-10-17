@@ -67,7 +67,7 @@ export function actionsMenu(issue: ActionTarget, where: Where, here: string | nu
     { group: 0, icon: GLYPH.plus, label: "Add sub-issue", run: () => ui.openCreator({ parent: issue.slug, parentTitle: issue.title }) },
     // An issue's session, docked beside the page.
     ...(issue.session ? [
-      { group: 1, icon: GLYPH.chat, label: "Open chat", hint: "O", key: "o", run: () => openSession(issue.session!) },
+      { group: 1, icon: GLYPH.chat, label: "Open chat", hint: "O", key: "o", run: () => openSession(issue.session!, issue.slug) },
     ] : []),
     { group: 1, icon: GLYPH.link, label: "Copy link", run: () => copy(`${location.origin}/issue/${issue.slug}`, "Link copied") },
     { group: 1, icon: GLYPH.id, label: "Copy ID", run: () => copy(issue.slug, "ID copied") },

@@ -1,9 +1,9 @@
-// Every page's frame (templates/base.html): the sidebar, the panel the page draws into, the session docked beside it,
-// the corner's session buttons,
+// Every page's frame (templates/base.html): the sidebar, the panel the page draws into, the chat that takes the middle
+// on a page that is one (an issue with a chat beside its issue, or /sessions/<id>), the corner's session buttons,
 // the shortcuts panel, the new issue panel, and the menus and toasts over them. desk's keys and the clicks that act
 // across the page live here, as desk.js read them on the document.
 import { observer } from "mobx-react-lite";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { Outlet, useLocation } from "react-router";
 import { deskPath, go } from "../app/nav";
 import { remove, removeMany, setField, undo, undoList } from "../issues/actions";
@@ -19,7 +19,7 @@ import { unfoldTo, toggleSection } from "../ui/folds";
 import { MenuHost, menus } from "../ui/menu";
 import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openViewer, viewerOpen } from "../ui/viewer";
-import { Dock, newSession, openSession } from "../sessions/Dock";
+import { arrange, Dock, newSession, openSession, SideEdge, toggleIssue } from "../sessions/Dock";
 import { Corner } from "./Corner";
 import { CreatorHost } from "./Creator";
 import { KeysPanel } from "./KeysPanel";
@@ -28,11 +28,19 @@ import { closeSide, sideOpen, toggleSide } from "./side";
 import { issues } from "../store/issues";
 import { toast as say } from "../ui/toast";
 
-// The issue's session, docked; an issue with none yet says so.
+// The issue's chat, in the middle; an issue with none yet says so.
 function openIssueSession(slug: string) {
   const session = issues.bySlug.get(slug)?.session;
-  if (session) openSession(session);
+  if (session) openSession(session, slug);
   else say("This issue has no session yet.");
+}
+
+// The chat the page at this address is: an issue's, with the issue beside it, or a session's own page.
+function chatOf(pathname: string): { session: string | null; issue: boolean } {
+  const issue = /^\/issue\/([^/]+)$/.exec(pathname);
+  if (issue) return { session: issues.bySlug.get(decodeURIComponent(issue[1]))?.session ?? null, issue: true };
+  const session = /^\/sessions\/([^/]+)$/.exec(pathname);
+  return { session: session?.[1] ?? null, issue: false };
 }
 
 // The issue this page shows, on an issue page.
@@ -131,7 +139,7 @@ function onKeyDown(e: KeyboardEvent) {
     const group = document.querySelector<HTMLElement>(".group[data-group]:hover") ?? (focused && groups.find((g) => g.nextElementSibling?.contains(focused)));
     group?.querySelector<HTMLElement>(".group-toggle")?.click();
   }
-  // O opens the issue's session in the panel, as its Open chat button does; an issue with no session says so.
+  // O opens the issue's chat, as its Open chat button does; an issue with no session says so.
   else if (key === "o" && target()) { openIssueSession(target()!); e.preventDefault(); }
   // Linear's Triage key: 2 declines a chat's issue that came to nothing, as Dropped. The chat itself stays open.
   else if (key === "2" && (focused ?? document.querySelector<HTMLElement>(".issue"))?.dataset.state === "triage") {
@@ -164,6 +172,7 @@ function onKeyDown(e: KeyboardEvent) {
     e.preventDefault();
   }
   else if (e.key === "[") toggleSide();
+  else if (e.key === "]") toggleIssue();
   else if (e.key === "Escape") {
     if (document.querySelector(".inbox") && page()) go("/inbox");
     else if (page()) goBack();
@@ -204,6 +213,8 @@ export const Frame = observer(function Frame() {
   const { pathname, search } = useLocation();
   useEffect(() => noteAppPath(pathname + search), [pathname, search]);
   useEffect(() => ui.clearSelection(), [pathname]); // a selection belongs to its page's list
+  const chat = chatOf(pathname);
+  useLayoutEffect(() => arrange(chat.session, chat.issue), [chat.session, chat.issue]);
   useEffect(() => {
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("click", onClick);
@@ -218,7 +229,7 @@ export const Frame = observer(function Frame() {
     <>
       {/* Settings has its own sidebar, as Linear's. */}
       {pathname.startsWith("/settings") ? <SettingsNav /> : <Sidebar />}
-      <div className="panel"><Outlet /></div>
+      <div className="panel"><SideEdge /><Outlet /></div>
       <Dock />
       <Corner />
       <KeysPanel />
