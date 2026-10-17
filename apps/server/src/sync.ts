@@ -5,12 +5,13 @@
 //     {"type": "snapshot", "seq": 7, "issues": [<issue>, ...], "projects": [<project>, ...]}   first, on every connect
 //     {"type": "changes",  "seq": 8, "upsert": [<issue>, ...], "delete": [<slug>, ...], "projects": [...]}
 //     {"type": "frame", "frame": <frame>}                                                       on connect, then when it changed
-//     {"type": "files", "slugs": [<slug>, ...]}                                                 files beside issue.md changed
+//     {"type": "files", "slugs": [<slug>, ...]}                                                 its description or files changed
 //
 // An <issue> is what GET /api/issues lists (api.ts, asJson); a <project> is {slug, title, state}. "projects" comes in a
 // change only when a project changed, as the whole list. A <frame> is the sidebar and the Inbox's rows, with each open
-// issue's session state (pages.ts, framePage). "files" names the issues whose other files changed (a session's plan.md,
-// questions.md, result.md, a screenshot), which no field the apps hold says: a page showing one of them asks again.
+// issue's session state (pages.ts, framePage). "files" names the issues whose description or other files changed (a
+// session's plan.md, questions.md, result.md, a screenshot), which no field the apps hold says: a page showing one of
+// them asks again.
 //
 // desk's own saves tell this module at once (issues.onChange). An editor's change to an issue.md or project.md is seen
 // on the folders, read into the database (reconcile), and sent the same way.
@@ -25,12 +26,14 @@ import * as pages from "./pages.ts";
 import * as projects from "./projects.ts";
 
 let issues = new Map<string, string>(); // slug: the issue as the apps were last told, as JSON
+let bodies = new Map<string, string>(); // slug: its description, which the apps do not hold, as last read
 let projectList = "[]";
 let seq = 0;
 const listeners = new Set<WebSocket>();
 
-async function snapshot(): Promise<Map<string, string>> {
-  return new Map([...(await store.loadAll())].map(([slug, i]) => [slug, JSON.stringify(asJson(i))]));
+async function snapshot(): Promise<[Map<string, string>, Map<string, string>]> {
+  const all = [...(await store.loadAll())];
+  return [new Map(all.map(([slug, i]) => [slug, JSON.stringify(asJson(i))])), new Map(all.map(([slug, i]) => [slug, i.body]))];
 }
 
 async function listProjects(): Promise<string> {
@@ -63,13 +66,21 @@ function serial(name: string, work: () => Promise<void>): () => Promise<void> {
 }
 
 // Read every issue again and tell the apps what differs from what they were told.
+// A description is no field the apps hold, so one rewritten, as by an agent's PATCH, goes as "files": the page showing
+// that issue asks for it again.
 async function checkNow() {
-  const next = await snapshot(), listed = await listProjects();
+  const [next, nextBodies] = await snapshot(), listed = await listProjects();
   const upsert = [...next].filter(([slug, i]) => issues.get(slug) !== i).map(([, i]) => i);
   const gone = [...issues.keys()].filter((slug) => !next.has(slug));
   const moved = listed !== projectList;
+  const rewritten = [...nextBodies].filter(([slug, body]) => bodies.has(slug) && bodies.get(slug) !== body).map(([slug]) => slug);
   issues = next;
+  bodies = nextBodies;
   projectList = listed;
+  if (rewritten.length) {
+    const message = JSON.stringify({ type: "files", slugs: rewritten });
+    for (const ws of listeners) ws.send(message);
+  }
   if (!upsert.length && !gone.length && !moved) return;
   seq++;
   const message = `{"type":"changes","seq":${seq},"upsert":[${upsert.join(",")}],"delete":${JSON.stringify(gone)}${moved ? `,"projects":${listed}` : ""}}`;
@@ -140,7 +151,7 @@ const interesting = (path: string) =>
 // Watch the folders for changes desk did not make, read them in, and tell the apps; watch the sessions, and tell the
 // apps the frame.
 export async function start() {
-  issues = await snapshot();
+  [issues, bodies] = await snapshot();
   projectList = await listProjects();
   const changed = () => {
     void check();
