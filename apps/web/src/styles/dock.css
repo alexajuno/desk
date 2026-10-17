@@ -32,7 +32,12 @@
 .dock { view-transition-name: chat; }
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
 ::view-transition-group(page), ::view-transition-group(chat) { animation-duration: 0.32s; animation-timing-function: var(--dock-ease); }
-::view-transition-old(page), ::view-transition-new(page) { animation-duration: 0.32s; }
+/* The issue page keeps its text size too: each picture rides its box's left edge, clipped to the box, and the old one
+   fades out before the new one fades in, so the page glides to its side with no line twice and no zoom. */
+::view-transition-group(page) { overflow: clip; border-radius: 12px; }
+::view-transition-old(page), ::view-transition-new(page) { width: 100%; height: 100%; object-fit: none; object-position: left top; }
+::view-transition-old(page) { animation: 0.16s ease both dock-out; }
+::view-transition-new(page) { animation: 0.22s ease 0.1s both dock-in; }
 /* The chat is the same chat before and after, only wider or narrower: its new picture alone glides, at its own size
    and centred as its column is, so no line shows twice and no text zooms. */
 ::view-transition-group(chat) { overflow: clip; border-radius: 12px; } /* the wide picture never spills over the sidebar */
@@ -43,6 +48,7 @@
 ::view-transition-old(chat):only-child { opacity: 1; animation: 0.2s ease both dock-out; }
 ::view-transition-new(page):only-child { animation: 0.32s var(--dock-ease) both dock-slide-in; }
 ::view-transition-old(page):only-child { animation: 0.26s var(--dock-ease) both dock-slide-out; }
+@keyframes dock-in { from { opacity: 0; } }
 @keyframes dock-out { to { opacity: 0; } }
 @keyframes dock-rise-in { from { opacity: 0; transform: translateY(12px) scale(0.99); } }
 @keyframes dock-slide-in { from { transform: translateX(calc(100% + 16px)); } }
