@@ -474,6 +474,7 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
        font: 450 12px/18px var(--font); color: var(--text-tip); pointer-events: none;
        transform-origin: 50% 0; animation: tip-in 0.07s ease-out; }
 .tip.above { transform-origin: 50% 100%; }
+.tip.right { transform-origin: 0 50%; }
 .tip.out { opacity: 0; transform: scale(0.98); transition: opacity 0.2s, transform 0.2s; }
 @keyframes tip-in { from { opacity: 0; transform: scale(0.98); } }
 .tip.raised { --bg-tip: var(--bg-tip-raised); --border-tip: var(--border-tip-raised); --text-tip: var(--text-tip-raised);
@@ -484,6 +485,11 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .tip kbd { display: inline-block; box-sizing: border-box; min-width: 18px; padding: 2px; border: 0.5px solid var(--border-tip-key);
            border-radius: 4px; font: 400 12px/1.1 var(--font); color: var(--text-tip-key); text-align: center; }
 .tip .lines kbd { font-weight: 450; }
+/* A sidebar link's, measured on linear.app on 2026-10-17: "then" between a sequence's caps in 10px, the caps' shade.
+   Issues' has a row per tab, the label at weight 400 and the keys lined up in a column. */
+.tip .then { font-size: 10px; color: var(--text-tip-key); }
+.tip .rows { display: grid; grid-template-columns: auto auto; gap: 6px 12px; align-items: center; font-weight: 400; white-space: nowrap; }
+.tip .caps:has(.then) { align-items: center; }
 /* The Inbox (inbox.html), as Linear's, measured on linear.app on 2026-10-15: a list beside the open notification.
    Rows are 55px with 8px corners, 10px in from the list's edges: a 32px avatar with a 16px badge
    for the kind of notice, then two lines 2px apart, 10px from the row's top and bottom. The first holds an 8px

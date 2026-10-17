@@ -11,11 +11,13 @@ import { toggled } from "../ui/menu";
 import { helpMenu } from "./help";
 import { toggleSide } from "./side";
 
-// Triage's hover: how many of its chats wait for you.
+// Triage's hover: how many of its chats wait for you, and its keys. The other links' say where they go and their keys,
+// as Linear's sidebar does; Issues' lists its tabs, as Linear's team Issues does.
 function triageTip(triage: { now: string }[]) {
   const waits = triage.filter((p) => p.now === "idle").length;
-  return triage.length ? `${triage.length} not settled yet${waits ? `, ${waits} waiting for you` : ""}` : "Nothing to settle";
+  return `${triage.length ? `${triage.length} not settled yet${waits ? `, ${waits} waiting for you` : ""}` : "Nothing to settle"}  G then T`;
 }
+const ISSUES_TIP = "All issues  G then E\nActive  G then A\nBacklog  G then B";
 const WHY = "desk runs this branch instead of main: a session's test, or your Try";
 
 export const Sidebar = observer(function Sidebar() {
@@ -34,11 +36,11 @@ export const Sidebar = observer(function Sidebar() {
           <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path fillRule="evenodd" d="M7.25 1C7.66414 1 7.99988 1.33589 8 1.75C8 2.16421 7.66421 2.5 7.25 2.5H4.75C3.50745 2.5 2.50012 3.50744 2.5 4.75V11.25C2.5 12.4926 3.50736 13.5 4.75 13.5H11.25C12.4926 13.5 13.5 12.4926 13.5 11.25V8.75C13.5001 8.33589 13.8359 8 14.25 8C14.6641 8 14.9999 8.33589 15 8.75V11.25C15 13.3211 13.3211 15 11.25 15H4.75C2.67893 15 1 13.3211 1 11.25V4.75C1.00012 2.67905 2.67899 1 4.75 1H7.25Z" /><path fillRule="evenodd" d="M13.4326 1.26953C13.7913 0.910937 14.3728 0.910883 14.7314 1.26953C15.0897 1.6282 15.0899 2.20981 14.7314 2.56836L9.2373 8.06152C8.68101 8.6177 7.94043 8.95161 7.15527 9C7.06754 9.0052 6.99468 8.93248 7 8.84473C7.04847 8.05961 7.38232 7.31897 7.93848 6.7627L13.4326 1.26953Z" /></svg>
         </button>
       </div>
-      <Go className={`nav-item${at("/inbox")}`} to="/inbox">
+      <Go className={`nav-item${at("/inbox")}`} to="/inbox" title="Go to inbox  G then I">
         <svg viewBox="0 0 16 16"><path d="M2 9h3l1 2h4l1-2h3M3 3h10l1 6v4H2V9z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
         Inbox{d?.inbox ? <span className="count">{d.inbox}</span> : null}
       </Go>
-      <Go className={`nav-item${at("/sessions")}`} to="/sessions">
+      <Go className={`nav-item${at("/sessions")}`} to="/sessions" title="Go to sessions  G then S">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" /><path d="M4.5 6l2 2-2 2M8 10.5h3.5" /></svg>
         Sessions
       </Go>
@@ -47,11 +49,11 @@ export const Sidebar = observer(function Sidebar() {
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9.5h3.25l1 1.75h3.5l1-1.75H14" /><path d="M2 9.5l1.6-5.1c.13-.42.52-.65.95-.65h6.9c.43 0 .82.23.95.65L14 9.5v2.75c0 .55-.45 1-1 1H3c-.55 0-1-.45-1-1z" /><path d="M8 4.5v3.25M6.6 6.4 8 7.75 9.4 6.4" /></svg>
         Triage{d && d.triage.length > 0 && <span className="count">{d.triage.length}</span>}
       </Go>
-      <Go className={`nav-item${here === "/issues" || here.startsWith("/issues/") ? " here" : ""}`} to="/issues">
+      <Go className={`nav-item${here === "/issues" || here.startsWith("/issues/") ? " here" : ""}`} to="/issues" title={ISSUES_TIP}>
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"><rect x="2.25" y="4.75" width="9" height="9" rx="2" /><path d="M4.75 2.25h7c1.1 0 2 .9 2 2v7" strokeLinecap="round" /></svg>
         Issues
       </Go>
-      <Go className={`nav-label${at("/projects")}`} to="/projects">Projects</Go>
+      <Go className={`nav-label${at("/projects")}`} to="/projects" title="Go to projects  G then P">Projects</Go>
       {d?.projects.map((pr) => (
         <Go key={pr.slug} className={`nav-item${at(`/project/${pr.slug}`)}`} to={`/project/${pr.slug}`}>
           <svg viewBox="0 0 16 16"><path d="M8 2l5.5 3v6L8 14l-5.5-3V5z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
