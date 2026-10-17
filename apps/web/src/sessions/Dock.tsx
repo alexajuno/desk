@@ -31,9 +31,10 @@ export function openSession(id: string, slug?: string | null) {
   runInAction(() => wantsFocus.set(id));
 }
 
-// I, as vim's insert: the cursor back into the composer of the chat in the middle. False when no chat is there.
+// I, as vim's insert: the cursor back into the composer of the chat in the middle, or of the one Triage shows. False
+// when no chat is there.
 export function focusComposer() {
-  const box = document.querySelector<HTMLTextAreaElement>(".dock .composer textarea");
+  const box = document.querySelector<HTMLTextAreaElement>(".dock .composer textarea, .triage-open .composer textarea");
   box?.focus();
   return Boolean(box);
 }
@@ -147,7 +148,8 @@ const Dot = observer(function Dot({ s }: { s: LiveSession }) {
   return <span className={`live-dot ${state}`} title={{ asks: "Waiting for you", working: "Working", idle: "Idle", off: "Connecting…" }[state]} />;
 });
 
-const SessionView = observer(function SessionView({ id }: { id: string }) {
+// A chat as the middle shows it; the Triage page draws one in its right pane too.
+export const SessionView = observer(function SessionView({ id }: { id: string }) {
   const s = useLive(id)!;
   const scroller = useRef<HTMLDivElement>(null);
   const stuck = useRef(true); // following the bottom, as new words come

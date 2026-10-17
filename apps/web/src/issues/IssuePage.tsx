@@ -40,7 +40,7 @@ export const IssuePage = observer(function IssuePage() {
       <Bar
         crumb={shown && p ? (
           <>
-            {shown.project ? <Go to={`/project/${shown.project.slug}`}>{shown.project.title}</Go> : <Go to="/backlog">Backlog</Go>}
+            {shown.project ? <Go to={`/project/${shown.project.slug}`}>{shown.project.title}</Go> : <Go to="/issues">Issues</Go>}
             {shown.trail.map((a) => (<Fragment key={a.slug}><span className="sep">›</span><Go to={`/issue/${a.slug}`}>{a.title}</Go></Fragment>))}
             <span className="sep">›</span><span>{p.title}</span>
           </>

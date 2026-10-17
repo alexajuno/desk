@@ -1,8 +1,8 @@
-// A list's view (ported from desk/views.py): Linear's Filter and Display options on desk's lists, the Backlog, a project page and
-// Sessions (linear.app/docs/filters and linear.app/docs/display-options). It says which rows the list keeps and how it
+// A list's view (ported from desk/views.py): Linear's Filter and Display options on desk's lists, the Issues tabs, a project
+// page and Sessions (linear.app/docs/filters and linear.app/docs/display-options). It says which rows the list keeps and how it
 // groups and orders them; on an issue list also which done issues come back and how sub-issues show.
 //
-// A view lives in the page's query, in words: /backlog?folder=muse&priority=not:low,none&group=status. Only what
+// A view lives in the page's query, in words: /issues?folder=muse&priority=not:low,none&group=status. Only what
 // differs from the page's defaults is written, so a list with nothing picked has a bare URL. The app keeps each page's
 // last query in the browser; a page opened with no view in its URL asks for that one.
 import { HOME } from "./config.ts";
@@ -17,10 +17,13 @@ export interface Page {
   empty: boolean; // offers Show empty groups
   keep: string[]; // the URL's words that are no view's, such as the Sessions search
   noun: string; // what a row is, for the counts in Filter's menus
+  holds?: string[]; // the statuses its issues are in, on an Issues tab that keeps to some
 }
 
 const ISSUE_FILTERS = { status: "Status", priority: "Priority", project: "Project", folder: "Folder", protocol: "Protocol" };
 const ISSUE_OPTIONS = {
+  // Linear's Layout: the list, or a board with a column per group (linear.app/docs/board-layout).
+  layout: { list: "List", board: "Board" },
   group: { none: "No grouping", status: "Status", priority: "Priority", project: "Project", folder: "Folder" },
   order: { priority: "Priority", status: "Status", created: "Created", updated: "Updated", title: "Title" },
   // Linear's Completed issues: how far back done and dropped issues come in.
@@ -28,12 +31,21 @@ const ISSUE_OPTIONS = {
   subs: { nested: "Nested", rows: "Flat", hidden: "Hidden" },
 };
 
-// Each page opens as it looked before views: the Backlog by priority with sub-issues under their parent; a project page
-// by status, flat, with its done issues; Sessions by when each last moved.
+// Active and Backlog keep to their own statuses, so done issues never come back there. A project page keeps to the list,
+// beside its properties.
+const { done: _done, ...OPEN_OPTIONS } = ISSUE_OPTIONS;
+const { layout: _layout, ...PROJECT_OPTIONS } = ISSUE_OPTIONS;
+export const ACTIVE = ["running", "waiting", "review", "landing"];
+
+// Each page opens as it looked before views: All issues (the Backlog until 17 Oct) by priority with sub-issues under
+// their parent; a project page by status, flat, with its done issues; Sessions by when each last moved. The Issues
+// tabs are Linear's: All issues, Active (being worked, or waiting on someone) and Backlog (parked, not started).
 export const PAGES: Record<string, Page> = {
-  backlog: { filters: ISSUE_FILTERS, options: ISSUE_OPTIONS, defaults: { group: "priority", order: "priority", done: "none", subs: "nested" }, empty: true, keep: [], noun: "issue" },
+  issues: { filters: ISSUE_FILTERS, options: ISSUE_OPTIONS, defaults: { layout: "list", group: "priority", order: "priority", done: "none", subs: "nested" }, empty: true, keep: [], noun: "issue" },
+  active: { filters: ISSUE_FILTERS, options: OPEN_OPTIONS, defaults: { layout: "list", group: "status", order: "priority", subs: "nested" }, empty: true, keep: [], noun: "issue", holds: ACTIVE },
+  backlog: { filters: ISSUE_FILTERS, options: OPEN_OPTIONS, defaults: { layout: "list", group: "priority", order: "priority", subs: "nested" }, empty: true, keep: [], noun: "issue", holds: ["backlog"] },
   project: {
-    filters: Object.fromEntries(Object.entries(ISSUE_FILTERS).filter(([k]) => k !== "project")), options: ISSUE_OPTIONS,
+    filters: Object.fromEntries(Object.entries(ISSUE_FILTERS).filter(([k]) => k !== "project")), options: PROJECT_OPTIONS,
     defaults: { group: "status", order: "priority", done: "all", subs: "rows" }, empty: true, keep: [], noun: "issue",
   },
   sessions: {
@@ -45,7 +57,7 @@ export const PAGES: Record<string, Page> = {
     defaults: { group: "time", order: "moved" }, empty: false, keep: ["q", "kind"], noun: "session",
   },
 };
-const OPTION_NAMES: Record<string, string> = { group: "Grouping", order: "Ordering", done: "Completed issues", subs: "Sub-issues" };
+const OPTION_NAMES: Record<string, string> = { layout: "Layout", group: "Grouping", order: "Ordering", done: "Completed issues", subs: "Sub-issues" };
 
 const DONE_DAYS: Record<string, number | null> = { none: 0, day: 1, week: 7, month: 30, all: null };
 const NEWEST_FIRST = new Set(["created", "updated", "moved"]); // Linear's "Last created" and "Last updated"
@@ -54,6 +66,7 @@ const BY_STATUS = ["landing", "review", "waiting", "running", "backlog", "triage
 
 export interface View {
   page: string;
+  layout: string | null;
   group: string;
   order: string;
   done: string | null;
@@ -112,7 +125,7 @@ function pairs(q: string): [string, string][] {
 // A view from a query; what it does not know (a hand-typed word) falls back to the default.
 export function parse(page: string, q: string): View {
   const s = PAGES[page];
-  const view: View = { page, group: s.defaults.group, order: s.defaults.order, done: s.defaults.done ?? null, subs: s.defaults.subs ?? null,
+  const view: View = { page, layout: s.defaults.layout ?? null, group: s.defaults.group, order: s.defaults.order, done: s.defaults.done ?? null, subs: s.defaults.subs ?? null,
     reverse: false, empty: false, filters: new Map() };
   for (const [name, value] of pairs(q)) {
     if (name in s.filters) {
@@ -216,6 +229,8 @@ const fold = (s: string) => s.toLowerCase();
 
 // The page's issues as the view shows them (views.py, build).
 export function build(view: View, pageIssues: Issue[], everyone: Map<string, Issue>, projects: Map<string, Project>): Listing {
+  const holds = spec(view).holds;
+  if (holds) pageIssues = pageIssues.filter((i) => holds.includes(i.state));
   const updatedCache = new Map<string, number>();
   const updated = (slug: string) => {
     if (!updatedCache.has(slug)) updatedCache.set(slug, store.changed(slug));
@@ -249,8 +264,10 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
   };
 
   // Nested, a row sits under its parent when the list shows the parent. A match whose parent it does not show sits
-  // under that parent greyed out, in the match's own group: Linear's "Show matching".
-  const nested = view.subs === "nested";
+  // under that parent greyed out, in the match's own group: Linear's "Show matching". On a board each issue is a card
+  // of its own, in its own column.
+  const board = view.layout === "board";
+  const nested = view.subs === "nested" && !board;
   const shown = new Set(kept.map((i) => i.slug));
   const kids = new Map<string, Issue[]>();
   let roots = kept;
@@ -268,14 +285,17 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
   } else if (view.group === "folder") {
     order = [...[...new Set(pageIssues.map((i) => value(i, "folder")))].filter((v) => v !== "none").sort(), "none"];
   } else if (view.group === "none") order = [""];
-  else order = ({ status: store.STATES, priority: store.PRIORITIES, protocol: store.PROTOCOLS } as Record<string, string[]>)[view.group];
+  // Triage has its own page, so its group shows only when a filter asks for it.
+  else order = ({ status: (holds ?? store.STATES).filter((s) => s !== "triage" || asked.has("triage")), priority: store.PRIORITIES, protocol: store.PROTOCOLS } as Record<string, string[]>)[view.group];
 
   const count = (rows: Issue[]): number => rows.reduce((n, i) => n + 1 + count(kids.get(i.slug) ?? []), 0);
 
+  // A board keeps every status and priority as a column, empty or not, to drop a card on.
+  const every = view.empty || (board && (view.group === "status" || view.group === "priority"));
   const groups: Group[] = [];
   for (const g of order) {
     const mine = roots.filter((i) => groupOf(i) === g);
-    if (!mine.length && !(view.empty && g)) continue;
+    if (!mine.length && !(every && g)) continue;
     const top: Issue[] = [], context = new Set<string>(), under = new Map<string, Issue[]>();
     for (const i of mine) {
       if (nested && i.parent && everyone.has(i.parent)) {
@@ -296,7 +316,7 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
     if (name === "project" || name === "folder") // the ones the list has, as Linear's menus list only those
       return ["none", ...[...new Set(base.map((i) => value(i, name)))].filter((v) => v !== "none")
         .sort((a, b) => cmp(fold(label(name, a, projects)), fold(label(name, b, projects))))];
-    return [...({ status: store.STATES, priority: ["none", "urgent", "high", "medium", "low"], protocol: store.PROTOCOLS } as Record<string, string[]>)[name]];
+    return [...({ status: holds ?? store.STATES, priority: ["none", "urgent", "high", "medium", "low"], protocol: store.PROTOCOLS } as Record<string, string[]>)[name]];
   };
   // Done and Dropped count all of them, since picking one brings them all back.
   const { chips, fields } = filtering(view, base, value, (name, v) => label(name, v, projects), icon, valuesOf,

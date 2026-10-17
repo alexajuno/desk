@@ -48,7 +48,7 @@ export const FilePage = observer(function FilePage() {
   }, [data]);
   return (
     <>
-      <Bar crumb={<><Go to="/backlog">Backlog</Go><span className="sep">›</span><Go to={`/issue/${slug}`}>{data?.issue.title}</Go><span className="sep">›</span><span>{name}</span></>}
+      <Bar crumb={<><Go to="/issues">Issues</Go><span className="sep">›</span><Go to={`/issue/${slug}`}>{data?.issue.title}</Go><span className="sep">›</span><span>{name}</span></>}
         tools={<ReadToggle />} />
       <div className="scroll">
         {error && !data && <p className="muted" style={{ padding: 24 }}>{error}</p>}

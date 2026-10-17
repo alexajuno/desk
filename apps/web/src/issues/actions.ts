@@ -67,7 +67,7 @@ export async function remove(slug: string, here: string | null) {
   if (!res.ok) return toast(await reason(res));
   const { deleted, parent } = (await res.json()) as { deleted: string[]; parent: string | null };
   const left = here !== null && deleted.includes(here);
-  const to = left ? (parent && !deleted.includes(parent) ? `/issue/${parent}` : "/backlog") : null;
+  const to = left ? (parent && !deleted.includes(parent) ? `/issue/${parent}` : "/issues") : null;
   sessionStorage.undo = JSON.stringify([...undoList(), { slug, back: left ? deskPath() : null, to }].slice(-20));
   if (ui.focused && deleted.includes(ui.focused)) ui.focus(null);
   const kids = deleted.length - 1;

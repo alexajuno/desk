@@ -1,10 +1,9 @@
-// The sidebar on every page (templates/base.html's aside.side): Inbox, Sessions, Backlog and the projects, then the
-// lists to watch: the chats in Triage, what is in progress and landing, and what desk's checkout runs. Waiting issues
-// stay in the Backlog, since waiting can last forever.
+// The sidebar on every page (templates/base.html's aside.side): Inbox, Sessions, Triage, Issues and the projects, then
+// the lists to watch: what is in progress and landing, and what desk's checkout runs. Waiting issues stay in Issues,
+// since waiting can last forever.
 import { observer } from "mobx-react-lite";
 import { useLocation } from "react-router";
 import { deskPath, Go } from "../app/nav";
-import { fromSlack } from "../lib/desk";
 import { frame } from "../store/frame";
 import { ui } from "../store/ui";
 import { SIDE_ICON, StateIcon } from "../ui/icons";
@@ -12,7 +11,11 @@ import { toggled } from "../ui/menu";
 import { helpMenu } from "./help";
 import { toggleSide } from "./side";
 
-const TRIAGE_TIP: Record<string, string> = { working: "Its chat is working", idle: "Its chat waits for you" };
+// Triage's hover: how many of its chats wait for you.
+function triageTip(triage: { now: string }[]) {
+  const waits = triage.filter((p) => p.now === "idle").length;
+  return triage.length ? `${triage.length} not settled yet${waits ? `, ${waits} waiting for you` : ""}` : "Nothing to settle";
+}
 const WHY = "desk runs this branch instead of main: a session's test, or your Try";
 
 export const Sidebar = observer(function Sidebar() {
@@ -39,9 +42,14 @@ export const Sidebar = observer(function Sidebar() {
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" /><path d="M4.5 6l2 2-2 2M8 10.5h3.5" /></svg>
         Sessions
       </Go>
-      <Go className={`nav-item${at("/backlog")}`} to="/backlog">
-        <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeDasharray="1.6 1.9" /></svg>
-        Backlog{d && <span className="count">{d.backlog}</span>}
+      {/* Linear's team section: Triage, the chats not settled yet, with how many; then Issues and its tabs. */}
+      <Go className={`nav-item${at("/triage")}`} to="/triage" title={triageTip(d?.triage ?? [])}>
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9.5h3.25l1 1.75h3.5l1-1.75H14" /><path d="M2 9.5l1.6-5.1c.13-.42.52-.65.95-.65h6.9c.43 0 .82.23.95.65L14 9.5v2.75c0 .55-.45 1-1 1H3c-.55 0-1-.45-1-1z" /><path d="M8 4.5v3.25M6.6 6.4 8 7.75 9.4 6.4" /></svg>
+        Triage{d && d.triage.length > 0 && <span className="count">{d.triage.length}</span>}
+      </Go>
+      <Go className={`nav-item${here === "/issues" || here.startsWith("/issues/") ? " here" : ""}`} to="/issues">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"><rect x="2.25" y="4.75" width="9" height="9" rx="2" /><path d="M4.75 2.25h7c1.1 0 2 .9 2 2v7" strokeLinecap="round" /></svg>
+        Issues
       </Go>
       <Go className={`nav-label${at("/projects")}`} to="/projects">Projects</Go>
       {d?.projects.map((pr) => (
@@ -50,17 +58,6 @@ export const Sidebar = observer(function Sidebar() {
           <span className="nav-title">{pr.title}</span>
         </Go>
       ))}
-      {/* The issues not settled yet, each with Triage's icon whether its chat works or waits, and a 🐧 when it came from Slack; hovering says where its chat stands. */}
-      {d && d.triage.length > 0 && (
-        <>
-          <div className="nav-label">Triage</div>
-          {d.triage.map((p) => (
-            <Go key={p.slug} className={`nav-item${at(`/issue/${p.slug}`)}`} to={`/issue/${p.slug}`} title={TRIAGE_TIP[p.now] ?? "Its chat is closed"}>
-              <StateIcon state="triage" /><span className="nav-title">{p.title}</span>{fromSlack(p.link) && <span className="from" title="Tagged in Slack">🐧</span>}
-            </Go>
-          ))}
-        </>
-      )}
       {d && d.running.length > 0 && (
         <>
           <div className="nav-label">In progress</div>

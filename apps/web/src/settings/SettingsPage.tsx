@@ -30,7 +30,7 @@ const PAGES: { group: string; pages: { slug: string; title: string; icon: ReactN
 const TITLES = Object.fromEntries(PAGES.flatMap((g) => g.pages).map((p) => [p.slug, p.title]));
 
 // Back to app returns to the last page outside Settings.
-let lastApp = "/backlog";
+let lastApp = "/issues";
 export function noteAppPath(path: string) {
   if (!path.startsWith("/settings")) lastApp = path;
 }

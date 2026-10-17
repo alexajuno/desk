@@ -10,6 +10,7 @@ import { GLYPH, PLUS, PrioIcon, ProtoIcon, Ring, StateIcon, TRIANGLE } from "../
 import { closeMenu, menus, openMenu, toggled, type MenuOptions } from "../ui/menu";
 import { showTip, tipShownFor } from "../ui/tooltip";
 import { ui, type CreatorPreset } from "../store/ui";
+import { Board } from "./Board";
 import { listView, setFilter, setView, toggleValue } from "./current";
 import type { ViewData } from "./view";
 
@@ -140,10 +141,21 @@ export function FilterBar({ list }: { list: ListData }) {
 }
 
 // Collapsed groups: the list groups folded on each page, remembered in this browser (localStorage.collapsed,
-// { "/backlog": ["low"], ... }), shared with the old pages.
+// { "/issues": ["low"], ... }).
 const collapsedOf = (key: string): string[] => JSON.parse(localStorage.collapsed ?? "{}")[key] ?? [];
 
-// The groups. On the Backlog a group's + opens the new issue panel with what the group says (preset). The triangle
+// A list's body: its filter bar, then its groups as rows, or as a board's columns when its Layout is Board.
+export function Listing({ list, empty }: { list: ListData; empty: string }) {
+  const board = list.view.layout === "board";
+  return (
+    <div className={`page${board ? " board-page" : ""}`}>
+      <FilterBar list={list} />
+      {board ? <Board list={list} empty={empty} /> : <Groups list={list} empty={empty} />}
+    </div>
+  );
+}
+
+// The groups. On an Issues tab a group's + opens the new issue panel with what the group says (preset). The triangle
 // folds a group, Alt+click every group; T does it to the group under the mouse, or the focused row's (Frame's keys
 // click this triangle).
 export function Groups({ list, empty, here = null }: { list: ListData; empty: string; here?: string | null }) {
@@ -201,6 +213,12 @@ const DIRECTION = (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M8.23 3.674a.75.75 0 0 1-.961 1.152l-1.77-1.475V14.25a.75.75 0 0 1-1.5 0V3.351L2.23 4.826a.75.75 0 1 1-.96-1.152l3-2.5a.75.75 0 0 1 .96 0z" /><path fillRule="evenodd" clipRule="evenodd" d="M6.999 7.25a.75.75 0 0 1 .75-.75h6.5a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1-.75-.75M6.999 10.25a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75M6.999 13.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75" /></svg>
 );
 
+// Linear's List and Board icons, on the two buttons at the top of Display options.
+const LAYOUT_ICON: Record<string, ReactNode> = {
+  list: <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 3.5a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5zM2 8a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 8m.75 3a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5z" /></svg>,
+  board: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"><rect x="2" y="2.75" width="4" height="10.5" rx="1.25" /><rect x="10" y="2.75" width="4" height="7" rx="1.25" /></svg>,
+};
+
 const DisplayPanel = observer(function DisplayPanel({ view }: { view: ViewData }) {
   const el = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -232,9 +250,18 @@ const DisplayPanel = observer(function DisplayPanel({ view }: { view: ViewData }
       }}>{d.options[view[d.key] as string]}{SELECT_CHEV}</button>
     </div>
   );
-  const first = view.display.filter((d) => d.key === "group" || d.key === "order"), rest = view.display.filter((d) => !first.includes(d));
+  const layout = view.display.find((d) => d.key === "layout");
+  const first = view.display.filter((d) => d.key === "group" || d.key === "order"), rest = view.display.filter((d) => !first.includes(d) && d !== layout);
   return (
     <div ref={el} className="display-panel" role="dialog" aria-label="Display options">
+      {layout && (
+        <div className="dp-layout" role="radiogroup" aria-label="Layout">
+          {Object.entries(layout.options).map(([value, name]) => (
+            <button key={value} type="button" role="radio" aria-checked={view.layout === value} className={view.layout === value ? "on" : ""}
+              title={`${name}  Ctrl B`} onClick={() => setView({ layout: value })}>{LAYOUT_ICON[value]}{name}</button>
+          ))}
+        </div>
+      )}
       {first.map(row)}
       {(rest.length > 0 || view.switches.length > 0) && <hr />}
       {rest.map(row)}

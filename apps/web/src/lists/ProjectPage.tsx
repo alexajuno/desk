@@ -60,7 +60,7 @@ export const ProjectPage = observer(function ProjectPage() {
                   : <><span>Archived</span><button type="button" onClick={() => setProject(pr.slug, "state", "active")}>Unarchive</button></>}
               </form>
               <div className="label">Issues</div>
-              <div className="prop static"><Go to={`/backlog?project=${pr.slug}`}>Open in the backlog view</Go></div>
+              <div className="prop static"><Go to={`/issues?project=${pr.slug}`}>Open in All issues</Go></div>
             </aside>
           </div>
         )}

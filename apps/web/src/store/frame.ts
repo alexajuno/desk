@@ -19,7 +19,6 @@ export interface InboxRow {
 }
 
 export interface FrameData {
-  backlog: number;
   inbox: number;
   triage: (IssueRow & { now: string })[];
   running: IssueRow[];

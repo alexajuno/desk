@@ -9,7 +9,7 @@ import { deskPath, go } from "../app/nav";
 import { remove, removeMany, setField, undo, undoList } from "../issues/actions";
 import { fieldMenu } from "../issues/menus";
 import { selectable, selectAll, selection, SelectionBar, selectionField } from "../issues/selection";
-import { listView } from "../lists/current";
+import { listView, setView } from "../lists/current";
 import { noteAppPath, SettingsNav } from "../settings/SettingsPage";
 import { filterMenu } from "../lists/parts";
 import { type Field } from "../lib/desk";
@@ -20,6 +20,7 @@ import { MenuHost, menus } from "../ui/menu";
 import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openViewer, viewerOpen } from "../ui/viewer";
 import { arrange, Dock, focusComposer, newSession, openSession, SideEdge, toggleIssue } from "../sessions/Dock";
+import { triageKey } from "../triage/TriagePage";
 import { Corner } from "./Corner";
 import { CreatorHost } from "./Creator";
 import { KeysPanel } from "./KeysPanel";
@@ -69,12 +70,12 @@ function moveFocus(step: number) {
   next.scrollIntoView({ block: "nearest" });
 }
 
-// Esc on an issue goes back to where you came from, or up to its parent or the backlog.
+// Esc on an issue goes back to where you came from, or up to its parent or the issues.
 function goBack() {
   const from = document.referrer, idx = (history.state as { idx?: number } | null)?.idx ?? 0;
   const cameFrom = from.startsWith(location.origin) && new URL(from).pathname !== location.pathname && history.length > 1;
   if (idx > 0 || cameFrom) history.back();
-  else go(page()?.parent ? `/issue/${page()!.parent}` : "/backlog");
+  else go(page()?.parent ? `/issue/${page()!.parent}` : "/issues");
 }
 
 let gPressed = 0;
@@ -101,6 +102,8 @@ function onKeyDown(e: KeyboardEvent) {
     else if (key === "a" && document.querySelector(".tree .item[data-slug]")) { selectAll(); e.preventDefault(); }
     else if ((e.key === "Delete" || e.key === "Backspace") && ui.selected.size) { removeMany(selection()); e.preventDefault(); }
     else if (e.key === ",") { go("/settings"); e.preventDefault(); } // the usual key for an app's settings
+    // Linear's Ctrl B: the list as a board, and back.
+    else if (key === "b" && listView.view?.layout) { setView({ layout: listView.view.layout === "board" ? "list" : "board" }); e.preventDefault(); }
     else if ((e.key === "Delete" || e.key === "Backspace") && target()) { remove(target()!, page()?.slug ?? null); e.preventDefault(); }
     return;
   }
@@ -108,7 +111,8 @@ function onKeyDown(e: KeyboardEvent) {
 
   if (gPressed && Date.now() - gPressed < 1500) {
     gPressed = 0;
-    const to = { b: "/backlog", i: "/inbox", s: "/sessions", p: "/projects" }[key];
+    // Linear's G E, G A and G B for its Issues tabs; desk has no teams, so G T is Triage's.
+    const to = { e: "/issues", a: "/issues/active", b: "/issues/backlog", t: "/triage", i: "/inbox", s: "/sessions", p: "/projects" }[key];
     if (to) go(to);
     return;
   }
@@ -150,6 +154,8 @@ function onKeyDown(e: KeyboardEvent) {
     if (!focusComposer() && target()) openIssueSession(target()!);
     e.preventDefault(); // so the i is not typed into the composer it lands in
   }
+  // Linear's Triage keys on the Triage page: 1 accepts, 2 declines, 3 marks a duplicate, and desk's 4 parks.
+  else if (["1", "2", "3", "4"].includes(key) && triageKey(key)) e.preventDefault();
   // Linear's Triage key: 2 declines a chat's issue that came to nothing, as Dropped. The chat itself stays open.
   else if (key === "2" && (focused ?? document.querySelector<HTMLElement>(".issue"))?.dataset.state === "triage") {
     setField(target()!, "state", "dropped").then(() => toast("Declined: nothing to do."));

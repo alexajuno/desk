@@ -1,10 +1,10 @@
-import { createBrowserRouter, type LoaderFunctionArgs, Navigate } from "react-router";
+import { createBrowserRouter, type LoaderFunctionArgs, Navigate, useLocation } from "react-router";
 import { prime } from "../api/page";
 import { Frame } from "../frame/Frame";
 import { IssuePage } from "../issues/IssuePage";
 import { FilePage } from "../files/FilePage";
 import { InboxPage } from "../inbox/InboxPage";
-import { BacklogPage } from "../lists/BacklogPage";
+import { IssuesPage, TABS } from "../lists/IssuesPage";
 import { ProjectPage } from "../lists/ProjectPage";
 import { ProjectsPage } from "../lists/ProjectsPage";
 import { listUrl } from "../lists/useList";
@@ -12,6 +12,7 @@ import { SearchPage } from "../search/SearchPage";
 import { SessionsPage } from "../sessions/SessionsPage";
 import { SettingsPage } from "../settings/SettingsPage";
 import { SessionFullRoute } from "../sessions/SessionFullRoute";
+import { TriagePage } from "../triage/TriagePage";
 
 // Each page's loader fetches its JSON before the router moves to it, so the page on screen stays until the next one can
 // draw whole (api/page.ts, prime). The first page desk opens on draws at once, as before, and fetches its own.
@@ -20,11 +21,24 @@ const first = () => !opened && (opened = true);
 const search = (request: Request) => new URL(request.url).search;
 const at = (url: (args: LoaderFunctionArgs) => string) => (args: LoaderFunctionArgs) => (first() ? null : prime(url(args)));
 
+// The Backlog listed every open issue, and became All issues on 17 Oct; a link to it, in an issue's text, keeps its view.
+function ToIssues() {
+  return <Navigate to={`/issues${useLocation().search}`} replace />;
+}
+
+// An Issues tab: All issues at /issues, Active and Backlog under it.
+const tabRoute = (tab: string) => ({
+  path: tab ? `/issues/${tab}` : "/issues", element: <IssuesPage key={tab} tab={tab} />,
+  loader: at(({ request }) => listUrl(tab ? `/issues/${tab}` : "/issues", tab ? `/api/page/issues/${tab}` : "/api/page/issues", search(request))),
+});
+
 // desk's pages, at the addresses they always had.
 export const router = createBrowserRouter(
   [{ element: <Frame />, children: [
-    { path: "/", element: <Navigate to="/backlog" replace /> },
-    { path: "/backlog", element: <BacklogPage />, loader: at(({ request }) => listUrl("/backlog", "/api/page/backlog", search(request))) },
+    { path: "/", element: <Navigate to="/issues" replace /> },
+    ...["", ...TABS].map(tabRoute),
+    { path: "/backlog", element: <ToIssues /> },
+    { path: "/triage", element: <TriagePage /> },
     { path: "/projects", element: <ProjectsPage />, loader: at(() => "/api/page/projects") },
     { path: "/project/:slug", element: <ProjectPage />,
       loader: at(({ params, request }) => listUrl(`/project/${params.slug}`, `/api/page/project/${params.slug}`, search(request))) },

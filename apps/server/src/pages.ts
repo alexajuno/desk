@@ -293,7 +293,7 @@ export async function framePage() {
   const everyProject = await projects.loadAll();
   const active = [...everyProject.values()].filter((p) => p.state === "active").sort(byCreated);
   return {
-    backlog: [...all.values()].filter((i) => i.state === "backlog").length, inbox: needs.length + review.length,
+    inbox: needs.length + review.length,
     triage: inState("triage").map((i) => ({ ...issueJson(i), now: agents.status((i.session && live.get(i.session)) || {}) })),
     running: inState("running").map(issueJson),
     landing: inState("landing").map(issueJson),
@@ -317,11 +317,17 @@ export async function issuePage(slug: string) {
 
 // A list's groups, chips and view. A group's + opens the new issue panel with what the group says, where the panel can
 // take it: its priority, its project, or Backlog.
-function listingJson(listing: views.Listing, path: string, add: boolean) {
+// On a board, a card's sub-issues read as done of all, as Linear's do.
+function listingJson(listing: views.Listing, path: string, add: boolean, all?: Map<string, Issue>) {
   const v = listing.view, data = views.data(listing);
+  const subsOf = (p: Issue) => {
+    const kids = all && v.layout === "board" ? store.children(all, p.slug) : [];
+    return kids.length ? [kids.filter((k) => CLOSED.has(k.state)).length, kids.length] : null;
+  };
   const node = (p: Issue, g: views.Group): unknown => {
     const kids = views.kidsOf(g, p.slug);
-    return { ...issueJson(p), open: kids.filter((k) => !CLOSED.has(k.state)).length, context: g.context.has(p.slug), kids: kids.map((k) => node(k, g)) };
+    return { ...issueJson(p), open: kids.filter((k) => !CLOSED.has(k.state)).length, context: g.context.has(p.slug), subs: subsOf(p),
+      kids: kids.map((k) => node(k, g)) };
   };
   const groups = listing.groups.map((g) => {
     let preset: unknown = null;
@@ -341,10 +347,12 @@ function listingJson(listing: views.Listing, path: string, add: boolean) {
   };
 }
 
-export async function backlogPage(query: string) {
+// The Issues tabs: All issues at /issues, Active and Backlog under it.
+export const TABS = ["active", "backlog"];
+export async function issuesPage(tab: string, query: string) {
   const all = await store.loadAll();
-  const listing = views.build(views.parse("backlog", query), [...all.values()], all, await projects.loadAll());
-  return listingJson(listing, "/backlog", true);
+  const listing = views.build(views.parse(tab || "issues", query), [...all.values()], all, await projects.loadAll());
+  return listingJson(listing, tab ? `/issues/${tab}` : "/issues", true, all);
 }
 
 export async function projectPage(slug: string, query: string) {

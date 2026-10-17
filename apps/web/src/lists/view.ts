@@ -1,6 +1,6 @@
 // A list's view: Linear's Filter and Display options (the server's views.ts). The view lives in the page's address, in words
-// (/backlog?folder=muse&priority=not:low,none&group=status), and only what differs from the page's defaults is
-// written. The app keeps each page's last view in this browser (localStorage.views), so the sidebar's bare /backlog
+// (/issues?folder=muse&priority=not:low,none&group=status), and only what differs from the page's defaults is
+// written. The app keeps each page's last view in this browser (localStorage.views), so the sidebar's bare /issues
 // opens it again, as the old pages kept it in a cookie.
 import { go } from "../app/nav";
 
@@ -21,6 +21,7 @@ export interface ViewData {
   switches: string[];
   fields: Field[];
   filters: Record<string, { not: boolean; values: string[] }>;
+  layout?: string;
   group: string;
   order: string;
   done?: string;
@@ -36,7 +37,7 @@ export interface Filter {
 }
 
 // The words the server's views.ts reads; any of them in the address means it carries a view.
-const WORDS = new Set(["status", "priority", "project", "folder", "protocol", "issue", "group", "order", "done", "subs", "reverse", "empty"]);
+const WORDS = new Set(["status", "priority", "project", "folder", "protocol", "issue", "layout", "group", "order", "done", "subs", "reverse", "empty"]);
 export const hasView = (search: string) => [...new URLSearchParams(search).keys()].some((k) => WORDS.has(k));
 
 // The words views.ts writes keep their slashes, tildes, commas and colons, as in folder=genai/api.
