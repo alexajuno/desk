@@ -648,8 +648,8 @@ const fresh = (s: LiveSession) => Boolean(s.meta?.chat && !s.meta.agent && !s.me
 // The chip by +, until the first message: what the chat becomes. Issue is desk's agent, which files the talk in Triage
 // and works it; Chat is a bare Claude, which the sidebar lists under Chats (chats.ts, becomeBare).
 const START_AS = {
-  issue: { label: "Issue", icon: GLYPH.triage, hint: "lands in Triage" },
-  chat: { label: "Chat", icon: GLYPH.chat, hint: "just talk, lands in Chats" },
+  issue: { label: "Issue", icon: GLYPH.triage, sub: "lands in Triage" },
+  chat: { label: "Chat", icon: GLYPH.chat, sub: "just talk, lands in Chats" },
 } as const;
 
 const StartAs = observer(function StartAs({ s }: { s: LiveSession }) {
