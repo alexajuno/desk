@@ -212,6 +212,12 @@ export function titleOf(sid: string): string {
   return row ? title(row) : "";
 }
 
+// A desk chat's title, as the list shows it: Claude Code's own, or what was first said in it; nothing before that.
+export function chatTitleOf(sid: string): string {
+  const row = refresh().get(sid);
+  return row ? row.ai_title || row.first_prompt || "" : "";
+}
+
 // The folder, short: "desk" for ~/projects/desk, "~" for home.
 export function folder(cwd: string | undefined): string {
   if (!cwd) return "";
@@ -270,7 +276,8 @@ function entrypoint(pid: number | undefined): string {
 
 // The sidebar's Other sessions: those running now that work no issue, such as a `claude` started in a terminal or one
 // opened from the corner's history, the newest first. Not a script (`claude -p`), which ends on its own with nobody to
-// talk to it, nor an agent chat nobody has written in yet.
+// talk to it, nor an agent chat nobody has written in yet, nor a chat with one of the user's agents, which the sidebar
+// lists under Agents.
 export async function others() {
   const issues = await issuesBySession(), mine = new Map(chats.agentChats().map((c) => [c.session, c]));
   const running = new Map<string, agents.Row>();
@@ -279,7 +286,7 @@ export async function others() {
   const t = running.size ? refresh() : table;
   for (const [sid, row] of running) {
     const chat = mine.get(sid), kept = t.get(sid);
-    if (chat ? chats.said(chat).next().done : entrypoint(row.pid) === "sdk-cli") continue;
+    if (chat?.agent || (chat ? chats.said(chat).next().done : entrypoint(row.pid) === "sdk-cli")) continue;
     found.push({ id: sid, title: (kept && shown(kept, null, Boolean(chat))) || row.name || "Untitled session", folder: folder(row.cwd), state: state(row), started: Number(row.startedAt ?? 0) });
   }
   return found.sort((a, b) => b.started - a.started);

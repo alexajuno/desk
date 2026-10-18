@@ -16,6 +16,7 @@ export interface InboxRow {
   why: string;
   says: string;
   url: string;
+  who?: string; // the agent, on a row from a chat with one; else the row is an issue's session's
 }
 
 export interface FrameData {
@@ -27,6 +28,7 @@ export interface FrameData {
   line: { slug: string; branch: string; for: string; issue: IssueRow }[];
   projects: { slug: string; title: string }[];
   others: { id: string; title: string; folder: string; state: "working" | "waiting" | "open" }[]; // running, with no issue
+  agents: { name: string; session: string; working: boolean; unread: boolean }[]; // the user's agents, by their newest chat
   rows: InboxRow[];
   live: Record<string, string>; // slug: where its session stands, for each open issue with one
 }
@@ -84,11 +86,11 @@ function notifyNew(rows: InboxRow[]) {
     }
 }
 
-// The notification reads as the Inbox's row: the issue's title, then what its session did. A newer one for the same
+// The notification reads as the Inbox's row: the issue's title, then what its session did, or the agent. A newer one for the same
 // issue takes the older's place. A click opens it in the Inbox and asks desk to bring this window forward, since
 // Hyprland leaves the page's own window.focus() unanswered.
 function notify(row: InboxRow) {
-  const note = new Notification(row.title, { body: `Session ${row.says}`, tag: row.slug });
+  const note = new Notification(row.title, { body: `${row.who ?? "Session"} ${row.says}`, tag: row.slug });
   note.onclick = () => {
     note.close();
     window.focus();

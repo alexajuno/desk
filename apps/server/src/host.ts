@@ -78,6 +78,8 @@ export interface StartOptions {
   permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "auto" | "dontAsk";
   disallowedTools?: string[];
   additionalDirectories?: string[];
+  agent?: string; // one of the user's agents (~/.claude/agents), as `claude --agent` runs it: its prompt, tools and model
+  settings?: Record<string, unknown>;
   message?: Content;
 }
 
@@ -136,6 +138,8 @@ function start(o: StartOptions): Session {
       ...(o.permissionMode ? { permissionMode: o.permissionMode } : {}),
       ...(o.disallowedTools?.length ? { disallowedTools: o.disallowedTools } : {}),
       ...(o.additionalDirectories?.length ? { additionalDirectories: o.additionalDirectories } : {}),
+      ...(o.agent ? { agent: o.agent } : {}),
+      ...(o.settings ? { settings: o.settings } : {}),
       includePartialMessages: true,
       pathToClaudeCodeExecutable: CLAUDE,
       env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "desk" },

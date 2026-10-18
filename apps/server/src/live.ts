@@ -20,6 +20,7 @@ import { HOME } from "./config.ts";
 import * as hosted from "./hosted.ts";
 import * as store from "./issues.ts";
 import * as models from "./models.ts";
+import * as roster from "./roster.ts";
 import * as transcript from "./transcript.ts";
 import type { Item } from "./transcript.ts";
 
@@ -39,6 +40,7 @@ interface Meta {
   folder: string;
   issue: { slug: string; title: string; state: string } | null;
   chat: boolean;
+  agent: string | null; // the agent a chat is with
   runs: models.Shown; // the model and effort, for the composer's chip
 }
 
@@ -52,7 +54,7 @@ async function meta(id: string): Promise<Meta> {
   const cwd = row.cwd ?? (chat ? chats.runsIn(chat) : transcript.cwdOf(id)) ?? "";
   const { titleOf } = await import("./sessions.ts");
   return {
-    id, cwd, folder: tilde(cwd), chat: Boolean(chat),
+    id, cwd, folder: tilde(cwd), chat: Boolean(chat), agent: chat?.agent ?? null,
     title: issue?.title || (chat && chat.title !== "New chat" ? chat.title : "") || titleOf(id) || "New session",
     issue: issue ? { slug: issue.slug, title: issue.title, state: issue.state } : null,
     runs: models.shown(id, Boolean(chat)),
@@ -62,6 +64,21 @@ async function meta(id: string): Promise<Meta> {
 // --- the socket ------------------------------------------------------------------------------------------------------
 
 export async function connect(ws: WebSocket, id: string) {
+  // Heard before anything is awaited: the app says whether it shows the session as soon as the socket opens, and a
+  // message with no listener yet is lost.
+  ws.on("message", (data) => {
+    try {
+      const e = JSON.parse(data.toString());
+      if (e.type === "visible") {
+        // An agent's chat on screen is read, up to the moment it leaves the screen.
+        if (e.visible) visible.set(ws, id);
+        if (e.visible || visible.delete(ws)) chats.seenNow(id);
+      }
+    } catch {
+      // not ours
+    }
+  });
+  ws.on("close", () => { if (visible.delete(ws)) chats.seenNow(id); });
   const sent = new Set<string>(); // the items' keys the panel has, so each comes once from whichever source is first
   let path: string | null = null, readTo = 0, file: FSWatcher | null = null, host: WebSocket | null = null, closed = false;
   let lastMeta = "";
@@ -155,20 +172,8 @@ export async function connect(ws: WebSocket, id: string) {
     }
   }, 1500);
 
-  ws.on("message", (data) => {
-    try {
-      const e = JSON.parse(data.toString());
-      if (e.type === "visible") {
-        if (e.visible) visible.set(ws, id);
-        else visible.delete(ws);
-      }
-    } catch {
-      // not ours
-    }
-  });
   const end = () => {
     closed = true;
-    visible.delete(ws);
     clearInterval(tick);
     if (timer) clearTimeout(timer);
     file?.close();
@@ -198,6 +203,14 @@ function content(m: Sent): hosted.Content {
 // Send the user's message. A session still at work in Claude Code's daemon, from before the panel, takes no message
 // mid-turn: the message waits here until its turn ends, then the host takes the session in with it.
 export async function send(id: string, m: Sent): Promise<{ queued: boolean }> {
+  // @name as the first words of a new chat: the chat becomes that agent's (chats.ts, becomeAgent).
+  const chat = chats.agentChatOf(id);
+  const tag = chat && chats.empty(chat) ? /^@([\w.-]+)(?:\s|$)/.exec(m.text.trim()) : null;
+  const agent = tag && roster.find(tag[1]);
+  if (agent) {
+    await chats.becomeAgent(chat!, agent, content(m));
+    return { queued: false };
+  }
   try {
     await agents.tell(id, content(m), m.uuid);
     return { queued: false };

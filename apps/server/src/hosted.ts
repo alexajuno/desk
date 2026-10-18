@@ -38,6 +38,8 @@ export interface StartOptions {
   permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "auto" | "dontAsk";
   disallowedTools?: string[];
   additionalDirectories?: string[];
+  agent?: string;
+  settings?: Record<string, unknown>;
   message?: Content;
 }
 
@@ -164,6 +166,9 @@ export async function start(o: StartOptions): Promise<HostRow> {
   // A session that never got a message has no transcript to resume: it starts afresh, under the same id.
   if (o.resume && o.id && !pathOf(o.id)) o = { ...o, resume: false };
   await ensure();
+  // A host of older code drops what it does not know, and would run an agent's chat as a plain session.
+  if (o.agent && (await version()) !== current())
+    throw new HostError("desk's session host runs older code, which cannot start an agent yet. It updates itself once no session has worked for 10 minutes; try again then.", 503);
   const row = await call<HostRow>("POST", "/sessions", o);
   cached = [0, []];
   return row;

@@ -546,6 +546,7 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .inbox-row.selected { background: var(--bg-raised); }
 .inbox-row .avatar { position: relative; flex: none; display: grid; place-items: center; width: 32px; height: 32px;
                      border-radius: 50%; background: var(--avatar-session); color: var(--on-accent); }
+.inbox-row .avatar.agent { font: 500 13px var(--font); } /* an agent's initial, as a person's avatar has */
 .inbox-row .badge { position: absolute; left: 19.5px; top: 17.5px; display: grid; place-items: center; width: 16px; height: 16px;
                     border-radius: 50%; background: var(--bg-panel); color: var(--text-3); }
 .inbox-row .lines { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 10px 0; }

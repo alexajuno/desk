@@ -4,10 +4,13 @@
 // the issue's session, and desk then moves the chat into the issue's folder, so that Claude Code loads that folder's
 // CLAUDE.md, rules, skills, agents and settings.
 //
+// A chat may instead be one of the user's own agents' (roster.ts): it runs as that agent, from the home folder, with no
+// desk prompt, and files no issue.
+//
 // A chat is a JSON file in DESK_DATA/chats/.
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import * as agents from "./agents.ts";
 import { CHATS_DIR, DATA_DIR, HOME, PORT, REPO } from "./config.ts";
 import * as hosted from "./hosted.ts";
@@ -16,6 +19,7 @@ import type { Issue } from "./issues.ts";
 import * as models from "./models.ts";
 import { run } from "./proc.ts";
 import { fill, MOVED, NOT_MOVED, PLAN_RULES, PROMPT, PROTOCOLS, WINDOW_RULES, WORK } from "./prompts.ts";
+import type { Agent } from "./roster.ts";
 import * as settings from "./settings.ts";
 import type { Effort } from "./settings.ts";
 import * as transcripts from "./transcript.ts";
@@ -34,6 +38,9 @@ export interface Chat {
   issue?: string;
   folder?: string;
   cwd?: string;
+  agent?: string; // the agent the chat is with, by name; none for desk's own
+  from?: string; // the script whose message started it (push)
+  seen?: number; // when the user last looked at it, in seconds: the Inbox leaves out what the agent said before
   [key: string]: unknown;
 }
 
@@ -121,6 +128,7 @@ const runsOn = (chat: Chat) => {
 
 // How the host starts the chat's session again: where it runs, with its prompt and settings.
 export async function hostOptions(chat: Chat, cwd = runsIn(chat)): Promise<hosted.StartOptions> {
+  if (chat.agent) return { id: chat.session, resume: true, cwd, agent: chat.agent, settings: AGENT_SETTINGS, ...OPTIONS, ...runsOn(chat), disallowedTools: [...OPTIONS.disallowedTools] };
   return { id: chat.session, resume: true, cwd, ...OPTIONS, ...runsOn(chat), disallowedTools: [...OPTIONS.disallowedTools], additionalDirectories: adds(cwd),
     append: await agentPrompt(chat, BASE) };
 }
@@ -129,18 +137,83 @@ export async function hostOptions(chat: Chat, cwd = runsIn(chat)): Promise<hoste
 // message, as for a Slack message the user tagged (slack.ts), the chat starts bound to the issue and works on the
 // message at once.
 export async function newChat(base: string, start?: { issue: Issue; message: string }): Promise<Chat> {
-  // strftime's %b in the C locale: Sep, never Sept.
-  const d = new Date(), month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
-  const chat: Chat = { id: `chat-${randomBytes(4).toString("hex")}`, kind: "panel", title: start?.issue.title ?? "New chat", created: now(), session: "", messages: [],
+  const chat: Chat = { id: newId(), kind: "panel", title: start?.issue.title ?? "New chat", created: now(), session: "", messages: [],
     ...(start && { issue: start.issue.slug, folder: DATA_DIR }) }; // where bind() leaves a chat whose issue has no folder
-  const name = `desk chat ${d.getDate()} ${month} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   const s = settings.load(), runs = { model: s.chat_model, effort: s.chat_effort };
-  const row = await hosted.start({ cwd: DATA_DIR, title: name, ...OPTIONS, ...runs, disallowedTools: [...OPTIONS.disallowedTools], append: await agentPrompt(chat, base),
+  const row = await hosted.start({ cwd: DATA_DIR, title: `desk chat ${stamp()}`, ...OPTIONS, ...runs, disallowedTools: [...OPTIONS.disallowedTools], append: await agentPrompt(chat, base),
     ...(start ? { message: start.message } : {}) });
   chat.session = row.id;
   models.keep(row.id, runs); // the chat keeps what it started on when Preferences change later
   save(chat);
   return chat;
+}
+
+const newId = () => `chat-${randomBytes(4).toString("hex")}`;
+
+// "17 Oct 19:24", for the name desk gives the session it starts. strftime's %b in the C locale: Sep, never Sept.
+function stamp(): string {
+  const d = new Date(), month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
+  return `${d.getDate()} ${month} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+// --- chats with the user's agents ------------------------------------------------------------------------------------
+// The user's words: "i would like a way to start psy from here, to talk about situation. psy = any agent" (18 Oct). A
+// chat with an agent runs as `psy` runs it in a terminal: `claude --agent <name>` from the home folder, the output style
+// at the default, the effort the agent names. Either side starts it: the user with @name, or a script (push).
+
+const AGENT_SETTINGS = { outputStyle: "default" }; // as `psy` and bin/coach start theirs
+
+// The agent's own model and effort, else a desk chat's (Settings > Preferences).
+function agentRuns(agent: Agent): models.Pick {
+  const s = settings.load();
+  return { model: agent.model ?? s.chat_model, effort: agent.effort ?? s.chat_effort };
+}
+
+// A new chat with the agent, its session started in the host, with a first message when given one.
+export async function agentChat(agent: Agent, message?: hosted.Content, from?: string): Promise<Chat> {
+  const chat: Chat = { id: newId(), kind: "panel", agent: agent.name, title: agent.name, created: now(), session: randomUUID(), messages: [], cwd: HOME,
+    ...(from ? { from } : {}) };
+  models.keep(chat.session, agentRuns(agent));
+  await hosted.start({ ...(await hostOptions(chat)), title: `${agent.name} ${stamp()}`, ...(message ? { message } : {}) });
+  save(chat);
+  return chat;
+}
+
+// @name as the first words of a new chat: the chat, which nobody has written in yet, becomes the agent's, and its
+// session starts again as the agent, with the message as typed, so the panel finds it in the transcript. When the
+// agent's session will not start, the chat stays desk's.
+export async function becomeAgent(chat: Chat, agent: Agent, message: hosted.Content) {
+  if (await hosted.holds(chat.session)) {
+    await hosted.close(chat.session).catch(() => {});
+    await hosted.released(chat.session);
+  }
+  const was = { ...chat }, runs = agentRuns(agent);
+  Object.assign(chat, { agent: agent.name, title: agent.name, cwd: HOME });
+  try {
+    await hosted.start({ ...(await hostOptions(chat)), ...runs, title: `${agent.name} ${stamp()}`, message });
+  } catch (error) {
+    Object.assign(chat, was);
+    throw error;
+  }
+  models.keep(chat.session, runs);
+  save(chat);
+}
+
+// A script's message for the user (POST /api/agents/<name>/say): a new chat with the agent, whose first turn passes it
+// on. The panel shows the message only as who sent it (transcript.ts, PUSH); the agent's reply is what the user reads.
+export function push(agent: Agent, text: string, from: string): Promise<Chat> {
+  const who = from.replace(/["<>\n]/g, " ").trim().slice(0, 60) || "a script";
+  const message = `<desk-push from="${who}">\n${text.trim()}\n</desk-push>\n\n${who} sent this for the user. desk opens a chat with you for it: your ` +
+    "reply is the first thing the user reads, and they may answer you there. Tell them what matters in it, briefly.";
+  return agentChat(agent, message, who);
+}
+
+// The user looked at the agent chat now: what the agent said so far is read.
+export function seenNow(session: string) {
+  const chat = agentChatOf(session);
+  if (!chat?.agent) return;
+  chat.seen = Date.now() / 1000;
+  save(chat);
 }
 
 // The user's words and the agent's, in order, from a chat's transcript.
@@ -154,7 +227,7 @@ export function* said(chat: Chat): Generator<[string, string]> {
 }
 
 // A chat nobody has written in yet: no issue, and no transcript, which its session writes only from its first message.
-export const empty = (chat: Chat) => !chat.issue && !transcripts.pathOf(chat.session);
+export const empty = (chat: Chat) => !chat.issue && !chat.agent && !transcripts.pathOf(chat.session);
 
 // When a chat last moved: its transcript's last write, or its start.
 export function activity(chat: Chat): string {
@@ -193,7 +266,7 @@ export function agentChats(): Chat[] {
 export function filing(title: string): Chat | null {
   const typed = JSON.stringify(title).slice(1, -1);
   for (const chat of chats()) {
-    if (!KINDS.has(chat.kind ?? "") || chat.issue) continue;
+    if (!KINDS.has(chat.kind ?? "") || chat.issue || chat.agent) continue;
     const path = transcripts.pathOf(chat.session);
     if (!path || Date.now() - statSync(path).mtimeMs > 60_000) continue;
     const [recent] = transcripts.read(path, Math.max(0, statSync(path).size - 256 * 1024)); // its last steps

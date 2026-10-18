@@ -183,7 +183,9 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
       <div className="dock-scroll" ref={scroller} onScroll={onScroll}>
         <div className="convo">
           {!s.loaded ? <p className="convo-empty">Connecting…</p>
-            : !s.items.length && !s.pending.length && !s.working ? <p className="convo-empty">{m?.chat ? "Ask desk's agent anything: it files the work and does it here." : "Nothing said yet."}</p>
+            : !s.items.length && !s.pending.length && !s.working ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
+              : m?.chat ? "Ask desk's agent anything: it files the work and does it here. Start with @ and a name to talk to one of your agents."
+              : "Nothing said yet."}</p>
             : null}
           <Conversation s={s} />
         </div>
@@ -435,6 +437,12 @@ const Questions = observer(function Questions({ s, ask }: { s: LiveSession; ask:
 
 interface Pick { label: string; hint?: string; insert: string }
 
+// The user's agents (GET /api/agents), asked once a page: @ at the start of a new desk chat offers them.
+let agentList: Promise<Pick[]> | null = null;
+const agentPicks = () => (agentList ??= fetch("/api/agents").then((r) => r.json())
+  .then((list: { name: string; description: string }[]) => list.map((a) => ({ label: `@${a.name}`, hint: a.description, insert: `@${a.name} ` })))
+  .catch(() => (agentList = null, [])));
+
 // A word being typed that the composer completes: a / at the start, or an @ after a space.
 function tokenAt(text: string, caret: number): { kind: "/" | "@"; start: number; word: string } | null {
   const before = text.slice(0, caret);
@@ -486,7 +494,10 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
       list = commands.current.filter((c) => c.label.slice(1).toLowerCase().includes(w))
         .sort((a, b) => Number(!a.label.slice(1).toLowerCase().startsWith(w)) - Number(!b.label.slice(1).toLowerCase().startsWith(w))).slice(0, 12);
     } else {
-      list = ((await (await fetch(`/api/live/${s.id}/files?q=${encodeURIComponent(t.word)}`)).json()) as string[])
+      // A new desk chat's first @ names one of the user's agents, whom the chat is then with; otherwise @ is a file.
+      const opening = s.meta?.chat && !s.meta.agent && t.start === 0 && !s.items.length && !s.pending.length;
+      const agents = opening ? (await agentPicks()).filter((a) => a.label.slice(1).toLowerCase().includes(t.word.toLowerCase())) : [];
+      list = agents.length ? agents : ((await (await fetch(`/api/live/${s.id}/files?q=${encodeURIComponent(t.word)}`)).json()) as string[])
         .slice(0, 12).map((f) => ({ label: f, insert: `@${f} ` }));
     }
     if (n !== asked.current) return; // a later keystroke asked again

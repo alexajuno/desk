@@ -40,6 +40,7 @@ export interface Meta {
   folder: string;
   issue: { slug: string; title: string; state: string } | null;
   chat: boolean;
+  agent: string | null; // the agent a chat is with
   runs: { model: string; name: string; effort: string }; // for the composer's chip
 }
 

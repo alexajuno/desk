@@ -15,6 +15,8 @@
 //     PATCH  /api/projects/<slug>       set title, body, state (active or archived)
 //     GET    /api/settings              desk's settings (settings.ts)
 //     PATCH  /api/settings              set any of them
+//     GET    /api/agents                the user's own agents, whom a chat can be with (roster.ts)
+//     POST   /api/agents/<name>/say     a script's message for the user: message, from; a new chat with the agent passes it on
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -27,6 +29,7 @@ import * as land from "./land.ts";
 import { HttpError } from "./pages.ts";
 import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
+import * as roster from "./roster.ts";
 import { find } from "./search.ts";
 import * as settings from "./settings.ts";
 
@@ -145,6 +148,23 @@ export function routes(app: FastifyInstance) {
     await apply(i, given(req.body, FIELDS));
     const closed = await store.save(i);
     return { ...asJson(i, true), ...(closed.length ? { closed } : {}) };
+  });
+
+  app.get("/api/agents", async () => roster.list().map(({ name, description }) => ({ name, description })));
+
+  // A script's message for the user, through one of the user's agents, as bin/jobs sends its daily list: a new chat
+  // with the agent, whose first reply passes it on, waits in the Inbox until the user reads it.
+  app.post("/api/agents/:name/say", async (req: FastifyRequest<{ Params: { name: string } }>) => {
+    const agent = roster.find(req.params.name);
+    if (!agent) throw new HttpError(404, `No agent ${req.params.name} in ~/.claude/agents.`);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    if (!str(body.message).trim()) throw new HttpError(422, "message is required");
+    try {
+      const chat = await chats.push(agent, str(body.message), str(body.from));
+      return { chat: chat.id, session: chat.session, url: `/inbox?i=${chat.id}` };
+    } catch (error) {
+      throw new HttpError(502, (error as Error).message);
+    }
   });
 
   app.get("/api/settings", async () => settings.load());

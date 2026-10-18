@@ -4,6 +4,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import * as agents from "./agents.ts";
+import * as chats from "./chats.ts";
 import { ISSUES_DIR, PROJECTS_DIR } from "./config.ts";
 import * as hosted from "./hosted.ts";
 import * as store from "./issues.ts";
@@ -158,9 +159,42 @@ export async function notifications(all: Map<string, Issue>): Promise<Notice[]> 
   return rows.sort((a, b) => b.at.getTime() - a.at.getTime());
 }
 
-// The Inbox's rows, as /api/inbox lists them.
+// What the user's agents said that the user has not read (chats.ts): an agent's last reply ended after the user last
+// looked at its chat and after the user last wrote in it, and no panel shows it now. A script's chat starts that way.
+export interface ChatNotice { chat: chats.Chat; title: string; why: string; says: string; at: Date }
+
+// An agent's chat's title: Claude Code's own, or the user's first words, or who sent it the message it began with.
+const chatTitle = (chat: chats.Chat) => sessions.chatTitleOf(chat.session) || (chat.from ? `From ${chat.from}` : chat.agent!);
+
+export function chatNotices(): ChatNotice[] {
+  const found: ChatNotice[] = [];
+  for (const chat of chats.agentChats()) {
+    if (!chat.agent) continue;
+    const replied = sessions.replied(chat.session);
+    if (!replied || replied <= (chat.seen ?? 0) || live_.watching(chat.session)) continue;
+    const wrote = sessions.prompted(chat.session); // none in a script's chat until the user answers
+    if (wrote && wrote > replied) continue; // at work on the user's message
+    found.push({ chat, title: chatTitle(chat), why: wrote ? "agent replied" : "agent wrote",
+      says: wrote ? "replied" : "wrote to you", at: new Date(replied * 1000) });
+  }
+  return found;
+}
+
+// The Inbox's rows, newest first, as /api/inbox lists them: the issues' sessions' and the agents', each agent's named (who).
 export async function inboxRows() {
-  return (await notifications(await store.loadAll())).map((n) => ({ slug: n.p.slug, title: n.p.title, why: n.why, says: n.says, url: `/inbox?i=${n.p.slug}` }));
+  const issues = (await notifications(await store.loadAll())).map((n) => ({ slug: n.p.slug, title: n.p.title, why: n.why, says: n.says, url: `/inbox?i=${n.p.slug}`, at: n.at }));
+  const theirs = chatNotices().map((n) => ({ slug: n.chat.id, title: n.title, why: n.why, says: n.says, url: `/inbox?i=${n.chat.id}`, who: n.chat.agent, at: n.at }));
+  return [...issues, ...theirs].sort((a, b) => b.at.getTime() - a.at.getTime()).map(({ at: _, ...row }) => row);
+}
+
+// The sidebar's Agents: each agent the user has a chat with, by its newest chat, which a click opens; whether it works
+// now, and whether it said something the user has not read.
+async function agentsNow(unread: Set<string>) {
+  const newest = new Map<string, chats.Chat>();
+  for (const chat of chats.agentChats()) if (chat.agent && !newest.has(chat.agent)) newest.set(chat.agent, chat); // the one that moved last first
+  return Promise.all([...newest.values()].map(async (c) => ({
+    name: c.agent!, session: c.session, working: (await agents.liveRow(c.session)).status === "busy", unread: unread.has(c.id),
+  })));
 }
 
 // --- what an issue shows -----------------------------------------------------------------------------------------------
@@ -299,8 +333,9 @@ export async function framePage() {
   const line = await land.line(land.DESK_REPO);
   const everyProject = await projects.loadAll();
   const active = [...everyProject.values()].filter((p) => p.state === "active").sort(byCreated);
+  const theirs = chatNotices();
   return {
-    inbox: needs.length + review.length,
+    inbox: needs.length + review.length + theirs.length,
     triage: inState("triage").map((i) => ({ ...issueJson(i), now: talkOf(i) })),
     running: inState("running").map(issueJson),
     landing: inState("landing").map(issueJson),
@@ -308,6 +343,7 @@ export async function framePage() {
     line: line.filter((w) => all.has(w.slug)).map((w) => ({ slug: w.slug, branch: w.branch ?? null, for: w.for ?? null, issue: issueJson(all.get(w.slug)!) })),
     projects: active.map((p) => ({ slug: p.slug, title: p.title })),
     others: await sessions.others(),
+    agents: await agentsNow(new Set(theirs.map((n) => n.chat.id))),
     rows: await inboxRows(),
     live: Object.fromEntries([...all.values()].filter((i) => i.session && !CLOSED.has(i.state)).map((i) => [i.slug, talkOf(i)])),
   };
@@ -376,14 +412,22 @@ export async function projectsPage() {
     open: projects.issuesOf(all, p.slug).filter((i) => !CLOSED.has(i.state)).length }));
 }
 
-// The Inbox's rows, newest first, and the one picked (?i=<slug>) as its issue page shows it.
+// The Inbox's rows, newest first, and the one picked (?i=<slug>) as its issue page shows it, or an agent's chat (?i=<chat
+// id>) as the chat, which stays open once reading it has taken its row out of the Inbox.
 export async function inboxPage(picked: string) {
   const all = await store.loadAll();
-  const items = (await notifications(all)).map((n) => ({
+  const rows = (await notifications(all)).map((n) => ({
     ...issueJson(n.p), why: n.why, says: n.says, kind: n.kind, seen: `${n.p.slug}:${n.why}:${Math.floor(n.at.getTime() / 1000)}`,
-    ago: ago(n.at), at: dayAndTime(n.at),
+    ago: ago(n.at), at: dayAndTime(n.at), when: n.at,
   }));
-  return { items, open: picked && all.has(picked) ? await issuePageJson(all, picked) : null };
+  const theirs = chatNotices().map((n) => ({
+    slug: n.chat.id, title: n.title, why: n.why, says: n.says, kind: "needs", seen: `${n.chat.id}:${n.why}:${Math.floor(n.at.getTime() / 1000)}`,
+    ago: ago(n.at), at: dayAndTime(n.at), when: n.at, chat: { session: n.chat.session, agent: n.chat.agent! },
+  }));
+  const items = [...rows, ...theirs].sort((a, b) => b.when.getTime() - a.when.getTime()).map(({ when: _, ...item }) => item);
+  const chat = picked && chats.exists(picked) ? chats.load(picked) : null;
+  return { items, open: picked && all.has(picked) ? await issuePageJson(all, picked) : null,
+    chat: chat?.agent ? { slug: chat.id, session: chat.session, agent: chat.agent, title: chatTitle(chat) } : null };
 }
 
 // Search's hits, best match first, their matched words marked.

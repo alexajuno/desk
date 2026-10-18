@@ -9,7 +9,8 @@
 //     {"t": "thinking", "key": …, "msg": …, "text": "…"}
 //     {"t": "tool", "key": …, "msg": …, "id": "toolu_…", "name": "Read", "summary": "src/app.ts", "input": "…"}
 //     {"t": "result", "key": "<uuid>:r0", "id": "toolu_…", "text": "…", "error": false}   a tool's result, drawn in its step
-//     {"t": "note", "key": …, "text": "Stopped"}                                 the user stopped the turn, or it compacted
+//     {"t": "note", "key": …, "text": "Stopped"}                                 the user stopped the turn, or it compacted,
+//                                                                                or a script sent the agent a message for the user
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { HOME } from "./config.ts";
@@ -100,6 +101,10 @@ function summary(name: string, input: Record<string, unknown>): string {
   return cut(pick("description", "prompt", "query", "name", "url") ?? "", 100);
 }
 
+// A script's message for the user, which desk gives an agent to pass on (chats.ts, push). The agent's reply is what the
+// user reads; the panel says only who sent it.
+export const PUSH = /^<desk-push from="([^"]*)">/;
+
 const resultText = (content: unknown): string =>
   typeof content === "string" ? content
     : Array.isArray(content) ? content.map((b) => (b.type === "text" ? b.text : b.type === "image" ? "[image]" : "")).join("\n") : "";
@@ -124,10 +129,14 @@ export function itemsOf(e: Entry): Item[] {
     return [{ t: "you", key: uuid, text: e.attachment.prompt, queued: true }];
   if (e.type === "system" && e.subtype === "compact_boundary") return [{ t: "note", key: uuid, text: "Compacted the conversation" }];
   if (e.type !== "user" && e.type !== "assistant") return [];
-  if (e.isMeta || e.isCompactSummary) return [];
+  // What Claude Code adds itself, such as a skill's text once the Skill tool loads it: isMeta in the transcript, and
+  // isSynthetic over the host's stream.
+  if (e.isMeta || e.isSynthetic || e.isCompactSummary) return [];
   const content = e.message?.content;
   if (e.type === "user") {
     if (typeof content === "string") {
+      const push = PUSH.exec(content);
+      if (push) return [{ t: "note", key: uuid, text: `Sent by ${push[1]}` }];
       const text = typed(content);
       if (text === "[Request interrupted by user]") return [{ t: "note", key: uuid, text: "Stopped" }];
       return text ? [{ t: "you", key: uuid, text }] : [];

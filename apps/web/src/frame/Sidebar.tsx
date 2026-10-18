@@ -1,5 +1,6 @@
-// The sidebar on every page (templates/base.html's aside.side): Inbox, Triage, Issues and the projects, then the lists
-// to watch: what is in progress and landing, the sessions running with no issue, and what desk's checkout runs.
+// The sidebar on every page (templates/base.html's aside.side): Inbox, Triage, Issues and the projects, the user's agents,
+// then the lists to watch: what is in progress and landing, the sessions running with no issue, and what desk's
+// checkout runs.
 // Waiting issues stay in Issues, since waiting can last forever.
 import { observer } from "mobx-react-lite";
 import { useLocation } from "react-router";
@@ -57,6 +58,20 @@ export const Sidebar = observer(function Sidebar() {
           <span className="nav-title">{pr.title}</span>
         </Go>
       ))}
+      {/* The user's own agents, such as psychiatrist and coach, each by its newest chat, once there is one: a chat that
+          starts with @name, or a script's message through the agent. */}
+      {d && d.agents.length > 0 && (
+        <>
+          <div className="nav-label">Agents</div>
+          {d.agents.map((a) => (
+            <Go key={a.name} className={`nav-item${at(`/sessions/${a.session}`)}`} to={`/sessions/${a.session}`}
+              title={a.working ? "Working" : a.unread ? "Said something you have not read" : "Its latest chat"}>
+              {a.working ? <StateIcon state="running" /> : a.unread ? <StateIcon state="review" /> : <Ring />}
+              <span className="nav-title">{a.name}</span>
+            </Go>
+          ))}
+        </>
+      )}
       {d && d.running.length > 0 && (
         <>
           <div className="nav-label">In progress</div>

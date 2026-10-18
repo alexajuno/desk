@@ -128,8 +128,8 @@ function onKeyDown(e: KeyboardEvent) {
   }
   else if (key === "j" || e.key === "ArrowDown" || key === "k" || e.key === "ArrowUp") {
     moveFocus(key === "j" || e.key === "ArrowDown" ? 1 : -1);
-    const now = ui.focused && document.querySelector<HTMLElement>(`.inbox-row[data-slug="${CSS.escape(ui.focused)}"]`);
-    if (now) go(now.getAttribute("href")!); // Linear's Inbox opens as you move
+    const now = focusedRow();
+    if (now?.classList.contains("inbox-row")) go(now.getAttribute("href")!); // Linear's Inbox opens as you move
     e.preventDefault();
   }
   else if (e.key === "Enter" && focused) {
