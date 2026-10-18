@@ -31,25 +31,50 @@ export interface Item {
   queued?: boolean;
 }
 
-const found = new Map<string, string>(); // session: its transcript
+// Every transcript by its session, listed again once it is a second old, or at once for a session it lacks. Listing
+// the ~120 folders costs a few ms; looking for each session in every folder, as each chat did in every frame, cost
+// desk a third of a second per list of chats (18 Oct).
+let index = new Map<string, string[]>(), indexed = 0;
+
+function reindex() {
+  const next = new Map<string, string[]>();
+  for (const dir of readdirSync(PROJECTS)) {
+    let names: string[];
+    try {
+      names = readdirSync(join(PROJECTS, dir));
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      if (!name.endsWith(".jsonl")) continue;
+      const session = name.slice(0, -".jsonl".length), path = join(PROJECTS, dir, name);
+      const paths = next.get(session);
+      if (paths) paths.push(path);
+      else next.set(session, [path]);
+    }
+  }
+  index = next;
+  indexed = Date.now();
+}
+
+const listed = (session: string) => (index.get(session) ?? []).filter((p) => existsSync(p));
 
 // The session's transcript, the newest when it ran in several folders (a chat desk moved resumes in the next).
 export function pathOf(session: string): string | null {
-  const known = found.get(session);
-  if (known && existsSync(known)) {
-    // A move writes on in the new folder's file, so look again when this one stopped growing a while ago.
-    if (Date.now() - statSync(known).mtimeMs < 60_000) return known;
-  }
-  let paths: string[] = [];
+  let paths: string[];
   try {
-    paths = readdirSync(PROJECTS).map((d) => join(PROJECTS, d, `${session}.jsonl`)).filter((p) => existsSync(p));
+    const stale = Date.now() - indexed > 1000;
+    if (stale) reindex();
+    paths = listed(session);
+    if (!paths.length && !stale) { // one Claude Code began a moment ago
+      reindex();
+      paths = listed(session);
+    }
   } catch {
     return null;
   }
   if (!paths.length) return null;
-  const newest = paths.reduce((a, b) => (statSync(a).mtimeMs >= statSync(b).mtimeMs ? a : b));
-  found.set(session, newest);
-  return newest;
+  return paths.length === 1 ? paths[0] : paths.reduce((a, b) => (statSync(a).mtimeMs >= statSync(b).mtimeMs ? a : b));
 }
 
 // The folder the session last ran in, as its transcript says.

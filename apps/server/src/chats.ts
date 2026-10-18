@@ -266,9 +266,13 @@ export async function sessionRunsIn(session: string | null | undefined): Promise
   return chat ? runsIn(chat) : null;
 }
 
-// The agent chats, the one that moved last first.
+// The agent chats, the one that moved last first. Each chat's activity is read once, not in every comparison.
 export function agentChats(): Chat[] {
-  return chats().filter((c) => KINDS.has(c.kind ?? "")).sort((a, b) => (activity(a) < activity(b) ? 1 : activity(a) > activity(b) ? -1 : 0));
+  return chats()
+    .filter((c) => KINDS.has(c.kind ?? ""))
+    .map((c) => [c, activity(c)] as const)
+    .sort(([, a], [, b]) => (a < b ? 1 : a > b ? -1 : 0))
+    .map(([c]) => c);
 }
 
 // The chat filing an issue of this title now, for a call that does not send the chat's id: one with no issue yet whose
