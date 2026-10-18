@@ -599,7 +599,10 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
         }}
         onKeyDown={(e) => {
           if (e.nativeEvent.isComposing) return; // a Vietnamese or other IME word still being typed
-          if (picks.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+          if (e.key === "Tab" && e.shiftKey && fresh(s)) {
+            e.preventDefault(); // Claude Code's key for its modes, here the chip's two
+            flipStartAs(s);
+          } else if (picks.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
             e.preventDefault();
             setAt((at + (e.key === "ArrowDown" ? 1 : picks.length - 1)) % picks.length);
           } else if (picks.length && (e.key === "Enter" || e.key === "Tab")) {
@@ -627,7 +630,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
         {fresh(s) && <StartAs s={s} />}
-        <span className="composer-hint">{!typing ? "I to type" : queued ? "↑ edits the queued · Ctrl C stops" : s.working ? "Enter queues · Ctrl C stops" : "Enter sends · Shift Enter for a new line"}</span>
+        <span className="composer-hint">{!typing ? "I to type" : fresh(s) ? "Shift Tab switches Issue or Chat · Enter sends" : queued ? "↑ edits the queued · Ctrl C stops" : s.working ? "Enter queues · Ctrl C stops" : "Enter sends · Shift Enter for a new line"}</span>
         <Runs s={s} />
         {s.working && (
           <button className="stop" type="button" title="Stop  Ctrl C" onClick={() => void s.interrupt()}>
@@ -652,12 +655,15 @@ const START_AS = {
   chat: { label: "Chat", icon: GLYPH.chat, sub: "just talk, lands in Chats" },
 } as const;
 
+// Shift Tab in the composer: the chip's other choice.
+const flipStartAs = (s: LiveSession) => runInAction(() => { s.startAs = s.startAs === "issue" ? "chat" : "issue"; });
+
 const StartAs = observer(function StartAs({ s }: { s: LiveSession }) {
   const now = START_AS[s.startAs];
   const items = () => (["issue", "chat"] as const).map((k) => ({ ...START_AS[k], group: 1, heading: "This chat becomes", current: k === s.startAs,
     run: () => runInAction(() => { s.startAs = k; }) }));
   return (
-    <button className="runs start-as" type="button" title="What this chat becomes"
+    <button className="runs start-as" type="button" title="What this chat becomes  Shift Tab"
       onClick={(e) => { if (!toggled(e.currentTarget)) openMenu({ anchor: e.currentTarget, items }); }}>
       {now.icon}{now.label}
       <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
