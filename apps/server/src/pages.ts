@@ -359,8 +359,8 @@ export async function issuePage(slug: string) {
 }
 
 // A list's groups, chips and view. A group's + opens the new issue panel with what the group says, where the panel can
-// take it: its priority, its project, or Backlog, and with what the page adds to every group (add), such as a
-// project's page its project. No add, no +.
+// take it: its priority, its project, or Backlog, and with what the page adds (add), such as a project's page its
+// project. No add, no +.
 // On a board, a card's sub-issues read as done of all, as Linear's do.
 function listingJson(listing: views.Listing, path: string, add: Record<string, unknown> | null, all?: Map<string, Issue>) {
   const v = listing.view, data = views.data(listing);
@@ -380,7 +380,7 @@ function listingJson(listing: views.Listing, path: string, add: Record<string, u
         priority: { priority: g.value }, status: g.value === "backlog" ? { state: g.value } : null,
         project: g.value !== "none" ? { project: g.value, projectTitle: g.label } : null,
       } as Record<string, object | null>)[v.group] ?? null;
-      preset = own || Object.keys(add).length ? { ...own, ...add } : null;
+      preset = own && { ...own, ...add };
     }
     return { value: g.value, label: g.label, icon: g.icon, count: g.count, preset, items: g.items.map((p) => node(p, g)) };
   });
