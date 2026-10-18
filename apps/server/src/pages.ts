@@ -159,9 +159,17 @@ export async function notifications(all: Map<string, Issue>): Promise<Notice[]> 
   return rows.sort((a, b) => b.at.getTime() - a.at.getTime());
 }
 
-// What the user's agents said that the user has not read (chats.ts): an agent's last reply ended after the user last
-// looked at its chat and after the user last wrote in it, and no panel shows it now. A script's chat starts that way.
+// What the user's agents said that the user has not read (chats.ts), as unread() says.
 export interface ChatNotice { chat: chats.Chat; title: string; why: string; says: string; at: Date }
+
+// When the chat's last reply came, if the user has not read it: it ended after the user last looked at the chat and
+// after the user last wrote in it, and no panel shows it now; else 0. A script's chat starts that way.
+function unread(chat: chats.Chat): number {
+  const replied = sessions.replied(chat.session);
+  if (!replied || replied <= (chat.seen ?? 0) || live_.watching(chat.session)) return 0;
+  const wrote = sessions.prompted(chat.session); // none in a script's chat until the user answers
+  return wrote && wrote > replied ? 0 : replied; // at work on the user's message
+}
 
 // An agent's chat's title: Claude Code's own, or the user's first words, or who sent it the message it began with.
 const chatTitle = (chat: chats.Chat) => sessions.chatTitleOf(chat.session) || (chat.from ? `From ${chat.from}` : chat.agent!);
@@ -169,11 +177,9 @@ const chatTitle = (chat: chats.Chat) => sessions.chatTitleOf(chat.session) || (c
 export function chatNotices(): ChatNotice[] {
   const found: ChatNotice[] = [];
   for (const chat of chats.agentChats()) {
-    if (!chat.agent) continue;
-    const replied = sessions.replied(chat.session);
-    if (!replied || replied <= (chat.seen ?? 0) || live_.watching(chat.session)) continue;
-    const wrote = sessions.prompted(chat.session); // none in a script's chat until the user answers
-    if (wrote && wrote > replied) continue; // at work on the user's message
+    const replied = chat.agent && unread(chat);
+    if (!replied) continue;
+    const wrote = sessions.prompted(chat.session);
     found.push({ chat, title: chatTitle(chat), why: wrote ? "agent replied" : "agent wrote",
       says: wrote ? "replied" : "wrote to you", at: new Date(replied * 1000) });
   }
@@ -194,6 +200,18 @@ async function agentsNow(unread: Set<string>) {
   for (const chat of chats.agentChats()) if (chat.agent && !newest.has(chat.agent)) newest.set(chat.agent, chat); // the one that moved last first
   return Promise.all([...newest.values()].map(async (c) => ({
     name: c.agent!, session: c.session, working: (await agents.liveRow(c.session)).status === "busy", unread: unread.has(c.id),
+  })));
+}
+
+// The sidebar's Chats: the bare chats, the newest few, the one that moved last first; whether each works now, and
+// whether it said something the user has not read. A bare chat never reaches the Inbox. Older ones are in the corner's
+// history.
+const CHATS_SHOWN = 8;
+
+async function chatsNow() {
+  const bare = chats.agentChats().filter((c) => c.bare).slice(0, CHATS_SHOWN);
+  return Promise.all(bare.map(async (c) => ({
+    session: c.session, title: sessions.chatTitleOf(c.session) || "New chat", working: (await agents.liveRow(c.session)).status === "busy", unread: unread(c) > 0,
   })));
 }
 
@@ -344,6 +362,7 @@ export async function framePage() {
     projects: active.map((p) => ({ slug: p.slug, title: p.title })),
     others: await sessions.others(),
     agents: await agentsNow(new Set(theirs.map((n) => n.chat.id))),
+    chats: await chatsNow(),
     rows: await inboxRows(),
     live: Object.fromEntries([...all.values()].filter((i) => i.session && !CLOSED.has(i.state)).map((i) => [i.slug, talkOf(i)])),
   };

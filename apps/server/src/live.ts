@@ -41,6 +41,7 @@ interface Meta {
   issue: { slug: string; title: string; state: string } | null;
   chat: boolean;
   agent: string | null; // the agent a chat is with
+  bare: boolean; // a chat with no agent and no desk prompt (chats.ts)
   runs: models.Shown; // the model and effort, for the composer's chip
 }
 
@@ -54,7 +55,7 @@ async function meta(id: string): Promise<Meta> {
   const cwd = row.cwd ?? (chat ? chats.runsIn(chat) : transcript.cwdOf(id)) ?? "";
   const { titleOf } = await import("./sessions.ts");
   return {
-    id, cwd, folder: tilde(cwd), chat: Boolean(chat), agent: chat?.agent ?? null,
+    id, cwd, folder: tilde(cwd), chat: Boolean(chat), agent: chat?.agent ?? null, bare: Boolean(chat?.bare),
     title: issue?.title || (chat && chat.title !== "New chat" ? chat.title : "") || titleOf(id) || "New session",
     issue: issue ? { slug: issue.slug, title: issue.title, state: issue.state } : null,
     runs: models.shown(id, Boolean(chat)),
@@ -189,6 +190,7 @@ export interface Sent {
   text: string;
   images?: { media_type: string; data: string }[];
   uuid?: string; // the panel's, to take it back while it waits
+  as?: "chat"; // a new chat's chip set to Chat
 }
 
 const waiting = new Map<string, Sent[]>(); // messages for sessions still busy in the daemon, sent once it is idle
@@ -203,12 +205,17 @@ function content(m: Sent): hosted.Content {
 // Send the user's message. A session still at work in Claude Code's daemon, from before the panel, takes no message
 // mid-turn: the message waits here until its turn ends, then the host takes the session in with it.
 export async function send(id: string, m: Sent): Promise<{ queued: boolean }> {
-  // @name as the first words of a new chat: the chat becomes that agent's (chats.ts, becomeAgent).
-  const chat = chats.agentChatOf(id);
-  const tag = chat && chats.empty(chat) ? /^@([\w.-]+)(?:\s|$)/.exec(m.text.trim()) : null;
+  // A new chat's first message: @name as its first words makes it that agent's (chats.ts, becomeAgent), and the chip
+  // set to Chat makes it bare (becomeBare).
+  const chat = chats.agentChatOf(id), fresh = chat && chats.empty(chat);
+  const tag = fresh ? /^@([\w.-]+)(?:\s|$)/.exec(m.text.trim()) : null;
   const agent = tag && roster.find(tag[1]);
   if (agent) {
     await chats.becomeAgent(chat!, agent, content(m));
+    return { queued: false };
+  }
+  if (fresh && m.as === "chat") {
+    await chats.becomeBare(chat!, content(m));
     return { queued: false };
   }
   try {

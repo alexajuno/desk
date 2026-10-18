@@ -5,7 +5,8 @@
 // CLAUDE.md, rules, skills, agents and settings.
 //
 // A chat may instead be one of the user's own agents' (roster.ts): it runs as that agent, from the home folder, with no
-// desk prompt, and files no issue.
+// desk prompt, and files no issue. Or it may be bare, a Chat in the composer's chip: Claude Code as `claude` runs from
+// the home folder, with no agent and no desk prompt, and it files no issue either.
 //
 // A chat is a JSON file in DESK_DATA/chats/.
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
@@ -39,6 +40,7 @@ export interface Chat {
   folder?: string;
   cwd?: string;
   agent?: string; // the agent the chat is with, by name; none for desk's own
+  bare?: boolean; // a Chat: no agent and no desk prompt
   from?: string; // the script whose message started it (push)
   seen?: number; // when the user last looked at it, in seconds: the Inbox leaves out what the agent said before
   [key: string]: unknown;
@@ -129,6 +131,7 @@ const runsOn = (chat: Chat) => {
 // How the host starts the chat's session again: where it runs, with its prompt and settings.
 export async function hostOptions(chat: Chat, cwd = runsIn(chat)): Promise<hosted.StartOptions> {
   if (chat.agent) return { id: chat.session, resume: true, cwd, agent: chat.agent, settings: AGENT_SETTINGS, ...OPTIONS, ...runsOn(chat), disallowedTools: [...OPTIONS.disallowedTools] };
+  if (chat.bare) return { id: chat.session, resume: true, cwd, ...OPTIONS, ...runsOn(chat), disallowedTools: [...OPTIONS.disallowedTools] };
   return { id: chat.session, resume: true, cwd, ...OPTIONS, ...runsOn(chat), disallowedTools: [...OPTIONS.disallowedTools], additionalDirectories: adds(cwd),
     append: await agentPrompt(chat, BASE) };
 }
@@ -179,18 +182,25 @@ export async function agentChat(agent: Agent, message?: hosted.Content, from?: s
   return chat;
 }
 
-// @name as the first words of a new chat: the chat, which nobody has written in yet, becomes the agent's, and its
-// session starts again as the agent, with the message as typed, so the panel finds it in the transcript. When the
-// agent's session will not start, the chat stays desk's.
-export async function becomeAgent(chat: Chat, agent: Agent, message: hosted.Content) {
+// @name as the first words of a new chat: the chat, which nobody has written in yet, becomes the agent's.
+export const becomeAgent = (chat: Chat, agent: Agent, message: hosted.Content) =>
+  restartAs(chat, { agent: agent.name, title: agent.name, cwd: HOME }, agentRuns(agent), `${agent.name} ${stamp()}`, message);
+
+// The composer's chip set to Chat when the first message is sent: the chat becomes bare, on the model and effort
+// picked for it so far.
+export const becomeBare = (chat: Chat, message: hosted.Content) => restartAs(chat, { bare: true, cwd: HOME }, runsOn(chat), `chat ${stamp()}`, message);
+
+// A new chat's session starts again as what it became, with the message as typed, so the panel finds it in the
+// transcript. When that session will not start, the chat stays desk's.
+async function restartAs(chat: Chat, became: Partial<Chat>, runs: models.Pick, title: string, message: hosted.Content) {
   if (await hosted.holds(chat.session)) {
     await hosted.close(chat.session).catch(() => {});
     await hosted.released(chat.session);
   }
-  const was = { ...chat }, runs = agentRuns(agent);
-  Object.assign(chat, { agent: agent.name, title: agent.name, cwd: HOME });
+  const was = { ...chat };
+  Object.assign(chat, became);
   try {
-    await hosted.start({ ...(await hostOptions(chat)), ...runs, title: `${agent.name} ${stamp()}`, message });
+    await hosted.start({ ...(await hostOptions(chat)), ...runs, title, message });
   } catch (error) {
     Object.assign(chat, was);
     throw error;
@@ -208,10 +218,10 @@ export function push(agent: Agent, text: string, from: string): Promise<Chat> {
   return agentChat(agent, message, who);
 }
 
-// The user looked at the agent chat now: what the agent said so far is read.
+// The user looked at the agent's or the bare chat now: what it said so far is read.
 export function seenNow(session: string) {
   const chat = agentChatOf(session);
-  if (!chat?.agent) return;
+  if (!chat?.agent && !chat?.bare) return;
   chat.seen = Date.now() / 1000;
   save(chat);
 }
@@ -227,7 +237,7 @@ export function* said(chat: Chat): Generator<[string, string]> {
 }
 
 // A chat nobody has written in yet: no issue, and no transcript, which its session writes only from its first message.
-export const empty = (chat: Chat) => !chat.issue && !chat.agent && !transcripts.pathOf(chat.session);
+export const empty = (chat: Chat) => !chat.issue && !chat.agent && !chat.bare && !transcripts.pathOf(chat.session);
 
 // When a chat last moved: its transcript's last write, or its start.
 export function activity(chat: Chat): string {
