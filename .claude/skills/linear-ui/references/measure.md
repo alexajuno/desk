@@ -12,6 +12,7 @@ Use the agents' Chrome, through the `chrome` skill (load it before the first `mc
 | My issues | `/alexajuno/my-issues/assigned` |
 | Views | `/alexajuno/team/OE/views/issues` |
 | The Agent | `/alexajuno/agent` |
+| A project's page | `/alexajuno/project/muse-99b877fd75f2/overview` and `/issues`. Open it with the tab in the address: `/project/muse-99b877fd75f2` alone hung the agents' Chrome for 30 minutes on 18 Oct |
 
 For any other page, list the sidebar's links in `browser_evaluate`: `[...document.querySelectorAll('a')].map(a => a.textContent.trim() + ' -> ' + a.getAttribute('href'))`.
 

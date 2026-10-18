@@ -38,6 +38,7 @@ desk.css holds the numbers, and its comments say where and when each was measure
 **Where things go.** Copy Linear's placement as well as its look: a control that looks right in the wrong place is still wrong.
 
 - A list page has two header rows: the 44px top bar with the page's name, then a 43px view row, its tabs from the left (8px in, 4px apart) and Filter and Display at its right end (28px circles, 6px apart).
+- A thing with a page of its own, such as a project, splits it into tabs in that view row: Overview, then Issues (a list page, with Filter and Display at the row's end). Its Overview is a document: a centred column of at most 805px, 64px under the view row, its name edited where it is, and its properties as a row of chips that are filled only under the mouse, after a 13px heading in `--text-3`.
 - Help, the shortcuts and the theme live in the ? at the sidebar's foot. No control stands alone in a corner.
 - Linear lays a pane out by the pane's width, not the window's: the Inbox's open notification drops its Properties column below about 820px.
 
@@ -54,6 +55,7 @@ Each one cost a redo. Check your work against them.
 - **Measured at 1x** (18 Oct). The first ring values came from a 1x page (1px at 0.091), while the user sees Linear at 2x (0.5px at 0.137). Fixed the same day.
 - **Measured in one theme, or one palette** (18 Oct). In light, the sidebar's New issue button is filled from the sidebar's palette, not the content's. Measure each control where it sits, in both themes.
 - **Invented a component instead of borrowing one** (14 Oct). desk's dropdowns, built before anyone looked at Linear's, were "ugly"; they became Linear's S and P menus (`.menu`). Borrow the nearest Linear component before building one.
+- **An edit behind a toggle** (18 Oct). A project's name and description could only change in a form behind "Edit title and description", and the user found no way to rename a project. Linear edits a name or a description where it is shown; desk's `Title` and `Description` editors do that for any page.
 - **Scattered controls** (15 Oct). A lone theme icon and a lone Ctrl / key cap stood in corners of the screen; they moved into the ? menu at the sidebar's foot, where Linear keeps them.
 - **Squeezed or overflowing** (15 Oct). A long title squeezed the sidebar's toggle to 20px (fixed with `flex: none`), and a 1436px screenshot in a plan pushed the page sideways (fixed with `max-width: 100%`). Try long text and big images.
 - **Responsive by guess** (15 Oct). The Inbox's open notification kept its properties column on a narrow window. Resize Linear and find where it changes: it was between an 817 and an 827px pane.
