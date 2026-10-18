@@ -53,10 +53,11 @@ async function meta(id: string): Promise<Meta> {
   const issue = [...all.values()].find((i) => i.session === id) ?? (chat?.issue ? all.get(chat.issue) : undefined) ?? null;
   const row = await agents.liveRow(id);
   const cwd = row.cwd ?? (chat ? chats.runsIn(chat) : transcript.cwdOf(id)) ?? "";
-  const { titleOf } = await import("./sessions.ts");
+  const { chatTitleOf, titleOf } = await import("./sessions.ts");
   return {
     id, cwd, folder: tilde(cwd), chat: Boolean(chat), agent: chat?.agent ?? null, bare: Boolean(chat?.bare),
-    title: issue?.title || (chat && chat.title !== "New chat" ? chat.title : "") || titleOf(id) || "New session",
+    // A bare chat by the title the sidebar's Chats give it, not by the name desk started its session with.
+    title: issue?.title || (chat?.bare ? chatTitleOf(id) : "") || (chat && chat.title !== "New chat" ? chat.title : "") || titleOf(id) || "New session",
     issue: issue ? { slug: issue.slug, title: issue.title, state: issue.state } : null,
     runs: models.shown(id, Boolean(chat)),
   };
