@@ -8,7 +8,7 @@ import { fold } from "../lib/desk";
 import { ui } from "../store/ui";
 
 const GROUPS: [string, [string, string][]][] = [
-  ["General", [["Open search", "/"], ["Create an issue", "C"], ["View keyboard shortcuts", "Ctrl /"], ["Close, or go back from an issue", "Esc"], ["Undo a delete", "Ctrl Z"]]],
+  ["General", [["Open search", "/"], ["Create an issue", "C"], ["Create a project", "N then P"], ["View keyboard shortcuts", "Ctrl /"], ["Close, or go back from an issue", "Esc"], ["Undo a delete", "Ctrl Z"]]],
   ["Navigation", [["Toggle left sidebar", "["], ["Go to inbox", "G then I"], ["Go to triage", "G then T"], ["Go to all issues", "G then E"], ["Go to active issues", "G then A"], ["Go to backlog", "G then B"], ["Go to projects", "G then P"], ["Open settings", "Ctrl ,"]]],
   ["List", [["Move down", "J or ↓"], ["Move up", "K or ↑"], ["Open the issue", "Enter"], ["Collapse or expand the group", "T"], ["Collapse or expand all of them", "Alt Click"], ["Filter", "F"], ["Display options", "Shift V"], ["Switch between list and board", "Ctrl B"]]],
   ["Selection", [["Select the issue", "X or Shift Click"], ["Select up or down", "Shift ↑ or Shift ↓"], ["Select all", "Ctrl A"], ["Change their status", "S"], ["Change their priority", "P"], ["Delete them", "Ctrl Delete"], ["Actions on them", "Right-click"], ["Clear the selection", "Esc"]]],

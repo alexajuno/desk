@@ -61,7 +61,14 @@
   --shadow-pop: lch(0 0 0 / 0.4) 0 7px 32px;
   --avatar-session: lch(58% 45 290);       /* the Inbox's avatar for an issue's session */
   --shadow-keys: lch(0 0 0 / 0.125) 0 3px 8px, lch(0 0 0 / 0.125) 0 2px 5px, lch(0 0 0 / 0.125) 0 1px 1px; /* the shortcuts panel */
-  --overlay: lch(0 0 0 / 0.5);
+  --overlay: lch(0 0 0 / 0.4);             /* behind a modal, measured on Linear's Create project on 2026-10-18 */
+  /* Linear's modals: the new project panel (its block below) */
+  --bg-modal: lch(9.232% 0.85 272);
+  --border-modal: lch(22.193% 1.93 272);
+  --rule-modal: lch(30.833% 1.93 272);     /* the rules over its description and its foot */
+  --text-hint: lch(39.452% 1.425 272);     /* its placeholders */
+  --shadow-modal: lch(0 0 0 / 0.1) 0 4px 40px, lch(0 0 0 / 0.125) 0 3px 20px, lch(0 0 0 / 0.125) 0 3px 12px,
+                  lch(0 0 0 / 0.125) 0 2px 8px, lch(0 0 0 / 0.125) 0 1px 1px;
   /* Settings' cards and switches (the Settings block below), measured on Linear's Settings on 2026-10-17 */
   --bg-card: lch(9.232% 0.85 272);
   --shadow-card: lch(100% 0 0 / 0.083) 0 0 0 0.5px, lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
@@ -143,6 +150,11 @@
   --shadow-keys: var(--shadow-pop);
   --avatar-session: lch(58% 45 290);
   --overlay: lch(0% 0 0 / 0.25);          /* bgModalOverlay */
+  --bg-modal: lch(100% 0 282);
+  --border-modal: lch(91.9% 0 282);
+  --rule-modal: lch(86.5% 0 282);
+  --text-hint: lch(66% 1 282);
+  --shadow-modal: var(--shadow-pop);
   --bg-card: lch(100% 0 282);             /* Settings' cards and switches: not measured in light, set to match */
   --shadow-card: lch(0 0 0 / 0.09) 0 0 0 0.5px, lch(0 0 0 / 0.04) 0 1px 2px;
   --hairline: lch(0% 0 0 / 0.09);
@@ -641,7 +653,8 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 /* the new issue panel, Linear's create modal as measured on linear.app on 2026-10-14 at 1436x862: 750px wide,
    centred, 112px from the top, 21px corners and a 13px edge; an 18px/600 title over a 15px description,
    24px pill chips with 14px icons and 12px/500 text, then a 22x14 Create more switch and a 28px pill
-   Create issue button. Linear's backdrop is lch(0 0 0 / 0.25) in its light theme; dark needs more. */
+   Create issue button. Linear's backdrop is lch(0 0 0 / 0.25) in its light theme and 0.4 in dark (measured on
+   2026-10-18, on its Create project modal). */
 .creator { position: fixed; inset: 0; z-index: 25; background: var(--overlay); }
 .creator ~ .menu { z-index: 26; }
 .create-panel { position: absolute; top: 13vh; left: 50%; transform: translateX(-50%); width: min(750px, calc(100vw - 32px));
@@ -676,13 +689,32 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .switch input:checked::after { transform: translateX(8px); background: var(--on-accent); }
 .switch input:focus-visible, .field-chip:focus-visible, .create-panel button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 
-/* projects: the list, a project's page and the project picker on an issue */
-.project-new { display: flex; gap: 8px; padding: 8px 12px 16px; }
-.project-new input, .project-pick select {
-  height: 32px; padding: 0 8px; border: 1px solid var(--border-3); border-radius: 6px; background: var(--bg-raised);
+/* The new project panel, Linear's Create project modal, measured on linear.app on 2026-10-18 at 2x in a 1380x815 window,
+   dark and light: 920px wide, centred, 6vh from the window's top and bottom, so it grows with the window; 21px corners,
+   a 0.5px edge, 8px inside it top and bottom. A 52px head with the 28px close 20px from the right, then a column 26px in:
+   a 28px icon with 4px corners, the name 12px under it at 24px on 32px and 600, a 0.5px rule, the description 24px under
+   it at 15px on 24px, then an 8px gap and a 0.5px rule over the foot, whose 28px Create project button sits 20px from
+   the right, 12px from the rule and the bottom. Placeholders are fainter than --text-4. Linear's summary, property
+   chips and milestones go between the name and the rule; desk's projects have none of them, so the rule's 24px gap
+   under the name is desk's own. */
+.project-panel { top: 6vh; bottom: 6vh; width: min(920px, calc(100vw - 24px)); padding: 8px 0;
+                 background: var(--bg-modal); border-color: var(--border-modal); box-shadow: var(--shadow-modal); }
+.project-panel header { flex: none; height: 52px; padding: 0 20px 0 26px; font-size: 13px; }
+.project-panel .project-icon { flex: none; width: 28px; height: 28px; margin: 0 26px; border-radius: 4px; }
+.project-panel .project-icon svg { width: 16px; height: 16px; }
+.project-panel textarea { width: calc(100% - 52px); margin: 0 26px; }
+.project-panel textarea::placeholder { color: var(--text-hint); }
+.project-panel .create-title { flex: none; margin: 12px 26px 24px; font: 600 24px/32px var(--font); }
+.project-panel .create-body { flex: 1; min-height: 0; max-height: none; padding: 24px 0; border-top: 0.5px solid var(--rule-modal); font: 450 15px/24px var(--font); }
+.project-panel footer { margin-top: 8px; padding: 12px 20px 4px; border-top: 0.5px solid var(--rule-modal); }
+
+/* projects: the list, a project's page and the project picker on an issue. The list's New project button is Linear's,
+   measured on 2026-10-18: a quiet 28px pill padded 0 10px 0 8px, with a 14px plus. */
+.bar .new-project { padding: 0 10px 0 8px; }
+.bar .new-project svg { width: 14px; height: 14px; }
+.project-pick select {
+  width: 100%; height: 32px; padding: 0 8px; border: 1px solid var(--border-3); border-radius: 6px; background: var(--bg-raised);
   color: var(--text-1); font: 450 13px var(--font); }
-.project-new input { flex: 1; }
-.project-pick select { width: 100%; }
 .project-row.archived { color: var(--text-3); }
 /* A project's Overview, measured on linear.app on 18 Oct (the muse project), dark and light, at 2x: a column of at most
    805px, centred, 64px under the view row. A 36px icon with 6px corners, the project's colour at 0.175 (0.125 in light)

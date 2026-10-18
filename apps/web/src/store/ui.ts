@@ -1,6 +1,6 @@
 // What the app's screen holds besides the data: the row in focus (hover, or J and K, as in Linear), the rows selected
-// (X, Shift-click, Shift ↑ ↓, Ctrl A, as in Linear), an open editor, the shortcuts panel, the new issue panel, and
-// changes shown before the server has them.
+// (X, Shift-click, Shift ↑ ↓, Ctrl A, as in Linear), an open editor, the shortcuts panel, the new issue and new project
+// panels, and changes shown before the server has them.
 import { action, makeObservable, observable, observableRef } from "mobx";
 import type { Field } from "../lib/desk";
 
@@ -22,12 +22,13 @@ class UI {
   editing = false;
   keysOpen = false;
   creator: CreatorPreset | null = null;
+  projectCreator = false;
   overrides = observable.map<string, Partial<Record<Field, string>>>();
 
   constructor() {
     makeObservable(this, {
-      focused: observable, byMouse: observable, editing: observable, keysOpen: observable, creator: observableRef,
-      focus: action, select: action, toggleSelect: action, unselect: action, clearSelection: action, setEditing: action, setKeys: action, openCreator: action, closeCreator: action, paint: action, unpaint: action,
+      focused: observable, byMouse: observable, editing: observable, keysOpen: observable, creator: observableRef, projectCreator: observable,
+      focus: action, select: action, toggleSelect: action, unselect: action, clearSelection: action, setEditing: action, setKeys: action, openCreator: action, closeCreator: action, setProjectCreator: action, paint: action, unpaint: action,
     });
   }
 
@@ -70,6 +71,10 @@ class UI {
 
   closeCreator() {
     this.creator = null;
+  }
+
+  setProjectCreator(open: boolean) {
+    this.projectCreator = open;
   }
 
   // A change shows at once, then is saved, then the page draws what the server holds (desk.js paint).

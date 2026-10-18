@@ -23,6 +23,7 @@ import { arrange, Dock, focusComposer, newSession, openSession, SideEdge, toggle
 import { triageKey } from "../triage/TriagePage";
 import { Corner } from "./Corner";
 import { CreatorHost } from "./Creator";
+import { ProjectCreatorHost } from "./ProjectCreator";
 import { KeysPanel } from "./KeysPanel";
 import { Sidebar } from "./Sidebar";
 import { closeSide, sideOpen, toggleSide } from "./side";
@@ -78,11 +79,11 @@ function goBack() {
   else go(page()?.parent ? `/issue/${page()!.parent}` : "/issues");
 }
 
-let gPressed = 0;
+let gPressed = 0, nPressed = 0;
 
 function onKeyDown(e: KeyboardEvent) {
   if (e.key === "Escape" && viewerOpen()) { closeViewer(); return; }
-  if (menus.current || viewerOpen() || ui.editing || ui.creator) return;
+  if (menus.current || viewerOpen() || ui.editing || ui.creator || ui.projectCreator) return;
   // Ctrl+/ works from a text box too, and Esc closes the shortcuts from their own search box.
   if ((e.ctrlKey || e.metaKey) && e.key === "/") { ui.setKeys(!ui.keysOpen); e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyO") { newSession(); e.preventDefault(); return; }
@@ -117,6 +118,13 @@ function onKeyDown(e: KeyboardEvent) {
     return;
   }
   if (key === "g") { gPressed = Date.now(); return; }
+  // Linear's N then P: a new project.
+  if (nPressed && Date.now() - nPressed < 1500) {
+    nPressed = 0;
+    if (key === "p") { ui.setProjectCreator(true); e.preventDefault(); }
+    return;
+  }
+  if (key === "n") { nPressed = Date.now(); return; }
 
   const focused = focusedRow();
   // Linear's Shift ↑ ↓: the selection grows from the row in focus, a row at a time.
@@ -252,6 +260,7 @@ export const Frame = observer(function Frame() {
       <KeysPanel />
       <SelectionBar />
       <CreatorHost />
+      <ProjectCreatorHost />
       <MenuHost />
       <ToastHost />
     </>

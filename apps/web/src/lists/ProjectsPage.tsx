@@ -1,12 +1,12 @@
-// The projects (templates/projects.html): a box to start one, then each with how many of its issues are open.
+// The projects (templates/projects.html), each with how many of its issues are open, and Linear's New project button at
+// the top bar's end, which opens the new project panel.
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
-import { post, reason } from "../api/http";
 import { usePage } from "../api/page";
-import { go, Go } from "../app/nav";
+import { Go } from "../app/nav";
 import { Bar } from "../frame/Bar";
 import { ui } from "../store/ui";
-import { toast } from "../ui/toast";
+import { GLYPH } from "../ui/icons";
 
 interface ProjectRow {
   slug: string;
@@ -19,22 +19,14 @@ interface ProjectRow {
 export const ProjectsPage = observer(function ProjectsPage() {
   const { data } = usePage<ProjectRow[]>("/api/page/projects");
   useEffect(() => { document.title = "Projects · desk"; }, []);
-  async function create(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const res = await post("/projects", { title: String(new FormData(e.currentTarget).get("title") ?? "") });
-    if (!res.ok) return toast(await reason(res));
-    go(new URL(res.url).pathname); // the new project's page, where its route redirected
-  }
   return (
     <>
-      <Bar crumb={<span>Projects</span>} />
+      <Bar crumb={<span>Projects</span>} tools={
+        <button type="button" className="ghost new-project" title="Create new project  N then P" onClick={() => ui.setProjectCreator(true)}>{GLYPH.plus}New project</button>
+      } />
       <div className="scroll">
         {data && (
           <div className="page">
-            <form className="project-new" onSubmit={create}>
-              <input type="text" name="title" placeholder="New project…" autoComplete="off" aria-label="New project title" />
-              <button className="primary">Create project</button>
-            </form>
             {data.map((pr) => (
               <Go key={pr.slug} className={`item project-row${pr.state === "archived" ? " archived" : ""}${ui.focused === `project/${pr.slug}` ? " focus" : ""}`}
                 to={`/project/${pr.slug}`} data-key={`project/${pr.slug}`} onMouseMove={() => { if (ui.focused !== `project/${pr.slug}`) ui.focus(`project/${pr.slug}`, true); }}>
