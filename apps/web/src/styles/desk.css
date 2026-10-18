@@ -49,6 +49,8 @@
   --btn-side: lch(10.149% 0.689 272);      /* the sidebar's New issue button, and under the mouse */
   --btn-side-hover: lch(14.777% 1.075 272);
   --bg-tab-on: lch(16.706% 0.979 272);     /* the open view tab */
+  --bg-chip-hover: lch(14.006% 0.593 272); /* a project's property chip under the mouse */
+  --project-icon: lch(61.803% 1.2 272 / 0.175); /* behind a project's icon, over its name */
   --btn-primary: lch(47.918% 59.303 288.421);
   --btn-primary-hover: lch(52.418% 61.103 288.421);
   --btn-primary-text: lch(100% 5 288.421);
@@ -129,6 +131,8 @@
   --btn-side: lch(97.94% 0.5 282);        /* sidebar: its own palette */
   --btn-side-hover: lch(94.44% 0.5 282);
   --bg-tab-on: lch(93.483% 0.5 282);
+  --bg-chip-hover: lch(92.44% 0.5 282);
+  --project-icon: lch(39.176% 1.25 282 / 0.125);
   --btn-primary: lch(53% 52.26 286.91);
   --btn-primary-hover: lch(47% 50.26 286.91);
   --btn-primary-text: lch(100% 5 286.91);
@@ -329,8 +333,8 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .strip form { margin: 0; }
 
 /* problem page: content on the left, properties and agents on the right, as Linear's issue page */
-.issue, .project-page { display: grid; grid-template-columns: minmax(0, 1fr) 272px; gap: 48px; max-width: 1040px; margin: 0 auto; padding: 32px 24px 0; }
-.issue h1, .project-page h1, .issue textarea.title { font: 600 24px/1.3 var(--font); margin: 0 0 16px; letter-spacing: -0.2px; }
+.issue { display: grid; grid-template-columns: minmax(0, 1fr) 272px; gap: 48px; max-width: 1040px; margin: 0 auto; padding: 32px 24px 0; }
+.issue h1, .issue textarea.title { font: 600 24px/1.3 var(--font); margin: 0 0 16px; letter-spacing: -0.2px; }
 .description { cursor: text; }
 .body { font-size: 15px; line-height: 24px; color: var(--text-2); letter-spacing: -0.1px; }
 .body img { max-width: 100%; cursor: zoom-in; }  /* a screenshot in a plan is 1436px wide, and pushed the page sideways (15 Oct) */
@@ -361,7 +365,7 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .sec-toggle svg { fill: currentColor; transform: rotate(90deg); transition: transform 0.15s; }
 .sec.folded > .sec-head .sec-toggle svg { transform: none; }
 .sec.folded > .sec-body { display: none; }
-.issue .tree .item, .project-page .tree .item { padding-left: 8px; height: 36px; }
+.issue .tree .item { padding-left: 8px; height: 36px; }
 .issue .tree .tree .item { padding-left: 10px; }
 .props { font-size: 13px; }
 .props .label { font-size: 13px; font-weight: 500; color: var(--text-3); margin: 0 0 8px; }
@@ -617,7 +621,7 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
   .side-open body::after { opacity: 1; pointer-events: auto; }
   .panel { left: 8px; }
   .bar .side-toggle { display: grid; }
-  .issue, .project-page { grid-template-columns: 1fr; gap: 24px; }
+  .issue { grid-template-columns: 1fr; gap: 24px; }
 }
 
 /* full-screen diagram viewer */
@@ -668,18 +672,32 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 
 /* projects: the list, a project's page and the project picker on an issue */
 .project-new { display: flex; gap: 8px; padding: 8px 12px 16px; }
-.project-new input, .project-pick select, .project-edit input, .project-edit textarea {
+.project-new input, .project-pick select {
   height: 32px; padding: 0 8px; border: 1px solid var(--border-3); border-radius: 6px; background: var(--bg-raised);
   color: var(--text-1); font: 450 13px var(--font); }
 .project-new input { flex: 1; }
 .project-pick select { width: 100%; }
-.project-edit { margin: 16px 0 0; font-size: 13px; color: var(--text-3); }
-.project-edit summary { cursor: pointer; }
-.project-edit form { display: flex; gap: 8px; margin: 8px 0; align-items: flex-start; }
-.project-edit input, .project-edit textarea { flex: 1; }
-.project-edit textarea { height: auto; padding: 8px; resize: vertical; }
 .project-row.archived { color: var(--text-3); }
-.project-page .group { margin-top: 16px; }
+/* A project's Overview, measured on linear.app on 18 Oct (the muse project), dark and light, at 2x: a column of at most
+   805px, centred, 64px under the view row. A 36px icon with 6px corners, the project's colour at 0.175 (0.125 in light)
+   behind a 24px glyph; desk's projects have no colour, so it takes --text-3's. The name 12px under it, 24px on 32px at
+   600. Properties is a row: its heading, 13px at 500 in --text-3 on a 28px line, then 16px on its chips, 28px pills
+   padded 3px 6px with a 16px icon, 13px at 500 in --text-2, filled only under the mouse, where the label turns
+   --text-1. The Description heading is the same, 16px over the text. Linear has a summary, Resources and updates
+   between Properties and Description, which desk has not, so the 32px over Description is desk's own. */
+.project-crumb { display: flex; align-items: center; gap: 8px; }
+.project-crumb .glyph { color: var(--text-2); }
+.project-overview { max-width: 805px; margin: 64px auto 24px; padding: 0 48px 40px; }
+.project-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 6px; background: var(--project-icon); color: var(--text-2); }
+.project-icon svg { width: 24px; height: 24px; }
+.project-overview textarea.title { font: 600 24px/32px var(--font); margin: 12px 0 0; }
+.project-overview h3 { flex: none; margin: 32px 0 16px; padding: 6px 0; font: 500 13px var(--font); color: var(--text-3); }
+.project-props { display: flex; align-items: center; gap: 4px; margin-top: 20px; }
+.project-props h3 { margin: 0 12px 0 0; }
+.prop-chip { display: flex; align-items: center; gap: 8px; height: 28px; padding: 3px 6px; border: 0; border-radius: 9999px; background: none;
+             font: 500 13px var(--font); color: var(--text-2); transition: background-color 0.1s, color 0.1s; }
+.prop-chip:hover { background: var(--bg-chip-hover); color: var(--text-1); }
+.prop-chip svg { width: 16px; height: 16px; }
 
 /* Filter and Display options on an issue list (views.ts), measured on linear.app on 16 Oct: two 28px
    round buttons, ringed like the view tabs (18 Oct), the dot on Display when the list's display is not its default, a
@@ -773,7 +791,7 @@ button.set-pick svg { color: var(--text-3); }
                           width: 14px; height: 14px; border: 1px solid var(--border-3); border-radius: 4px; background: var(--bg-panel);
                           color: transparent; cursor: pointer; opacity: 0; }
 .tree .tree .item .select-box { left: 1px; }
-.issue .tree .item .select-box, .project-page .tree .item .select-box { display: none; }
+.issue .tree .item .select-box { display: none; }
 .tree .item:hover .select-box, .item.selected .select-box, :root:has(.item.selected) .tree .item .select-box { opacity: 1; }
 .item.selected .select-box { border-color: var(--accent); background: var(--accent); color: var(--on-accent); } /* as a menu's ticked box */
 .select-bar { position: fixed; bottom: 24px; left: calc(244px + (100vw - 252px) / 2); translate: -50% 0; z-index: 30; display: flex;

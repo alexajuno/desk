@@ -53,7 +53,7 @@ export const Sidebar = observer(function Sidebar() {
       </Go>
       <Go className={`nav-label${at("/projects")}`} to="/projects" title="Go to projects  G then P">Projects</Go>
       {d?.projects.map((pr) => (
-        <Go key={pr.slug} className={`nav-item${at(`/project/${pr.slug}`)}`} to={`/project/${pr.slug}`}>
+        <Go key={pr.slug} className={`nav-item${here === `/project/${pr.slug}` || here.startsWith(`/project/${pr.slug}/`) ? " here" : ""}`} to={`/project/${pr.slug}`}>
           <svg viewBox="0 0 16 16"><path d="M8 2l5.5 3v6L8 14l-5.5-3V5z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
           <span className="nav-title">{pr.title}</span>
         </Go>

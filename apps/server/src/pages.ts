@@ -359,9 +359,10 @@ export async function issuePage(slug: string) {
 }
 
 // A list's groups, chips and view. A group's + opens the new issue panel with what the group says, where the panel can
-// take it: its priority, its project, or Backlog.
+// take it: its priority, its project, or Backlog, and with what the page adds to every group (add), such as a
+// project's page its project. No add, no +.
 // On a board, a card's sub-issues read as done of all, as Linear's do.
-function listingJson(listing: views.Listing, path: string, add: boolean, all?: Map<string, Issue>) {
+function listingJson(listing: views.Listing, path: string, add: Record<string, unknown> | null, all?: Map<string, Issue>) {
   const v = listing.view, data = views.data(listing);
   const subsOf = (p: Issue) => {
     const kids = all && v.layout === "board" ? store.children(all, p.slug) : [];
@@ -375,10 +376,11 @@ function listingJson(listing: views.Listing, path: string, add: boolean, all?: M
   const groups = listing.groups.map((g) => {
     let preset: unknown = null;
     if (add && v.group !== "none") {
-      preset = ({
+      const own = ({
         priority: { priority: g.value }, status: g.value === "backlog" ? { state: g.value } : null,
         project: g.value !== "none" ? { project: g.value, projectTitle: g.label } : null,
-      } as Record<string, unknown>)[v.group] ?? null;
+      } as Record<string, object | null>)[v.group] ?? null;
+      preset = own || Object.keys(add).length ? { ...own, ...add } : null;
     }
     return { value: g.value, label: g.label, icon: g.icon, count: g.count, preset, items: g.items.map((p) => node(p, g)) };
   });
@@ -395,14 +397,14 @@ export const TABS = ["active", "backlog"];
 export async function issuesPage(tab: string, query: string) {
   const all = await store.loadAll();
   const listing = views.build(views.parse(tab || "issues", query), [...all.values()], all, await projects.loadAll());
-  return listingJson(listing, tab ? `/issues/${tab}` : "/issues", true, all);
+  return listingJson(listing, tab ? `/issues/${tab}` : "/issues", {}, all);
 }
 
 export async function projectPage(slug: string, query: string) {
   if (!(await projects.exists(slug))) throw new HttpError(404, "That project is gone.");
   const p = await projects.load(slug), all = await store.loadAll();
   const listing = views.build(views.parse("project", query), projects.issuesOf(all, slug), all, await projects.loadAll());
-  return { project: { slug: p.slug, title: p.title, state: p.state, body: p.body, body_html: toHtml(p.body) }, list: listingJson(listing, `/project/${slug}`, false) };
+  return { project: { slug: p.slug, title: p.title, state: p.state, body: p.body, body_html: toHtml(p.body) }, list: listingJson(listing, `/project/${slug}`, { project: p.slug, projectTitle: p.title }) };
 }
 
 export async function projectsPage() {

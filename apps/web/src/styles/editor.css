@@ -46,5 +46,5 @@
 .toolbar button code { background: none; border: 0; padding: 0; font-size: 12px; }
 
 /* The title, a text box that looks like the heading it was. */
-.issue textarea.title { display: block; width: 100%; box-sizing: border-box; resize: none; overflow: hidden; padding: 0; border: 0;
+.issue textarea.title, .project-overview textarea.title { display: block; width: 100%; box-sizing: border-box; resize: none; overflow: hidden; padding: 0; border: 0;
                         background: none; color: var(--text-1); outline: none; }

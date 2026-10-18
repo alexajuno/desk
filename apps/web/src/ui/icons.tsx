@@ -106,6 +106,7 @@ export const GLYPH = {
   chat: glyph(<path d="M8 2.5c3.3 0 6 2.2 6 4.9s-2.7 4.9-6 4.9c-.6 0-1.1-.1-1.6-.2L3 13.5l.6-2.3C2.6 10.3 2 9 2 7.4 2 4.7 4.7 2.5 8 2.5z" />),
   terminal: glyph(<><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" /><path d="M4.5 6l2 2-2 2M8 10.5h3.5" /></>),
   id: glyph(<path d="M6.5 2.5l-1 11M10.5 2.5l-1 11M3 6h10.5M2.5 10H13" />),
+  archive: glyph(<><rect x="2" y="3" width="12" height="3" rx="1" /><path d="M3 6v6.5c0 .28.22.5.5.5h9c.28 0 .5-.22.5-.5V6M6.5 8.75h3" /></>),
   trash: glyph(<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" />),
   none: glyph(<><circle cx="8" cy="8" r="5.5" /><path d="M4.2 11.8l7.6-7.6" /></>),
   folder: glyph(<path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z" />),

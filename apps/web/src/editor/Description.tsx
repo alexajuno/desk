@@ -1,4 +1,4 @@
-// An issue's description, editable where it is, as Linear's: no mode to enter, a click puts the caret there, Markdown
+// A description, an issue's or a project's, editable where it is, as Linear's: no mode to enter, a click puts the caret there, Markdown
 // typed or pasted turns into what it says, and a toolbar comes up over selected text. It saves on its own, a second
 // after you stop typing and when you leave it, and only when the Markdown changed. A change made elsewhere, such as by
 // an agent, shows once you are not typing here.
@@ -7,7 +7,6 @@ import { Placeholder } from "@tiptap/extensions";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { useEffect, useRef, type ReactNode } from "react";
-import { setField } from "../issues/actions";
 import { ui } from "../store/ui";
 import { Commands, linkMenu } from "./commands";
 import { extensions, parse, toMarkdown, type Parsed } from "./content";
@@ -20,10 +19,11 @@ const SAVE_AFTER = 1000; // ms after the last change
 // The document needs a block to put the caret in.
 const editable = (parsed: Parsed) => (parsed.doc.content?.length ? parsed.doc : { type: "doc", content: [{ type: "paragraph" }] });
 
-export function Description({ slug, body, html }: { slug: string; body: string; html: string }) {
+// save stores the Markdown; the page keys this by what it describes, so save is the same function all along.
+export function Description({ body, html, save: store }: { body: string; html: string; save: (text: string) => Promise<unknown> }) {
   const parsed = useRef<Parsed | null>(null);
   parsed.current ??= parse(body);
-  const saved = useRef(body); // what issue.md holds, as far as this page knows
+  const saved = useRef(body); // what the file holds, as far as this page knows
   const saving = useRef(0); // saves on their way, whose page reload may still bring an older body
   const timer = useRef(0);
 
@@ -34,7 +34,7 @@ export function Description({ slug, body, html }: { slug: string; body: string; 
     if (text === saved.current) return;
     saved.current = text;
     saving.current++;
-    setField(slug, "body", text).finally(() => saving.current--);
+    store(text).finally(() => saving.current--);
   }
 
   const editor = useEditor({

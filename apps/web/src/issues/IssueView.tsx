@@ -126,7 +126,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
       <div className="issue" data-slug={p.slug} data-state={p.state} data-priority={p.priority} data-parent={p.parent ?? ""}
         {...(p.session ? { "data-session": p.session.slice(0, 8) } : {})}>
         <div>
-          <Title slug={p.slug} title={p.title} />
+          <Title title={p.title} save={(t) => setField(p.slug, "title", t)} />
           <Chips p={p} project={data.project} />
           {/* In review the card comes first, right under the strip whose Approve decides on it. */}
           {p.state === "review" && (
@@ -159,7 +159,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
               <div className="sec-body"><Tree items={data.kids} /></div>
             </section>
           )}
-          <Description key={p.slug} slug={p.slug} body={data.body} html={data.body_html} />
+          <Description key={p.slug} body={data.body} html={data.body_html} save={(t) => setField(p.slug, "body", t)} />
           {"questions.md" in data.agent_files && <AgentFile name="questions.md" html={data.agent_files["questions.md"]} />}
         </div>
         <Properties data={data} p={p} />
@@ -304,8 +304,9 @@ function useEditorKeys(isSave: (e: React.KeyboardEvent, k: string) => boolean, f
   };
 }
 
-// The title, editable where it is, as Linear's: Enter or clicking away saves, Esc leaves it as it was.
-function Title({ slug, title }: { slug: string; title: string }) {
+// The title, an issue's or a project's, editable where it is, as Linear's: Enter or clicking away saves, Esc leaves it
+// as it was.
+export function Title({ title, save }: { title: string; save: (title: string) => unknown }) {
   const [value, setValue] = useState(title);
   const box = useRef<HTMLTextAreaElement>(null);
   const done = useRef(true);
@@ -321,7 +322,7 @@ function Title({ slug, title }: { slug: string; title: string }) {
     done.current = true;
     ui.setEditing(false);
     const next = value.trim().replace(/\s+/g, " ");
-    if (keep && next && next !== title) setField(slug, "title", next);
+    if (keep && next && next !== title) save(next);
     else setValue(title);
     box.current?.blur();
   }
