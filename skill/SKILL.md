@@ -43,6 +43,12 @@ Create one. Only the title is required; a new issue waits in the backlog with no
 curl -s "http://127.0.0.1:8790/api/issues" --json '{"title": "Fix the login redirect", "priority": "high", "protocol": "quick", "folder": "~/projects/site", "body": "## Context\n\nThe user, 14 Oct: \"after login it lands on /\""}'
 ```
 
+desk's agent chat files its own issue in Triage with `"state": "triage"` and its id, which its prompt gives, as `"chat"`; desk binds the chat to the issue in the same call:
+
+```bash
+curl -s "http://127.0.0.1:8790/api/issues" --json '{"title": "Login lands on the home page", "state": "triage", "chat": "<chat id>", "body": "## Context\n\nThe user, 14 Oct: \"after login it lands on /\""}'
+```
+
 Set fields, sending only the ones that change; null clears a parent or a folder:
 
 ```bash

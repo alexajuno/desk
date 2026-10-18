@@ -115,6 +115,18 @@ export const baseOf = (req: FastifyRequest) => `${req.protocol}://${req.headers.
 type Req = FastifyRequest<{ Params: { slug: string }; Querystring: Record<string, string> }>;
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 
+// The chat filing its own issue in Triage: the one whose id the call sends, or, when it sends none, the one whose
+// transcript holds the call. A chat whose own issue is still open files any other in the backlog.
+async function filer(body: unknown, title: string): Promise<chats.Chat | null> {
+  const id = str(((body ?? {}) as Record<string, unknown>).chat);
+  if (!id) return chats.filing(title);
+  if (!chats.exists(id)) throw new HttpError(404, "No such chat");
+  const chat = chats.load(id);
+  if (chat.issue && (await store.exists(chat.issue)) && OPEN.includes((await store.load(chat.issue)).state))
+    throw new HttpError(409, `${id} already has its own issue, ${chat.issue}: file this one in the backlog, or bind the chat to it with /work.`);
+  return chat;
+}
+
 export function routes(app: FastifyInstance) {
   // Open issues unless state says otherwise (state=all, or a list such as state=running,review), in the backlog's
   // order; with q, the ones desk's search finds, best match first; project= keeps one project's.
@@ -131,10 +143,10 @@ export function routes(app: FastifyInstance) {
   app.post("/api/issues", async (req, reply) => {
     const fields = given(req.body, FIELDS);
     if (!(fields.title ?? "").trim()) throw new HttpError(422, "title is required");
-    // A chat files its own issue in Triage, and desk binds the two then and there rather than trusting the chat to (17
-    // Oct: one filed "Teammates in desk" and never bound it, so the issue had no chat to settle it with). Finding the
-    // chat can take a moment, so desk does it before it picks the slug, which the issue then saves under at once.
-    const chat = fields.state === "triage" ? await chats.filing(fields.title!) : null;
+    // A chat files its own issue in Triage, sending its id, and desk binds the two in that one call rather than trusting
+    // the chat with a second (17 Oct: one filed "Teammates in desk" and never bound it, so the issue had no chat to
+    // settle it with). Finding a chat that sent no id can take a moment, so desk does it before it picks the slug.
+    const chat = fields.state === "triage" ? await filer(req.body, fields.title!) : null;
     const i = store.blank(await store.newSlug(fields.title!), fields.title!);
     await apply(i, fields);
     if (chat) i.session = chat.session;

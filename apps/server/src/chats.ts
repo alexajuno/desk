@@ -261,9 +261,10 @@ export function agentChats(): Chat[] {
   return chats().filter((c) => KINDS.has(c.kind ?? "")).sort((a, b) => (activity(a) < activity(b) ? 1 : activity(a) > activity(b) ? -1 : 0));
 }
 
-// The chat filing an issue of this title now: one with no issue yet whose transcript holds the curl that files it.
-// Claude Code writes the tool call to the transcript some 30 ms after it starts the command, and desk answers a curl
-// sooner, so it looks again for a few seconds (18 Oct: looking once, it bound no chat, and the Inbox could not open one).
+// The chat filing an issue of this title now, for a call that does not send the chat's id: one with no issue yet whose
+// transcript holds the curl that files it. Claude Code writes the tool call to the transcript some 30 ms after it starts
+// the command, and desk answers a curl sooner, so it looks again for a few seconds (18 Oct: looking once, it bound no
+// chat, and the Inbox could not open one).
 export async function filing(title: string): Promise<Chat | null> {
   for (let waited = 0; waited < 3000; waited += 100) {
     const chat = filingNow(title);
