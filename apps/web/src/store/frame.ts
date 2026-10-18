@@ -34,6 +34,11 @@ export interface FrameData {
   live: Record<string, string>; // slug: where its session stands, for each open issue with one
 }
 
+// A frame with nothing in it. A frame from a desk of another version can lack a list this app reads, such as a tab
+// reopened on the app it last had while desk runs a newer or older commit (18 Oct: the sidebar's Agents crashed the
+// page); the list then draws empty until the tab reloads.
+const EMPTY: FrameData = { inbox: 0, triage: [], running: [], landing: [], trying: null, line: [], projects: [], others: [], agents: [], rows: [], live: {} };
+
 class Frame {
   data: FrameData | null = null;
   private text = "";
@@ -42,9 +47,10 @@ class Frame {
     makeAutoObservable<Frame, "text">(this, { data: observableRef, text: false });
   }
 
-  take(data: FrameData) {
-    const text = JSON.stringify(data);
+  take(sent: FrameData) {
+    const text = JSON.stringify(sent);
     if (text === this.text) return;
+    const data = { ...EMPTY, ...sent };
     notifyNew(data.rows);
     this.text = text;
     this.data = data;

@@ -318,6 +318,12 @@ button.ghost:hover { background: var(--btn-ghost-hover); color: var(--text-2); }
 button.small { height: 24px; padding: 0 8px; }
 button.large { height: 32px; padding: 0 12px; }
 button:disabled, button:disabled:hover { opacity: 0.5; cursor: default; background: var(--btn); }
+
+/* A page that crashed twice in a minute (app/Crashed.tsx): what broke and a Reload button, alone in the middle of the
+   window, since the frame around the page may be what broke. Not measured: Linear shows no such page on purpose. */
+.crashed { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; }
+.crashed h1 { margin: 0; font-size: 15px; font-weight: 500; color: var(--text-1); }
+.crashed p { margin: 0; max-width: 60ch; color: var(--text-3); overflow-wrap: anywhere; }
 button.primary:disabled, button.primary:disabled:hover { background: var(--btn-primary); }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 

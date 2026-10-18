@@ -12,6 +12,7 @@ import { SearchPage } from "../search/SearchPage";
 import { SettingsPage } from "../settings/SettingsPage";
 import { SessionFullRoute } from "../sessions/SessionFullRoute";
 import { TriagePage } from "../triage/TriagePage";
+import { Crashed } from "./Crashed";
 
 // Each page's loader fetches its JSON before the router moves to it, so the page on screen stays until the next one can
 // draw whole (api/page.ts, prime). The first page desk opens on draws at once, as before, and fetches its own.
@@ -33,7 +34,7 @@ const tabRoute = (tab: string) => ({
 
 // desk's pages, at the addresses they always had.
 export const router = createBrowserRouter(
-  [{ element: <Frame />, children: [
+  [{ element: <Frame />, errorElement: <Crashed />, children: [
     { path: "/", element: <Navigate to="/issues" replace /> },
     ...["", ...TABS].map(tabRoute),
     { path: "/backlog", element: <ToIssues /> },
