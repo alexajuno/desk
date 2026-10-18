@@ -193,16 +193,6 @@ export async function inboxRows() {
   return [...issues, ...theirs].sort((a, b) => b.at.getTime() - a.at.getTime()).map(({ at: _, ...row }) => row);
 }
 
-// The sidebar's Agents: each agent the user has a chat with, by its newest chat, which a click opens; whether it works
-// now, and whether it said something the user has not read.
-async function agentsNow(unread: Set<string>) {
-  const newest = new Map<string, chats.Chat>();
-  for (const chat of chats.agentChats()) if (chat.agent && !newest.has(chat.agent)) newest.set(chat.agent, chat); // the one that moved last first
-  return Promise.all([...newest.values()].map(async (c) => ({
-    name: c.agent!, session: c.session, working: (await agents.liveRow(c.session)).status === "busy", unread: unread.has(c.id),
-  })));
-}
-
 // The sidebar's Chats: the bare chats, the newest few, the one that moved last first; whether each works now, and
 // whether it said something the user has not read. A bare chat never reaches the Inbox. Older ones are in the corner's
 // history.
@@ -361,7 +351,6 @@ export async function framePage() {
     line: line.filter((w) => all.has(w.slug)).map((w) => ({ slug: w.slug, branch: w.branch ?? null, for: w.for ?? null, issue: issueJson(all.get(w.slug)!) })),
     projects: active.map((p) => ({ slug: p.slug, title: p.title })),
     others: await sessions.others(),
-    agents: await agentsNow(new Set(theirs.map((n) => n.chat.id))),
     chats: await chatsNow(),
     rows: await inboxRows(),
     live: Object.fromEntries([...all.values()].filter((i) => i.session && !CLOSED.has(i.state)).map((i) => [i.slug, talkOf(i)])),
