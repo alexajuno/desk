@@ -131,11 +131,12 @@ export function routes(app: FastifyInstance) {
   app.post("/api/issues", async (req, reply) => {
     const fields = given(req.body, FIELDS);
     if (!(fields.title ?? "").trim()) throw new HttpError(422, "title is required");
+    // A chat files its own issue in Triage, and desk binds the two then and there rather than trusting the chat to (17
+    // Oct: one filed "Teammates in desk" and never bound it, so the issue had no chat to settle it with). Finding the
+    // chat can take a moment, so desk does it before it picks the slug, which the issue then saves under at once.
+    const chat = fields.state === "triage" ? await chats.filing(fields.title!) : null;
     const i = store.blank(await store.newSlug(fields.title!), fields.title!);
     await apply(i, fields);
-    // A chat files its own issue in Triage, and desk binds the two then and there rather than trusting the chat to (17
-    // Oct: one filed "Teammates in desk" and never bound it, so the issue had no chat to settle it with).
-    const chat = i.state === "triage" ? chats.filing(i.title) : null;
     if (chat) i.session = chat.session;
     await store.save(i);
     if (chat) chats.bind(chat, i, baseOf(req));

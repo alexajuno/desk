@@ -17,7 +17,7 @@ import * as hosted from "./hosted.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as models from "./models.ts";
-import { run } from "./proc.ts";
+import { run, sleep } from "./proc.ts";
 import { fill, MOVED, NOT_MOVED, PLAN_RULES, PROMPT, PROTOCOLS, WINDOW_RULES, WORK } from "./prompts.ts";
 import type { Agent } from "./roster.ts";
 import * as settings from "./settings.ts";
@@ -262,8 +262,18 @@ export function agentChats(): Chat[] {
 }
 
 // The chat filing an issue of this title now: one with no issue yet whose transcript holds the curl that files it.
-// Claude Code writes a tool call to the transcript before it runs it, so the call is there while desk answers it.
-export function filing(title: string): Chat | null {
+// Claude Code writes the tool call to the transcript some 30 ms after it starts the command, and desk answers a curl
+// sooner, so it looks again for a few seconds (18 Oct: looking once, it bound no chat, and the Inbox could not open one).
+export async function filing(title: string): Promise<Chat | null> {
+  for (let waited = 0; waited < 3000; waited += 100) {
+    const chat = filingNow(title);
+    if (chat) return chat;
+    await sleep(100);
+  }
+  return null;
+}
+
+function filingNow(title: string): Chat | null {
   const typed = JSON.stringify(title).slice(1, -1);
   for (const chat of chats()) {
     if (!KINDS.has(chat.kind ?? "") || chat.issue || chat.agent) continue;
