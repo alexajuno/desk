@@ -223,12 +223,10 @@ const Chips = observer(function Chips({ p, project }: { p: IssueRow; project: { 
   );
 });
 
-const LIVE_WORDS: Record<string, string> = { working: "working", stopped: "stopped" };
-
 function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
   const live = data.live;
   const liveWord = data.session_kind === "interactive" ? "open in a terminal"
-    : live === "idle" ? (["done", "dropped", "waiting"].includes(p.state) ? "idle" : "your turn") : LIVE_WORDS[live] ?? "not running";
+    : live === "working" ? "working" : ["done", "dropped", "waiting"].includes(p.state) ? "idle" : "your turn";
   return (
     <aside className="props">
       <div className="label">Properties</div>

@@ -4,8 +4,8 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import * as agents from "./agents.ts";
-import * as chats from "./chats.ts";
 import { ISSUES_DIR, PROJECTS_DIR } from "./config.ts";
+import * as hosted from "./hosted.ts";
 import * as store from "./issues.ts";
 import { byRank, CLOSED, runs, type Issue } from "./issues.ts";
 import * as land from "./land.ts";
@@ -74,11 +74,20 @@ export function landed(result: string): [boolean, string | null] {
   return [first.startsWith("**Landed:**"), pr ? pr[0] : null];
 }
 
-// Whether a landing issue's session stopped short of landing it: not working, or blocked on a prompt, a minute after
-// Approve (Approve stops the session and resumes it, and it is idle for a moment in between).
-function landingStuck(i: Issue, row: agents.Row, now: string): boolean {
-  const blocked = row.state === "blocked" && Boolean(row.pid);
-  return (now !== "working" || blocked) && Date.now() - parseLocal(i.landing!).getTime() > 60000;
+// Whether the issue's session works on your last message, from its transcript, never from whether a process holds it:
+// a chat the host closed, or that never started, is not working, and its next message resumes it.
+const working = (i: Issue) => Boolean(i.session && sessions.working(i.session));
+
+// Where the issue's chat stands, for the strip, the sidebar and Triage: working, idle (your move), or none, with no chat.
+const talkOf = (i: Issue) => (!i.session ? "none" : working(i) ? "working" : "idle");
+
+// The sessions asking you to allow a tool now. Only a running session can ask, and the host is the one that knows.
+const asking = async () => new Set((await hosted.sessions()).filter((h) => h.asks).map((h) => h.id));
+
+// Whether a landing issue's session stopped short of landing it: not working, or asking you something, a minute after
+// Approve.
+function landingStuck(i: Issue, asks: Set<string>): boolean {
+  return (!working(i) || asks.has(i.session!)) && Date.now() - parseLocal(i.landing!).getTime() > 60000;
 }
 
 type Item = [Issue, string];
@@ -86,38 +95,41 @@ type Item = [Issue, string];
 // What needs you and what waits for your review. desk moves the state here, from the session: In progress to In review
 // once it wrote result.md and stopped working, back to In progress when you ask it for a change and it works again,
 // from Landing to Done once result.md says it landed, and from Waiting to In progress once you write in its chat after
-// the wait began. A chat's issue in Triage needs you once its chat has replied, unless its window is the one in front.
-// A session that is not working leaves the turn to you whether or not the host still holds it: one dropped by a restart
-// resumes on your next message (18 Oct: after a reboot, a plan waiting on its "go" left the Inbox).
-export async function inboxItems(all: Map<string, Issue>, live: Map<string, agents.Row>): Promise<[Item[], Item[]]> {
+// the wait began. An issue in Triage or In progress needs you once its chat is not working, a Triage one unless its
+// window is the one in front, or when it has no chat. Whether a process still holds the chat never counts (18 Oct: "we
+// should write code in the way we don't care"): its next message resumes it.
+export async function inboxItems(all: Map<string, Issue>): Promise<[Item[], Item[]]> {
   const needs: Item[] = [], review: Item[] = [];
+  const asks = await asking();
   for (const i of all.values()) {
-    const row = (i.session && live.get(i.session)) || {};
-    const now = agents.status(row);
+    const busy = working(i);
     const result = resultOf(i.slug), hasResult = isFile(result);
     if (i.state === "landing") {
       // A result that says it landed counts however old it is.
       const [done, pr] = hasResult ? landed(result) : [false, null];
-      if (hasResult && now !== "working" && (done || statSync(result).mtimeMs > parseLocal(i.landing!).getTime()))
+      if (hasResult && !busy && (done || statSync(result).mtimeMs > parseLocal(i.landing!).getTime()))
         await store.move(i, { state: done ? "done" : "review", link: i.link || (done ? pr : null) });
-    } else if (i.state === "running" && hasResult && now !== "working") {
+    } else if (i.state === "running" && hasResult && !busy) {
       await store.move(i, { state: "review" });
     } else if (i.state === "waiting" && i.session && i.waiting_since) {
       const wrote = sessions.prompted(i.session);
       if (wrote && wrote > iso(i.waiting_since)) await store.move(i, { state: "running" });
-    } else if (i.state === "review" && now === "working") {
+    } else if (i.state === "review" && busy) {
       await store.move(i, { state: "running" });
     }
     if (i.state === "review") review.push([i, hasResult ? "result ready" : "check it"]);
-    else if (i.state === "landing") { // and no further: the blocked rule below would list it during the minute
-      if (landingStuck(i, row, now)) needs.push([i, "landing stuck"]);
-    } else if (i.state === "running" && now !== "working" && hasQuestions(i)) {
+    else if (i.state === "landing") { // and no further: the asking rule below would list it during the minute
+      if (landingStuck(i, asks)) needs.push([i, "landing stuck"]);
+    } else if (i.state === "running" && !busy && hasQuestions(i)) {
       needs.push([i, "has questions"]);
-    } else if (i.state === "running" && i.session && now !== "working" && !hasResult && store.hasPlan(i)) {
-      needs.push([i, runs(i) === "quick" ? "waiting for you" : "plan ready"]);
-    } else if (i.state === "triage") {
-      if (i.session && now !== "working" && !live_.watching(i.session)) needs.push([i, "chat replied"]);
-    } else if (row.state === "blocked" && row.pid && !CLOSED.has(i.state) && i.state !== "waiting") {
+    } else if (i.state === "triage" && !i.session) {
+      needs.push([i, "no chat"]);
+    } else if (i.state === "triage" && !busy && !live_.watching(i.session)) {
+      needs.push([i, "chat replied"]);
+    } else if (i.state === "running" && i.session && !busy) {
+      const ready = !hasResult && store.hasPlan(i);
+      needs.push([i, !ready ? "chat replied" : runs(i) === "quick" ? "waiting for you" : "plan ready"]);
+    } else if (i.session && asks.has(i.session) && !CLOSED.has(i.state) && i.state !== "waiting") {
       needs.push([i, "waiting for you"]);
     }
   }
@@ -128,6 +140,7 @@ export async function inboxItems(all: Map<string, Issue>, live: Map<string, agen
 // What each reason for being in the Inbox reads as, in a row's second line, after "Session".
 const NOTICES: Record<string, string> = {
   "chat replied": "replied: your turn in its chat", "waiting for you": "is waiting for you", "plan ready": "wrote its plan: read it, then say go in its chat",
+  "no chat": "has no chat: settle it in Triage",
   "has questions": "saved questions for you", "landing stuck": "stopped before the work landed",
   "result ready": "finished: the result is ready", "check it": "finished, with no result.md",
 };
@@ -136,16 +149,12 @@ export interface Notice { p: Issue; why: string; says: string; kind: string; at:
 
 // The Inbox's rows, newest first.
 export async function notifications(all: Map<string, Issue>): Promise<Notice[]> {
-  const [needs, review] = await inboxItems(all, await agents.live());
-  const changed = async (i: Issue) => {
-    // A chat in Triage changes no file when it replies: its transcript says when, so each reply shows unread.
-    const chat = i.state === "triage" ? chats.agentChatOf(i.session) : null;
-    const at = store.changed(i.slug);
-    return chat ? Math.max(at, parseLocal(chats.activity(chat)).getTime() / 1000) : at;
-  };
+  const [needs, review] = await inboxItems(all);
+  // A chat's reply changes no file: its transcript says when, so each reply shows unread.
+  const changed = (i: Issue) => Math.max(store.changed(i.slug), (i.session && sessions.replied(i.session)) || 0);
   const rows: Notice[] = [];
   for (const [list, kind] of [[needs, "needs"], [review, "review"]] as const)
-    for (const [p, why] of list) rows.push({ p, why, says: NOTICES[why] ?? why, kind, at: new Date((await changed(p)) * 1000) });
+    for (const [p, why] of list) rows.push({ p, why, says: NOTICES[why] ?? why, kind, at: new Date(changed(p) * 1000) });
   return rows.sort((a, b) => b.at.getTime() - a.at.getTime());
 }
 
@@ -192,22 +201,21 @@ type Button = { label: string; action?: string; chat?: boolean; disabled?: boole
 
 // The strip pinned at the top of an issue: where it stands, and its one button, the next step. Only Plan and Approve
 // are clicks; everything else is said in the issue's chat, which Open chat brings up in a window over desk.
-export function strip(i: Issue, row: agents.Row, hasPlan: boolean, result: string): { text: string; button: Button } {
-  const now = agents.status(row), hasResult = isFile(result);
+export function strip(i: Issue, asks: Set<string>, hasPlan: boolean, result: string): { text: string; button: Button } {
+  const hasResult = isFile(result);
   const chat = { label: "Open chat", chat: true };
-  const asleep = i.session ? "Session stopped" : "";
   if (i.state === "backlog") {
     if (i.session) return { text: "Backlog", button: chat };
     return { text: "Backlog", button: { label: runs(i) === "quick" ? "Start" : "Plan", action: "start" } };
   }
   if (i.state === "triage") return { text: "Triage", button: chat };
   if (i.state === "landing") {
-    if (!landingStuck(i, row, now)) return { text: "Landing", button: { label: "Landing…", disabled: true } };
-    return { text: now === "idle" ? "Landing stopped" : asleep, button: chat };
+    if (!landingStuck(i, asks)) return { text: "Landing", button: { label: "Landing…", disabled: true } };
+    return { text: "Landing stopped", button: chat };
   }
   if (i.state === "running") {
     if (!i.session) return { text: "In progress, outside desk", button: null };
-    if (now === "working") return { text: "Working", button: chat };
+    if (working(i)) return { text: "Working", button: chat };
     const ready = hasPlan && !hasResult && runs(i) !== "quick";
     return { text: ready ? "Plan ready: say go" : "Your turn", button: chat };
   }
@@ -272,8 +280,8 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     kids: treeJson(kidsOf(slug), kidsOf),
     progress: [direct.filter((k) => k.state === "done").length, direct.filter((k) => k.state !== "dropped").length],
     files: store.files(slug), agent_files: agentFiles, card,
-    session_kind: session.kind ?? null, live: agents.status(session),
-    strip: strip(i, session, store.hasPlan(i), result), trial: await tryButton(i),
+    session_kind: session.kind ?? null, live: talkOf(i),
+    strip: strip(i, await asking(), store.hasPlan(i), result), trial: await tryButton(i),
   };
 }
 
@@ -284,17 +292,16 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
 // sync.ts sends it to the app whenever it changed.
 export async function framePage() {
   const all = await store.loadAll();
-  const [needs, review] = await inboxItems(all, await agents.live());
+  const [needs, review] = await inboxItems(all);
   // Sub-issues too: a session runs whether or not its issue sits under another.
   const inState = (s: string) => [...all.values()].filter((i) => i.state === s).sort(byRank);
-  const live = await agents.live();
   const now = await land.running(land.DESK_REPO);
   const line = await land.line(land.DESK_REPO);
   const everyProject = await projects.loadAll();
   const active = [...everyProject.values()].filter((p) => p.state === "active").sort(byCreated);
   return {
     inbox: needs.length + review.length,
-    triage: inState("triage").map((i) => ({ ...issueJson(i), now: agents.status((i.session && live.get(i.session)) || {}) })),
+    triage: inState("triage").map((i) => ({ ...issueJson(i), now: talkOf(i) })),
     running: inState("running").map(issueJson),
     landing: inState("landing").map(issueJson),
     trying: now && { slug: now.slug, branch: now.branch, issue: (now.slug && all.has(now.slug)) ? issueJson(all.get(now.slug)!) : null },
@@ -302,8 +309,7 @@ export async function framePage() {
     projects: active.map((p) => ({ slug: p.slug, title: p.title })),
     others: await sessions.others(),
     rows: await inboxRows(),
-    live: Object.fromEntries([...all.values()].filter((i) => i.session && !CLOSED.has(i.state))
-      .map((i) => [i.slug, agents.status(live.get(i.session!) || {})])),
+    live: Object.fromEntries([...all.values()].filter((i) => i.session && !CLOSED.has(i.state)).map((i) => [i.slug, talkOf(i)])),
   };
 }
 
@@ -312,7 +318,7 @@ const byCreated = (a: Project, b: Project) => (a.created < b.created ? -1 : a.cr
 export async function issuePage(slug: string) {
   const all = await store.loadAll();
   if (!all.has(slug)) throw new HttpError(404, "That issue is gone.");
-  await inboxItems(all, await agents.live()); // moves it on first, as the page does
+  await inboxItems(all); // moves it on first, as the page does
   return issuePageJson(all, slug);
 }
 

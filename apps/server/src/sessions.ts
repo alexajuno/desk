@@ -13,6 +13,7 @@ import { HOME } from "./config.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import { patternOf } from "./search.ts";
+import * as transcripts from "./transcript.ts";
 import { ago } from "./when.ts";
 
 export const PROJECTS = join(HOME, ".claude", "projects");
@@ -82,41 +83,61 @@ function readRow(row: TableRow) {
   }
 }
 
-const prompted_ = new Map<string, [string, number, number | null]>(); // session: its transcript, bytes read, when the user last wrote
+// Where a session's talk stands, from its transcript alone, open or closed: when the user last wrote, a message typed
+// in its chat or one desk sent for them, such as Approve's (both carry "origin": {"kind": "human"}), and when its last
+// reply ended ("stop_reason": "end_turn"). Read from where it stopped, as the table is; a chat desk moved writes on in
+// its new folder's file, which is read from its start.
+interface Talk { path: string; read: number; prompted: number | null; replied: number | null }
+const talks = new Map<string, Talk>();
 
-// When the user last wrote to the session, in seconds: a message typed in its chat, or one desk sent for them, such as
-// Approve's; both carry "origin": {"kind": "human"}. Read from where it stopped, as the table is.
-export function prompted(session: string): number | null {
-  let entry = prompted_.get(session);
-  if (!entry || !existsSync(entry[0]) || statSync(entry[0]).size < entry[1]) {
-    const paths = existsSync(PROJECTS) ? readdirSync(PROJECTS).map((d) => join(PROJECTS, d, `${session}.jsonl`)).filter((p) => existsSync(p)) : [];
-    if (!paths.length) return null;
-    const newest = paths.reduce((a, b) => (statSync(a).mtimeMs >= statSync(b).mtimeMs ? a : b));
-    entry = [newest, 0, null];
-    prompted_.set(session, entry);
-  }
-  const fd = openSync(entry[0], "r");
-  const size = statSync(entry[0]).size;
-  const buf = Buffer.alloc(Math.max(0, size - entry[1]));
-  readSync(fd, buf, 0, buf.length, entry[1]);
+function talk(session: string): Talk | null {
+  const path = transcripts.pathOf(session);
+  if (!path) return null;
+  let t = talks.get(session);
+  if (!t) talks.set(session, (t = { path, read: 0, prompted: null, replied: null }));
+  if (t.path !== path || statSync(path).size < t.read) [t.path, t.read] = [path, 0];
+  const fd = openSync(path, "r");
+  const size = statSync(path).size;
+  const buf = Buffer.alloc(Math.max(0, size - t.read));
+  readSync(fd, buf, 0, buf.length, t.read);
   closeSync(fd);
   const end = buf.lastIndexOf(10) + 1;
-  entry[1] += end;
+  t.read += end;
   let at = 0;
   while (at < end) {
     const nl = buf.indexOf(10, at);
     const line = buf.subarray(at, nl);
     at = nl + 1;
-    if (!line.includes('"origin":{"kind":"human"}')) continue;
+    const human = line.includes('"origin":{"kind":"human"}');
+    if (!human && !line.includes('"stop_reason":"end_turn"')) continue;
     let event;
     try {
       event = JSON.parse(line.toString("utf8"));
     } catch {
       continue;
     }
-    if (event.type === "user" && !event.isMeta && textOf(event) && event.timestamp) entry[2] = new Date(event.timestamp).getTime() / 1000;
+    if (!event.timestamp) continue;
+    const when = new Date(event.timestamp).getTime() / 1000;
+    if (human && event.type === "user" && !event.isMeta && textOf(event)) t.prompted = when;
+    else if (event.type === "assistant" && event.message?.stop_reason === "end_turn") t.replied = when;
   }
-  return entry[2];
+  return t;
+}
+
+// When the user last wrote to the session, and when its last reply ended, in seconds.
+export const prompted = (session: string): number | null => talk(session)?.prompted ?? null;
+export const replied = (session: string): number | null => talk(session)?.replied ?? null;
+
+// A turn writes to its transcript at each step; one silent this long stopped short of its reply (killed by a reboot,
+// or the host stopped under it). A long Bash call runs at most 10 minutes, Claude Code's own limit.
+const QUIET = 15 * 60_000;
+
+// Whether the session works on your last message: no reply has ended since, and its transcript moved in the last
+// QUIET. Its transcript alone says so, so a chat the host closed, or one never started, is not working.
+export function working(session: string): boolean {
+  const t = talk(session);
+  if (!t?.prompted || (t.replied ?? 0) >= t.prompted) return false;
+  return Date.now() - statSync(t.path).mtimeMs < QUIET;
 }
 
 // The session table, brought up to date with the transcripts.

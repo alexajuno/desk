@@ -28,7 +28,7 @@ import { toast } from "../ui/toast";
 type Row = IssueRow & { now: string };
 type Where = Pick<MenuOptions, "anchor" | "x" | "y">;
 
-const NOW: Record<string, string> = { working: "Its chat is working", idle: "Its chat waits for you" };
+const NOW: Record<string, string> = { working: "Its chat is working", idle: "Its chat waits for you", none: "It has no chat" };
 
 // Newest first, as chats come in.
 const rows = (): Row[] => [...(frame.data?.triage ?? [])].sort((a, b) => (a.created < b.created ? 1 : a.created > b.created ? -1 : 0));
@@ -106,10 +106,10 @@ export const TriagePage = observer(function TriagePage() {
                   to={`/triage?i=${p.slug}`} title={p.title} data-slug={p.slug} data-state={p.state} data-priority={p.priority} data-parent={p.parent ?? ""}
                   onMouseMove={() => { if (ui.focused !== p.slug) ui.focus(p.slug, true); }}
                   onContextMenu={(e) => { e.preventDefault(); ui.focus(p.slug); actionsMenu(p, { x: e.clientX, y: e.clientY }, picked?.slug ?? null); }}>
-                  <span className={`triage-now ${p.now}`} title={NOW[p.now] ?? "Its chat is closed"}><StateIcon state="triage" /></span>
+                  <span className={`triage-now ${p.now}`} title={NOW[p.now]}><StateIcon state="triage" /></span>
                   <span className="lines">
                     <span className="line"><span className="title">{p.title}</span>{fromSlack(p.link) && <span className="from" title="Tagged in Slack">🐧</span>}</span>
-                    <span className="line sub"><span className="says">{NOW[p.now] ?? "Its chat is closed"}</span><span className="age" title={p.created}>{p.created_short}</span></span>
+                    <span className="line sub"><span className="says">{NOW[p.now]}</span><span className="age" title={p.created}>{p.created_short}</span></span>
                   </span>
                 </Go>
               ))}
