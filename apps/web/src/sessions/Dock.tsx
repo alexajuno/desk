@@ -247,7 +247,7 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
       })}
       {liveSteps.length > 0 && last?.kind !== "steps" && <Steps s={s} items={[]} running={liveSteps} live />}
       {liveText.map((b) => <Reply key={`${b.msg}:${b.index}`} text={b.text} streaming />)}
-      {s.pending.map((p) => <You key={p.key} text={p.text} images={p.images} queued={s.working} />)}
+      {s.pending.map((p) => <You key={p.key} text={p.text} images={p.images.length} queued={s.working} />)}
       {s.working && !liveText.length && !s.asks.length && <Working since={s.since} />}
     </>
   );
@@ -460,6 +460,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   const asked = useRef(0);
   const [typing, setTyping] = useState(false); // the cursor is here: the hint says the keys of this mode
   const focus = wantsFocus.get() === s.id;
+  const queued = s.working && s.pending.length > 0; // messages waiting for Claude's next step, which ↑ takes back
 
   useEffect(() => {
     if (!focus) return;
@@ -522,6 +523,19 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
     }
   }
 
+  // ↑ on the box's first line while messages wait: they come back into the box, above what is typed, to edit.
+  async function takeBack() {
+    const back = await s.withdraw();
+    if (!back) return;
+    setText((now) => [back.text, now].filter(Boolean).join("\n"));
+    setImages((now) => [...back.images, ...now]);
+    requestAnimationFrame(() => {
+      const el = box.current!;
+      el.focus();
+      el.selectionStart = el.selectionEnd = back.text.length;
+    });
+  }
+
   async function attach(files: Iterable<File>) {
     const read = (await Promise.all([...files].map(readImage))).filter((x): x is Image => Boolean(x));
     if (read.length) setImages((now) => [...now, ...read]);
@@ -569,6 +583,9 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           } else if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             void send();
+          } else if (e.key === "ArrowUp" && queued && !e.currentTarget.value.slice(0, e.currentTarget.selectionStart).includes("\n")) {
+            e.preventDefault();
+            void takeBack();
           } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === "KeyC" && s.working && e.currentTarget.selectionStart === e.currentTarget.selectionEnd) {
             e.preventDefault(); // a terminal's Ctrl C; with text selected it copies
             void s.interrupt();
@@ -584,7 +601,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           {GLYPH.plus}
           <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
-        <span className="composer-hint">{!typing ? "I to type" : s.working ? "Enter queues · Ctrl C stops" : "Enter sends · Shift Enter for a new line"}</span>
+        <span className="composer-hint">{!typing ? "I to type" : queued ? "↑ edits the queued · Ctrl C stops" : s.working ? "Enter queues · Ctrl C stops" : "Enter sends · Shift Enter for a new line"}</span>
         <Runs s={s} />
         {s.working && (
           <button className="stop" type="button" title="Stop  Ctrl C" onClick={() => void s.interrupt()}>

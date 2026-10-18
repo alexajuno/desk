@@ -50,9 +50,9 @@ export interface Image {
 }
 
 interface Pending {
-  key: string;
+  key: string; // its uuid too, by which ↑ takes it back from Claude's queue
   text: string;
-  images: number;
+  images: Image[];
 }
 
 export class LiveSession {
@@ -75,7 +75,7 @@ export class LiveSession {
     this.id = id;
     makeObservable(this, {
       items: observableShallow, meta: observableRef, working: observable, since: observable, asks: observableRef, partial: observable,
-      pending: observable, connected: observable, loaded: observable, apply: action, sending: action, sent: action, shows: action,
+      pending: observable, connected: observable, loaded: observable, apply: action, sending: action, sent: action, took: action, shows: action,
     });
   }
 
@@ -181,8 +181,8 @@ export class LiveSession {
     if (kept.length) this.items = [...this.items, ...kept];
   }
 
-  sending(text: string, images: number): Pending {
-    const p = { key: `pending-${Date.now()}`, text, images };
+  sending(text: string, images: Image[]): Pending {
+    const p = { key: crypto.randomUUID(), text, images };
     this.pending.push(p);
     if (!this.working) this.setWorking(true); // drawn at once; the server's word follows
     return p;
@@ -193,12 +193,35 @@ export class LiveSession {
   }
 
   async send(text: string, images: Image[]) {
-    const p = this.sending(text, images.length);
-    const res = await postJson(`/api/live/${this.id}/send`, { text, images: images.map(({ media_type, data }) => ({ media_type, data })) });
+    const p = this.sending(text, images);
+    const res = await postJson(`/api/live/${this.id}/send`, { text, images: images.map(({ media_type, data }) => ({ media_type, data })), uuid: p.key });
     this.sent(p, res.ok);
     if (!res.ok) toast(await reason(res));
     else if ((await res.json()).queued) toast("It's still working in the background: your message goes in when this turn ends.");
     return res.ok;
+  }
+
+  // ↑ in the composer, as in Claude Code's terminal: the messages queued while Claude works come back from its queue,
+  // joined, for the user to edit. One Claude has read already stays in the chat.
+  async withdraw(): Promise<{ text: string; images: Image[] } | null> {
+    const queued = [...this.pending], back: Pending[] = [];
+    let read = 0;
+    for (const p of queued) {
+      const res = await postJson(`/api/live/${this.id}/withdraw`, { uuid: p.key });
+      if (!res.ok) {
+        toast(await reason(res));
+        break;
+      }
+      if ((await res.json()).withdrawn) back.push(p);
+      else read++;
+    }
+    this.took(back);
+    if (read) toast(queued.length === 1 ? "Claude has read it already." : `Claude has read ${read} of them already.`);
+    return back.length ? { text: back.map((p) => p.text).filter(Boolean).join("\n"), images: back.flatMap((p) => p.images) } : null;
+  }
+
+  took(back: Pending[]) {
+    this.pending = this.pending.filter((p) => !back.includes(p));
   }
 
   async interrupt() {

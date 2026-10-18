@@ -183,6 +183,7 @@ export async function connect(ws: WebSocket, id: string) {
 export interface Sent {
   text: string;
   images?: { media_type: string; data: string }[];
+  uuid?: string; // the panel's, to take it back while it waits
 }
 
 const waiting = new Map<string, Sent[]>(); // messages for sessions still busy in the daemon, sent once it is idle
@@ -198,7 +199,7 @@ function content(m: Sent): hosted.Content {
 // mid-turn: the message waits here until its turn ends, then the host takes the session in with it.
 export async function send(id: string, m: Sent): Promise<{ queued: boolean }> {
   try {
-    await agents.tell(id, content(m));
+    await agents.tell(id, content(m), m.uuid);
     return { queued: false };
   } catch (error) {
     if (!(error instanceof agents.Busy)) throw error;
@@ -222,6 +223,16 @@ export async function send(id: string, m: Sent): Promise<{ queued: boolean }> {
     }
   })();
   return { queued: true };
+}
+
+// Take back a message Claude has not read yet (the composer's ↑): true when it never will.
+export async function withdraw(id: string, uuid: string): Promise<boolean> {
+  const list = waiting.get(id), at = list?.findIndex((m) => m.uuid === uuid) ?? -1;
+  if (at >= 0) {
+    list!.splice(at, 1);
+    return true;
+  }
+  return Boolean(await hosted.holds(id)) && hosted.withdraw(id, uuid);
 }
 
 export async function interrupt(id: string) {

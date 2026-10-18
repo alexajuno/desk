@@ -497,6 +497,16 @@ export async function create(): Promise<FastifyInstance> {
       throw new HttpError(409, (error as Error).message);
     }
   });
+  app.post("/api/live/:id/withdraw", async (req: Req) => {
+    mustBePage(req);
+    const { uuid } = (req.body ?? {}) as unknown as { uuid?: string };
+    if (!uuid) throw new HttpError(422, "Which message?");
+    try {
+      return { withdrawn: await live.withdraw(sessionOf(req), uuid) };
+    } catch (error) {
+      throw new HttpError(409, (error as Error).message);
+    }
+  });
   app.post("/api/live/:id/interrupt", async (req: Req) => {
     mustBePage(req);
     try {

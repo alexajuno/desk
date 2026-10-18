@@ -112,8 +112,9 @@ async function* inbox(s: Session): AsyncGenerator<SDKUserMessage> {
   }
 }
 
-function userMessage(content: Content): SDKUserMessage {
-  return { type: "user", message: { role: "user", content: content as never }, parent_tool_use_id: null, session_id: "", origin: { kind: "human" } } as SDKUserMessage;
+// The uuid, when the panel gave one, is how the message is taken back while it waits (withdraw).
+function userMessage(content: Content, uuid?: string): SDKUserMessage {
+  return { type: "user", message: { role: "user", content: content as never }, parent_tool_use_id: null, session_id: "", origin: { kind: "human" }, ...(uuid ? { uuid } : {}) } as SDKUserMessage;
 }
 
 function start(o: StartOptions): Session {
@@ -249,11 +250,25 @@ app.post<{ Body: StartOptions }>("/sessions", async (req) => {
   return row(start(o));
 });
 
-app.post<{ Params: { id: string }; Body: { content: Content; priority?: "now" | "next" | "later" } }>("/sessions/:id/send", async (req) => {
+app.post<{ Params: { id: string }; Body: { content: Content; uuid?: string; priority?: "now" | "next" | "later" } }>("/sessions/:id/send", async (req) => {
   const s = find(req.params.id);
-  s.inbox.push(userMessage(req.body.content));
+  s.inbox.push(userMessage(req.body.content, req.body.uuid));
   s.wake?.();
   return row(s);
+});
+
+// Take back a message Claude has not read yet, as ↑ does to the queue in its terminal: from the inbox, or from Claude
+// Code's own queue, where it waits for the turn's next step. False once Claude has read it.
+app.post<{ Params: { id: string }; Body: { uuid: string } }>("/sessions/:id/withdraw", async (req) => {
+  const s = find(req.params.id);
+  const at = s.inbox.findIndex((m) => m.uuid === req.body.uuid);
+  if (at >= 0) {
+    s.inbox.splice(at, 1);
+    return { withdrawn: true };
+  }
+  // The SDK's Query has it (the control request cancel_async_message, which sdk.d.ts documents) but types it not.
+  const q = s.q as Query & { cancelAsyncMessage(uuid: string): Promise<boolean> };
+  return { withdrawn: Boolean(await q.cancelAsyncMessage(req.body.uuid)) };
 });
 
 app.post<{ Params: { id: string } }>("/sessions/:id/interrupt", async (req) => {

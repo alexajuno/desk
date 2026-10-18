@@ -169,9 +169,11 @@ export async function start(o: StartOptions): Promise<HostRow> {
   return row;
 }
 
-export async function send(id: string, content: Content): Promise<HostRow> {
-  return call<HostRow>("POST", `/sessions/${id}/send`, { content });
+export async function send(id: string, content: Content, uuid?: string): Promise<HostRow> {
+  return call<HostRow>("POST", `/sessions/${id}/send`, { content, ...(uuid ? { uuid } : {}) });
 }
+
+export const withdraw = async (id: string, uuid: string) => (await call<{ withdrawn: boolean }>("POST", `/sessions/${id}/withdraw`, { uuid })).withdrawn;
 
 export const interrupt = (id: string) => call("POST", `/sessions/${id}/interrupt`, {});
 export const answer = (id: string, ask: string, result: Record<string, unknown>) => call("POST", `/sessions/${id}/answer`, { ask, result });
