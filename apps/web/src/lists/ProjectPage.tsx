@@ -56,7 +56,7 @@ function Head({ slug, title, tab, tools }: { slug: string; title?: string; tab: 
   useEffect(() => { if (title) document.title = `${title} › ${tab ? "Issues" : "Overview"} · desk`; }, [title, tab]);
   return (
     <>
-      <Bar crumb={<span className="bar-title project-crumb">{GLYPH.project}{title}</span>} />
+      <Bar crumb={title && <span className="bar-title project-crumb">{GLYPH.project}{title}</span>} />
       <div className="view-bar">
         <nav className="tabs" aria-label="Views">
           {TABS.map(([t, name]) => (
