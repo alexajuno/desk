@@ -7,8 +7,9 @@ import { useLocation } from "react-router";
 import { deskPath, Go } from "../app/nav";
 import { frame } from "../store/frame";
 import { ui } from "../store/ui";
-import { Ring, SIDE_ICON, StateIcon } from "../ui/icons";
-import { toggled } from "../ui/menu";
+import { renameChat } from "../sessions/live";
+import { GLYPH, Ring, SIDE_ICON, StateIcon } from "../ui/icons";
+import { openMenu, toggled } from "../ui/menu";
 import { helpMenu } from "./help";
 import { toggleSide } from "./side";
 
@@ -21,6 +22,16 @@ function triageTip(triage: { now: string }[]) {
 const ISSUES_TIP = "All issues  G then E\nActive  G then A\nBacklog  G then B";
 const WHY = "desk runs this branch instead of main: a session's test, or your Try";
 const SAYS = { working: "Working", waiting: "Waiting for you", open: "Open, idle" };
+
+// A chat's right-click menu: Rename, typed over its title. An empty one gives it back Claude Code's.
+function chatMenu(c: { session: string; title: string }, at: { x: number; y: number }) {
+  const rename = () => openMenu({
+    ...at, filter: "input", className: "folders", query: c.title, placeholder: "Rename chat…",
+    items: () => [], empty: "Enter saves it; empty gives back its own title",
+    onEnter: (typed) => void renameChat(c.session, typed.replace(/\s+/g, " ").trim()),
+  });
+  openMenu({ ...at, className: "actions", items: () => [{ icon: GLYPH.pencil, label: "Rename…", hint: "R", key: "r", more: true, run: rename }] });
+}
 
 export const Sidebar = observer(function Sidebar() {
   const here = deskPath(useLocation().pathname);
@@ -65,7 +76,8 @@ export const Sidebar = observer(function Sidebar() {
           <div className="nav-label">Chats</div>
           {d.chats.map((c) => (
             <Go key={c.session} className={`nav-item${at(`/sessions/${c.session}`)}`} to={`/sessions/${c.session}`}
-              title={c.working ? "Working" : c.unread ? "Said something you have not read" : c.title}>
+              title={c.working ? "Working" : c.unread ? "Said something you have not read" : c.title}
+              onContextMenu={(e) => { e.preventDefault(); chatMenu(c, { x: e.clientX, y: e.clientY }); }}>
               {c.working ? <StateIcon state="running" /> : c.unread ? <StateIcon state="review" /> : <Ring />}
               <span className="nav-title">{c.title}</span>
             </Go>

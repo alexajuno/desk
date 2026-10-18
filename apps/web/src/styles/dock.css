@@ -85,6 +85,11 @@
 .dock-issue:hover { background: var(--btn-ghost-hover); }
 .dock-issue:not(.on) { margin-left: 0; border-color: var(--border-2); background: var(--bg-raised); }
 .dock-issue:not(.on):hover { background: var(--bg-hover); }
+/* a chat's own title, renamed where it is: quiet until the mouse is on it, as the issue's chip */
+.dock-title input.title { field-sizing: content; max-width: 100%; height: 26px; margin-left: -8px; padding: 0 8px; border: 0; border-radius: 6px;
+                          background: transparent; font: 500 13px/26px var(--font); color: var(--text-1); outline: none; }
+.dock-title input.title:hover { background: var(--btn-ghost-hover); }
+.dock-title input.title:focus { background: var(--bg-hover); }
 /* the sidebar's toggle, while the sidebar is hidden, as a page's top bar has it */
 .dock-head .side-toggle { display: none; flex: none; margin-left: -6px; }
 .side-collapsed .dock-head .side-toggle { display: grid; }

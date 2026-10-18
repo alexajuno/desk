@@ -118,6 +118,9 @@ async function frameNow() {
 
 const frame = serial("sync frame", frameNow);
 
+// Something the frame shows changed that no watcher sees, such as a chat's title: tell the apps now.
+export const frameChanged = () => void frame();
+
 // What each running session is doing, as its state file says: busy or idle, by session id.
 function sessionStates(): Map<string, string> {
   const states = new Map<string, string>();

@@ -263,6 +263,18 @@ export function live(id: string): LiveSession {
   return s;
 }
 
+// A chat's own title, from its head or the sidebar's menu: an open chat shows it at once, and the server's next meta
+// confirms it. An empty one gives the chat back Claude Code's title.
+export async function renameChat(id: string, title: string) {
+  const s = open.get(id), was = s?.meta;
+  if (s && was && title) s.shows({ ...was, title });
+  const res = await postJson(`/api/live/${id}/title`, { title });
+  if (!res.ok) {
+    if (s && was) s.shows(was);
+    toast(await reason(res));
+  }
+}
+
 // The session, connected while the component that draws it is on screen.
 export function useLive(id: string | null): LiveSession | null {
   const s = id ? live(id) : null;

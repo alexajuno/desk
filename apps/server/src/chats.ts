@@ -41,6 +41,7 @@ export interface Chat {
   cwd?: string;
   agent?: string; // the agent the chat is with, by name; none for desk's own
   bare?: boolean; // a Chat: no agent and no desk prompt
+  named?: string; // the title the user gave it, over Claude Code's
   from?: string; // the script whose message started it (push)
   seen?: number; // when the user last looked at it, in seconds: the Inbox leaves out what the agent said before
   [key: string]: unknown;
@@ -266,6 +267,18 @@ export function seenNow(session: string) {
   chat.seen = Date.now() / 1000;
   save(chat);
 }
+
+// The user's own title for the chat, or none to give it back Claude Code's. "Rename by hand" (the user, 18 Oct).
+export function rename(session: string, title: string) {
+  const chat = agentChatOf(session);
+  if (!chat) throw new NoChat("No such chat");
+  if (title) chat.named = title;
+  else delete chat.named;
+  save(chat);
+}
+
+// The title the user gave the session's chat, if any.
+export const namedOf = (session: string) => ofSession(session)?.named ?? "";
 
 // The user's words and the agent's, in order, from a chat's transcript.
 export function* said(chat: Chat): Generator<[string, string]> {

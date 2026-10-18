@@ -10,14 +10,14 @@ import { postJson, reason } from "../api/http";
 import { go } from "../app/nav";
 import { markdown } from "../lib/markdown";
 import { seenPage } from "../api/page";
-import type { IssuePageData } from "../issues/IssueView";
+import { Title, type IssuePageData } from "../issues/IssueView";
 import { dock, SIDE_WIDTH, type Layout, type Reading } from "../store/dock";
 import { issues } from "../store/issues";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { GLYPH, SIDE_ICON } from "../ui/icons";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
-import { live, useLive, type Ask, type Block, type Image, type Item, type LiveSession } from "./live";
+import { live, renameChat, useLive, type Ask, type Block, type Image, type Item, type LiveSession } from "./live";
 import { effortName, runsMenu, warm } from "./models";
 
 // The chat whose composer takes the cursor: the one openSession opened. Its composer takes it as it comes on screen,
@@ -200,7 +200,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
 });
 
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, whether it works, its issue's
-// title, and its folder. The title shows or hides the issue beside it.
+// title, and its folder. The title shows or hides the issue beside it; a chat with no issue is renamed there.
 const ChatHead = observer(function ChatHead({ s }: { s: LiveSession }) {
   const m = s.meta;
   return (
@@ -210,6 +210,7 @@ const ChatHead = observer(function ChatHead({ s }: { s: LiveSession }) {
       <div className="dock-title">
         {dock.issue && m?.issue
           ? <button type="button" className={`dock-issue${dock.sideShown ? " on" : ""}`} title={`${dock.sideShown ? "Hide" : "Show"} the issue  ]`} onClick={toggleIssue}>{m.issue.title}</button>
+          : m?.chat && !m.issue ? <Title line title={m.title} save={(t) => renameChat(s.id, t)} />
           : <span>{m?.issue?.title ?? m?.title ?? ""}</span>}
         {fresh(s) && s.startAs === "chat" ? <span className="dock-folder" title="Your home folder, where a Chat runs">~</span>
           : m?.folder && <span className="dock-folder" title={m.cwd}>{m.folder}</span>}

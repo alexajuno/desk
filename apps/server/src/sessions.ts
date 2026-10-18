@@ -201,9 +201,11 @@ export function title(row: TableRow, i: Issue | null = null): string {
 }
 
 // desk names each session it starts in the host, which keeps the name as the session's title: a chat "desk chat 17 Oct
-// 19:24", an issue's its title cut short. Its issue's whole title, or what was first said in it, reads better.
+// 19:24", an issue's its title cut short. Its issue's whole title, or what was first said in it, reads better. A chat
+// the user retitled goes by their title, unless it works an issue, which names it.
 function shown(row: TableRow, i: Issue | null, desks: boolean): string {
-  return desks || i ? i?.title || row.ai_title || row.first_prompt || title(row) : title(row);
+  const named = i ? "" : chats.namedOf(row.id);
+  return named || (desks || i ? i?.title || row.ai_title || row.first_prompt || title(row) : title(row));
 }
 
 // The session's title as the list shows it, or nothing when it has no transcript yet.
@@ -212,10 +214,11 @@ export function titleOf(sid: string): string {
   return row ? title(row) : "";
 }
 
-// A desk chat's title, as the list shows it: Claude Code's own, or what was first said in it; nothing before that.
+// A desk chat's title, as the list shows it: the user's own, Claude Code's, or what was first said in it; nothing before
+// that.
 export function chatTitleOf(sid: string): string {
   const row = refresh().get(sid);
-  return row ? row.ai_title || row.first_prompt || "" : "";
+  return chats.namedOf(sid) || (row ? row.ai_title || row.first_prompt || "" : "");
 }
 
 // The folder, short: "desk" for ~/projects/desk, "~" for home.

@@ -304,16 +304,16 @@ function useEditorKeys(isSave: (e: React.KeyboardEvent, k: string) => boolean, f
   };
 }
 
-// The title, an issue's or a project's, editable where it is, as Linear's: Enter or clicking away saves, Esc leaves it
-// as it was.
-export function Title({ title, save }: { title: string; save: (title: string) => unknown }) {
+// The title, an issue's, a project's or a chat's, editable where it is, as Linear's: Enter or clicking away saves, Esc
+// leaves it as it was. A chat's stays on one line in its head (line).
+export function Title({ title, save, line = false }: { title: string; save: (title: string) => unknown; line?: boolean }) {
   const [value, setValue] = useState(title);
-  const box = useRef<HTMLTextAreaElement>(null);
+  const box = useRef<HTMLTextAreaElement & HTMLInputElement>(null);
   const done = useRef(true);
   useEffect(() => { if (done.current) setValue(title); }, [title]);
   useLayoutEffect(() => {
     const el = box.current;
-    if (!el) return;
+    if (!el || line) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   });
@@ -327,9 +327,10 @@ export function Title({ title, save }: { title: string; save: (title: string) =>
     box.current?.blur();
   }
   const keys = useEditorKeys((_e, k) => k === "Enter", finish);
-  return (
-    <textarea ref={box} className="title" rows={1} value={value} aria-label="Title" spellCheck={false}
-      onChange={(e) => setValue(e.target.value.replace(/\n/g, " "))}
-      onFocus={() => { done.current = false; ui.setEditing(true); }} onBlur={() => finish(true)} {...keys} />
-  );
+  const props = {
+    ref: box, className: "title", value, "aria-label": "Title", spellCheck: false,
+    onChange: (e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => setValue(e.target.value.replace(/\n/g, " ")),
+    onFocus: () => { done.current = false; ui.setEditing(true); }, onBlur: () => finish(true), ...keys,
+  };
+  return line ? <input {...props} title="Rename" /> : <textarea rows={1} {...props} />;
 }

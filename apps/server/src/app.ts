@@ -8,6 +8,7 @@ import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import * as agents from "./agents.ts";
 import * as api from "./api.ts";
+import * as chats from "./chats.ts";
 import { HOME } from "./config.ts";
 import * as store from "./issues.ts";
 import { byRank, CLOSED, runs } from "./issues.ts";
@@ -534,6 +535,18 @@ export async function create(): Promise<FastifyInstance> {
     } catch (error) {
       throw new HttpError(422, (error as Error).message);
     }
+    return { ok: true };
+  });
+  // A chat's own title, typed in its head or in the sidebar's menu; an empty one gives it back Claude Code's.
+  app.post("/api/live/:id/title", async (req: Req) => {
+    mustBePage(req);
+    const { title } = (req.body ?? {}) as unknown as { title?: string };
+    try {
+      chats.rename(sessionOf(req), String(title ?? "").replace(/\s+/g, " ").trim().slice(0, 200));
+    } catch (error) {
+      throw new HttpError(404, (error as Error).message);
+    }
+    sync.frameChanged();
     return { ok: true };
   });
   // The chip's menu: the models to pick from, and the plan's 5-hour and weekly usage.
