@@ -463,8 +463,21 @@ async function readImage(file: File): Promise<Image | null> {
   return { media_type: file.type, data: url.slice(url.indexOf(",") + 1), url };
 }
 
+// What is typed and not yet sent, by chat (localStorage.composerDrafts), so a closed or reloaded tab gives it back,
+// as claude.ai's composer does. Text only: images would soon fill the browser's few megabytes. The 50 chats typed in
+// last keep theirs.
+const drafts = (): Record<string, string> => JSON.parse(localStorage.composerDrafts ?? "{}");
+
+function keepDraft(id: string, text: string) {
+  const { [id]: _, ...rest } = drafts();
+  const all = Object.entries(rest);
+  if (text.trim()) all.push([id, text]);
+  localStorage.composerDrafts = JSON.stringify(Object.fromEntries(all.slice(-50)));
+}
+
 const Composer = observer(function Composer({ s }: { s: LiveSession }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => drafts()[s.id] ?? "");
+  useEffect(() => keepDraft(s.id, text), [s.id, text]);
   const [images, setImages] = useState<Image[]>([]);
   const [picks, setPicks] = useState<Pick[]>([]);
   const [at, setAt] = useState(0);
