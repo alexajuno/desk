@@ -188,6 +188,22 @@ export function agentChats(): Chat[] {
   return chats().filter((c) => KINDS.has(c.kind ?? "")).sort((a, b) => (activity(a) < activity(b) ? 1 : activity(a) > activity(b) ? -1 : 0));
 }
 
+// The chat filing an issue of this title now: one with no issue yet whose transcript holds the curl that files it.
+// Claude Code writes a tool call to the transcript before it runs it, so the call is there while desk answers it.
+export function filing(title: string): Chat | null {
+  const typed = JSON.stringify(title).slice(1, -1);
+  for (const chat of chats()) {
+    if (!KINDS.has(chat.kind ?? "") || chat.issue) continue;
+    const path = transcripts.pathOf(chat.session);
+    if (!path || Date.now() - statSync(path).mtimeMs > 60_000) continue;
+    const [recent] = transcripts.read(path, Math.max(0, statSync(path).size - 256 * 1024)); // its last steps
+    const calls = recent.flatMap((e) => (e.type === "assistant" && Array.isArray(e.message?.content) ? e.message.content : []));
+    if (calls.some((b) => b.type === "tool_use" && String(b.input?.command ?? "").includes("/api/issues") && String(b.input.command).includes(typed)))
+      return chat;
+  }
+  return null;
+}
+
 // --- moving a chat -------------------------------------------------------------------------------------------------
 // A chat's session loads the folder it runs in, and only that one, so once it binds to an issue in another folder desk
 // moves it there, between two turns (chats.py, in git history, said what was checked, 15 Oct).

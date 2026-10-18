@@ -130,7 +130,12 @@ export function routes(app: FastifyInstance) {
     if (!(fields.title ?? "").trim()) throw new HttpError(422, "title is required");
     const i = store.blank(await store.newSlug(fields.title!), fields.title!);
     await apply(i, fields);
+    // A chat files its own issue in Triage, and desk binds the two then and there rather than trusting the chat to (17
+    // Oct: one filed "Teammates in desk" and never bound it, so the issue had no chat to settle it with).
+    const chat = i.state === "triage" ? chats.filing(i.title) : null;
+    if (chat) i.session = chat.session;
     await store.save(i);
+    if (chat) chats.bind(chat, i, baseOf(req));
     return reply.code(201).send(asJson(i, true));
   });
 
