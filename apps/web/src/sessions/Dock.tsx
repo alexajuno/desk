@@ -494,8 +494,9 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
       list = commands.current.filter((c) => c.label.slice(1).toLowerCase().includes(w))
         .sort((a, b) => Number(!a.label.slice(1).toLowerCase().startsWith(w)) - Number(!b.label.slice(1).toLowerCase().startsWith(w))).slice(0, 12);
     } else {
-      // A new desk chat's first @ names one of the user's agents, whom the chat is then with; otherwise @ is a file.
-      const opening = s.meta?.chat && !s.meta.agent && t.start === 0 && !s.items.length && !s.pending.length;
+      // A new desk chat's first @ names one of the user's agents, whom the chat is then with; otherwise @ is a file. A
+      // chat still connecting, as right after New session, offers them too: desk switches only a new desk chat.
+      const opening = (!s.meta || (s.meta.chat && !s.meta.agent)) && t.start === 0 && !s.items.length && !s.pending.length;
       const agents = opening ? (await agentPicks()).filter((a) => a.label.slice(1).toLowerCase().includes(t.word.toLowerCase())) : [];
       list = agents.length ? agents : ((await (await fetch(`/api/live/${s.id}/files?q=${encodeURIComponent(t.word)}`)).json()) as string[])
         .slice(0, 12).map((f) => ({ label: f, insert: `@${f} ` }));
