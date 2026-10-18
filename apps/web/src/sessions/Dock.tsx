@@ -163,16 +163,20 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   useLayoutEffect(() => {
     if (stuck.current) scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
   }, [s.items.length, streamed, s.pending.length, s.asks.length, s.working, s.loaded]);
-  // A composer that grows or a question card that comes shrinks the view, and a reply that streams grows what is in
-  // it: either way it keeps to the bottom while it was there.
+  // A reply that streams grows the conversation, and a composer that grows or a question card that comes grows the
+  // foot over its end: either way the view keeps to the bottom while it was there. The view itself changes size only
+  // with the window.
   useEffect(() => {
     const el = scroller.current!;
     const keep = new ResizeObserver(() => { if (stuck.current) el.scrollTo({ top: el.scrollHeight }); });
     keep.observe(el);
     keep.observe(el.firstElementChild!); // the conversation itself, as words stream and steps unfold
+    keep.observe(el.lastElementChild!); // the foot: the composer and any question card
     return () => keep.disconnect();
   }, []);
 
+  // The composer lies over the conversation's end, as claude.ai's does: the foot sticks to the bottom of the view, and
+  // the conversation runs on behind it (dock.css).
   return (
     <div className="session-view">
       <ChatHead s={s} />
@@ -183,9 +187,11 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
             : null}
           <Conversation s={s} />
         </div>
+        <div className="dock-foot">
+          {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
+          <Composer s={s} />
+        </div>
       </div>
-      {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
-      <Composer s={s} />
     </div>
   );
 });
@@ -467,14 +473,6 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
     box.current!.focus();
     runInAction(() => wantsFocus.set(null));
   }, [focus]);
-
-  // Grows with what is typed, up to a third of the panel. A chat that opens hidden measures 0, which left the box 0px
-  // tall with nothing to click; it keeps its one row then, and measures again on the first keystroke.
-  useLayoutEffect(() => {
-    const el = box.current!;
-    el.style.height = "auto";
-    if (el.scrollHeight) el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
-  }, [text]);
 
   async function complete(t: ReturnType<typeof tokenAt>) {
     setToken(t);

@@ -97,9 +97,20 @@
 .live-dot.working { background: var(--state-running); animation: dock-pulse 1.4s ease-in-out infinite; }
 .live-dot.asks { background: var(--state-waiting); }
 
-/* the conversation */
-.dock-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
-.convo { display: flex; flex-direction: column; gap: 14px; max-width: 760px; margin: 0 auto; padding: 32px 24px 16px; }
+/* the conversation, and its foot lying over its end, as claude.ai lays a chat out. The view keeps its height whatever
+   the composer does, and keeps the scrollbar's room, so its width stays too. The conversation fills it when short, so
+   the foot sits at its bottom. Its last words stop the fade's height above the foot, and only pass under the fade as
+   it scrolls. */
+.dock-scroll { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+               scrollbar-gutter: stable; }
+.convo { flex: 1 0 auto; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; width: 100%; max-width: 808px; margin: 0 auto;
+         padding: 32px 24px var(--foot-fade); }
+/* Measured on claude.ai, 18 Oct, dark, at 2x: the composer's band is position: sticky at bottom: 0, the page's colour
+   behind the box, and a 48px gradient from the page's colour to none above it. */
+:root { --foot-fade: 48px; }
+.dock-foot { position: sticky; bottom: 0; z-index: 1; display: flex; flex-direction: column; background: var(--bg-panel); }
+.dock-foot::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: var(--foot-fade); pointer-events: none;
+                     background: linear-gradient(to top, var(--bg-panel), transparent); }
 .convo > * { animation: dock-rise 0.18s ease both; }
 .convo-empty { margin: 48px 12px; text-align: center; font-size: 13px; color: var(--text-3); }
 .convo-note { margin: 0; text-align: center; font-size: 12px; color: var(--text-3); }
@@ -160,8 +171,8 @@
 .spark { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: dock-pulse 1.2s ease-in-out infinite; }
 .working-key { margin-left: auto; font-size: 11px; color: var(--text-4); }
 
-/* what waits on the user, above the composer: a permission, or Claude's questions as buttons */
-.ask { flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); max-height: 45%; overflow: auto; margin: 0 auto 8px; padding: 12px;
+/* what waits on the user, in the foot above the composer: a permission, or Claude's questions as buttons */
+.ask { flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); max-height: 45vh; overflow: auto; margin: 0 auto 8px; padding: 12px;
        border: 1px solid var(--border-2); border-radius: 12px; background: var(--bg-raised); animation: dock-rise 0.18s ease; }
 .ask-q + .ask-q { margin-top: 14px; }
 .ask-header { display: inline-block; margin-bottom: 4px; font: 500 11px var(--font); color: var(--text-3); }
@@ -184,8 +195,11 @@
 .composer { position: relative; flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); margin: 0 auto 16px; padding: 10px 8px 6px 12px;
             border: 1px solid var(--border-2); border-radius: 14px; background: var(--bg-raised); transition: border-color 0.15s; }
 .composer:focus-within { border-color: var(--border-3); }
-.composer textarea { display: block; width: 100%; max-height: 240px; box-sizing: border-box; padding: 0; border: 0; outline: 0; resize: none;
-                     background: transparent; font: 450 14px/21px var(--font); color: var(--text-1); }
+/* It grows with what is typed, a line at a time, up to 240px, then scrolls inside. The browser sizes it to its text,
+   as claude.ai's box grows by itself: measuring it by hand on each key shrank it to one line for a moment, which pulled
+   the conversation's scroll up (18 Oct). */
+.composer textarea { display: block; width: 100%; min-height: 21px; max-height: 240px; box-sizing: border-box; padding: 0; border: 0; outline: 0;
+                     resize: none; field-sizing: content; background: transparent; font: 450 14px/21px var(--font); color: var(--text-1); }
 .composer textarea::placeholder { color: var(--text-4); }
 .composer-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
 .composer-hint { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--text-4); }
