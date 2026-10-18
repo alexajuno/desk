@@ -18,7 +18,7 @@ In order:
 
 desk.css holds the numbers, and its comments say where and when each was measured: `grep -n measured apps/web/src/styles/*.css` lists them. What follows is the pattern under the numbers. Where the two disagree, desk.css wins; fix this file.
 
-**Surfaces.** A dark app background, the 244px sidebar on it, and the page in an inset panel 8px from the window's edges, with 12px corners, a 0.5px `--border-2` edge and `--shadow-panel`. Popovers (menus, tooltips, the new issue panel) float on `--bg-pop` with `--shadow-pop`. In light, Linear gives the sidebar, the content and popovers each their own palette, so a fill measured in the content can be wrong in the sidebar (the sidebar's New issue button's is).
+**Surfaces.** A dark app background, the 244px sidebar on it, and the page in an inset panel 8px from the window's edges, with 12px corners, a 0.5px `--border-2` edge and `--shadow-panel`. Popovers (menus, tooltips, the new issue panel) float on `--bg-pop` with `--shadow-pop`. A big modal (Create project) has its own palette in dark, `--bg-modal`, `--border-modal`, `--rule-modal`, `--text-hint` and `--shadow-modal`, over `--overlay`; in light it matches the popovers'. In light, Linear gives the sidebar, the content and popovers each their own palette, so a fill measured in the content can be wrong in the sidebar (the sidebar's New issue button's is).
 
 **Type.** Inter Variable, at weight 450 for text and 500 for names, titles and controls. 13px in lists, the sidebar and menus; 12px on controls, counts, tooltips and meta; 15px on 24px in a document; 18px/600 for a modal's title, 24px/500 for a settings page's.
 
@@ -39,6 +39,7 @@ desk.css holds the numbers, and its comments say where and when each was measure
 
 - A list page has two header rows: the 44px top bar with the page's name, then a 43px view row, its tabs from the left (8px in, 4px apart) and Filter and Display at its right end (28px circles, 6px apart).
 - A thing with a page of its own, such as a project, splits it into tabs in that view row: Overview, then Issues (a list page, with Filter and Display at the row's end). Its Overview is a document: a centred column of at most 805px, 64px under the view row, its name edited where it is, and its properties as a row of chips that are filled only under the mouse, after a 13px heading in `--text-3`.
+- A list page's way to make one of its things (Projects' New project) is a quiet 28px pill with a plus at the right end of the top bar, its keys in its tooltip (N then P). It opens a modal; nothing to type sits open over the list.
 - Help, the shortcuts and the theme live in the ? at the sidebar's foot. No control stands alone in a corner.
 - Linear lays a pane out by the pane's width, not the window's: the Inbox's open notification drops its Properties column below about 820px.
 
@@ -58,6 +59,7 @@ Each one cost a redo. Check your work against them.
 - **An edit behind a toggle** (18 Oct). A project's name and description could only change in a form behind "Edit title and description", and the user found no way to rename a project. Linear edits a name or a description where it is shown; desk's `Title` and `Description` editors do that for any page.
 - **Scattered controls** (15 Oct). A lone theme icon and a lone Ctrl / key cap stood in corners of the screen; they moved into the ? menu at the sidebar's foot, where Linear keeps them.
 - **Squeezed or overflowing** (15 Oct). A long title squeezed the sidebar's toggle to 20px (fixed with `flex: none`), and a 1436px screenshot in a plan pushed the page sideways (fixed with `max-width: 100%`). Try long text and big images.
+- **A form over the list** (18 Oct). The Projects page opened with an input and a Create project button above its rows; the user asked for "linear flow": a New project button in the top bar and a modal, as Linear has.
 - **Responsive by guess** (15 Oct). The Inbox's open notification kept its properties column on a narrow window. Resize Linear and find where it changes: it was between an 817 and an 827px pane.
 
 ## Keep this current

@@ -12,6 +12,7 @@ Use the agents' Chrome, through the `chrome` skill (load it before the first `mc
 | My issues | `/alexajuno/my-issues/assigned` |
 | Views | `/alexajuno/team/OE/views/issues` |
 | The Agent | `/alexajuno/agent` |
+| Projects, and its New project modal | `/alexajuno/projects/all` |
 | A project's page | `/alexajuno/project/muse-99b877fd75f2/overview` and `/issues`. Open it with the tab in the address: `/project/muse-99b877fd75f2` alone hung the agents' Chrome for 30 minutes on 18 Oct |
 
 For any other page, list the sidebar's links in `browser_evaluate`: `[...document.querySelectorAll('a')].map(a => a.textContent.trim() + ' -> ' + a.getAttribute('href'))`.
@@ -49,7 +50,9 @@ async (page) => {
 }
 ```
 
-Linear follows the system's theme, so `emulateMedia` switches it without touching the account, and `colorScheme: null` puts it back. Read the current state too: an open tab, a ticked menu item, the sidebar's current page. A selector that matches several elements (Linear has four "Create new issue" buttons) needs `>> nth=0` or a narrower one, such as `nav button[...]`.
+Linear follows the system's theme, so `emulateMedia` switches it without touching the account, and `colorScheme: null` puts it back. A modal already open keeps the theme it opened in (18 Oct, Create project): close it with Escape, switch, and open it again.
+
+`locator.click` on Linear can time out at "waiting for element to be visible, enabled and stable" (18 Oct, the New project button). Click it in the page instead, `page.evaluate(() => document.querySelector('button[aria-label="New project"]').click())`, and wait a second or two for the modal's opening animation before reading or screenshotting it. A modal's fields are often `contenteditable` with the placeholder on a `::before`, so read the placeholder's colour there. Read the current state too: an open tab, a ticked menu item, the sidebar's current page. A selector that matches several elements (Linear has four "Create new issue" buttons) needs `>> nth=0` or a narrower one, such as `nav button[...]`.
 
 ## Reading the layout
 
@@ -85,4 +88,4 @@ Try the branch as CLAUDE.md says, then read the same properties off desk's eleme
 
 ## Files
 
-The browser servers only write under the folder the session started in (`~/projects/desk`). Save screenshots in your worktree, copy the ones the review card shows into the issue's folder, and delete the rest, along with your own `page-*.yml` and `console-*.log` in `~/projects/desk/.playwright-mcp`. Close Linear's tab, then call `browser_close`.
+The browser servers only write under the folder the session started in (`~/projects/desk`); the chrome server refused `~/.playwright-mcp` on 18 Oct. Save screenshots in your worktree, copy the ones the review card shows into the issue's folder, and delete the rest, along with your own `page-*.yml` and `console-*.log` in `~/projects/desk/.playwright-mcp`. Close Linear's tab, then call `browser_close`.
