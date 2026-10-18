@@ -134,6 +134,8 @@ function onKeyDown(e: KeyboardEvent) {
   }
   else if (e.key === "Enter" && focused) {
     if (focused.dataset.session) openSession(focused.dataset.session);
+    // In the Inbox, Enter on the issue already open beside the list opens its chat, as O does: Enter Enter goes in.
+    else if (focused.matches(".inbox-row.selected[data-slug]")) openIssueSession(focused.dataset.slug!);
     else go(focused.getAttribute("href")!);
   }
   else if (key === "c") { ui.openCreator(); e.preventDefault(); }
