@@ -50,12 +50,50 @@ export class NoChat extends Error {}
 
 const CHAT_ID = /^[a-z0-9-]{1,80}$/;
 
-function path(id: string): string {
-  if (!CHAT_ID.test(id) || !existsSync(join(CHATS_DIR, `${id}.json`))) throw new NoChat("No such chat");
-  return join(CHATS_DIR, `${id}.json`);
+// --- the chats, kept ---------------------------------------------------------------------------------------------
+// desk alone writes a chat's file (save), and never removes one, so the files are read once, at the first ask, and
+// kept: a new chat is appended, a saved one replaced. "chat should be append and it's just there. no need to read all
+// files at once for that" (the user, 18 Oct): every sidebar rebuild used to read all of them five times. When each
+// last moved is kept beside it: its transcript's last write at that first read, then each turn starting or ending.
+
+let kept: Map<string, Chat> | null = null; // by id
+const bySession = new Map<string, Chat>();
+const lastMoved = new Map<string, number>(); // by id, in ms
+
+function keep(chats: Map<string, Chat>, chat: Chat) {
+  const was = chats.get(chat.id);
+  if (was && was.session !== chat.session) bySession.delete(was.session);
+  chats.set(chat.id, chat);
+  if (chat.session) bySession.set(chat.session, chat);
 }
 
-export const load = (id: string): Chat => JSON.parse(readFileSync(path(id), "utf8"));
+function all(): Map<string, Chat> {
+  if (kept) return kept;
+  const read = new Map<string, Chat>();
+  for (const name of existsSync(CHATS_DIR) ? readdirSync(CHATS_DIR) : []) {
+    if (!name.endsWith(".json")) continue;
+    const chat: Chat = JSON.parse(readFileSync(join(CHATS_DIR, name), "utf8"));
+    keep(read, chat);
+    const file = transcripts.pathOf(chat.session);
+    lastMoved.set(chat.id, file ? statSync(file).mtimeMs : Date.parse(chat.created));
+  }
+  return (kept = read);
+}
+
+const ofSession = (session: string) => (all(), bySession.get(session));
+
+// A copy to change and save(): the kept one changes only by save.
+export function load(id: string): Chat {
+  const chat = CHAT_ID.test(id) ? all().get(id) : undefined;
+  if (!chat) throw new NoChat("No such chat");
+  return structuredClone(chat);
+}
+
+// A turn of this session started or ended now (sync.ts sees it in ~/.claude/sessions).
+export function moved(session: string) {
+  const chat = ofSession(session);
+  if (chat) lastMoved.set(chat.id, Date.now());
+}
 
 const now = () => store.now();
 
@@ -71,12 +109,15 @@ function pyJson(value: unknown, indent = 1, depth = 0): string {
 }
 
 export function save(chat: Chat) {
+  const chats = all(), fresh = !chats.has(chat.id);
   mkdirSync(CHATS_DIR, { recursive: true });
   chat.updated = now();
   writeFileSync(join(CHATS_DIR, `${chat.id}.json`), pyJson(chat), "utf8");
+  keep(chats, structuredClone(chat));
+  if (fresh) lastMoved.set(chat.id, Date.now());
 }
 
-export const exists = (id: string) => CHAT_ID.test(id) && existsSync(join(CHATS_DIR, `${id}.json`));
+export const exists = (id: string) => CHAT_ID.test(id) && all().has(id);
 
 // The chat as plain text, the user's words and the agent's replies in order, for a session's first prompt.
 export function transcript(id: string): string {
@@ -239,22 +280,13 @@ export function* said(chat: Chat): Generator<[string, string]> {
 // A chat nobody has written in yet: no issue, and no transcript, which its session writes only from its first message.
 export const empty = (chat: Chat) => !chat.issue && !chat.agent && !chat.bare && !transcripts.pathOf(chat.session);
 
-// When a chat last moved: its transcript's last write, or its start.
-export function activity(chat: Chat): string {
-  const file = transcripts.pathOf(chat.session);
-  if (!file) return chat.created;
-  const d = statSync(file).mtime, pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
+// Every chat as kept, to read, not to change: load() gives one to change.
+const chats = (): Chat[] => [...all().values()];
 
-function chats(): Chat[] {
-  if (!existsSync(CHATS_DIR)) return [];
-  return readdirSync(CHATS_DIR).filter((n) => n.endsWith(".json")).map((n) => JSON.parse(readFileSync(join(CHATS_DIR, n), "utf8")));
-}
-
-// The agent chat whose session this is, if any.
+// The agent chat whose session this is, if any, as a copy to change.
 export function agentChatOf(session: string | null | undefined): Chat | null {
-  return session ? chats().find((c) => KINDS.has(c.kind ?? "") && c.session === session) ?? null : null;
+  const chat = session ? ofSession(session) : undefined;
+  return chat && KINDS.has(chat.kind ?? "") ? structuredClone(chat) : null;
 }
 
 // The folder the chat's session runs in: DESK_DATA, where every chat starts, until desk moves it.
@@ -262,17 +294,13 @@ export const runsIn = (chat: Chat) => chat.cwd || DATA_DIR;
 
 // The folder a chat's session runs in, when the session is a chat's.
 export async function sessionRunsIn(session: string | null | undefined): Promise<string | null> {
-  const chat = session ? chats().find((c) => c.session === session) : undefined;
+  const chat = session ? ofSession(session) : undefined;
   return chat ? runsIn(chat) : null;
 }
 
-// The agent chats, the one that moved last first. Each chat's activity is read once, not in every comparison.
+// The agent chats, the one that moved last first, as kept: to read, not to change.
 export function agentChats(): Chat[] {
-  return chats()
-    .filter((c) => KINDS.has(c.kind ?? ""))
-    .map((c) => [c, activity(c)] as const)
-    .sort(([, a], [, b]) => (a < b ? 1 : a > b ? -1 : 0))
-    .map(([c]) => c);
+  return chats().filter((c) => KINDS.has(c.kind ?? "")).sort((a, b) => (lastMoved.get(b.id) ?? 0) - (lastMoved.get(a.id) ?? 0));
 }
 
 // The chat filing an issue of this title now, for a call that does not send the chat's id: one with no issue yet whose
@@ -297,7 +325,7 @@ function filingNow(title: string): Chat | null {
     const [recent] = transcripts.read(path, Math.max(0, statSync(path).size - 256 * 1024)); // its last steps
     const calls = recent.flatMap((e) => (e.type === "assistant" && Array.isArray(e.message?.content) ? e.message.content : []));
     if (calls.some((b) => b.type === "tool_use" && String(b.input?.command ?? "").includes("/api/issues") && String(b.input.command).includes(typed)))
-      return chat;
+      return structuredClone(chat); // which the caller binds
   }
   return null;
 }

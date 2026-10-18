@@ -20,6 +20,7 @@ import { basename, dirname, join, sep } from "node:path";
 import type { WebSocket } from "ws";
 import * as agents from "./agents.ts";
 import { asJson } from "./api.ts";
+import * as chats from "./chats.ts";
 import { HOME, ISSUES_DIR, PROJECTS_DIR } from "./config.ts";
 import * as store from "./issues.ts";
 import * as pages from "./pages.ts";
@@ -117,22 +118,24 @@ async function frameNow() {
 
 const frame = serial("sync frame", frameNow);
 
-// What each running session is doing, as its state file says.
-function sessionStates(): string {
+// What each running session is doing, as its state file says: busy or idle, by session id.
+function sessionStates(): Map<string, string> {
+  const states = new Map<string, string>();
   let names: string[];
   try {
-    names = readdirSync(SESSIONS).filter((n) => n.endsWith(".json")).sort();
+    names = readdirSync(SESSIONS).filter((n) => n.endsWith(".json"));
   } catch {
-    return "";
+    return states;
   }
-  return names.map((n) => {
+  for (const n of names) {
     try {
       const s = JSON.parse(readFileSync(join(SESSIONS, n), "utf8"));
-      return `${s.sessionId}:${s.status}`;
+      states.set(s.sessionId, s.status);
     } catch {
-      return n; // written as we read: its next write tells again
+      states.set(n, ""); // written as we read: its next write tells again
     }
-  }).join(" ");
+  }
+  return states;
 }
 
 // Gathers a burst of writes into one call of fn.
@@ -192,8 +195,11 @@ export async function start() {
   let states = sessionStates();
   const moved = soon(() => {
     const now = sessionStates();
-    if (now === states) return; // a write that changed no session's state, such as its name
+    const turned = [...now.keys()].filter((sid) => states.get(sid) !== now.get(sid));
+    const ended = [...states.keys()].some((sid) => !now.has(sid));
     states = now;
+    if (!turned.length && !ended) return; // a write that changed no session's state, such as its name
+    for (const sid of turned) chats.moved(sid); // a turn started or ended: the chat moved now
     void frame();
   });
   watch(SESSIONS, (_event, name) => {
