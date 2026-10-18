@@ -41,6 +41,7 @@ export interface Meta {
   issue: { slug: string; title: string; state: string } | null;
   chat: boolean;
   agent: string | null; // the agent a chat is with
+  bare: boolean; // a chat with no agent and no desk prompt
   runs: { model: string; name: string; effort: string }; // for the composer's chip
 }
 
@@ -66,6 +67,7 @@ export class LiveSession {
   asks: Ask[] = [];
   partial: Block[] = [];
   pending: Pending[] = []; // sent, and not yet in the transcript
+  startAs: "issue" | "chat" = "issue"; // a new desk chat's chip: what its first message makes it
   connected = false;
   loaded = false;
   private ws: WebSocket | null = null;
@@ -76,7 +78,7 @@ export class LiveSession {
     this.id = id;
     makeObservable(this, {
       items: observableShallow, meta: observableRef, working: observable, since: observable, asks: observableRef, partial: observable,
-      pending: observable, connected: observable, loaded: observable, apply: action, sending: action, sent: action, took: action, shows: action,
+      pending: observable, startAs: observable, connected: observable, loaded: observable, apply: action, sending: action, sent: action, took: action, shows: action,
     });
   }
 
@@ -195,7 +197,8 @@ export class LiveSession {
 
   async send(text: string, images: Image[]) {
     const p = this.sending(text, images);
-    const res = await postJson(`/api/live/${this.id}/send`, { text, images: images.map(({ media_type, data }) => ({ media_type, data })), uuid: p.key });
+    const res = await postJson(`/api/live/${this.id}/send`, { text, images: images.map(({ media_type, data }) => ({ media_type, data })), uuid: p.key,
+      ...(this.startAs === "chat" ? { as: "chat" } : {}) });
     this.sent(p, res.ok);
     if (!res.ok) toast(await reason(res));
     else if ((await res.json()).queued) toast("It's still working in the background: your message goes in when this turn ends.");

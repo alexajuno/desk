@@ -1,5 +1,5 @@
 // The sidebar on every page (templates/base.html's aside.side): Inbox, Triage, Issues and the projects, the user's agents,
-// then the lists to watch: what is in progress and landing, the sessions running with no issue, and what desk's
+// the newest bare chats, as claude.ai's Recents, then the lists to watch: what is in progress and landing, the sessions running with no issue, and what desk's
 // checkout runs.
 // Waiting issues stay in Issues, since waiting can last forever.
 import { observer } from "mobx-react-lite";
@@ -68,6 +68,20 @@ export const Sidebar = observer(function Sidebar() {
               title={a.working ? "Working" : a.unread ? "Said something you have not read" : "Its latest chat"}>
               {a.working ? <StateIcon state="running" /> : a.unread ? <StateIcon state="review" /> : <Ring />}
               <span className="nav-title">{a.name}</span>
+            </Go>
+          ))}
+        </>
+      )}
+      {/* The chats started as Chat, with no issue and no desk instructions, the newest first; older ones are in the
+          corner's history. */}
+      {d && d.chats.length > 0 && (
+        <>
+          <div className="nav-label">Chats</div>
+          {d.chats.map((c) => (
+            <Go key={c.session} className={`nav-item${at(`/sessions/${c.session}`)}`} to={`/sessions/${c.session}`}
+              title={c.working ? "Working" : c.unread ? "Said something you have not read" : c.title}>
+              {c.working ? <StateIcon state="running" /> : c.unread ? <StateIcon state="review" /> : <Ring />}
+              <span className="nav-title">{c.title}</span>
             </Go>
           ))}
         </>

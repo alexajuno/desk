@@ -29,6 +29,7 @@ export interface FrameData {
   projects: { slug: string; title: string }[];
   others: { id: string; title: string; folder: string; state: "working" | "waiting" | "open" }[]; // running, with no issue
   agents: { name: string; session: string; working: boolean; unread: boolean }[]; // the user's agents, by their newest chat
+  chats: { session: string; title: string; working: boolean; unread: boolean }[]; // the newest bare chats
   rows: InboxRow[];
   live: Record<string, string>; // slug: where its session stands, for each open issue with one
 }

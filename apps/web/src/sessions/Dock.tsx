@@ -15,7 +15,7 @@ import { dock, SIDE_WIDTH, type Layout, type Reading } from "../store/dock";
 import { issues } from "../store/issues";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { GLYPH, SIDE_ICON } from "../ui/icons";
-import { toggled } from "../ui/menu";
+import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { live, useLive, type Ask, type Block, type Image, type Item, type LiveSession } from "./live";
 import { effortName, runsMenu, warm } from "./models";
@@ -184,6 +184,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
         <div className="convo">
           {!s.loaded ? <p className="convo-empty">Connecting…</p>
             : !s.items.length && !s.pending.length && !s.working ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
+              : m?.bare || (m?.chat && s.startAs === "chat") ? "Just Claude, as claude runs in a terminal from your home folder: no issue and no desk instructions."
               : m?.chat ? "Ask desk's agent anything: it files the work and does it here. Start with @ and a name to talk to one of your agents."
               : "Nothing said yet."}</p>
             : null}
@@ -210,7 +211,8 @@ const ChatHead = observer(function ChatHead({ s }: { s: LiveSession }) {
         {dock.issue && m?.issue
           ? <button type="button" className={`dock-issue${dock.sideShown ? " on" : ""}`} title={`${dock.sideShown ? "Hide" : "Show"} the issue  ]`} onClick={toggleIssue}>{m.issue.title}</button>
           : <span>{m?.issue?.title ?? m?.title ?? ""}</span>}
-        {m?.folder && <span className="dock-folder" title={m.cwd}>{m.folder}</span>}
+        {fresh(s) && s.startAs === "chat" ? <span className="dock-folder" title="Your home folder, where a Chat runs">~</span>
+          : m?.folder && <span className="dock-folder" title={m.cwd}>{m.folder}</span>}
       </div>
     </header>
   );
@@ -624,6 +626,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           {GLYPH.plus}
           <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
+        {fresh(s) && <StartAs s={s} />}
         <span className="composer-hint">{!typing ? "I to type" : queued ? "↑ edits the queued · Ctrl C stops" : s.working ? "Enter queues · Ctrl C stops" : "Enter sends · Shift Enter for a new line"}</span>
         <Runs s={s} />
         {s.working && (
@@ -636,6 +639,29 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
         </button>
       </div>
     </div>
+  );
+});
+
+// A new desk chat that nobody has written in yet, whose chip still picks what it becomes.
+const fresh = (s: LiveSession) => Boolean(s.meta?.chat && !s.meta.agent && !s.meta.bare && !s.meta.issue) && !s.items.length && !s.pending.length && !s.working;
+
+// The chip by +, until the first message: what the chat becomes. Issue is desk's agent, which files the talk in Triage
+// and works it; Chat is a bare Claude, which the sidebar lists under Chats (chats.ts, becomeBare).
+const START_AS = {
+  issue: { label: "Issue", icon: GLYPH.triage, hint: "lands in Triage" },
+  chat: { label: "Chat", icon: GLYPH.chat, hint: "just talk, lands in Chats" },
+} as const;
+
+const StartAs = observer(function StartAs({ s }: { s: LiveSession }) {
+  const now = START_AS[s.startAs];
+  const items = () => (["issue", "chat"] as const).map((k) => ({ ...START_AS[k], group: 1, heading: "This chat becomes", current: k === s.startAs,
+    run: () => runInAction(() => { s.startAs = k; }) }));
+  return (
+    <button className="runs start-as" type="button" title="What this chat becomes"
+      onClick={(e) => { if (!toggled(e.currentTarget)) openMenu({ anchor: e.currentTarget, items }); }}>
+      {now.icon}{now.label}
+      <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
+    </button>
   );
 });
 
