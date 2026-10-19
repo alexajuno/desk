@@ -6,6 +6,8 @@
 //     {"type": "stream", "msg": …, "index": 0, "kind": "text", "text": "…"}   a piece of a reply (host.ts)
 //     {"type": "working", "working": true}
 //     {"type": "asks", "asks": [...]}
+//     {"type": "tasks", "tasks": [...]}                          what runs beside the conversation now (host.ts)
+//     {"type": "status", "status": {...} | null}                 a retry, a compaction or a usage limit holds the turn up
 //     {"type": "meta", "meta": <meta>}                           its title, folder, issue, model or effort changed
 //
 // An <item> is transcript.ts's. The app sends {"type": "visible", "visible": true} as its tab shows or hides, so desk
@@ -140,12 +142,14 @@ export async function connect(ws: WebSocket, id: string) {
     host = h;
     h.on("message", (data) => {
       const e = JSON.parse(data.toString());
-      if (e.type === "hello") say({ type: "working", working: e.working, since: e.since, asks: e.asks, partial: e.partial });
+      if (e.type === "hello") say({ type: "working", working: e.working, since: e.since, asks: e.asks, partial: e.partial, tasks: e.tasks ?? [], status: e.status ?? null });
       else if (e.type === "message") {
         const added = fresh(transcript.itemsOf(e.entry));
         if (added.length) say({ type: "items", items: added });
-      } else if (e.type === "closed") h.close();
-      else say(e);
+      } else if (e.type === "closed") {
+        say({ type: "tasks", tasks: [] }); // they ended with its process
+        h.close();
+      } else say(e);
     });
     h.on("close", () => {
       if (host === h) host = null;
@@ -265,6 +269,11 @@ export async function interrupt(id: string) {
 }
 
 export const answer = (id: string, ask: string, result: Record<string, unknown>) => hosted.answer(id, ask, result);
+
+// How full the session's context is, for the model chip's menu; null while no process holds it, when none is loaded.
+export async function context(id: string) {
+  return (await hosted.holds(id)) ? hosted.context(id) : null;
+}
 
 // --- what the composer completes ------------------------------------------------------------------------------------
 

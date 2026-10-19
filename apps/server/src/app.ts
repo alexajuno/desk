@@ -21,6 +21,7 @@ import { HttpError } from "./pages.ts";
 import * as projects from "./projects.ts";
 import * as sessions from "./sessions.ts";
 import * as sync from "./sync.ts";
+import * as transcript from "./transcript.ts";
 import * as web from "./web.ts";
 import * as window from "./window.ts";
 
@@ -594,6 +595,15 @@ export async function create(): Promise<FastifyInstance> {
   });
   app.get("/api/live/:id/files", async (req: Req) => live.files(sessionOf(req), req.query.q ?? ""));
   app.get("/api/live/:id/commands", async (req: Req) => live.commands(sessionOf(req)));
+  // What one of the session's subagents did, by the Agent call that started it: its steps, for that step's fold.
+  app.get("/api/live/:id/agent/:tool", async (req: Req) => transcript.subagentItems(sessionOf(req), String(req.params.tool ?? "")));
+  app.get("/api/live/:id/context", async (req: Req) => {
+    try {
+      return await live.context(sessionOf(req));
+    } catch (error) {
+      throw new HttpError(502, `Claude Code did not say how full the context is: ${(error as Error).message}`);
+    }
+  });
 
   // --- the app's live sync; a WebSocket is not bound by CORS, so another site could otherwise read every issue
   app.get("/api/sync", {

@@ -10,8 +10,9 @@
 //     {"t": "tool", "key": …, "msg": …, "id": "toolu_…", "name": "Read", "summary": "src/app.ts", "input": "…"}
 //     {"t": "result", "key": "<uuid>:r0", "id": "toolu_…", "text": "…", "error": false}   a tool's result, drawn in its step
 //     {"t": "note", "key": …, "text": "Stopped"}                                 the user stopped the turn, or it compacted,
-//                                                                                or a script sent the agent a message for the user
-import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from "node:fs";
+//                                                                                or a script sent the agent a message for the user,
+//                                                                                or a task ended, or a command printed a line
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { HOME } from "./config.ts";
 
@@ -146,12 +147,31 @@ function typed(text: string): string {
   return t.startsWith("<") ? "" : t;
 }
 
+// What Claude Code itself tells Claude in a user message that the user should see too, as a note: a task it ran beside
+// the conversation ended (<task-notification>, its <summary> such as `Agent "count files" finished`), or a slash
+// command printed something (<local-command-stdout>, such as "Set model to Sonnet"). Null for anything else.
+function notice(text: string): string | null {
+  const t = text.trim();
+  if (t.startsWith("<task-notification>")) return /<summary>([\s\S]*?)<\/summary>/.exec(t)?.[1]?.trim() ?? "";
+  const out = /^<local-command-(?:stdout|stderr)>([\s\S]*?)<\/local-command-(?:stdout|stderr)>/.exec(t);
+  return out ? cut(out[1].replace(/\x1b\[[0-9;]*m/g, "").trim(), 400) : null;
+}
+
+const noted = (key: string, text: string): Item[] => (text ? [{ t: "note", key, text }] : []);
+
 // The items one transcript event stands for.
 export function itemsOf(e: Entry): Item[] {
   if (e.isSidechain || e.parent_tool_use_id) return []; // a subagent's: its Agent step stands for it
+  return entryItems(e);
+}
+
+// The items of an event, the conversation's or a subagent's own.
+function entryItems(e: Entry): Item[] {
   const uuid = String(e.uuid ?? "");
-  if (e.type === "attachment" && e.attachment?.type === "queued_command" && typeof e.attachment.prompt === "string")
-    return [{ t: "you", key: uuid, text: e.attachment.prompt, queued: true }];
+  if (e.type === "attachment" && e.attachment?.type === "queued_command" && typeof e.attachment.prompt === "string") {
+    const note = notice(e.attachment.prompt);
+    return note !== null ? noted(uuid, note) : [{ t: "you", key: uuid, text: e.attachment.prompt, queued: true }];
+  }
   if (e.type === "system" && e.subtype === "compact_boundary") return [{ t: "note", key: uuid, text: "Compacted the conversation" }];
   if (e.type !== "user" && e.type !== "assistant") return [];
   // What Claude Code adds itself, such as a skill's text once the Skill tool loads it: isMeta in the transcript, and
@@ -160,6 +180,8 @@ export function itemsOf(e: Entry): Item[] {
   const content = e.message?.content;
   if (e.type === "user") {
     if (typeof content === "string") {
+      const note = notice(content);
+      if (note !== null) return noted(uuid, note);
       const push = PUSH.exec(content);
       if (push) return [{ t: "note", key: uuid, text: `Sent by ${push[1]}` }];
       const text = typed(content);
@@ -172,6 +194,8 @@ export function itemsOf(e: Entry): Item[] {
     (content as Entry[] ?? []).forEach((b, n) => {
       if (b.type === "tool_result") items.push({ t: "result", key: `${uuid}:r${n}`, id: b.tool_use_id, text: cut(resultText(b.content), 4000), error: Boolean(b.is_error) });
       else if (b.type === "text") {
+        const note = notice(b.text ?? "");
+        if (note !== null) return void items.push(...noted(`${uuid}:${n}`, note));
         const text = typed(b.text ?? "");
         if (text.startsWith("[Request interrupted by user")) items.push({ t: "note", key: `${uuid}:${n}`, text: "Stopped" });
         else if (text) texts.push(text);
@@ -191,6 +215,31 @@ export function itemsOf(e: Entry): Item[] {
     }
     return [];
   });
+}
+
+// What a subagent did, by the Agent call that started it: the steps and words in its own transcript, which Claude Code
+// keeps beside the session's as subagents/agent-<id>.jsonl, with the call's id in agent-<id>.meta.json (seen 19 Oct,
+// Claude Code 2.1.285). Its first message, the prompt, is the Agent step's input already.
+export function subagentItems(session: string, tool: string, limit = 300): Item[] {
+  for (const path of listed(session)) {
+    const dir = join(path.slice(0, -".jsonl".length), "subagents");
+    let names: string[];
+    try {
+      names = readdirSync(dir).filter((n) => n.endsWith(".meta.json"));
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      try {
+        if (JSON.parse(readFileSync(join(dir, name), "utf8")).toolUseId !== tool) continue;
+      } catch {
+        continue;
+      }
+      const items = read(join(dir, name.replace(/\.meta\.json$/, ".jsonl")), 0)[0].flatMap(entryItems);
+      return (items[0]?.t === "you" ? items.slice(1) : items).slice(-limit);
+    }
+  }
+  return [];
 }
 
 // The last `limit` items of the session's conversation, and where its transcript was read to.

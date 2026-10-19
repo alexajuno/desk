@@ -8,14 +8,19 @@
 // desk reads the finished messages there. What only the host knows it sends over each session's event stream: the words
 // as they stream, whether a turn runs, and the questions waiting on the user.
 //
-//     {"type": "hello", "working": true, "since": <ms>, "partial": [<block>, ...], "asks": [...]}   first, on connect
+//     {"type": "hello", "working": true, "since": <ms>, "partial": [<block>, ...], "asks": [...], "tasks": [...], "status": …}
+//                                                                                             first, on connect
 //     {"type": "stream", "msg": "msg_…", "index": 0, "kind": "text", "text": "…"}            a piece of a block
 //     {"type": "message", "entry": <the SDK's assistant or user message>}                    a block done
 //     {"type": "working", "working": false, "since": <ms>}                                    a turn began or ended
 //     {"type": "asks", "asks": [<ask>, ...]}                                                  the questions changed
+//     {"type": "tasks", "tasks": [<task>, ...]}                                               what runs now changed
+//     {"type": "status", "status": <status> | null}                                           a retry, a compaction, a limit
 //     {"type": "closed", "error": "…"}                                                        the process ended
 //
 // An <ask> is {id, tool, input}: a tool call Claude Code wants the user's yes to, or AskUserQuestion's questions.
+// A <task> is something Claude Code runs beside the conversation: a subagent, a background command, a watch (Task).
+// A <status> is what holds the turn up, which the panel's working line says: {kind: "retry" | "compacting" | "limit", …}.
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
@@ -32,6 +37,11 @@ const VERSION = createHash("sha1").update(readFileSync(fileURLToPath(import.meta
 // The user's own Claude Code, the one their terminal runs, rather than the copy the SDK's package carries.
 const CLAUDE = execFileSync("sh", ["-c", "command -v claude"], { encoding: "utf8" }).trim();
 const IDLE_CLOSE = 20 * 60_000; // ms an idle session with nobody watching keeps its process; it resumes on its next message
+// The longest Claude may ask a background command to run: a day. Claude Code counts an SDK session as unattended and
+// stops its background commands after 30 minutes, or the timeout Claude asks for up to 2 hours, unless this raises the
+// ceiling; it leaves the 30-minute default and the foreground timeouts as they are
+// (https://code.claude.com/docs/en/tools-reference#time-limit-for-background-commands).
+const LONGEST_COMMAND = String(24 * 3600_000);
 
 interface Ask {
   id: string;
@@ -48,6 +58,22 @@ interface Block {
   name?: string; // a tool's
 }
 
+// Something Claude Code runs beside the conversation, as its task_* events tell: a subagent (local_agent), a background
+// command (local_bash), a watch or a workflow.
+interface Task {
+  id: string;
+  tool?: string; // the tool call that started it, whose step the conversation shows
+  kind: string;
+  description: string;
+  agent?: string; // a subagent's type
+  background: boolean; // false for a subagent the turn waits on
+  since: number;
+  doing?: string; // its latest step, as "Running Count entries"
+  steps?: number; // a subagent's tool calls so far
+}
+
+type Status = { kind: "retry"; error: string; attempt: number; of: number; until: number } | { kind: "compacting" } | { kind: "limit"; resets?: number };
+
 interface Session {
   id: string;
   cwd: string;
@@ -58,6 +84,8 @@ interface Session {
   working: boolean;
   since: number; // when it last started or finished a turn
   asks: Map<string, Ask>;
+  tasks: Map<string, Task>; // what runs now, by task id
+  status: Status | null;
   partial: Map<string, Block>; // the blocks streaming now, by message and index
   watchers: Set<WebSocket>;
   closed: boolean;
@@ -91,6 +119,13 @@ function send(s: Session, event: Record<string, unknown>) {
 }
 
 const asksOf = (s: Session) => [...s.asks.values()].map(({ id, tool, input }) => ({ id, tool, input }));
+const tasksOf = (s: Session) => [...s.tasks.values()];
+
+function setStatus(s: Session, status: Status | null) {
+  if (!status && !s.status) return;
+  s.status = status;
+  send(s, { type: "status", status });
+}
 
 function setWorking(s: Session, working: boolean) {
   if (s.working === working) return;
@@ -122,7 +157,7 @@ function userMessage(content: Content, uuid?: string): SDKUserMessage {
 function start(o: StartOptions): Session {
   const id = o.id ?? randomUUID();
   const s: Session = { id, cwd: o.cwd, title: o.title ?? "", q: null as unknown as Query, inbox: [], wake: null, working: false, since: Date.now(),
-    asks: new Map(), partial: new Map(), watchers: new Set(), closed: false, ended: Promise.resolve(), streaming: "" };
+    asks: new Map(), tasks: new Map(), status: null, partial: new Map(), watchers: new Set(), closed: false, ended: Promise.resolve(), streaming: "" };
   // The first message waits in the inbox before the SDK first reads it, which it does as query() starts.
   if (o.message) s.inbox.push(userMessage(o.message));
   s.q = query({
@@ -142,7 +177,7 @@ function start(o: StartOptions): Session {
       ...(o.settings ? { settings: o.settings } : {}),
       includePartialMessages: true,
       pathToClaudeCodeExecutable: CLAUDE,
-      env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "desk" },
+      env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "desk", BASH_MAX_TIMEOUT_MS: LONGEST_COMMAND },
       // A tool call Claude Code wants a yes for, and every AskUserQuestion, waits here for the user's answer in the panel.
       canUseTool: (tool, input, { signal, toolUseID }) => new Promise<PermissionResult>((resolve) => {
         const askId = toolUseID ?? randomUUID();
@@ -180,9 +215,53 @@ async function read(s: Session) {
   }
 }
 
+// What Claude Code runs beside the conversation, kept from its task events (tried on 19 Oct: a background command and
+// a background subagent each sent task_started, background_tasks_changed, then task_updated and task_notification as
+// they ended; the subagent sent task_progress at each of its tool calls). Housekeeping tasks Claude Code marks ambient
+// stay out, and so do those a subagent started: the panel shows what the conversation started.
+function track(s: Session, e: Record<string, any>) {
+  const before = JSON.stringify(tasksOf(s));
+  if (e.subtype === "task_started" && !e.ambient && !e.parent_task_id) {
+    s.tasks.set(e.task_id, { id: e.task_id, tool: e.tool_use_id, kind: e.task_type ?? "", description: e.description, agent: e.subagent_type,
+      background: Boolean(e.is_backgrounded), since: Date.now() });
+  } else if (e.subtype === "task_progress") {
+    const t = s.tasks.get(e.task_id);
+    if (t) Object.assign(t, { doing: e.description, steps: e.usage?.tool_uses });
+  } else if (e.subtype === "task_updated") {
+    const t = s.tasks.get(e.task_id);
+    if (["completed", "failed", "killed"].includes(e.patch?.status)) s.tasks.delete(e.task_id);
+    else if (t && e.patch?.is_backgrounded !== undefined) t.background = e.patch.is_backgrounded;
+  } else if (e.subtype === "task_notification") s.tasks.delete(e.task_id);
+  else if (e.subtype === "background_tasks_changed") {
+    // Every background task there is now: one the turn waited on and that moved to the background is in it too.
+    const now = new Map((e.tasks as Record<string, any>[]).filter((t) => !t.ambient && !t.parent_task_id).map((t) => [t.task_id, t]));
+    for (const t of s.tasks.values()) if (t.background && !now.has(t.id)) s.tasks.delete(t.id);
+    for (const [id, t] of now) {
+      const known = s.tasks.get(id);
+      if (known) known.background = true;
+      else s.tasks.set(id, { id, kind: t.task_type, description: t.description, agent: t.subagent_type, background: true, since: Date.now() });
+    }
+  } else return;
+  if (JSON.stringify(tasksOf(s)) !== before) send(s, { type: "tasks", tasks: tasksOf(s) });
+}
+
 function take(s: Session, m: SDKMessage) {
   // A turn Claude starts on its own, such as when a task it left running in the background finishes, works too.
-  if ((m.type === "stream_event" || m.type === "assistant") && !m.parent_tool_use_id) setWorking(s, true);
+  if ((m.type === "stream_event" || m.type === "assistant") && !m.parent_tool_use_id) {
+    setWorking(s, true);
+    if (s.status?.kind !== "compacting") setStatus(s, null); // the reply came: no longer retrying or held by a limit
+  }
+  if (m.type === "system") {
+    const e = m as Record<string, any>;
+    if (e.subtype === "api_retry") setStatus(s, { kind: "retry", error: e.error, attempt: e.attempt, of: e.max_retries, until: Date.now() + e.retry_delay_ms });
+    else if (e.subtype === "status") {
+      if (e.status === "compacting") setStatus(s, { kind: "compacting" });
+      else if (s.status?.kind === "compacting") setStatus(s, null);
+    }
+    else track(s, e);
+    return;
+  }
+  if (m.type === "rate_limit_event" && m.rate_limit_info.status === "rejected") setStatus(s, { kind: "limit", resets: m.rate_limit_info.resetsAt });
   if (m.type === "stream_event") {
     if (m.parent_tool_use_id) return; // a subagent's: the panel shows only its Agent step
     const e = m.event as { type: string; index?: number; message?: { id: string }; content_block?: { type: string; name?: string }; delta?: Record<string, string> };
@@ -211,6 +290,11 @@ function take(s: Session, m: SDKMessage) {
     send(s, { type: "message", entry: m });
   } else if (m.type === "result") {
     s.partial.clear();
+    setStatus(s, null);
+    // A subagent the turn waited on ends with it; one the user stopped may send no event of its own to say so.
+    const was = s.tasks.size;
+    for (const t of s.tasks.values()) if (!t.background) s.tasks.delete(t.id);
+    if (s.tasks.size !== was) send(s, { type: "tasks", tasks: tasksOf(s) });
     if (!s.inbox.length) setWorking(s, false);
   }
 }
@@ -227,7 +311,8 @@ function close(s: Session) {
 }
 
 setInterval(() => {
-  for (const s of sessions.values()) if (!s.working && !s.watchers.size && !s.asks.size && Date.now() - s.since > IDLE_CLOSE) close(s);
+  // One with a task still running keeps its process, which the task would end with.
+  for (const s of sessions.values()) if (!s.working && !s.watchers.size && !s.asks.size && !s.tasks.size && Date.now() - s.since > IDLE_CLOSE) close(s);
 }, 60_000);
 
 const row = (s: Session) => ({ id: s.id, cwd: s.cwd, title: s.title, working: s.working, since: s.since, asks: s.asks.size, watchers: s.watchers.size });
@@ -308,6 +393,12 @@ app.get<{ Params: { id: string } }>("/sessions/:id/commands", async (req) => {
   return await s.q.supportedCommands();
 });
 
+// How full the session's context is, as /context counts it.
+app.get<{ Params: { id: string } }>("/sessions/:id/context", async (req) => {
+  const { totalTokens, maxTokens, percentage } = await find(req.params.id).q.getContextUsage();
+  return { tokens: totalTokens, max: maxTokens, percent: percentage };
+});
+
 app.get<{ Params: { id: string } }>("/sessions/:id/events", { websocket: true }, (ws, req) => {
   const s = sessions.get(req.params.id);
   if (!s || s.closed) {
@@ -316,18 +407,18 @@ app.get<{ Params: { id: string } }>("/sessions/:id/events", { websocket: true },
     return;
   }
   s.watchers.add(ws);
-  ws.send(JSON.stringify({ type: "hello", working: s.working, since: s.since, partial: [...s.partial.values()], asks: asksOf(s) }));
+  ws.send(JSON.stringify({ type: "hello", working: s.working, since: s.since, partial: [...s.partial.values()], asks: asksOf(s), tasks: tasksOf(s), status: s.status }));
   ws.on("close", () => {
     s.watchers.delete(ws);
     s.since = Math.max(s.since, Date.now() - IDLE_CLOSE / 2); // closing the panel leaves it a while before its process goes
   });
 });
 
-// desk asks the host to step down for a newer one, which it does only while nothing works, nor has for a while: a
-// session that just finished may have left a task running in the background, whose end starts its next turn.
+// desk asks the host to step down for a newer one, which it does only while nothing works or runs in the background,
+// nor has for a while: a session that just finished may yet start a turn of its own, such as a wakeup it scheduled.
 const QUIET = 10 * 60_000; // ms
 app.post("/quit", async (_req, reply) => {
-  if ([...sessions.values()].some((s) => s.working || s.asks.size || Date.now() - s.since < QUIET))
+  if ([...sessions.values()].some((s) => s.working || s.asks.size || s.tasks.size || Date.now() - s.since < QUIET))
     return reply.code(409).send({ detail: "A session is working" });
   setTimeout(stop, 50);
   return {};
