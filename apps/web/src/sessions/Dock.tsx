@@ -261,7 +261,9 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
       })}
       {liveSteps.length > 0 && last?.kind !== "steps" && <Steps s={s} items={[]} running={liveSteps} live />}
       {liveText.map((b) => <Reply key={`${b.msg}:${b.index}`} text={b.text} streaming />)}
-      {s.pending.map((p) => <You key={p.key} text={p.text} images={p.images.length} queued={s.working} />)}
+      {s.pending.map((p) => (
+        <You key={p.key} text={p.text} images={p.images.length} queued={s.working && !p.lost} lost={p.lost} onSend={() => void s.resend(p)} />
+      ))}
       {s.working && !liveText.length && !s.asks.length && <Working since={s.since} />}
     </>
   );
@@ -269,17 +271,23 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
 
 const LONG = 600; // characters past which a message shows its first lines only, as claude.ai shows a long paste
 
-function You({ text, images, queued }: { text: string; images?: number; queued?: boolean }) {
+function You({ text, images, queued, lost, onSend }: { text: string; images?: number; queued?: boolean; lost?: boolean; onSend?: () => void }) {
   const [all, setAll] = useState(false);
   const long = text.length > LONG && !all;
   return (
-    <div className={`you${queued ? " queued" : ""}`}>
+    <div className={`you${queued || lost ? " queued" : ""}`}>
       <div className={`you-bubble${long ? " folded" : ""}`}>
         {images ? <span className="you-images">{images === 1 ? "1 image" : `${images} images`}</span> : null}
         {text}
       </div>
       {long && <button className="you-more" type="button" onClick={() => setAll(true)}>Show all</button>}
       {queued && <span className="you-queued">{GLYPH.clock}Queued</span>}
+      {lost && (
+        <span className="you-queued">
+          {GLYPH.none}Not sent
+          <button className="you-more" type="button" title="Send it again" onClick={onSend}>Send</button>
+        </span>
+      )}
     </div>
   );
 }
@@ -516,7 +524,8 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   const asked = useRef(0);
   const [typing, setTyping] = useState(false); // the cursor is here: the hint says the keys of this mode
   const focus = wantsFocus.get() === s.id;
-  const queued = s.working && s.pending.length > 0; // messages waiting for Claude's next step, which ↑ takes back
+  // Messages waiting for Claude's next step, or not sent, which ↑ takes back.
+  const queued = (s.working && s.pending.length > 0) || s.pending.some((p) => p.lost);
 
   useEffect(() => {
     if (!focus) return;
@@ -681,7 +690,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
         {fresh(s) && <StartAs s={s} />}
-        <span className="composer-hint">{!typing ? "I to type" : picks.length ? (at < 0 ? "Tab picks · Enter sends as typed" : "Enter picks · Esc closes") : fresh(s) ? "Shift Tab switches Issue or Chat · Enter sends" : queued ? "↑ edits the queued · Ctrl C stops" : s.working ? "Enter queues · Ctrl C stops" : "Enter sends · Shift Enter for a new line"}</span>
+        <span className="composer-hint">{!typing ? "I to type" : picks.length ? (at < 0 ? "Tab picks · Enter sends as typed" : "Enter picks · Esc closes") : fresh(s) ? "Shift Tab switches Issue or Chat · Enter sends" : queued ? (s.working ? "↑ edits the queued · Ctrl C stops" : "↑ edits the unsent · Enter sends") : s.working ? "Enter queues · Ctrl C stops" : "Enter sends · Shift Enter for a new line"}</span>
         <Runs s={s} />
         {s.working && (
           <button className="stop" type="button" title="Stop  Ctrl C" onClick={() => void s.interrupt()}>

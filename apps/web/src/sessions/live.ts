@@ -55,7 +55,15 @@ interface Pending {
   key: string; // its uuid too, by which ↑ takes it back from Claude's queue
   text: string;
   images: Image[];
+  at: number; // when it was sent
+  lost?: boolean; // still not in the transcript well after the turn ended: lost on the way
 }
+
+// How long a message may stay out of the transcript once the turn has ended before the panel calls it not sent: a new
+// chat's first message waits on its session starting, with no turn shown meanwhile.
+const LOST_AFTER = 8000;
+
+const words = (text: string) => text.replace(/\s+/g, " ").trim();
 
 export class LiveSession {
   id: string;
@@ -74,12 +82,14 @@ export class LiveSession {
   private users = 0;
   private readers = 0; // of the users, the views that show its conversation; the dock's pill shows only whether it works
   private retry: number | null = null;
+  private check: number | null = null; // for messages still pending after the turn ended
 
   constructor(id: string) {
     this.id = id;
     makeObservable(this, {
       items: observableShallow, meta: observableRef, working: observable, since: observable, asks: observableRef, partial: observable,
       pending: observable, startAs: observable, connected: observable, loaded: observable, apply: action, sending: action, sent: action, took: action, shows: action,
+      lose: action,
     });
   }
 
@@ -164,6 +174,33 @@ export class LiveSession {
   private setWorking(on: boolean, since?: number) {
     if (on && (since || !this.working)) this.since = since ?? Date.now();
     this.working = on;
+    // From the turn's end, not from the server's every word that it still doesn't work.
+    if (on && this.check) {
+      clearTimeout(this.check);
+      this.check = null;
+    } else if (!on && this.pending.length && !this.check) this.check = window.setTimeout(() => { this.check = null; this.lose(); }, LOST_AFTER);
+  }
+
+  // A message still out of the transcript well after its turn ended was never read, and never will be: lost on the way,
+  // such as with desk's restart while it waited for a turn in Claude Code's daemon. It says so, for the user to send
+  // again. One starting with < shows in no transcript (transcript.ts, typed), so its absence says nothing.
+  lose() {
+    if (this.working) return;
+    for (const p of this.pending) if (Date.now() - p.at >= LOST_AFTER && !p.text.trimStart().startsWith("<")) p.lost = true;
+  }
+
+  // A message now in the transcript is sent: one pending message, or several in a row that Claude Code read as one,
+  // joined by line breaks.
+  private arrived(text: string) {
+    const want = words(text);
+    for (let i = 0; i < this.pending.length; i++) {
+      let joined = "";
+      for (let j = i; j < this.pending.length; j++) {
+        joined = words(`${joined} ${this.pending[j].text}`);
+        if (joined === want) return void this.pending.splice(i, j - i + 1);
+        if (!want.startsWith(joined)) break;
+      }
+    }
   }
 
   private take(items: Item[]) {
@@ -181,16 +218,13 @@ export class LiveSession {
         const done = this.partial.find((b) => b.msg === item.msg && b.kind === kind);
         if (done) this.partial = this.partial.filter((b) => b.msg !== item.msg || b.index > done.index);
       }
-      if (item.t === "you") {
-        const at = this.pending.findIndex((p) => p.text.trim() === (item.text ?? "").trim());
-        if (at >= 0) this.pending.splice(at, 1);
-      }
+      if (item.t === "you") this.arrived(item.text ?? "");
     }
     if (kept.length) this.items = [...this.items, ...kept];
   }
 
   sending(text: string, images: Image[]): Pending {
-    const p = { key: crypto.randomUUID(), text, images };
+    const p = { key: crypto.randomUUID(), text, images, at: Date.now(), lost: false };
     this.pending.push(p);
     if (!this.working) this.setWorking(true); // drawn at once; the server's word follows
     return p;
@@ -211,11 +245,15 @@ export class LiveSession {
   }
 
   // ↑ in the composer, as in Claude Code's terminal: the messages queued while Claude works come back from its queue,
-  // joined, for the user to edit. One Claude has read already stays in the chat.
+  // joined, for the user to edit. One Claude has read already stays in the chat; one not sent comes back as it is.
   async withdraw(): Promise<{ text: string; images: Image[] } | null> {
     const queued = [...this.pending], back: Pending[] = [];
     let read = 0;
     for (const p of queued) {
+      if (p.lost) {
+        back.push(p);
+        continue;
+      }
       const res = await postJson(`/api/live/${this.id}/withdraw`, { uuid: p.key });
       if (!res.ok) {
         toast(await reason(res));
@@ -231,6 +269,12 @@ export class LiveSession {
 
   took(back: Pending[]) {
     this.pending = this.pending.filter((p) => !back.includes(p));
+  }
+
+  // A message not sent, sent again as it was.
+  resend(p: Pending) {
+    this.took([p]);
+    return this.send(p.text, p.images);
   }
 
   async interrupt() {
