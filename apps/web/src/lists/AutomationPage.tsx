@@ -2,7 +2,7 @@
 // Properties as chips: when it fires, the check that runs first, and the agent its run is with. Run now and Pause are
 // in the top bar; under the description, its last run, which opens its chat.
 import { observer } from "mobx-react-lite";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useParams } from "react-router";
 import { postJson, reason } from "../api/http";
 import { usePage } from "../api/page";
@@ -71,8 +71,8 @@ export const AutomationPage = observer(function AutomationPage() {
     }
   }
 
-  const chip = (label: string, title: string, open: (anchor: Element) => void) => (
-    <button className="prop-chip" type="button" title={title} onClick={(e) => { if (!toggled(e.currentTarget)) open(e.currentTarget); }}>{label}</button>
+  const chip = (icon: ReactNode, label: string, title: string, open: (anchor: Element) => void) => (
+    <button className="prop-chip" type="button" title={title} onClick={(e) => { if (!toggled(e.currentTarget)) open(e.currentTarget); }}>{icon}<span>{label}</span></button>
   );
 
   return (
@@ -92,9 +92,9 @@ export const AutomationPage = observer(function AutomationPage() {
             <Title title={a.title} save={(t) => setAutomation(slug, { title: t })} />
             <div className="project-props">
               <h3>Properties</h3>
-              {chip(a.when || "On calls only", "When it fires", (el) => typedMenu(slug, "when", a.when, el))}
-              {chip(a.check || "No check", "A command run first: what it prints goes into the run, and an empty output skips it", (el) => typedMenu(slug, "check", a.check, el))}
-              {chip(a.agent || "No agent", "The agent its run is with", (el) => agentMenu(slug, a.agent, data.agents, el))}
+              {chip(GLYPH.clock, a.when || "On calls only", "When it fires", (el) => typedMenu(slug, "when", a.when, el))}
+              {chip(GLYPH.terminal, a.check || "No check", "A command run first: what it prints goes into the run, and an empty output skips it", (el) => typedMenu(slug, "check", a.check, el))}
+              {chip(GLYPH.chat, a.agent || "No agent", "The agent its run is with", (el) => agentMenu(slug, a.agent, data.agents, el))}
             </div>
             {(a.trouble || a.state === "paused") && <p className={`automation-says${a.trouble ? " trouble" : ""}`}>{whenNext(a)}</p>}
             <h3>Description</h3>
