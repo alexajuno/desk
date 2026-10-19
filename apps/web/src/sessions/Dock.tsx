@@ -130,7 +130,7 @@ export const SideEdge = observer(function SideEdge() {
 // The pill the chat you left waits as, at the bottom right: its title and whether it works. A click takes you back to it.
 export const DockPill = observer(function DockPill() {
   const shown = dock.pill && !dock.center ? dock.session : null;
-  const s = useLive(shown);
+  const s = useLive(shown, false);
   if (!s) return null;
   return (
     <span className="dock-pill">

@@ -72,6 +72,7 @@ export class LiveSession {
   loaded = false;
   private ws: WebSocket | null = null;
   private users = 0;
+  private readers = 0; // of the users, the views that show its conversation; the dock's pill shows only whether it works
   private retry: number | null = null;
 
   constructor(id: string) {
@@ -82,11 +83,14 @@ export class LiveSession {
     });
   }
 
-  use() {
+  use(reads: boolean) {
+    if (reads) this.readers++;
     if (this.users++ === 0) this.connect();
+    else if (reads) this.visible();
   }
 
-  release() {
+  release(reads: boolean) {
+    if (reads && --this.readers === 0) this.visible();
     if (--this.users > 0) return;
     if (this.retry) clearTimeout(this.retry);
     this.retry = null;
@@ -106,9 +110,10 @@ export class LiveSession {
     };
   }
 
-  // Whether the user can see this session now: desk's Inbox leaves out a reply read as it came.
+  // Whether the user can see this session's conversation now: desk's Inbox leaves out a reply read as it came. The
+  // pill of a chat you left is not reading it, so its reply waits in the Inbox.
   visible() {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: "visible", visible: !document.hidden }));
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: "visible", visible: this.readers > 0 && !document.hidden }));
   }
 
   apply(e: Record<string, unknown>) {
@@ -275,18 +280,19 @@ export async function renameChat(id: string, title: string) {
   }
 }
 
-// The session, connected while the component that draws it is on screen.
-export function useLive(id: string | null): LiveSession | null {
+// The session, connected while the component that draws it is on screen; one that shows no conversation (reads false)
+// leaves its replies unread.
+export function useLive(id: string | null, reads = true): LiveSession | null {
   const s = id ? live(id) : null;
   useEffect(() => {
     if (!s) return;
-    s.use();
+    s.use(reads);
     const seen = () => s.visible();
     document.addEventListener("visibilitychange", seen);
     return () => {
       document.removeEventListener("visibilitychange", seen);
-      s.release();
+      s.release(reads);
     };
-  }, [s]);
+  }, [s, reads]);
   return s;
 }
