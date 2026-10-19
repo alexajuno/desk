@@ -251,6 +251,7 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
   const liveSteps = s.partial.filter((b) => b.kind === "tool_use" || b.kind === "thinking");
   const liveText = s.partial.filter((b) => b.kind === "text");
   const last = rows[rows.length - 1];
+  const lastQueued = s.working ? s.pending.filter((p) => p.mid && !p.lost).at(-1) : undefined; // Send now goes under it
   return (
     <>
       {rows.map((r, n) => {
@@ -266,9 +267,9 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
       })}
       {liveSteps.length > 0 && last?.kind !== "steps" && <Steps s={s} items={[]} running={liveSteps} live />}
       {liveText.map((b) => <Reply key={`${b.msg}:${b.index}`} text={b.text} streaming />)}
-      {s.pending.map((p, n) => (
-        <You key={p.key} text={p.text} images={p.images.length} queued={s.working && !p.lost} lost={p.lost} onSend={() => void s.resend(p)}
-          onSendNow={n === s.pending.length - 1 ? () => void s.sendNow("", []) : undefined} />
+      {s.pending.map((p) => (
+        <You key={p.key} text={p.text} images={p.images.length} queued={s.working && p.mid && !p.lost} lost={p.lost} onSend={() => void s.resend(p)}
+          onSendNow={p === lastQueued ? () => void s.sendNow("", []) : undefined} />
       ))}
       {s.working && !liveText.length && !s.asks.length && <Working since={s.since} status={s.status} />}
     </>
@@ -635,7 +636,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   const asked = useRef(0);
   const focus = wantsFocus.get() === s.id;
   // Messages waiting for Claude's next step, or not sent, which ↑ takes back.
-  const queued = (s.working && s.pending.length > 0) || s.pending.some((p) => p.lost);
+  const queued = s.pending.some((p) => (s.working && p.mid) || p.lost);
 
   useEffect(() => {
     if (!focus) return;

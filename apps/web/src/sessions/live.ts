@@ -75,6 +75,7 @@ interface Pending {
   images: Image[];
   at: number; // when it was sent
   lost?: boolean; // still not in the transcript well after the turn ended: lost on the way
+  mid?: boolean; // sent while Claude worked, so it waits in Claude Code's queue; one sent while idle starts the turn
 }
 
 // How long a message may stay out of the transcript once the turn has ended before the panel calls it not sent: a new
@@ -256,7 +257,7 @@ export class LiveSession {
   }
 
   sending(text: string, images: Image[]): Pending {
-    const p = { key: crypto.randomUUID(), text, images, at: Date.now(), lost: false };
+    const p = { key: crypto.randomUUID(), text, images, at: Date.now(), lost: false, mid: this.working };
     this.pending.push(p);
     if (!this.working) this.setWorking(true); // drawn at once; the server's word follows
     return p;
@@ -280,7 +281,7 @@ export class LiveSession {
   // ↑ in the composer, as in Claude Code's terminal: the messages queued while Claude works come back from its queue,
   // joined, for the user to edit. One Claude has read already stays in the chat; one not sent comes back as it is.
   async withdraw(): Promise<{ text: string; images: Image[] } | null> {
-    const queued = [...this.pending], back: Pending[] = [];
+    const queued = this.pending.filter((p) => p.mid || p.lost), back: Pending[] = [];
     let read = 0;
     for (const p of queued) {
       if (p.lost) {
