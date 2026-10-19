@@ -4,6 +4,10 @@
 
 :root { --dock-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
         --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace; }
+/* A skill named in the composer: claude.ai's --cds-text-accent, measured on its composer's skill chip, 19 Oct, at 2x,
+   in dark and light. */
+:root { --skill-text: #6da7ec; }
+:root[data-theme=light] { --skill-text: #184f95; }
 
 .dock { position: fixed; top: 8px; right: 8px; bottom: 8px; left: 244px; z-index: 5; box-sizing: border-box;
         display: none; flex-direction: column; overflow: hidden;
@@ -203,9 +207,18 @@
 /* It grows with what is typed, a line at a time, up to 240px, then scrolls inside. The browser sizes it to its text,
    as claude.ai's box grows by itself: measuring it by hand on each key shrank it to one line for a moment, which pulled
    the conversation's scroll up (18 Oct). */
-.composer textarea { display: block; width: 100%; min-height: 21px; max-height: 240px; box-sizing: border-box; padding: 0; border: 0; outline: 0;
+.composer textarea { position: relative; display: block; width: 100%; min-height: 21px; max-height: 240px; box-sizing: border-box; padding: 0; border: 0; outline: 0;
                      resize: none; field-sizing: content; background: transparent; font: 450 14px/21px var(--font); color: var(--text-1); }
 .composer textarea::placeholder { color: var(--text-4); }
+/* A known /name in it is blue, as in claude.ai's composer, its / at half strength. The textarea's text turns clear
+   (selected, it shows again) over a layer that draws the same text in the same box, wrapped as a textarea wraps. */
+.composer-text { position: relative; }
+.composer-marks { position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+                  font: 450 14px/21px var(--font); color: var(--text-1); white-space: pre-wrap; overflow-wrap: break-word; }
+.composer textarea.marked { color: transparent; caret-color: var(--text-1); }
+.composer textarea.marked::selection { color: var(--text-1); }
+.skill { color: var(--skill-text); }
+.skill-slash { opacity: 0.5; }
 .composer-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
 .composer-hint { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--text-4); }
 .attach { cursor: pointer; display: inline-flex; align-items: center; }

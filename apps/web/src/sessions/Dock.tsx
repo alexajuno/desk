@@ -460,6 +460,26 @@ function tokenAt(text: string, caret: number): { kind: "/" | "@"; start: number;
   return null;
 }
 
+// A skill or command named in what is typed, as / and its name at the start or after a space, as claude.ai's composer
+// shows one in blue. The textarea can't colour a word, so its text turns clear and the layer under it draws the text
+// again, with each known name marked; null when nothing is known, and the textarea draws its own text.
+const SLASHED = /(^|\s)\/([\w:-]+(?:\.[\w:-]+)*)(?![\w/])/g;
+
+function marked(text: string, known: Set<string> | null) {
+  if (!known) return null;
+  const out: React.ReactNode[] = [];
+  let from = 0;
+  for (const m of text.matchAll(SLASHED)) {
+    if (!known.has(m[2])) continue;
+    const start = m.index + m[1].length;
+    out.push(text.slice(from, start), <span key={start} className="skill"><span className="skill-slash">/</span>{m[2]}</span>);
+    from = start + 1 + m[2].length;
+  }
+  if (!out.length) return null;
+  out.push(text.slice(from) + (text.endsWith("\n") ? " " : "")); // a last empty line, which a div drops and a textarea keeps
+  return out;
+}
+
 async function readImage(file: File): Promise<Image | null> {
   if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) return null;
   const url = await new Promise<string>((resolve) => {
@@ -490,7 +510,9 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   const [at, setAt] = useState(0);
   const [token, setToken] = useState<ReturnType<typeof tokenAt>>(null);
   const box = useRef<HTMLTextAreaElement>(null);
-  const commands = useRef<Pick[] | null>(null);
+  const layer = useRef<HTMLDivElement>(null);
+  const commands = useRef<Promise<Pick[]> | null>(null);
+  const [known, setKnown] = useState<Set<string> | null>(null); // the names / takes, once asked
   const asked = useRef(0);
   const [typing, setTyping] = useState(false); // the cursor is here: the hint says the keys of this mode
   const focus = wantsFocus.get() === s.id;
@@ -502,16 +524,35 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
     runInAction(() => wantsFocus.set(null));
   }, [focus]);
 
+  const commandList = () => (commands.current ??= fetch(`/api/live/${s.id}/commands`).then((r) => r.json())
+    .then((list: { name: string; description: string }[]) => {
+      setKnown(new Set(list.map((c) => c.name)));
+      return list.map((c) => ({ label: `/${c.name}`, hint: c.description, insert: `/${c.name} ` }));
+    })
+    .catch(() => (commands.current = null, [])));
+
+  // A / in the text, typed or kept in a draft, asks for the names it may mark.
+  useEffect(() => {
+    if (!known && /(^|\s)\/\w/.test(text)) void commandList();
+  }, [text, known]);
+
+  const marks = marked(text, known);
+  // The layer keeps to the textarea's text: as wide as its lines, short of a scrollbar, and scrolled as far.
+  useLayoutEffect(() => {
+    const el = box.current!, under = layer.current;
+    if (!under) return;
+    under.style.right = `${el.offsetWidth - el.clientWidth}px`;
+    under.scrollTop = el.scrollTop;
+  });
+
   async function complete(t: ReturnType<typeof tokenAt>) {
     setToken(t);
     if (!t) return setPicks([]);
     const n = ++asked.current;
     let list: Pick[];
     if (t.kind === "/") {
-      commands.current ??= ((await (await fetch(`/api/live/${s.id}/commands`)).json()) as { name: string; description: string }[])
-        .map((c) => ({ label: `/${c.name}`, hint: c.description, insert: `/${c.name} ` }));
       const w = t.word.toLowerCase();
-      list = commands.current.filter((c) => c.label.slice(1).toLowerCase().includes(w))
+      list = (await commandList()).filter((c) => c.label.slice(1).toLowerCase().includes(w))
         .sort((a, b) => Number(!a.label.slice(1).toLowerCase().startsWith(w)) - Number(!b.label.slice(1).toLowerCase().startsWith(w))).slice(0, 12);
     } else {
       // A new desk chat's first @ names one of the user's agents, whom the chat is then with; otherwise @ is a file. A
@@ -595,41 +636,45 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           ))}
         </div>
       )}
-      <textarea ref={box} rows={1} value={text} spellCheck={false}
-        placeholder={s.working ? "Queue a message for when it's ready…" : "Reply…"}
-        onChange={(e) => { setText(e.target.value); void complete(tokenAt(e.target.value, e.target.selectionStart)); }}
-        onFocus={() => setTyping(true)} onBlur={() => setTyping(false)}
-        onPaste={(e) => {
-          const files = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
-          if (files.length) { e.preventDefault(); void attach(files); }
-        }}
-        onKeyDown={(e) => {
-          if (e.nativeEvent.isComposing) return; // a Vietnamese or other IME word still being typed
-          if (e.key === "Tab" && e.shiftKey && fresh(s)) {
-            e.preventDefault(); // Claude Code's key for its modes, here the chip's two
-            flipStartAs(s);
-          } else if (picks.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-            e.preventDefault();
-            setAt(e.key === "ArrowDown" ? (at + 1) % picks.length : (at <= 0 ? picks.length : at) - 1);
-          } else if (picks.length && (e.key === "Tab" || (e.key === "Enter" && at >= 0))) {
-            e.preventDefault();
-            choose(picks[Math.max(at, 0)]);
-          } else if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            void send();
-          } else if (e.key === "ArrowUp" && queued && !e.currentTarget.value.slice(0, e.currentTarget.selectionStart).includes("\n")) {
-            e.preventDefault();
-            void takeBack();
-          } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === "KeyC" && s.working && e.currentTarget.selectionStart === e.currentTarget.selectionEnd) {
-            e.preventDefault(); // a terminal's Ctrl C; with text selected it copies
-            void s.interrupt();
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation(); // the frame's Esc would also leave the page: that is the next Esc's to do
-            if (picks.length) setPicks([]);
-            else e.currentTarget.blur();
-          }
-        }} />
+      <div className="composer-text">
+        {marks && <div ref={layer} className="composer-marks" aria-hidden="true">{marks}</div>}
+        <textarea ref={box} rows={1} value={text} spellCheck={false} className={marks ? "marked" : undefined}
+          placeholder={s.working ? "Queue a message for when it's ready…" : "Reply…"}
+          onScroll={(e) => { if (layer.current) layer.current.scrollTop = e.currentTarget.scrollTop; }}
+          onChange={(e) => { setText(e.target.value); void complete(tokenAt(e.target.value, e.target.selectionStart)); }}
+          onFocus={() => setTyping(true)} onBlur={() => setTyping(false)}
+          onPaste={(e) => {
+            const files = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
+            if (files.length) { e.preventDefault(); void attach(files); }
+          }}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return; // a Vietnamese or other IME word still being typed
+            if (e.key === "Tab" && e.shiftKey && fresh(s)) {
+              e.preventDefault(); // Claude Code's key for its modes, here the chip's two
+              flipStartAs(s);
+            } else if (picks.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+              e.preventDefault();
+              setAt(e.key === "ArrowDown" ? (at + 1) % picks.length : (at <= 0 ? picks.length : at) - 1);
+            } else if (picks.length && (e.key === "Tab" || (e.key === "Enter" && at >= 0))) {
+              e.preventDefault();
+              choose(picks[Math.max(at, 0)]);
+            } else if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void send();
+            } else if (e.key === "ArrowUp" && queued && !e.currentTarget.value.slice(0, e.currentTarget.selectionStart).includes("\n")) {
+              e.preventDefault();
+              void takeBack();
+            } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === "KeyC" && s.working && e.currentTarget.selectionStart === e.currentTarget.selectionEnd) {
+              e.preventDefault(); // a terminal's Ctrl C; with text selected it copies
+              void s.interrupt();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation(); // the frame's Esc would also leave the page: that is the next Esc's to do
+              if (picks.length) setPicks([]);
+              else e.currentTarget.blur();
+            }
+          }} />
+      </div>
       <div className="composer-foot">
         <label className="dock-btn attach" title="Attach an image">
           {GLYPH.plus}
