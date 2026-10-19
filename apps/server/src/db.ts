@@ -132,6 +132,16 @@ create table if not exists trying (
   pid integer -- the desk that switched it
 );
 create table if not exists copies (path text primary key, text text); -- each file copies.ts last wrote out, null once removed
+create table if not exists sessions ( -- what each session does, as the session host tells desk (turns.ts)
+  id text primary key,
+  open boolean not null default false, -- the host holds its process
+  working boolean not null default false, -- a turn runs
+  asks integer not null default 0, -- the questions waiting on the user: a tool to allow, AskUserQuestion's
+  prompted timestamptz, -- when the user last wrote to it, or desk for them
+  replied timestamptz, -- when its last turn ended with its reply
+  ended timestamptz, -- when its last turn ended, however: its reply, Stop, an error, or its process going
+  updated timestamptz not null default now()
+);
 create table if not exists changes ( -- the log: each change to a row the app holds, numbered as it was written
   seq bigint generated always as identity primary key,
   at timestamptz not null default now(),

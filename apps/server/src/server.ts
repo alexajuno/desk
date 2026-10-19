@@ -15,6 +15,7 @@ import * as projects from "./projects.ts";
 import * as settings from "./settings.ts";
 import * as slack from "./slack.ts";
 import * as sync from "./sync.ts";
+import * as turns from "./turns.ts";
 import * as web from "./web.ts";
 
 await db.open();
@@ -28,6 +29,7 @@ await settings.open();
 await pins.open();
 await models.open();
 await slack.open();
+await turns.load(); // what each session does, as the session host last told desk
 await web.build();
 const app = await create();
 await sync.start();
@@ -46,6 +48,7 @@ async function stop() {
   stopping = true;
   // Sockets stay open as long as a tab does: close them, and the pages reconnect to the desk that comes next.
   sync.closeAll();
+  turns.stop();
   const late = setTimeout(() => process.exit(0), 5000);
   try {
     await app.close();

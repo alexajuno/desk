@@ -22,6 +22,7 @@ import * as projects from "./projects.ts";
 import * as sessions from "./sessions.ts";
 import * as sync from "./sync.ts";
 import * as transcript from "./transcript.ts";
+import * as turns from "./turns.ts";
 import * as web from "./web.ts";
 import * as window from "./window.ts";
 
@@ -612,6 +613,14 @@ export async function create(): Promise<FastifyInstance> {
       if (!fromDesk(req)) await reply.code(403).send();
     },
   }, (socket, req) => void sync.connect(socket, req.query as Record<string, string | undefined>));
+
+  // --- the session host (host.ts), which tells desk here what each session does (turns.ts)
+  app.get("/api/host", {
+    websocket: true,
+    preValidation: async (req, reply) => {
+      if (!fromDesk(req)) await reply.code(403).send();
+    },
+  }, (socket) => turns.connect(socket));
 
   return app;
 }

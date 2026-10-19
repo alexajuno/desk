@@ -7,7 +7,6 @@ import * as agents from "./agents.ts";
 import * as automations from "./automations.ts";
 import * as chats from "./chats.ts";
 import { ISSUES_DIR, PROJECTS_DIR } from "./config.ts";
-import * as hosted from "./hosted.ts";
 import * as store from "./issues.ts";
 import { byRank, CLOSED, runs, type Issue } from "./issues.ts";
 import * as land from "./land.ts";
@@ -20,6 +19,7 @@ import * as roster from "./roster.ts";
 import { find } from "./search.ts";
 import * as seen from "./seen.ts";
 import * as sessions from "./sessions.ts";
+import * as turns from "./turns.ts";
 import * as views from "./views.ts";
 import { ago, dayAndTime, nearDay, parseLocal, shortDate, waited } from "./when.ts";
 
@@ -63,15 +63,15 @@ const isFile = (path: string) => existsSync(path) && statSync(path).isFile();
 const resultOf = (slug: string) => join(store.folder(slug), "result.md");
 const iso = (t: string) => parseLocal(t).getTime() / 1000;
 
-// Whether the issue's session works on your last message, from its transcript, never from whether a process holds it:
-// a chat the host closed, or that never started, is not working, and its next message resumes it.
-const working = (i: Issue) => Boolean(i.session && sessions.working(i.session));
+// Whether a turn of the issue's session runs, as the session host told desk (turns.ts): a chat the host closed, or that
+// never started, is not working, and its next message resumes it.
+const working = (i: Issue) => Boolean(i.session && turns.working(i.session));
 
 // Where the issue's chat stands, for the strip, the sidebar and Triage: working, idle (your move), or none, with no chat.
 const talkOf = (i: Issue) => (!i.session ? "none" : working(i) ? "working" : "idle");
 
 // The sessions asking you to allow a tool now. Only a running session can ask, and the host is the one that knows.
-const asking = async () => new Set((await hosted.sessions()).filter((h) => h.asks).map((h) => h.id));
+const asking = turns.asking;
 
 // Whether a landing issue's session stopped short of landing it: not working, or asking you something, a minute after
 // Approve.
@@ -86,12 +86,11 @@ const savedAt = (i: Issue) => {
 };
 
 // Whether the session's turn ended since the issue was last saved, as when it moved to In progress: it is not working,
-// and it replied, or last heard from you, after that. So a message desk is still handing over, as Go's, ends nothing,
-// and an issue you move to In progress yourself stays there until the turn after.
+// and a turn of it ended after that. So a message desk is still handing over, as Go's, ends nothing, and an issue you
+// move to In progress yourself stays there until the turn after.
 function turnEnded(i: Issue): boolean {
   if (!i.session || working(i)) return false;
-  const asked = sessions.prompted(i.session);
-  return asked !== null && Math.max(asked, sessions.replied(i.session) ?? 0) > savedAt(i);
+  return (turns.ended(i.session) ?? 0) > savedAt(i);
 }
 
 // What an issue in review holds: a review from before 19 Oct held a result.
@@ -110,11 +109,11 @@ export async function advance(all: Map<string, Issue>) {
     if (i.state === "running" && turnEnded(i)) {
       await store.move(i, { state: "review", review_of: "reply" });
     } else if (i.state === "waiting" && i.session && i.waiting_since) {
-      const wrote = sessions.prompted(i.session);
+      const wrote = turns.prompted(i.session);
       if (wrote && wrote > iso(i.waiting_since)) await store.move(i, { state: "running" });
     } else if (i.state === "review" && i.session) {
       // A review from before 19 Oct has no review_since: it moves back once its session works again.
-      const wrote = sessions.prompted(i.session);
+      const wrote = turns.prompted(i.session);
       if (i.review_since ? wrote !== null && wrote > iso(i.review_since) : working(i)) await store.move(i, { state: "running" });
     }
   }
@@ -159,9 +158,9 @@ function readTo(h: Held): number {
 // When the session's last reply came, if the user has not read it: it ended after the user last read the session and
 // after the user last wrote in it, and no panel shows it now; else 0. A script's chat starts that way.
 function unread(h: Held): number {
-  const replied = sessions.replied(h.session);
+  const replied = turns.replied(h.session);
   if (!replied || replied <= readTo(h) || live_.watching(h.session)) return 0;
-  const wrote = sessions.prompted(h.session); // none in a script's chat until the user answers
+  const wrote = turns.prompted(h.session); // none in a script's chat until the user answers
   return wrote && wrote > replied ? 0 : replied; // at work on the user's message
 }
 
@@ -232,16 +231,16 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
   const rows: Notice[] = [];
   for (const h of held(all)) {
     const i = h.issue, slug = i?.slug ?? h.chat!.id;
-    const replied = sessions.replied(h.session) ?? 0;
+    const replied = turns.replied(h.session) ?? 0;
     let why = "";
     if (i?.state === "landing") { // and no further: a landing session works, asks and replies on its way to Done
       if (landingStuck(i, asks)) why = "landing stuck";
     } else if (asks.has(h.session)) why = "waiting for you";
     else if (unread(h) || (slug === keep && replied)) {
-      why = i ? replyWhy(i, isFile(resultOf(i.slug))) : sessions.prompted(h.session) ? "agent replied" : "agent wrote";
+      why = i ? replyWhy(i, isFile(resultOf(i.slug))) : turns.prompted(h.session) ? "agent replied" : "agent wrote";
     }
     if (!why) continue;
-    // A chat's reply changes no file: its transcript says when, so each reply shows unread.
+    // A chat's reply changes no file: the host says when, so each reply shows unread.
     const at = Math.max(replied, i ? store.changed(i.slug) : 0);
     rows.push({ slug, title: i ? i.title : chatTitle(h.chat!), why, says: saysOf(why, i), kind: i?.state === "review" && REVIEWED.has(why) ? "review" : "needs",
       at: new Date(at * 1000), issue: i, chat: h.chat, session: h.session });
@@ -277,12 +276,12 @@ function chatsNow(all: Map<string, Issue>) {
   const shown = held(all).filter((h) => table.has(h.session) && !h.chat?.automation);
   const row = (h: Held) => ({
     session: h.session, title: h.issue?.title ?? chatTitle(h.chat!), issue: h.issue && { slug: h.issue.slug, state: h.issue.state },
-    working: sessions.working(h.session), unread: unread(h) > 0,
+    working: turns.working(h.session), unread: unread(h) > 0,
   });
   const bySession = new Map(shown.map((h) => [h.session, h]));
   const pinned = pins.all().filter((s) => bySession.has(s));
   const inHand = (h: Held) => (h.issue ? IN_HAND.has(h.issue.state)
-    : Date.now() - moved(h) < DAY || sessions.working(h.session) || unread(h) > 0);
+    : Date.now() - moved(h) < DAY || turns.working(h.session) || unread(h) > 0);
   return {
     pinned: pinned.map((s) => row(bySession.get(s)!)),
     chats: shown.filter((h) => !pinned.includes(h.session) && inHand(h)).sort((a, b) => moved(b) - moved(a)).map(row),

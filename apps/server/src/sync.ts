@@ -33,6 +33,7 @@ import type { Change } from "./db.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as pages from "./pages.ts";
+import * as turns from "./turns.ts";
 
 const listeners = new Set<WebSocket>();
 
@@ -93,11 +94,12 @@ function serial(name: string, work: () => Promise<void>): () => Promise<void> {
 }
 
 // --- the frame ---------------------------------------------------------------------------------------------------------
-// A session that starts or stops working, or writes its plan or result, changes no issue, yet the Inbox and the
-// strips say it. Claude Code rewrites ~/.claude/sessions/<pid>.json the moment a session's turn starts or ends
-// ("status": busy or idle; `claude agents` reads it there) and removes it when the process ends, so desk watches those
-// and the files a session writes beside issue.md, and sends the frame again when it changed. A tick catches what no
-// file shows: time (a landing stuck for a minute) and the window in front (a chat's reply read as it came).
+// A session that starts or stops working, asks you something, or writes its plan or result, changes no issue, yet the
+// Inbox and the strips say it. The session host tells desk the moment a turn starts or ends, a question waits, or a
+// process ends (turns.ts), so the frame goes again then, and when a session writes a file beside issue.md. Until a host
+// of this code tells desk, Claude Code's own ~/.claude/sessions/<pid>.json says when a turn starts or ends ("status":
+// busy or idle; `claude agents` reads it there), so desk watches those too. A tick catches what neither shows: time (a
+// landing stuck for a minute) and the window in front (a chat's reply read as it came).
 
 const SESSIONS = join(HOME, ".claude", "sessions");
 const AGENT_FILES = ["plan.md", "result.md"];
@@ -110,7 +112,7 @@ async function frameNow() {
     frameText = ""; // an app that connects next is told afresh
     return;
   }
-  await agents.live(true); // the frame's own asks reuse this answer
+  if (!turns.reports()) await agents.live(true); // the frame's own asks of the host reuse this answer
   const text = JSON.stringify(await pages.framePage(legacy.size > 0));
   if (text === frameText) return;
   frameText = text;
@@ -159,6 +161,7 @@ const desks = (path: string) => basename(path) === store.MAIN || dirname(path) =
 // screenshots), which no row holds, and the sessions, and tell the apps the frame.
 export async function start() {
   db.onWrite(told);
+  turns.onChange(() => void frame());
   const agentWrote = soon(() => void frame());
   const touched = new Set<string>();
   const tellFiles = soon(() => {

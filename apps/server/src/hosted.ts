@@ -95,9 +95,10 @@ async function launch() {
   mkdirSync(dirname(LOG), { recursive: true });
   const out = openSync(LOG, "a");
   const node = process.execPath;
+  const args = ["--socket", SOCKET, "--desk", `http://127.0.0.1:${PORT}`]; // the host tells desk what each session does (turns.ts)
   const argv = which("systemd-run")
-    ? ["systemd-run", "--user", "--scope", "--slice=agents.slice", `--unit=${UNIT}-${Date.now()}`, "--collect", "--quiet", "--", node, HOST, "--socket", SOCKET]
-    : [node, HOST, "--socket", SOCKET];
+    ? ["systemd-run", "--user", "--scope", "--slice=agents.slice", `--unit=${UNIT}-${Date.now()}`, "--collect", "--quiet", "--", node, HOST, ...args]
+    : [node, HOST, ...args];
   const { sessionEnv } = await import("./agents.ts");
   spawn(argv[0], argv.slice(1), { cwd: REPO, env: await sessionEnv(), detached: true, stdio: ["ignore", out, out] }).unref();
   for (let i = 0; i < 100; i++) {
@@ -105,6 +106,12 @@ async function launch() {
     await sleep(100);
   }
   throw new Error(`The session host did not start; see ${LOG}`);
+}
+
+// Which host answers now: none, one of the code checked out now, or one of older code.
+export async function standing(): Promise<"none" | "current" | "older"> {
+  const v = await version();
+  return !v ? "none" : v === current() ? "current" : "older";
 }
 
 let starting: Promise<void> | null = null;

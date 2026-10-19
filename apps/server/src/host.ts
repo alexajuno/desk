@@ -21,6 +21,10 @@
 // An <ask> is {id, tool, input}: a tool call Claude Code wants the user's yes to, or AskUserQuestion's questions.
 // A <task> is something Claude Code runs beside the conversation: a subagent, a background command, a watch (Task).
 // A <status> is what holds the turn up, which the panel's working line says: {kind: "retry" | "compacting" | "limit", …}.
+//
+// desk itself hears what each session does from the host, which keeps a WebSocket open to desk's /api/host (turns.ts
+// there says what goes over it): whether its process runs, whether a turn runs, the questions waiting, and when the user
+// last wrote to it and it last replied.
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
@@ -28,10 +32,12 @@ import { fileURLToPath } from "node:url";
 import { query, type PermissionResult, type Query, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
-import type { WebSocket } from "ws";
+import { WebSocket } from "ws";
 
-const SOCKET = process.argv[process.argv.indexOf("--socket") + 1];
-if (!SOCKET || process.argv.indexOf("--socket") < 0) throw new Error("usage: node host.ts --socket <path>");
+const option = (name: string) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] ?? "" : "");
+const SOCKET = option("--socket");
+if (!SOCKET) throw new Error("usage: node host.ts --socket <path> [--desk <desk's address>]");
+const DESK = option("--desk"); // desk, which the host tells what each session does: http://127.0.0.1:<port>
 // desk compares this with its own copy of the file, and restarts the host while nothing works when they differ.
 const VERSION = createHash("sha1").update(readFileSync(fileURLToPath(import.meta.url))).digest("hex").slice(0, 12);
 // The user's own Claude Code, the one their terminal runs, rather than the copy the SDK's package carries.
@@ -83,6 +89,9 @@ interface Session {
   wake: (() => void) | null;
   working: boolean;
   since: number; // when it last started or finished a turn
+  prompted: number | null; // when the user last wrote to it, or desk for them, in ms
+  replied: number | null; // when its last turn ended with its reply
+  finished: number | null; // when its last turn ended, however: its reply, Stop, an error, or its process going
   asks: Map<string, Ask>;
   tasks: Map<string, Task>; // what runs now, by task id
   status: Status | null;
@@ -132,6 +141,14 @@ function setWorking(s: Session, working: boolean) {
   s.working = working;
   s.since = Date.now();
   send(s, { type: "working", working, since: s.since });
+  tell(s);
+}
+
+// Words the user wrote, as the transcript's reader on desk's side counted them before (sessions.ts): not a slash
+// command, nor what a script or desk pushes in a tag such as <desk-push>, nor a screenshot alone.
+function said(content: Content): boolean {
+  const text = (typeof content === "string" ? content : content.filter((b) => b.type === "text").map((b) => String(b.text ?? "")).join("\n")).trim();
+  return Boolean(text) && !text.startsWith("<") && !/^\/[\w:-]+(\s|$)/.test(text);
 }
 
 // The messages Claude Code reads, one at a time, as the user sends them; it reads the next while a turn runs and folds
@@ -140,6 +157,10 @@ async function* inbox(s: Session): AsyncGenerator<SDKUserMessage> {
   while (!s.closed) {
     const next = s.inbox.shift();
     if (next) {
+      if (said(next.message.content as Content)) {
+        s.prompted = Date.now();
+        tell(s);
+      }
       setWorking(s, true);
       yield next;
       continue;
@@ -157,7 +178,7 @@ function userMessage(content: Content, uuid?: string): SDKUserMessage {
 function start(o: StartOptions): Session {
   const id = o.id ?? randomUUID();
   const s: Session = { id, cwd: o.cwd, title: o.title ?? "", q: null as unknown as Query, inbox: [], wake: null, working: false, since: Date.now(),
-    asks: new Map(), tasks: new Map(), status: null, partial: new Map(), watchers: new Set(), closed: false, ended: Promise.resolve(), streaming: "" };
+    prompted: null, replied: null, finished: null, asks: new Map(), tasks: new Map(), status: null, partial: new Map(), watchers: new Set(), closed: false, ended: Promise.resolve(), streaming: "" };
   // The first message waits in the inbox before the SDK first reads it, which it does as query() starts.
   if (o.message) s.inbox.push(userMessage(o.message));
   s.q = query({
@@ -184,16 +205,19 @@ function start(o: StartOptions): Session {
         const done = (result: PermissionResult) => {
           if (!s.asks.delete(askId)) return;
           send(s, { type: "asks", asks: asksOf(s) });
+          tell(s);
           resolve(result);
         };
         s.asks.set(askId, { id: askId, tool, input, answer: done });
         send(s, { type: "asks", asks: asksOf(s) });
+        tell(s);
         signal.addEventListener("abort", () => done({ behavior: "deny", message: "The user stopped the turn." }));
       }),
     },
   });
   sessions.set(id, s);
   s.ended = read(s);
+  tell(s);
   return s;
 }
 
@@ -210,6 +234,8 @@ async function read(s: Session) {
     s.wake?.();
     for (const ask of s.asks.values()) ask.answer({ behavior: "deny", message: "The session ended." });
     if (sessions.get(s.id) === s) sessions.delete(s.id);
+    if (s.working) s.finished = Date.now(); // cut short
+    tell(s);
     send(s, { type: "closed", error });
     for (const ws of s.watchers) ws.close();
   }
@@ -291,6 +317,9 @@ function take(s: Session, m: SDKMessage) {
     }
     send(s, { type: "message", entry: m });
   } else if (m.type === "result") {
+    s.finished = Date.now();
+    if (m.subtype === "success") s.replied = s.finished;
+    tell(s);
     s.partial.clear();
     setStatus(s, null);
     // A subagent the turn waited on ends with it; one the user stopped may send no event of its own to say so.
@@ -299,6 +328,44 @@ function take(s: Session, m: SDKMessage) {
     if (s.tasks.size !== was) send(s, { type: "tasks", tasks: tasksOf(s) });
     if (!s.inbox.length) setWorking(s, false);
   }
+}
+
+// --- telling desk ------------------------------------------------------------------------------------------------------
+// Each session's state goes to desk the moment it changes, several changes at once as one. While desk is away, as it
+// restarts on every Try, the host tries again each second, and says every session anew once it is back: one that
+// ended meanwhile is left out, which tells desk so.
+
+let desk: WebSocket | null = null; // open
+const changed = new Set<Session>();
+
+const stateOf = (s: Session) => ({ id: s.id, open: !s.closed, working: s.working && !s.closed, asks: s.closed ? 0 : s.asks.size, prompted: s.prompted, replied: s.replied,
+  ended: s.finished });
+
+function tell(s: Session) {
+  if (!changed.size) queueMicrotask(flush);
+  changed.add(s);
+}
+
+function flush() {
+  const now = [...changed];
+  changed.clear();
+  if (desk?.readyState !== WebSocket.OPEN) return;
+  for (const s of now) desk.send(JSON.stringify({ type: "session", ...stateOf(s) }));
+}
+
+function reach() {
+  if (!DESK) return;
+  // desk takes this socket only from its own address, as it does its pages' (app.ts, fromDesk).
+  const ws = new WebSocket(`${DESK.replace(/^http/, "ws")}/api/host`, { origin: DESK });
+  ws.on("open", () => {
+    desk = ws;
+    ws.send(JSON.stringify({ type: "hello", sessions: [...sessions.values()].filter((s) => !s.closed).map(stateOf) }));
+  });
+  ws.on("close", () => {
+    if (desk === ws) desk = null;
+    setTimeout(reach, 1000);
+  });
+  ws.on("error", () => {}); // it closes next
 }
 
 // Close a session's process; its transcript stays, and its next message resumes it.
@@ -436,3 +503,4 @@ process.on("SIGINT", stop);
 if (existsSync(SOCKET)) unlinkSync(SOCKET); // a host that died left it behind; hosted.ts checks no host answers first
 await app.listen({ path: SOCKET });
 console.log(`desk host ${VERSION} on ${SOCKET}`);
+reach();
