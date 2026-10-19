@@ -633,7 +633,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
         {fresh(s) && <StartAs s={s} />}
-        <span className="composer-hint">{!typing ? "I to type" : picks.length && at < 0 ? "Tab picks · Enter sends as typed" : fresh(s) ? "Shift Tab switches Issue or Chat · Enter sends" : queued ? "↑ edits the queued · Ctrl C stops" : s.working ? "Enter queues · Ctrl C stops" : "Enter sends · Shift Enter for a new line"}</span>
+        <span className="composer-hint">{!typing ? "I to type" : picks.length ? (at < 0 ? "Tab picks · Enter sends as typed" : "Enter picks · Esc closes") : fresh(s) ? "Shift Tab switches Issue or Chat · Enter sends" : queued ? "↑ edits the queued · Ctrl C stops" : s.working ? "Enter queues · Ctrl C stops" : "Enter sends · Shift Enter for a new line"}</span>
         <Runs s={s} />
         {s.working && (
           <button className="stop" type="button" title="Stop  Ctrl C" onClick={() => void s.interrupt()}>
