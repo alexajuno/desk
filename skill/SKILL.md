@@ -84,7 +84,7 @@ Automations run one of the user's agents at a time, or when a check finds someth
 - `body`: what the agent should do, given to it with what the check printed
 - `state`: active or paused
 
-When the user asks for one, such as a desk chat that opens with "New automation:", write its check script where it belongs (usually `~/projects/muse/bin`), create the automation, and fire it once to show it works; then settle your chat's own issue as done. `/run` fires one now, as a script's call or the page's Run now: it answers once its check has run, with how it went, and a `message` goes into the run:
+When the user asks for one, such as a desk chat that opens with "New automation:", or asks to be told when something happens, first read the automation skill: it says which trigger to pick, a push before a timed check. Then write its check script where it belongs (usually `~/projects/muse/bin`), create the automation, and fire it once to show it works; then settle your chat's own issue as done. `/run` fires one now, as a script's call or the page's Run now: it answers once its check has run, with how it went, and a `message` goes into the run:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/automations"
