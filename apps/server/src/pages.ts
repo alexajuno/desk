@@ -398,17 +398,14 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
 export async function framePage() {
   const all = await store.loadAll();
   const notices = await notifications(all); // moves the issues on first
-  // Sub-issues too: a session runs whether or not its issue sits under another.
-  const inState = (s: string) => [...all.values()].filter((i) => i.state === s).sort(byRank);
+  const triage = [...all.values()].filter((i) => i.state === "triage").sort(byRank);
   const now = await land.running(land.DESK_REPO);
   const line = await land.line(land.DESK_REPO);
   const everyProject = await projects.loadAll();
   const active = [...everyProject.values()].filter((p) => p.state === "active").sort(byCreated);
   return {
     inbox: notices.length,
-    triage: inState("triage").map((i) => ({ ...issueJson(i), now: talkOf(i) })),
-    running: inState("running").map(issueJson),
-    landing: inState("landing").map(issueJson),
+    triage: triage.map((i) => ({ ...issueJson(i), now: talkOf(i) })),
     trying: now && { slug: now.slug, branch: now.branch, issue: (now.slug && all.has(now.slug)) ? issueJson(all.get(now.slug)!) : null },
     line: line.filter((w) => all.has(w.slug)).map((w) => ({ slug: w.slug, branch: w.branch ?? null, for: w.for ?? null, issue: issueJson(all.get(w.slug)!) })),
     projects: active.map((p) => ({ slug: p.slug, title: p.title })),

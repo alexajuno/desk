@@ -1,7 +1,7 @@
 // The sidebar on every page (templates/base.html's aside.side): Inbox, Triage, Issues, Automations and the projects,
-// the newest sessions, as claude.ai's Recents, then the lists to watch: what is in progress and landing, and what desk's
-// checkout runs.
-// Waiting issues stay in Issues, since waiting can last forever.
+// the newest sessions, as claude.ai's Recents, then what desk's checkout runs. An issue in progress or landing shows
+// in Chats, by its session ("now that the chats section display all issues, feel like we don't need the in progress
+// section anymore", the user, 19 Oct); the rest stay in Issues.
 import { observer } from "mobx-react-lite";
 import { useLocation } from "react-router";
 import { deskPath, Go } from "../app/nav";
@@ -88,23 +88,6 @@ export const Sidebar = observer(function Sidebar() {
               <span className="nav-title">{c.title}</span>
               {c.working ? <span className="live-dot working" /> : c.unread ? <span className="unread" aria-label="Unread" /> : null}
             </Go>
-          ))}
-        </>
-      )}
-      {d && d.running.length > 0 && (
-        <>
-          <div className="nav-label">In progress</div>
-          {d.running.map((p) => (
-            <Go key={p.slug} className={`nav-item${at(`/issue/${p.slug}`)}`} to={`/issue/${p.slug}`}><StateIcon state="running" /><span className="nav-title">{p.title}</span></Go>
-          ))}
-        </>
-      )}
-      {/* Approved: the session lands the work, and the issue leaves the list once it is Done. */}
-      {d && d.landing.length > 0 && (
-        <>
-          <div className="nav-label">Landing</div>
-          {d.landing.map((p) => (
-            <Go key={p.slug} className={`nav-item${at(`/issue/${p.slug}`)}`} to={`/issue/${p.slug}`}><StateIcon state="landing" /><span className="nav-title">{p.title}</span></Go>
           ))}
         </>
       )}
