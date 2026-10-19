@@ -574,7 +574,7 @@ export async function create(): Promise<FastifyInstance> {
   app.post("/api/live/:id/pin", async (req: Req) => {
     mustBePage(req);
     const { pinned } = (req.body ?? {}) as unknown as { pinned?: boolean };
-    pins.set(sessionOf(req), pinned !== false);
+    await pins.set(sessionOf(req), pinned !== false);
     sync.frameChanged();
     return { ok: true };
   });

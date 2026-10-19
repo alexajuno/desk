@@ -9,17 +9,25 @@ import * as db from "./db.ts";
 import * as hosted from "./hosted.ts";
 import * as store from "./issues.ts";
 import * as land from "./land.ts";
+import * as models from "./models.ts";
+import * as pins from "./pins.ts";
 import * as projects from "./projects.ts";
+import * as settings from "./settings.ts";
 import * as slack from "./slack.ts";
 import * as sync from "./sync.ts";
 import * as web from "./web.ts";
 
 await db.open();
-// The folders are the record: whatever changed there while desk was down is read in first.
-await store.readIn();
+// Postgres is the record. A new database, or one lost, starts from the issue.md and project.md desk wrote out.
+const issues = await store.importAll(), projectCount = await projects.importAll();
+if (issues || projectCount) console.log(`desk read ${issues} issue.md and ${projectCount} project.md into a new database`);
 await store.readLanded();
-await projects.readIn();
 await chats.readIn();
+// What a desk of an older branch changed in the files desk kept its state in before Postgres, while it ran (copies.ts).
+await settings.open();
+await pins.open();
+await models.open();
+await slack.open();
 await web.build();
 const app = await create();
 await sync.start();

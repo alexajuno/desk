@@ -1,15 +1,18 @@
 // The model and effort each session runs on, which the composer's chip shows and changes, and the account's usage,
-// which the chip's menu shows. A session's pick is kept in DATA_DIR/session-models.json, by session id, so it holds
-// when the host starts the session again; a session with no pick runs as it started: a desk chat on Settings >
+// which the chip's menu shows. A session's pick is kept in the session_models table, by session id, so it holds when
+// the host starts the session again; a session with no pick runs as it started: a desk chat on Settings >
 // Preferences (settings.ts), any other on Claude Code's own default (~/.claude/settings.json).
 //
 // The list of models and the usage come from Claude Code itself, asked by one started only for the question (as the
 // SDK's supportedModels and the call behind /usage), with no message, no settings and no transcript, so it costs
 // nothing and leaves no trace. desk asks it here rather than in the session host, which may still run older code.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { query, type ModelInfo, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { DATA_DIR, HOME } from "./config.ts";
+import * as copies from "./copies.ts";
+import * as db from "./db.ts";
+import { sql } from "./db.ts";
 import * as hosted from "./hosted.ts";
 import { which } from "./proc.ts";
 import * as settings from "./settings.ts";
@@ -35,22 +38,44 @@ export interface Model {
 
 // --- the picks -----------------------------------------------------------------------------------------------------
 
-const FILE = join(DATA_DIR, "session-models.json");
+const FILE = join(DATA_DIR, "session-models.json"); // where they were until 19 Oct, written out still (copies.ts)
 
-function picks(): Record<string, Pick> {
-  try {
-    return existsSync(FILE) ? JSON.parse(readFileSync(FILE, "utf8")) : {};
-  } catch {
-    return {}; // a file broken by hand counts as none
+// What the table holds, kept here as well, since the chip and the sidebar ask for every session they show.
+let picks: Record<string, Pick> = {};
+
+const fit = (pick: Pick): Pick => ({ ...(typeof pick.model === "string" && { model: pick.model }), ...(EFFORTS.includes(pick.effort!) && { effort: pick.effort }) });
+
+// Read the picks, once, as desk starts: those of session-models.json first when a desk of an older branch changed it.
+export async function open() {
+  const text = await copies.changed(FILE);
+  if (text !== undefined) {
+    let saved: Record<string, Pick> = {};
+    try {
+      saved = text ? JSON.parse(text) : {};
+    } catch {
+      // a file broken by hand counts as none
+    }
+    await db.write(async (tx) => {
+      await tx.query("delete from session_models");
+      for (const [session, pick] of Object.entries(saved)) {
+        const { model = null, effort = null } = fit(pick ?? {});
+        await tx.query("insert into session_models values ($1, $2, $3)", [session, model, effort]);
+      }
+    });
+    await copies.taken(FILE, text);
   }
+  const rows = (await sql().query<{ session: string; model: string | null; effort: Effort | null }>("select * from session_models")).rows;
+  picks = Object.fromEntries(rows.map((r) => [r.session, fit({ model: r.model ?? undefined, effort: r.effort ?? undefined })]));
 }
 
-export const pickOf = (session: string): Pick => picks()[session] ?? {};
+export const pickOf = (session: string): Pick => picks[session] ?? {};
 
-export function keep(session: string, pick: Pick) {
-  const all = picks();
-  all[session] = { ...all[session], ...pick };
-  writeFileSync(FILE, `${JSON.stringify(all, null, 2)}\n`, "utf8");
+export async function keep(session: string, pick: Pick) {
+  const { model = null, effort = null } = { ...picks[session], ...fit(pick) };
+  await db.write((tx) => tx.query(`insert into session_models values ($1, $2, $3)
+    on conflict (session) do update set model = excluded.model, effort = excluded.effort`, [session, model, effort]));
+  picks = { ...picks, [session]: fit({ model: model ?? undefined, effort: effort ?? undefined }) };
+  await copies.out(FILE, `${JSON.stringify(picks, null, 2)}\n`);
 }
 
 // Claude Code's own default, as the user's settings name it.
@@ -76,7 +101,7 @@ export function shown(session: string, chat: boolean): Shown {
 export async function change(session: string, pick: Pick): Promise<void> {
   if (pick.model !== undefined && !(await all()).some((m) => m.value === pick.model)) throw new Error(`Claude Code has no model ${pick.model}.`);
   if (pick.effort !== undefined && !EFFORTS.includes(pick.effort)) throw new Error(`Effort is one of ${EFFORTS.join(", ")}.`);
-  keep(session, pick);
+  await keep(session, pick);
   const row = await hosted.holds(session);
   if (!row) return;
   try {

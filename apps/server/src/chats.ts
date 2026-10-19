@@ -236,7 +236,7 @@ export async function newChat(base: string, start?: { issue: Issue; message: str
   const row = await hosted.start({ cwd: DATA_DIR, title: `desk chat ${stamp()}`, ...OPTIONS, ...runs, disallowedTools: [...OPTIONS.disallowedTools], append: await agentPrompt(chat, base),
     ...(start ? { message: start.message } : {}) });
   chat.session = row.id;
-  models.keep(row.id, runs); // the chat keeps what it started on when Preferences change later
+  await models.keep(row.id, runs); // the chat keeps what it started on when Preferences change later
   await save(chat);
   return chat;
 }
@@ -268,7 +268,7 @@ export async function agentChat(agent: Agent | null, message?: hosted.Content, m
   const chat: Chat = { id: newId(), kind: "panel", ...(agent ? { agent: agent.name, title: agent.name } : { bare: true, title: "Chat" }), created: now(),
     session: randomUUID(), cwd: HOME, ...more };
   const s = settings.load();
-  models.keep(chat.session, agent ? agentRuns(agent) : { model: s.chat_model, effort: s.chat_effort });
+  await models.keep(chat.session, agent ? agentRuns(agent) : { model: s.chat_model, effort: s.chat_effort });
   await hosted.start({ ...(await hostOptions(chat)), title: `${agent?.name ?? "chat"} ${stamp()}`, ...(message ? { message } : {}) });
   await save(chat);
   return chat;
@@ -297,7 +297,7 @@ async function restartAs(chat: Chat, became: Partial<Chat>, runs: models.Pick, t
     Object.assign(chat, was);
     throw error;
   }
-  models.keep(chat.session, runs);
+  await models.keep(chat.session, runs);
   await save(chat);
 }
 

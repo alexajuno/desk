@@ -5,15 +5,18 @@
 // session's git to its worktree, so desk merges for it (merge), rebasing on the way when main moved.
 //
 // The API's try and back-to-main switch a folder's checkout to an issue's branch and back (tryBranch), and note which
-// issue it is, so the sidebar's Trying names it (running). desk's own checkout runs one branch at a time, so it keeps a
+// issue it is in the trying table, so the sidebar's Trying names it (running). desk's own checkout runs one branch at a time, so it keeps a
 // line: try while another branch runs puts the issue in line; whenever the checkout is back on main, desk switches it to
 // the first one's branch, and once it runs there, messages that session to carry on (tick). A session holds the
 // checkout only while it tests; desk takes it back once the session's turn ended without giving it back (LINE_GRACE).
 // The user's Try holds it until they put it back or the work lands, and goes ahead of the sessions in line.
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import * as agents from "./agents.ts";
 import { REPO } from "./config.ts";
+import * as copies from "./copies.ts";
+import * as db from "./db.ts";
+import { sql } from "./db.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import { run } from "./proc.ts";
@@ -60,29 +63,99 @@ export async function worktree(i: Issue): Promise<[string, string] | null> {
 
 const gitFiles = new Map<string, string>();
 
-// One of desk's notes on a checkout, inside the repo's own git dir.
+// One of the notes on a checkout, inside the repo's own git dir, where desk kept the line until 19 Oct: a desk of a
+// branch from before then still reads them, so they are written out still (copies.ts), desk-line for the line and
+// desk-trying for the switch.
 async function gitFile(top: string, name: string): Promise<string> {
   const key = `${top}\0${name}`;
   if (!gitFiles.has(key)) gitFiles.set(key, (await git(top, "rev-parse", "--path-format=absolute", "--git-path", name))!);
   return gitFiles.get(key)!;
 }
 
-// Where desk notes what it switched a checkout to.
 const trialFile = (top: string) => gitFile(top, "desk-trying");
+const lineFile = (top: string) => gitFile(top, "desk-line");
 
 export interface InLine { slug: string; branch: string; for: string }
 interface LineData { line: InLine[]; branches: Record<string, string> }
 export interface Note { branch: string; slug: string; back: string; for?: string; told?: boolean; since: number; pid?: number }
 
-// The line for the checkout, and the branch each issue last tried, the second for the user's Try. Kept on disk, since
-// every switch restarts desk.
+const readBack = new Map<string, Promise<void>>();
+
+// A note's JSON; null for none, or one broken by hand.
+function parsed(text: string | null): Record<string, unknown> | null {
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Read the checkout's notes back in, once a run of desk, when a desk of an older branch changed them: it ran on the
+// checkout, and may have handed it on, before this desk started.
+function current(top: string): Promise<void> {
+  if (!readBack.has(top)) readBack.set(top, (async () => {
+    const linePath = await lineFile(top), trialPath = await trialFile(top);
+    const line = await copies.changed(linePath), trial = await copies.changed(trialPath);
+    if (line !== undefined) {
+      await writeLine(top, { line: [], branches: {}, ...parsed(line) });
+      await copies.taken(linePath, line);
+    }
+    if (trial !== undefined) {
+      await writeNote(top, parsed(trial) as Note | null);
+      await copies.taken(trialPath, trial);
+    }
+  })().catch((error) => {
+    readBack.delete(top);
+    throw error;
+  }));
+  return readBack.get(top)!;
+}
+
+// The line for the checkout, and the branch each issue last tried, the second for the user's Try.
 async function lineData(top: string): Promise<LineData> {
-  const path = await gitFile(top, "desk-line");
-  return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : { line: [], branches: {} };
+  await current(top);
+  const line = (await sql().query<{ slug: string; branch: string; holder: string }>("select slug, branch, holder from line where repo = $1 order by place", [top])).rows;
+  const tried = (await sql().query<{ slug: string; branch: string }>("select slug, branch from tries where repo = $1", [top])).rows;
+  return { line: line.map((e) => ({ slug: e.slug, branch: e.branch, for: e.holder })), branches: Object.fromEntries(tried.map((t) => [t.slug, t.branch])) };
+}
+
+function writeLine(top: string, data: LineData) {
+  return db.write(async (tx) => {
+    await tx.query("delete from line where repo = $1", [top]);
+    await tx.query("delete from tries where repo = $1", [top]);
+    for (const [place, e] of data.line.entries())
+      if (e.slug && e.branch) await tx.query("insert into line values ($1, $2, $3, $4, $5) on conflict do nothing", [top, place, e.slug, e.branch, e.for ?? "test"]);
+    for (const [slug, branch] of Object.entries(data.branches)) await tx.query("insert into tries values ($1, $2, $3)", [top, slug, branch]);
+  });
 }
 
 async function saveLine(top: string, data: LineData) {
-  writeFileSync(await gitFile(top, "desk-line"), pyDumps(data), "utf8");
+  await writeLine(top, data);
+  await copies.out(await lineFile(top), pyDumps(data));
+}
+
+// The branch desk switched the checkout to, as noted, whether or not it still runs there.
+async function noteOf(top: string): Promise<Note | null> {
+  await current(top);
+  const r = (await sql().query<{ branch: string; slug: string; back: string; holder: string | null; told: boolean; since: number; pid: number | null }>(
+    "select * from trying where repo = $1", [top])).rows[0];
+  if (!r) return null;
+  // In the order switchTo wrote the note, for sameNote.
+  return { branch: r.branch, slug: r.slug, back: r.back, ...(r.holder !== null && { for: r.holder }), told: r.told, since: r.since,
+    ...(r.pid !== null && { pid: r.pid }) };
+}
+
+function writeNote(top: string, note: Note | null) {
+  return db.write(async (tx) => {
+    await tx.query("delete from trying where repo = $1", [top]);
+    if (note?.branch && note.slug && note.back) await tx.query("insert into trying values ($1, $2, $3, $4, $5, $6, $7, $8)",
+      [top, note.branch, note.slug, note.back, note.for ?? null, Boolean(note.told), note.since ?? 0, note.pid ?? null]);
+  });
+}
+
+async function saveNote(top: string, note: Note | null) {
+  await writeNote(top, note);
+  await copies.out(await trialFile(top), note && pyDumps(note));
 }
 
 // Python's json.dumps, ", " and ": " between items, and every character past ASCII escaped, so the notes read the same
@@ -116,9 +189,8 @@ export async function branchOf(i: Issue): Promise<string | null> {
 // The branch desk switched the checkout to, with who holds it and since when, or null. A checkout put back on a branch
 // by hand counts as back, and so does one since detached by hand off that branch's line.
 export async function trying(top: string): Promise<Note | null> {
-  const path = await trialFile(top);
-  if (!existsSync(path) || (await git(top, "branch", "--show-current"))) return null;
-  const now: Note = JSON.parse(readFileSync(path, "utf8"));
+  const now = await noteOf(top);
+  if (!now || (await git(top, "branch", "--show-current"))) return null;
   // HEAD stays on the line while the session commits more on its branch; a branch deleted after landing fails too.
   if ((await git(top, "merge-base", "--is-ancestor", "HEAD", now.branch)) === null) return null;
   return now;
@@ -214,7 +286,7 @@ async function switchTo(top: string, slug: string, branch: string, by: string, t
   const r = await run(["git", "checkout", "--detach", branch], { cwd: top });
   if (r.code) throw new Blocked((r.stderr || r.stdout).trim() || "git checkout failed");
   const note: Note = { branch, slug, back, for: by, told, since: Date.now() / 1000, pid: process.pid };
-  writeFileSync(await trialFile(top), pyDumps(note), "utf8");
+  await saveNote(top, note);
   return `${top} runs ${branch} now.`;
 }
 
@@ -241,7 +313,7 @@ async function serve(top: string): Promise<string> {
 async function putBack(top: string, now: Note) {
   const r = await run(["git", "checkout", now.back], { cwd: top });
   if (r.code) throw new Blocked((r.stderr || r.stdout).trim() || "git checkout failed");
-  rmSync(await trialFile(top), { force: true });
+  await saveNote(top, null);
 }
 
 // The issue is done with the checkout: take it out of the line, and when the checkout runs its branch, put it back on
@@ -302,7 +374,7 @@ export async function tick(top: string = DESK_REPO) {
     }
     if (told) {
       await locked(async () => {
-        if (sameNote(await trying(top), now)) writeFileSync(await trialFile(top), pyDumps({ ...now, told: true, since: Date.now() / 1000 }), "utf8");
+        if (sameNote(await trying(top), now)) await saveNote(top, { ...now, told: true, since: Date.now() / 1000 });
       });
       return;
     }

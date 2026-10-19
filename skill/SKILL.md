@@ -5,9 +5,9 @@ description: Files, finds, updates and starts issues in desk, the user's own wor
 
 # desk
 
-desk keeps the user's work as issues. Each issue is a folder of files: `issue.md` (YAML front matter, then sections such as `## Context` and `## Plan`) and anything else that belongs to it. Each issue has one Claude Code session, which does its work in the issue's folder and writes `result.md` when it is done. The user sees an issue at `http://127.0.0.1:8790/issue/<slug>`.
+desk keeps the user's work as issues, in its database. Each issue also has a folder of files: `issue.md` (YAML front matter, then sections such as `## Context` and `## Plan`), which desk writes out on every save, and anything else that belongs to it. Each issue has one Claude Code session, which does its work in the issue's folder and writes `result.md` when it is done. The user sees an issue at `http://127.0.0.1:8790/issue/<slug>`.
 
-Change issues through the API below, not by editing `issue.md`: the user and desk own that file.
+Change issues through the API below. `issue.md` is only for reading: desk never reads an edit to it, and its next save writes over the edit.
 
 ## Calls
 

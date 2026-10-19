@@ -5,9 +5,14 @@
 //
 // The center of desk's data ("what to be the center of data. which should be api and db", the user, 19 Oct): every
 // write to a table the app holds goes through write() here, one at a time and in one transaction, and a trigger numbers
-// each row it changes in the log, changes, in that same transaction, whoever writes: the API, desk itself, or the
-// read-in of an issue.md edited by hand. Once it commits, sync.ts sends what was logged to every open app, and an app
-// that lost desk asks for only what it missed (since). Reads go through sql().
+// each row it changes in the log, changes, in that same transaction, whoever writes: the API or desk itself. Once it
+// commits, sync.ts sends what was logged to every open app, and an app that lost desk asks for only what it missed
+// (since). Reads go through sql().
+//
+// The tables are the record of desk's state ("you should find whatever represent state, should be in db", the user, 19
+// Oct): issues and projects, the trash, pins, each session's model, settings, Slack's tags and the line. issue.md and
+// project.md are only written out, for agents, git and an editor to read; desk reads them in only into a database
+// with no issues yet, as a new one (issues.importAll).
 import { PGlite, type Transaction } from "@electric-sql/pglite";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -85,6 +90,48 @@ create table if not exists automations ( -- what happened to each of automations
   ran text,
   note text not null default ''
 );
+create table if not exists trashed ( -- each issue deleted into the trash, as its row was, until a restore puts it back
+  slug text primary key,
+  bin text not null, -- the issue whose delete took it: its folder in TRASH_DIR
+  row jsonb not null
+);
+create table if not exists pins ( -- the sessions pinned to the sidebar's Pinned (pins.ts)
+  session text primary key,
+  seq bigint generated always as identity -- the order they were pinned in
+);
+create table if not exists session_models ( -- the model and effort picked for a session (models.ts)
+  session text primary key,
+  model text,
+  effort text
+);
+create table if not exists settings (name text primary key, value jsonb not null); -- each one set (settings.ts)
+create table if not exists slack_filed ( -- each Slack message tagged 🐧 that desk handled, "<channel>/<ts>" (slack.ts)
+  message text primary key,
+  seq bigint generated always as identity
+);
+create table if not exists slack_threads (thread text primary key, slug text not null); -- a thread's issue
+-- The line for a checkout (land.ts): who waits for it, the branch each issue last tried there, and the branch desk
+-- switched it to. repo is the checkout's folder.
+create table if not exists line (
+  repo text not null,
+  place integer not null,
+  slug text not null,
+  branch text not null,
+  holder text not null, -- test, the issue's session, or review, the user's Try
+  primary key (repo, slug)
+);
+create table if not exists tries (repo text not null, slug text not null, branch text not null, primary key (repo, slug));
+create table if not exists trying (
+  repo text primary key,
+  branch text not null,
+  slug text not null,
+  back text not null, -- the branch to put the checkout back on
+  holder text,
+  told boolean not null default false, -- whether its session knows the branch runs
+  since double precision not null, -- seconds
+  pid integer -- the desk that switched it
+);
+create table if not exists copies (path text primary key, text text); -- each file copies.ts last wrote out, null once removed
 create table if not exists changes ( -- the log: each change to a row the app holds, numbered as it was written
   seq bigint generated always as identity primary key,
   at timestamptz not null default now(),

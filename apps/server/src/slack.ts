@@ -8,10 +8,12 @@
 // connection opens, desk lists the user's latest reactions once, so a tag made while desk was down or the laptop slept
 // comes in then. Each tagged message is filed once, and a tag in a thread whose issue is still open files nothing
 // more, since that issue's chat reads the whole thread.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as chats from "./chats.ts";
 import { DATA_DIR, PORT } from "./config.ts";
+import * as copies from "./copies.ts";
+import * as db from "./db.ts";
+import { sql } from "./db.ts";
 import * as store from "./issues.ts";
 import { CLOSED } from "./issues.ts";
 import { run } from "./proc.ts";
@@ -29,11 +31,47 @@ const RETRY = 30; // s before trying again when Slack cannot be reached
 // s the clock may jump between two ticks of a 5 s timer before desk takes it for a sleep. After one the WebSocket may be
 // dead without knowing it, so desk opens a new one.
 const SLEPT = 30;
-const STATE = join(DATA_DIR, "slack.json");
+const STATE = join(DATA_DIR, "slack.json"); // where what desk handled was until 19 Oct, written out still (copies.ts)
 
+// What desk handled, as the slack_filed and slack_threads tables hold it.
 interface Seen {
   filed: string[]; // "<channel>/<ts>" of each tagged message already handled
   threads: Record<string, string>; // "<channel>/<thread ts>": the slug of the thread's issue
+}
+
+// Read slack.json back in, as desk starts, when a desk of an older branch changed it: what that desk filed counts as
+// handled.
+export async function open() {
+  const text = await copies.changed(STATE);
+  if (text === undefined) return;
+  let seen: Seen = { filed: [], threads: {} };
+  try {
+    if (text) seen = { ...seen, ...JSON.parse(text) };
+  } catch {
+    // a file broken by hand counts as none
+  }
+  await db.write(async (tx) => {
+    await tx.query("delete from slack_filed");
+    await tx.query("delete from slack_threads");
+    for (const message of new Set(seen.filed)) await tx.query("insert into slack_filed (message) values ($1)", [message]);
+    for (const [thread, slug] of Object.entries(seen.threads)) await tx.query("insert into slack_threads values ($1, $2)", [thread, slug]);
+  });
+  await copies.taken(STATE, text);
+}
+
+async function handled(): Promise<Seen> {
+  const filed = (await sql().query<{ message: string }>("select message from slack_filed order by seq")).rows.map((r) => r.message);
+  const threads = (await sql().query<{ thread: string; slug: string }>("select thread, slug from slack_threads")).rows;
+  return { filed, threads: Object.fromEntries(threads.map((r) => [r.thread, r.slug])) };
+}
+
+// The message is handled, and the thread's issue is the one filed from it, when one was.
+async function handle(seen: Seen, key: string, thread: string | null) {
+  await db.write(async (tx) => {
+    await tx.query("insert into slack_filed (message) values ($1) on conflict do nothing", [key]);
+    if (thread) await tx.query("insert into slack_threads values ($1, $2) on conflict (thread) do update set slug = excluded.slug", [thread, seen.threads[thread]]);
+  });
+  await copies.out(STATE, JSON.stringify({ filed: seen.filed, threads: seen.threads, ...copies.others(STATE, ["filed", "threads"]) }, null, 1) + "\n");
 }
 
 interface Message { ts: string; thread_ts?: string; user?: string; username?: string; text?: string; reactions?: { name: string; users: string[] }[] }
@@ -103,7 +141,7 @@ export async function look(base: string) {
   const token = await secret(TOKEN);
   const me = (await call<{ user_id: string }>(token, "auth.test")).user_id;
   const { items } = await call<{ items: Item[] }>(token, "reactions.list", { limit: LATEST, full: "true" }); // full: every reaction, so a busy message keeps its 🐧
-  const seen: Seen = existsSync(STATE) ? JSON.parse(readFileSync(STATE, "utf8")) : { filed: [], threads: {} };
+  const seen = await handled();
   // Oldest first, so two tags in one thread file the first.
   for (const { type, channel, message: m } of items.reverse()) {
     const key = `${channel}/${m.ts}`;
@@ -118,8 +156,8 @@ export async function look(base: string) {
       seen.threads[thread] = i.slug;
     }
     seen.filed.push(key);
-    // Written before the chat starts, so a chat that fails to start leaves its issue filed once, not once a minute.
-    writeFileSync(STATE, JSON.stringify(seen, null, 1) + "\n", "utf8");
+    // Saved before the chat starts, so a chat that fails to start leaves its issue filed once, not once a minute.
+    await handle(seen, key, i ? thread : null);
     if (i) await startChat(i, m, author, base);
   }
 }

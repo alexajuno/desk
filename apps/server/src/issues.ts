@@ -1,11 +1,12 @@
-// Issues (ported from desk/issues.py). Postgres holds every issue's fields; each issue also keeps its folder in ISSUES_DIR, where
-// issue.md is written on every save, as before, and where its other files live: a plan, a design doc, a diagram, an
-// agent's result. So agents, git and an editor still find each issue where they always did, and an issue.md an
-// editor changes is read back in (sync.ts watches the folders). Every write here goes through db.write, which logs it
-// for the apps.
+// Issues (ported from desk/issues.py). Postgres is the record of every issue; each issue also keeps its folder in ISSUES_DIR,
+// where issue.md is written out on every save, and where its other files live: a plan, a design doc, a diagram, an
+// agent's result. So agents, git and an editor still find each issue where they always did, but an issue.md changed
+// by hand changes nothing, and the next save writes over it: "when agent changes sth, it calls api, not edit file and
+// desk fetches from file later" (the user, 19 Oct). Every write here goes through db.write, which logs it for the apps.
 //
 // Nesting is a `parent` slug, not nested folders, so a sub-issue can have its own sub-issues to any depth. Deleting
-// moves an issue and its sub-issues to TRASH_DIR/<slug>/, one folder each, so undo is a move back.
+// moves an issue and its sub-issues to TRASH_DIR/<slug>/, one folder each, and their rows to the trashed table, so undo
+// is a move back.
 import { existsSync, mkdirSync, opendirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ISSUES_DIR, TRASH_DIR } from "./config.ts";
@@ -123,6 +124,7 @@ export function render(i: Issue): string {
 export const folder = (slug: string) => join(ISSUES_DIR, slug);
 export const validSlug = (slug: string) => /^[\w-]+$/.test(slug);
 
+// written: issue.md as desk last wrote it, against which a desk of an older branch tells a hand edit.
 type Row = Issue & { written: string | null };
 const fromRow = (r: Row): Issue => {
   const { written: _, ...i } = r;
@@ -303,6 +305,8 @@ export function trash(slug: string): Promise<string[]> {
     mkdirSync(bin, { recursive: true });
     for (const name of names) {
       if (existsSync(folder(name))) renameSync(folder(name), join(bin, name));
+      await tx.query(`insert into trashed select slug, $2, to_jsonb(issues) from issues where slug = $1
+        on conflict (slug) do update set bin = excluded.bin, row = excluded.row`, [name, slug]);
       await tx.query("delete from issues where slug = $1", [name]);
     }
     return names;
@@ -312,7 +316,7 @@ export function trash(slug: string): Promise<string[]> {
 export class Missing extends Error {}
 export class Clash extends Error {}
 
-// Move a trashed issue and its sub-issues back, and read them in again. If an agent wrote into an old folder
+// Move a trashed issue and its sub-issues back, their rows and their folders. If an agent wrote into an old folder
 // meanwhile, that folder has no issue.md and takes the trashed files back in; one with an issue.md is a clash.
 export async function restore(slug: string): Promise<string[]> {
   const bin = join(TRASH_DIR, slug);
@@ -328,34 +332,42 @@ export async function restore(slug: string): Promise<string[]> {
           if (!existsSync(join(folder(name), item))) renameSync(join(bin, name, item), join(folder(name), item));
         rmSync(join(bin, name), { recursive: true, force: true });
       }
-      await readOne(tx, name);
+      await back(tx, name);
     }
     rmdirSync(bin);
     return [slug, ...trashed.filter((name) => name !== slug)];
   });
 }
 
-// Bring an issue's row in line with its folder, as an editor or a restore left it: an issue.md desk did not write is
-// read in, and an issue whose issue.md is gone is let go. Desk's own write changes nothing.
-async function readOne(tx: Db, slug: string) {
+// The trashed issue's row back into the issues table, and its issue.md written out again from it; an issue trashed
+// before the table kept it (19 Oct) comes back from its issue.md, the one time desk reads one.
+async function back(tx: Db, slug: string) {
   const path = join(folder(slug), MAIN);
-  const row = (await tx.query<{ written: string | null }>("select written from issues where slug = $1", [slug])).rows[0];
-  if (!existsSync(path)) {
-    if (row) await tx.query("delete from issues where slug = $1", [slug]);
-    return;
+  const kept = (await tx.query<{ row: Row }>("delete from trashed where slug = $1 returning row", [slug])).rows[0];
+  if (kept) {
+    const text = render(fromRow(kept.row));
+    mkdirSync(folder(slug), { recursive: true });
+    writeFileSync(path, text, "utf8");
+    await upsert(tx, parse(slug, text), text);
+  } else if (existsSync(path)) {
+    const text = readFileSync(path, "utf8");
+    await upsert(tx, parse(slug, text), text);
   }
-  const text = readFileSync(path, "utf8");
-  if (row && row.written === text) return;
-  await upsert(tx, parse(slug, text), text);
 }
 
-// Read in the issues whose folders changed outside desk (sync.ts watches them), or, with no slugs, every issue, as at
-// start: whatever changed while desk was down.
-export function readIn(slugs?: string[]): Promise<void> {
+// Read every issue.md in, as Postgres held none: a new database, or one lost. desk reads issue.md at no other time.
+export function importAll(): Promise<number> {
   return db.write(async (tx) => {
-    const all = slugs ?? [...new Set([...(existsSync(ISSUES_DIR) ? readdirSync(ISSUES_DIR) : []),
-      ...(await tx.query<{ slug: string }>("select slug from issues")).rows.map((r) => r.slug)])];
-    for (const slug of all) if (validSlug(slug)) await readOne(tx, slug);
+    if ((await tx.query("select 1 from issues limit 1")).rows.length) return 0;
+    let read = 0;
+    for (const slug of existsSync(ISSUES_DIR) ? readdirSync(ISSUES_DIR) : []) {
+      const path = join(folder(slug), MAIN);
+      if (!validSlug(slug) || !existsSync(path)) continue;
+      const text = readFileSync(path, "utf8");
+      await upsert(tx, parse(slug, text), text);
+      read++;
+    }
+    return read;
   });
 }
 

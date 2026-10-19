@@ -20,21 +20,19 @@
 // framePage), which no table holds yet. "files" names the issues whose files beside issue.md changed (a session's
 // plan.md, result.md, a screenshot), which no row holds either: a page showing one of them asks again.
 //
-// An editor's change to an issue.md or project.md is seen on the folders and read in (issues.readIn), a write like any
-// other.
+// issue.md and project.md are only written out: one changed by hand is not read, and tells the apps nothing (db.ts).
 import { mkdirSync, readdirSync, readFileSync, watch } from "node:fs";
 import { basename, dirname, join, sep } from "node:path";
 import type { WebSocket } from "ws";
 import * as agents from "./agents.ts";
 import { asJson } from "./api.ts";
 import * as chats from "./chats.ts";
-import { HOME, ISSUES_DIR, PROJECTS_DIR } from "./config.ts";
+import { HOME, ISSUES_DIR } from "./config.ts";
 import * as db from "./db.ts";
 import type { Change } from "./db.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as pages from "./pages.ts";
-import * as projects from "./projects.ts";
 
 const listeners = new Set<WebSocket>();
 
@@ -153,27 +151,14 @@ function soon(fn: () => void, ms = 50): () => void {
   };
 }
 
-// An issue's or a project's own file, or its folder coming or going (a new issue, a delete into the trash). Files a
-// session writes beside issue.md (result.md, screenshots) change no field the apps hold.
-const interesting = (path: string) =>
-  [store.MAIN, projects.MAIN].includes(basename(path)) || [ISSUES_DIR, PROJECTS_DIR].includes(dirname(path));
+// Desk's own writes in the issues' folders, told as writes already: an issue.md, or a folder coming or going (a new
+// issue, a delete into the trash).
+const desks = (path: string) => basename(path) === store.MAIN || dirname(path) === ISSUES_DIR;
 
-// Tell the apps each write; watch the folders for changes desk did not make, and read in the issue or project each
-// was to; watch the sessions, and tell the apps the frame.
+// Tell the apps each write; watch the issues' folders for the files a session writes beside issue.md (result.md,
+// screenshots), which no row holds, and the sessions, and tell the apps the frame.
 export async function start() {
   db.onWrite(told);
-  const edited = { [ISSUES_DIR]: new Set<string>(), [PROJECTS_DIR]: new Set<string>() };
-  const readIn = soon(async () => {
-    const issues = [...edited[ISSUES_DIR]], projectSlugs = [...edited[PROJECTS_DIR]];
-    edited[ISSUES_DIR].clear();
-    edited[PROJECTS_DIR].clear();
-    try {
-      if (issues.length) await store.readIn(issues);
-      if (projectSlugs.length) await projects.readIn(projectSlugs);
-    } catch (error) {
-      console.error("sync watcher", error);
-    }
-  });
   const agentWrote = soon(() => void frame());
   const touched = new Set<string>();
   const tellFiles = soon(() => {
@@ -181,23 +166,16 @@ export async function start() {
     touched.clear();
     for (const ws of [...listeners, ...legacy]) ws.send(message);
   });
-  for (const root of [ISSUES_DIR, PROJECTS_DIR]) {
-    mkdirSync(root, { recursive: true });
-    watch(root, { recursive: true }, (_event, name) => {
-      if (!name) return;
-      const path = join(root, name.toString());
-      const slug = name.toString().split(sep)[0];
-      if (slug.startsWith(".")) return; // a hidden folder, not an issue
-      if (interesting(path)) {
-        edited[root].add(slug);
-        return readIn();
-      }
-      if (root !== ISSUES_DIR) return;
-      touched.add(slug);
-      tellFiles();
-      if (AGENT_FILES.includes(basename(path))) agentWrote();
-    });
-  }
+  mkdirSync(ISSUES_DIR, { recursive: true });
+  watch(ISSUES_DIR, { recursive: true }, (_event, name) => {
+    if (!name) return;
+    const path = join(ISSUES_DIR, name.toString());
+    const slug = name.toString().split(sep)[0];
+    if (slug.startsWith(".") || desks(path)) return; // a hidden folder is not an issue
+    touched.add(slug);
+    tellFiles();
+    if (AGENT_FILES.includes(basename(path))) agentWrote();
+  });
   mkdirSync(SESSIONS, { recursive: true });
   let states = sessionStates();
   const moved = soon(() => {

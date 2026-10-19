@@ -269,7 +269,7 @@ export function routes(app: FastifyInstance) {
     const body = req.body;
     if (!body || typeof body !== "object" || Array.isArray(body)) throw new HttpError(422, 'Send the settings to change as JSON, such as {"parent_auto_close": true}.');
     try {
-      return settings.set(body as Record<string, unknown>);
+      return await settings.set(body as Record<string, unknown>);
     } catch (error) {
       throw new HttpError(422, (error as Error).message);
     }

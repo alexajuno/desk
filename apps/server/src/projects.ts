@@ -1,7 +1,7 @@
 // Projects (ported from desk/projects.py): long-lived work that is never done, such as desk itself, so a project is only active or
-// archived. Postgres holds them; each keeps its folder in PROJECTS_DIR, where project.md is written on every save, through
-// db.write, as an issue is. An issue joins one with its `project` slug; archiving a project keeps its issues and their
-// link to it.
+// archived. Postgres is the record of them; each keeps its folder in PROJECTS_DIR, where project.md is written out on every
+// save, through db.write, as an issue is, and read back only into a new database. An issue joins one with its `project`
+// slug; archiving a project keeps its issues and their link to it.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PROJECTS_DIR } from "./config.ts";
@@ -88,22 +88,18 @@ export function newSlug(title: string): string {
 // The issues in the project, most urgent first.
 export const issuesOf = (issues: Map<string, Issue>, slug: string) => [...issues.values()].filter((i) => i.project === slug).sort(byRank);
 
-// Read in the projects whose folders changed outside desk, or, with no slugs, every project, as at start: a project.md
-// desk did not write is read in, and a project whose project.md is gone is let go (issues.readIn).
-export function readIn(slugs?: string[]): Promise<void> {
+// Read every project.md in, as Postgres held none: a new database, or one lost (issues.importAll).
+export function importAll(): Promise<number> {
   return db.write(async (tx) => {
-    const all = slugs ?? [...new Set([...(existsSync(PROJECTS_DIR) ? readdirSync(PROJECTS_DIR) : []),
-      ...(await tx.query<{ slug: string }>("select slug from projects")).rows.map((r) => r.slug)])];
-    for (const slug of all) {
-      if (!/^[\w-]+$/.test(slug)) continue;
+    if ((await tx.query("select 1 from projects limit 1")).rows.length) return 0;
+    let read = 0;
+    for (const slug of existsSync(PROJECTS_DIR) ? readdirSync(PROJECTS_DIR) : []) {
       const path = join(folder(slug), MAIN);
-      const row = (await tx.query<{ written: string | null }>("select written from projects where slug = $1", [slug])).rows[0];
-      if (!existsSync(path)) {
-        if (row) await tx.query("delete from projects where slug = $1", [slug]);
-        continue;
-      }
+      if (!/^[\w-]+$/.test(slug) || !existsSync(path)) continue;
       const text = readFileSync(path, "utf8");
-      if (!row || row.written !== text) await upsert(tx, parse(slug, text), text);
+      await upsert(tx, parse(slug, text), text);
+      read++;
     }
+    return read;
   });
 }
