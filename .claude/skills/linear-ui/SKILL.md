@@ -42,6 +42,8 @@ desk.css holds the numbers, and its comments say where and when each was measure
 - A list page's way to make one of its things (Projects' New project) is a quiet 28px pill with a plus at the right end of the top bar, its keys in its tooltip (N then P). It opens a modal; nothing to type sits open over the list.
 - Help, the shortcuts and the theme live in the ? at the sidebar's foot. No control stands alone in a corner.
 - Linear lays a pane out by the pane's width, not the window's: the Inbox's open notification drops its Properties column below about 820px.
+- A sidebar section (Workspace, Your teams, Favorites) has its label as a full-width button that folds it, with the group's triangle right after the label, always shown. Its row has no fill, under the mouse too; only the text brightens. Favorites is Linear's pinning, Alt F in a row's right-click menu. desk's Pinned and Chats fold this way (`.nav-fold`, 19 Oct).
+- The sidebar scrolls whole, with a thin scrollbar whose room is always kept (`scrollbar-gutter: stable`), so a long list never narrows the rows. Don't put a scroll area inside one section.
 
 **Links in a document.** Linear's editor has two modes for a link (measured 19 Oct on OE-705's description). Not typing, a click opens it, in a new tab, and puts no caret there; typing, a click selects the whole link and brings up a link bar over it (its address, then icons). Ctrl+click opens it either way. Hovering shows the address without `https://` in a tooltip under the link. desk's description does the same (`editor/links.ts`).
 
