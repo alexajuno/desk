@@ -1,7 +1,7 @@
 // Linear's Inbox (templates/inbox.html): the notifications on the left, newest first; the one picked (?i=<slug>) opens
 // on the right, as the issue's page shows it. Each row is the issue's session telling you something: a dot until you
 // open it, the issue's title and status, then what the session did and how long ago. A row may instead be one of the
-// user's agents writing (?i=<chat id>), whose chat opens on the right, as Triage shows one. The top bar splits at the
+// user's agents or a bare chat writing (?i=<chat id>), whose chat opens on the right, as Triage shows one. The top bar splits at the
 // list's edge: "Inbox" over the list, the open notification's title over it.
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -28,13 +28,13 @@ interface InboxItem extends IssueRow {
   seen: string; // "<slug>:<why>:<time>": a new event on the issue is a new key, so it shows unread again
   ago: string;
   at: string;
-  chat?: { session: string; agent: string }; // a row from a chat with one of the user's agents
+  chat?: { session: string; agent: string | null }; // a row from a chat with one of the user's agents, or a bare one
 }
 
 interface InboxData {
   items: InboxItem[];
   open: IssuePageData | null;
-  chat: { slug: string; session: string; agent: string; title: string } | null; // the agent's chat picked
+  chat: { slug: string; session: string; agent: string | null; title: string } | null; // the agent's or bare chat picked
 }
 
 // The rows you have opened (localStorage.inboxSeen, shared with the old pages): a read row loses its dot, as in
@@ -91,7 +91,7 @@ export const InboxPage = observer(function InboxPage() {
   return (
     <>
       <Bar
-        crumb={<><Go className="inbox-head" to="/inbox">Inbox</Go>{(p || chat) && <><span className="sep">›</span><span className="inbox-crumb">{p ? p.title : `${chat!.agent}: ${chat!.title}`}</span></>}</>}
+        crumb={<><Go className="inbox-head" to="/inbox">Inbox</Go>{(p || chat) && <><span className="sep">›</span><span className="inbox-crumb">{p ? p.title : chat!.agent ? `${chat!.agent}: ${chat!.title}` : chat!.title}</span></>}</>}
         tools={p && (
           <button className="more" title="Actions" onClick={(e) => { if (!toggled(e.currentTarget)) actionsMenu(p, { anchor: e.currentTarget }, p.slug); }}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25" /><circle cx="8" cy="8" r="1.25" /><circle cx="12.5" cy="8" r="1.25" /></svg>
@@ -142,17 +142,20 @@ export const InboxPage = observer(function InboxPage() {
   );
 });
 
-// An agent's row: what it said, unread until you open it, which opens its chat on the right. It is no issue, so it has
-// no status, and the issue keys pass it by.
+// An agent's or a bare chat's row: what it said, unread until you open it, which opens its chat on the right. It is no
+// issue, so it has no status, and the issue keys pass it by. An agent shows its initial, a bare chat a speech bubble.
 const ChatRow = observer(function ChatRow({ n, open, read }: { n: InboxItem; open: boolean; read: boolean }) {
+  const agent = n.chat!.agent;
   return (
     <Go className={`item inbox-row${open ? " selected" : ""}${read ? " read" : ""}${ui.focused === n.slug ? " focus" : ""}`}
       to={`/inbox?i=${n.slug}`} title={n.title} data-key={n.slug} data-session={n.chat!.session} data-seen={n.seen}
       onMouseMove={() => { if (ui.focused !== n.slug) ui.focus(n.slug, true); }}>
-      <span className="avatar agent" aria-label={n.chat!.agent}>{n.chat!.agent.slice(0, 1).toUpperCase()}</span>
+      {agent
+        ? <span className="avatar agent" aria-label={agent}>{agent.slice(0, 1).toUpperCase()}</span>
+        : <span className="avatar" aria-label="Chat"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2c3.6 0 6.5 2.4 6.5 5.4S11.6 12.8 8 12.8c-.6 0-1.2-.1-1.8-.2L3 14.1c-.4.2-.8-.2-.7-.6l.6-2.4C2 10.1 1.5 8.8 1.5 7.4 1.5 4.4 4.4 2 8 2z" /></svg></span>}
       <span className="lines">
         <span className="line"><span className="dot" aria-label="Unread" /><span className="title">{n.title}</span></span>
-        <span className="line sub"><span className="says">{`${n.chat!.agent} ${n.says}`}</span><span className="age" title={n.at}>{n.ago}</span></span>
+        <span className="line sub"><span className="says">{`${agent ?? "Chat"} ${n.says}`}</span><span className="age" title={n.at}>{n.ago}</span></span>
       </span>
     </Go>
   );

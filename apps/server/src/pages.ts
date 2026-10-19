@@ -159,7 +159,7 @@ export async function notifications(all: Map<string, Issue>): Promise<Notice[]> 
   return rows.sort((a, b) => b.at.getTime() - a.at.getTime());
 }
 
-// What the user's agents said that the user has not read (chats.ts), as unread() says.
+// What the user's agents and bare chats said that the user has not read (chats.ts), as unread() says.
 export interface ChatNotice { chat: chats.Chat; title: string; why: string; says: string; at: Date }
 
 // When the chat's last reply came, if the user has not read it: it ended after the user last looked at the chat and
@@ -171,13 +171,16 @@ function unread(chat: chats.Chat): number {
   return wrote && wrote > replied ? 0 : replied; // at work on the user's message
 }
 
-// An agent's chat's title: Claude Code's own, or the user's first words, or who sent it the message it began with.
-const chatTitle = (chat: chats.Chat) => sessions.chatTitleOf(chat.session) || (chat.from ? `From ${chat.from}` : chat.agent!);
+// An agent's or a bare chat's title: Claude Code's own, or the user's first words, or who sent it the message it began
+// with.
+const chatTitle = (chat: chats.Chat) => sessions.chatTitleOf(chat.session) || (chat.from ? `From ${chat.from}` : chat.agent ?? "New chat");
 
+// A bare chat's reply is your turn in it, as an agent's is: "wanna have chat response to my turn in inbox" (the user,
+// 19 Oct).
 export function chatNotices(): ChatNotice[] {
   const found: ChatNotice[] = [];
   for (const chat of chats.agentChats()) {
-    const replied = chat.agent && unread(chat);
+    const replied = (chat.agent || chat.bare) && unread(chat);
     if (!replied) continue;
     const wrote = sessions.prompted(chat.session);
     found.push({ chat, title: chatTitle(chat), why: wrote ? "agent replied" : "agent wrote",
@@ -186,16 +189,18 @@ export function chatNotices(): ChatNotice[] {
   return found;
 }
 
-// The Inbox's rows, newest first, as /api/inbox lists them: the issues' sessions' and the agents', each agent's named (who).
+// Who a chat's row names: its agent, or "Chat" for a bare one.
+const whoOf = (chat: chats.Chat) => chat.agent ?? "Chat";
+
+// The Inbox's rows, newest first, as /api/inbox lists them: the issues' sessions' and the chats', each named by who.
 export async function inboxRows() {
   const issues = (await notifications(await store.loadAll())).map((n) => ({ slug: n.p.slug, title: n.p.title, why: n.why, says: n.says, url: `/inbox?i=${n.p.slug}`, at: n.at }));
-  const theirs = chatNotices().map((n) => ({ slug: n.chat.id, title: n.title, why: n.why, says: n.says, url: `/inbox?i=${n.chat.id}`, who: n.chat.agent, at: n.at }));
+  const theirs = chatNotices().map((n) => ({ slug: n.chat.id, title: n.title, why: n.why, says: n.says, url: `/inbox?i=${n.chat.id}`, who: whoOf(n.chat), at: n.at }));
   return [...issues, ...theirs].sort((a, b) => b.at.getTime() - a.at.getTime()).map(({ at: _, ...row }) => row);
 }
 
 // The sidebar's Chats: the bare chats, the newest few, the one that moved last first; whether each works now, and
-// whether it said something the user has not read. A bare chat never reaches the Inbox. Older ones are in the corner's
-// history.
+// whether it said something the user has not read, which the Inbox lists too. Older ones are in the corner's history.
 const CHATS_SHOWN = 8;
 
 async function chatsNow() {
@@ -422,8 +427,8 @@ export async function projectsPage() {
     open: projects.issuesOf(all, p.slug).filter((i) => !CLOSED.has(i.state)).length }));
 }
 
-// The Inbox's rows, newest first, and the one picked (?i=<slug>) as its issue page shows it, or an agent's chat (?i=<chat
-// id>) as the chat, which stays open once reading it has taken its row out of the Inbox.
+// The Inbox's rows, newest first, and the one picked (?i=<slug>) as its issue page shows it, or an agent's or a bare
+// chat (?i=<chat id>) as the chat, which stays open once reading it has taken its row out of the Inbox.
 export async function inboxPage(picked: string) {
   const all = await store.loadAll();
   const rows = (await notifications(all)).map((n) => ({
@@ -432,12 +437,12 @@ export async function inboxPage(picked: string) {
   }));
   const theirs = chatNotices().map((n) => ({
     slug: n.chat.id, title: n.title, why: n.why, says: n.says, kind: "needs", seen: `${n.chat.id}:${n.why}:${Math.floor(n.at.getTime() / 1000)}`,
-    ago: ago(n.at), at: dayAndTime(n.at), when: n.at, chat: { session: n.chat.session, agent: n.chat.agent! },
+    ago: ago(n.at), at: dayAndTime(n.at), when: n.at, chat: { session: n.chat.session, agent: n.chat.agent ?? null },
   }));
   const items = [...rows, ...theirs].sort((a, b) => b.when.getTime() - a.when.getTime()).map(({ when: _, ...item }) => item);
   const chat = picked && chats.exists(picked) ? chats.load(picked) : null;
   return { items, open: picked && all.has(picked) ? await issuePageJson(all, picked) : null,
-    chat: chat?.agent ? { slug: chat.id, session: chat.session, agent: chat.agent, title: chatTitle(chat) } : null };
+    chat: chat && (chat.agent || chat.bare) ? { slug: chat.id, session: chat.session, agent: chat.agent ?? null, title: chatTitle(chat) } : null };
 }
 
 // Search's hits, best match first, their matched words marked.
