@@ -4,7 +4,8 @@
 //     GET    /api/issues?q=&state=      list and search issues
 //     GET    /api/issues/<slug>         one issue, with its body and files
 //     POST   /api/issues                create one: title, body, priority, state, parent, project, folder, protocol
-//     PATCH  /api/issues/<slug>         set any of those fields
+//     PATCH  /api/issues/<slug>         set any of those fields; its session also says what its turn hands you (review_of)
+//                                       and where its work landed (landed)
 //     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
 //     POST   /api/issues/<slug>/work    the agent chat works it itself: the chat becomes the issue's session
 //     POST   /api/issues/<slug>/try     run the issue's branch in its folder's checkout, to test it (land.ts)
@@ -34,7 +35,7 @@ import { HOME } from "./config.ts";
 import * as store from "./issues.ts";
 import { byRank, type Issue } from "./issues.ts";
 import * as land from "./land.ts";
-import { handed, HttpError } from "./pages.ts";
+import { HttpError } from "./pages.ts";
 import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
 import * as roster from "./roster.ts";
@@ -50,6 +51,7 @@ export function asJson(i: Issue, full = false) {
   };
   if (i.state === "waiting") Object.assign(data, { waiting_on: i.waiting_on, waiting_since: i.waiting_since });
   if (i.state === "review") Object.assign(data, { review_of: i.review_of ?? "result", review_since: i.review_since });
+  if (i.state === "done" && i.landed) data.landed = i.landed;
   if (full) Object.assign(data, { file: join(store.folder(i.slug), store.MAIN), files: store.files(i.slug), body: i.body });
   return data;
 }
@@ -59,7 +61,8 @@ async function loadIssue(slug: string): Promise<Issue> {
   return store.load(slug);
 }
 
-const FIELDS = ["title", "body", "priority", "state", "parent", "project", "folder", "protocol", "waiting_on", "review_of"];
+const FIELDS = ["title", "body", "priority", "state", "parent", "project", "folder", "protocol", "waiting_on", "review_of", "landed"];
+const PULL = /https:\/\/github\.com\/\S+\/pull\/\d+/;
 const AUTOMATION_FIELDS = ["title", "when", "check", "agent", "body", "state"];
 
 // The fields the body sends, as pydantic read them: strings or null, the rest left out.
@@ -87,13 +90,20 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
     throw new HttpError(422, 'waiting_on is for an issue in waiting: send "state": "waiting" with it');
   if (fields.review_of && (fields.state ?? i.state) !== "review")
     throw new HttpError(422, 'review_of is for an issue in review: send "state": "review" with it');
+  if (fields.landed && (fields.state ?? i.state) !== "done")
+    throw new HttpError(422, 'landed is for an issue done: send "state": "done" with it');
   // A session that ends its turn says what it hands you, and its review starts then, even when the issue was in review
   // already: your reply after it is what moves the issue back to In progress (pages.ts, advance). Sent with no
-  // review_of, desk reads it from the files the turn wrote, as when the session says nothing.
+  // review_of, it holds a reply: desk reads nothing from the files the turn wrote ("when agent changes sth, it calls
+  // api, not edit file and desk fetches from file later", the user, 19 Oct).
   if (fields.state === "review" || fields.review_of) {
     i.review_since = null;
-    if (!fields.review_of) fields.review_of = handed(i);
+    if (!fields.review_of) fields.review_of = "reply";
   }
+  // A session that landed its work says where, which Done shows: the commit, or the pull request, which becomes the
+  // issue's link.
+  const pr = fields.landed?.match(PULL);
+  if (pr && !i.link) i.link = pr[0];
   if ("title" in fields && !fields.title) throw new HttpError(422, "title cannot be empty");
   const parent = fields.parent;
   if (parent) {
@@ -105,7 +115,7 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
   if (fields.folder && !isDir(expand(fields.folder))) throw new HttpError(422, `No folder ${fields.folder}. Find one with GET /api/folders?q=<name>.`);
   if ("body" in fields) fields.body = fields.body || "";
   const target = i as unknown as Record<string, string | null>;
-  for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "project", "folder", "waiting_on"].includes(name) ? value || null : value;
+  for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "project", "folder", "waiting_on", "landed"].includes(name) ? value || null : value;
 }
 
 async function projectJson(p: Project, full = false) {

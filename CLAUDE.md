@@ -17,7 +17,7 @@ desk is the user's own vibe-coded workspace, TypeScript end to end in one pnpm w
   - Approve in desk tells it to land on main. If main moved since the branch began, rebase onto main in the worktree, check the path again and land, with no second review ("after approve, and rebase, should merge immediately", the user, 15 Oct). How depends on where `~/projects/desk` stands:
     - On main: `git merge --ff-only feat/<name>` there, then `systemctl --user restart desk`.
     - On no branch, a test or the user's Try: leave it alone, and fast-forward main from your worktree with `git fetch . feat/<name>:main` (git allows it while main is checked out nowhere, and only as a fast-forward). Then call back-to-main: when it runs your branch, desk puts it on main, now with your work, and hands it on.
-    - Then remove the worktree and the branch, and put **Landed:** with the commit at the top of result.md.
+    - Then remove the worktree and the branch, and tell desk it landed, with the call Approve's message gives: desk reads no **Landed:** line from result.md.
   - When the user throws the work away instead, call back-to-main, which also takes you out of the line, and remove the worktree and the branch.
   - A session desk started before 15 Oct in a worktree it made (`claude -w`, branch `worktree-desk-<slug>`) cannot run git in `~/projects/desk`. It tests with `curl -s -X POST http://127.0.0.1:8790/api/issues/<slug>/try` (and `/back-to-main`), and desk merges it on Approve.
 - A session you run yourself, outside desk: when the path you changed works on 8790, merge without asking ("when done testing, just merge", the user, 14 Oct), as above.

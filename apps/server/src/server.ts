@@ -17,6 +17,7 @@ import * as web from "./web.ts";
 await db.open();
 // The folders are the record: whatever changed there while desk was down is read in first.
 await store.readIn();
+await store.readLanded();
 await projects.readIn();
 await chats.readIn();
 await web.build();

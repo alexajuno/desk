@@ -44,6 +44,7 @@ export interface Issue {
   protocol: string | null; // one of PROTOCOLS; read it through runs(), which gives design for none
   link: string | null;
   landing: string | null; // in landing, when Approve told the session to land its work
+  landed: string | null; // in done, where its session said the work landed: the commit, or the pull request's link
   session: string | null; // the one Claude Code session bound to this issue, from planning to done
   waiting_on: string | null; // in waiting, who or what it waits on, such as "QA on #570"
   waiting_since: string | null;
@@ -54,8 +55,8 @@ export interface Issue {
 }
 
 // The fields in issue.md, in the order issues.py's dataclass wrote them.
-const FIELDS = ["title", "priority", "state", "parent", "project", "folder", "protocol", "link", "landing", "session",
-  "waiting_on", "waiting_since", "review_of", "review_since", "created"] as const;
+const FIELDS = ["title", "priority", "state", "parent", "project", "folder", "protocol", "link", "landing", "landed",
+  "session", "waiting_on", "waiting_since", "review_of", "review_since", "created"] as const;
 
 export const now = (d = new Date()) => {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -64,7 +65,8 @@ export const now = (d = new Date()) => {
 
 export function blank(slug: string, title: string): Issue {
   return { slug, title, priority: "none", state: "backlog", parent: null, project: null, folder: null, protocol: null, link: null,
-    landing: null, session: null, waiting_on: null, waiting_since: null, review_of: null, review_since: null, created: now(), body: "" };
+    landing: null, landed: null, session: null, waiting_on: null, waiting_since: null, review_of: null, review_since: null,
+    created: now(), body: "" };
 }
 
 // The protocol the issue runs.
@@ -170,14 +172,15 @@ async function upsert(tx: Db, i: Issue, written: string) {
 }
 
 async function put(tx: Db, i: Issue) {
-  // The wait's note belongs to the wait: one that ends drops it, so a later wait starts afresh. So do the review's and
-  // Landing's.
+  // The wait's note belongs to the wait: one that ends drops it, so a later wait starts afresh. So do the review's,
+  // Landing's, and Done's word on where the work landed.
   if (i.state !== "waiting") i.waiting_on = i.waiting_since = null;
   else if (!i.waiting_since) i.waiting_since = now();
   if (i.state !== "review") i.review_of = i.review_since = null;
   else if (!i.review_since) i.review_since = now();
   if (i.state !== "landing") i.landing = null;
   else if (!i.landing) i.landing = now();
+  if (i.state !== "done") i.landed = null;
   const text = render(i);
   mkdirSync(folder(i.slug), { recursive: true });
   writeFileSync(join(folder(i.slug), MAIN), text, "utf8");
@@ -353,5 +356,23 @@ export function readIn(slugs?: string[]): Promise<void> {
     const all = slugs ?? [...new Set([...(existsSync(ISSUES_DIR) ? readdirSync(ISSUES_DIR) : []),
       ...(await tx.query<{ slug: string }>("select slug from issues")).rows.map((r) => r.slug)])];
     for (const slug of all) if (validSlug(slug)) await readOne(tx, slug);
+  });
+}
+
+// Until 19 Oct a session said where its work landed on the first line of result.md, **Landed:**, and desk read it from
+// there; since, it says so through the API (api.ts). Each done issue's old line is read once into the field, at the
+// first start that knows it, and never again.
+export function readLanded(): Promise<void> {
+  return db.write(async (tx) => {
+    if ((await tx.query("select 1 from meta where name = 'landed read'")).rows.length) return;
+    for (const i of (await loadAll(tx)).values()) {
+      const result = join(folder(i.slug), "result.md");
+      if (i.state !== "done" || i.landed || !existsSync(result)) continue;
+      const first = readFileSync(result, "utf8").trim().split(/\r\n|\r|\n/)[0];
+      if (!first.startsWith("**Landed:**")) continue;
+      i.landed = first.slice("**Landed:**".length).trim() || null;
+      await put(tx, i);
+    }
+    await tx.query("insert into meta values ('landed read', now()::text)");
   });
 }

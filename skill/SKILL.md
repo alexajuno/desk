@@ -20,7 +20,8 @@ An issue's fields:
 - `priority`: urgent, high, medium, low or none
 - `state`: triage (a desk chat's own issue, filed in its first reply, until the talk settles it; only desk's agent chat files one), backlog, running (shown as In progress: its session works on it, planning or carrying it out), waiting (someone else's move, such as QA's), review (shown as In review: the user's move, once its session's turn ends on a plan, a question or a result; the user's reply, or Go, moves it back to In progress), landing (approved: its session lands the work; only the user's Approve sets it), done or dropped
 - `waiting_on`: for a waiting issue, who or what it waits on, such as `QA on #570`, sent with `"state": "waiting"` or on its own after; desk notes since when, and drops both when the issue leaves waiting
-- `review_of`: for an issue in review, what its session hands the user: `plan` (waits for go: the user's Go button says it), `question` (only the user can answer), `result` (result.md, for Approve) or `reply`. An issue's session sends it with `"state": "review"` as it ends each turn; sent without it, desk reads it from the files the turn wrote, and a turn that ends with no call shows In review the same way
+- `review_of`: for an issue in review, what its session hands the user: `plan` (waits for go: the user's Go button says it), `question` (only the user can answer), `result` (result.md, for Approve) or `reply`. An issue's session sends it with `"state": "review"` as it ends each turn; sent without it, or when a turn ends with no call, the issue shows In review on a `reply`: desk reads nothing from the files the turn wrote
+- `landed`: for a done issue, where its work landed: the commit and its branch, or the pull request's link (which becomes the issue's `link`). Once the user's Approve lands the work, its session sends it with `"state": "done"`, which moves the issue from Landing to Done; desk reads it from no file
 - `parent`: the slug of the issue it belongs under, or null
 - `project`: the slug of the project it belongs to, or null. A project is ongoing work that is never done, such as desk itself; its issues finish, it does not. It is a separate thing from `parent`, which is for sub-issues
 - `folder`: where its session works, usually a repo, such as `~/projects/desk`
@@ -112,6 +113,12 @@ Then work it by its protocol, in the chat: write `plan.md` in the issue's folder
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"state": "review", "review_of": "result"}'
+```
+
+Once it has landed, say where, which moves the issue to Done. If it cannot land, say why in the chat and end your turn on `"review_of": "question"` instead:
+
+```bash
+curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"state": "done", "landed": "fe1aca7 on main"}'
 ```
 
 Any other Claude Code session (not the agent chat) can still start an issue's own background session. Send a plan: Direction (what to do, and which way), Done when, and What you may decide alone. A quick or brief issue may start with no plan, `--json '{}'`: its session writes its own brief, then works at once (quick) or waits for the user's "go" (brief). Only a backlog issue, or one in progress or in review whose session has only planned it, can start. If the call answers 409 "Workspace not trusted", tell the user to press Trust folder on the issue's page, then start again.

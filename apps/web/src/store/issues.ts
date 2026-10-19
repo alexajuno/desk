@@ -17,6 +17,7 @@ export interface Issue {
   protocol: Protocol | null; // none runs design
   link: string | null;
   landing: string | null;
+  landed: string | null; // in done, where its session said the work landed
   session: string | null;
   waiting_on: string | null;
   waiting_since: string | null;

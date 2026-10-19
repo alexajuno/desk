@@ -423,8 +423,8 @@ export async function create(): Promise<FastifyInstance> {
     return fromInbox ? onward(reply, before, slug, `Go: ${i.title}`) : back(reply, slug);
   });
 
-  // Approve, the gate: the issue's session lands the work by its repo's rules, and the issue shows Landing until its
-  // result says it landed. With nothing to land, no repo or no session, it is done at once. A session in a worktree desk
+  // Approve, the gate: the issue's session lands the work by its repo's rules, and the issue shows Landing until the
+  // session says, through the API, that it landed. With nothing to land, no repo or no session, it is done at once. A session in a worktree desk
   // made cannot merge, so desk merges for it. From the Inbox you stay in the Inbox: the next notification opens.
   app.post("/issue/:slug/approve", async (req: Req, reply) => {
     const slug = req.params.slug, i = await store.load(slug);

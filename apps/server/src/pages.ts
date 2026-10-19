@@ -63,14 +63,6 @@ const isFile = (path: string) => existsSync(path) && statSync(path).isFile();
 const resultOf = (slug: string) => join(store.folder(slug), "result.md");
 const iso = (t: string) => parseLocal(t).getTime() / 1000;
 
-// Whether the session's result says, on its first line, that the work landed, and the pull request it opened, if any.
-export function landed(result: string): [boolean, string | null] {
-  const text = read(result).trim();
-  const first = text ? text.split(/\r\n|\r|\n/)[0] : "";
-  const pr = first.match(/https:\/\/github\.com\/\S+\/pull\/\d+/);
-  return [first.startsWith("**Landed:**"), pr ? pr[0] : null];
-}
-
 // Whether the issue's session works on your last message, from its transcript, never from whether a process holds it:
 // a chat the host closed, or that never started, is not working, and its next message resumes it.
 const working = (i: Issue) => Boolean(i.session && sessions.working(i.session));
@@ -102,44 +94,28 @@ function turnEnded(i: Issue): boolean {
   return asked !== null && Math.max(asked, sessions.replied(i.session) ?? 0) > savedAt(i);
 }
 
-// What a turn that ended with no word from its session left for you, from the files it wrote since your last message:
-// a result, a plan, or else just its reply, as a question it asked in its chat reads.
-export function handed(i: Issue): string {
-  const since = (i.session && sessions.prompted(i.session)) || 0;
-  const wrote = (name: string) => {
-    const path = join(store.folder(i.slug), name);
-    return isFile(path) && statSync(path).mtimeMs / 1000 > since;
-  };
-  return wrote("result.md") ? "result" : wrote("plan.md") ? "plan" : "reply";
-}
-
 // What an issue in review holds: a review from before 19 Oct held a result.
 export const reviewOf = (i: Issue) => i.review_of ?? "result";
 
 // desk moves an issue's state here, from its session. In progress means the session works: once its turn ends, it is
-// your move, and the issue shows In review, holding what the session said it handed you (api.ts), or else what desk
-// reads from the files the turn wrote; "in progress means the agent in progress, and when sth is ready to be reviewed,
-// even just the plan, it should change to be in in review" (the user, 19 Oct). Your reply, or Go, moves it back to In
-// progress, as one in Waiting. From Landing it moves to Done once result.md says it landed. Whether a process still
-// holds the chat never counts (18 Oct: "we should write code in the way we don't care"): its next message resumes it.
+// your move, and the issue shows In review, holding what the session said it handed you with its call (api.ts), or a
+// reply when it said nothing; "in progress means the agent in progress, and when sth is ready to be reviewed, even just
+// the plan, it should change to be in in review" (the user, 19 Oct). Your reply, or Go, moves it back to In progress,
+// as one in Waiting. Landing moves on only by its session's call, to Done or back to review: desk reads no file to
+// tell ("when agent changes sth, it calls api, not edit file and desk fetches from file later", 19 Oct). Whether a
+// process still holds the chat never counts (18 Oct: "we should write code in the way we don't care"): its next
+// message resumes it.
 export async function advance(all: Map<string, Issue>) {
   for (const i of all.values()) {
-    const busy = working(i);
-    const result = resultOf(i.slug), hasResult = isFile(result);
-    if (i.state === "landing") {
-      // A result that says it landed counts however old it is.
-      const [done, pr] = hasResult ? landed(result) : [false, null];
-      if (hasResult && !busy && (done || statSync(result).mtimeMs > parseLocal(i.landing!).getTime()))
-        await store.move(i, { state: done ? "done" : "review", review_of: done ? null : "result", link: i.link || (done ? pr : null) });
-    } else if (i.state === "running" && turnEnded(i)) {
-      await store.move(i, { state: "review", review_of: handed(i) });
+    if (i.state === "running" && turnEnded(i)) {
+      await store.move(i, { state: "review", review_of: "reply" });
     } else if (i.state === "waiting" && i.session && i.waiting_since) {
       const wrote = sessions.prompted(i.session);
       if (wrote && wrote > iso(i.waiting_since)) await store.move(i, { state: "running" });
     } else if (i.state === "review" && i.session) {
       // A review from before 19 Oct has no review_since: it moves back once its session works again.
       const wrote = sessions.prompted(i.session);
-      if (i.review_since ? wrote !== null && wrote > iso(i.review_since) : busy) await store.move(i, { state: "running" });
+      if (i.review_since ? wrote !== null && wrote > iso(i.review_since) : working(i)) await store.move(i, { state: "running" });
     }
   }
 }
@@ -201,7 +177,7 @@ function replyWhy(i: Issue, result: boolean): string {
       if (of === "reply" && !result) return "chat replied";
       return result ? "result ready" : "check it";
     }
-    case "done": return result && landed(resultOf(i.slug))[0] ? "landed" : "done";
+    case "done": return i.landed ? "landed" : "done";
     case "dropped": return "dropped";
     case "backlog": return "parked";
     case "waiting": return "waiting";
@@ -383,10 +359,9 @@ export function strip(i: Issue, asks: Set<string>, hasPlan: boolean, result: str
     if (of === "reply" && !hasResult) return { text: "Replied: your turn in its chat", button: chat };
     return { text: hasResult ? "In review" : "In review, no card", button: { label: "Approve", action: "approve" } };
   }
-  if (i.state === "done" && hasResult && landed(result)[0]) {
+  if (i.state === "done" && i.landed) {
     // The session's own words on where it landed: the commit, or the pull request.
-    const where = read(result).trim().split(/\r\n|\r|\n/)[0].replace(/^\*\*Landed:\*\*/, "");
-    return { text: `Landed: ${[...where.replace(/`/g, "").trim()].slice(0, 160).join("")}`, button: null };
+    return { text: `Landed: ${[...i.landed.replace(/`/g, "").trim()].slice(0, 160).join("")}`, button: null };
   }
   return { text: i.state === "done" ? "Done" : "Dropped", button: null };
 }
