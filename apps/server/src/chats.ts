@@ -46,7 +46,7 @@ export interface Chat {
   named?: string; // the title the user gave it, or its automation's, over Claude Code's
   from?: string; // the script whose message started it (push)
   automation?: string; // the automation whose run it is, by slug (automations.ts)
-  seen?: number; // when the user last looked at it, in seconds, until 19 Oct: seen.ts keeps it since
+  seen?: number; // when the user last looked at it, in seconds, until 19 Oct: the inbox table keeps it since (inbox.ts)
   [key: string]: unknown; // what else its file held, such as the messages of a chat from before the panel
 }
 

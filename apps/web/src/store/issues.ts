@@ -1,8 +1,8 @@
 import { makeAutoObservable, observable } from "mobx";
 import type { Priority, Protocol, State } from "../lib/desk";
 
-// The rows desk syncs (the server's sync.ts and db.ts): every issue, project and chat, each as its table holds it, less
-// what the app is not sent. The app works out what it shows from these, as a list and its count from the same rows, so the
+// The rows desk syncs (the server's sync.ts and db.ts): every issue, project, chat and Inbox row, each as its table
+// holds it, less what the app is not sent. The app works out what it shows from these, as a list and its count from the same rows, so the
 // two cannot disagree.
 
 // An issue: every field of its issue.md but the description.
@@ -49,21 +49,39 @@ export interface Chat {
   automation: string | null; // the automation whose run it is
 }
 
+// A row of the Inbox (the server's inbox.ts): what a session last did for you, or an issue in Triage with no chat to
+// settle, and whether you read it. The sidebar's count, the Inbox's list and each dot all read these.
+export interface InboxRow {
+  id: string; // the session's id, or the slug of an issue in Triage with no session
+  slug: string; // what the row opens: the issue's slug, or the id of a chat with no issue
+  issue: boolean; // whether slug names an issue
+  session: string | null;
+  title: string; // as it was when written: an issue's row shows its issue's own
+  agent: string | null; // the agent of a chat with no issue
+  why: string;
+  says: string; // the second line, after who
+  kind: "needs" | "review"; // review: Go or Approve decides it
+  waits: boolean; // listed, read or not, until answered
+  at: number; // when it happened, in seconds
+  read: number | null; // when you read it, in seconds; null while unread
+}
+
 // One change from desk's log: the row as it is now, or null once deleted. kind is its table.
 interface Change { seq: number; kind: string; key: string; row: Record<string, unknown> | null }
 
 export type SyncMessage =
-  | { type: "snapshot"; log: string; seq: number; rows: { issues: Issue[]; projects: Project[]; chats?: Chat[] } }
+  | { type: "snapshot"; log: string; seq: number; rows: { issues: Issue[]; projects: Project[]; chats?: Chat[]; inbox?: InboxRow[] } }
   | { type: "changes"; after: number; changes: Change[] }
   | { type: "files"; slugs: string[] };
 
 const newestFirst = (a: { created: string }, b: { created: string }) => (a.created < b.created ? 1 : a.created > b.created ? -1 : 0);
 
-// Every issue, project and chat, in memory. The screen draws from here, and MobX redraws only what read a field that changed.
+// Every issue, project, chat and Inbox row, in memory. The screen draws from here, and MobX redraws only what read a field that changed.
 export class IssueStore {
   bySlug = observable.map<string, Issue>();
   projects = observable.map<string, Project>();
   chats = observable.map<string, Chat>(); // by id
+  inbox = observable.map<string, InboxRow>(); // by id
   files = observable.map<string, number>(); // slug: how many times its other files changed (a plan, a result)
   connected = false;
   log = ""; // the name of desk's log these rows follow
@@ -84,12 +102,13 @@ export class IssueStore {
       this.bySlug.replace(message.rows.issues.map((i) => [i.slug, i]));
       this.projects.replace(message.rows.projects.map((p) => [p.slug, p]));
       this.chats.replace((message.rows.chats ?? []).map((c) => [c.id, c])); // none from a desk before the table
+      this.inbox.replace((message.rows.inbox ?? []).map((r) => [r.id, r]));
       this.log = message.log;
       this.seq = message.seq;
       return true;
     }
     if (message.after !== this.seq) return false;
-    const tables: Record<string, Map<string, unknown>> = { issues: this.bySlug, projects: this.projects, chats: this.chats };
+    const tables: Record<string, Map<string, unknown>> = { issues: this.bySlug, projects: this.projects, chats: this.chats, inbox: this.inbox };
     for (const c of message.changes) {
       const table = tables[c.kind]; // a table this app does not hold yet is a newer desk's
       if (table && c.row) table.set(c.key, c.row);
@@ -106,6 +125,16 @@ export class IssueStore {
   // Triage: the issues whose chat has not settled them yet, the newest first, as chats come in.
   get triage(): Issue[] {
     return [...this.bySlug.values()].filter((i) => i.state === "triage").sort(newestFirst);
+  }
+
+  // The Inbox's unread rows, which the sidebar counts and the Inbox marks with a dot.
+  get unread(): InboxRow[] {
+    return [...this.inbox.values()].filter((r) => r.read === null);
+  }
+
+  // The rows the Inbox lists, newest first: each unread one, each that waits on you, read or not, and the one open now.
+  listed(open: string | null): InboxRow[] {
+    return [...this.inbox.values()].filter((r) => r.read === null || r.waits || r.slug === open).sort((a, b) => b.at - a.at);
   }
 
   // The active projects, the oldest first, as the sidebar lists them.

@@ -20,10 +20,10 @@ import * as agents from "./agents.ts";
 import * as chats from "./chats.ts";
 import { HOME } from "./config.ts";
 import * as hosted from "./hosted.ts";
+import * as inbox from "./inbox.ts";
 import * as store from "./issues.ts";
 import * as models from "./models.ts";
 import * as roster from "./roster.ts";
-import * as seen from "./seen.ts";
 import * as transcript from "./transcript.ts";
 import type { Item } from "./transcript.ts";
 
@@ -78,15 +78,15 @@ export async function connect(ws: WebSocket, id: string) {
     try {
       const e = JSON.parse(data.toString());
       if (e.type === "visible") {
-        // A session on screen is read, up to the moment it leaves the screen.
+        // A session on screen is read, up to the moment it leaves the screen: its Inbox row, in every tab.
         if (e.visible) visible.set(ws, id);
-        if (e.visible || visible.delete(ws)) seen.now(id);
+        if (e.visible || visible.delete(ws)) void inbox.read({ session: id });
       }
     } catch {
       // not ours
     }
   });
-  ws.on("close", () => { if (visible.delete(ws)) seen.now(id); });
+  ws.on("close", () => { if (visible.delete(ws)) void inbox.read({ session: id }); });
   const sent = new Set<string>(); // the items' keys the panel has, so each comes once from whichever source is first
   let path: string | null = null, readTo = 0, file: FSWatcher | null = null, host: WebSocket | null = null, closed = false;
   let lastMeta = "";

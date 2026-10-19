@@ -10,7 +10,7 @@
 // (since). Reads go through sql().
 //
 // The tables are the record of desk's state ("you should find whatever represent state, should be in db", the user, 19
-// Oct): issues and projects, the trash, pins, each session's model, settings, Slack's tags and the line. issue.md and
+// Oct): issues and projects, the Inbox, the trash, pins, each session's model, settings, Slack's tags and the line. issue.md and
 // project.md are only written out, for agents, git and an editor to read; desk reads them in only into a database
 // with no issues yet, as a new one (issues.importAll).
 import { PGlite, type Transaction } from "@electric-sql/pglite";
@@ -29,6 +29,7 @@ const HELD: Record<string, { key: string; hidden: string[] }> = {
   issues: { key: "slug", hidden: ["body", "written"] },
   projects: { key: "slug", hidden: ["body", "written"] },
   chats: { key: "id", hidden: ["folder", "cwd", "seen", "extra"] },
+  inbox: { key: "id", hidden: [] },
 };
 
 // The row as the app holds it, in SQL, from a row named t.
@@ -141,6 +142,20 @@ create table if not exists sessions ( -- what each session does, as the session 
   replied timestamptz, -- when its last turn ended with its reply
   ended timestamptz, -- when its last turn ended, however: its reply, Stop, an error, or its process going
   updated timestamptz not null default now()
+);
+create table if not exists inbox ( -- the Inbox's rows (inbox.ts): what each session last did for you, and each issue to settle
+  id text primary key, -- the session's id, or the slug of an issue in Triage with no session
+  slug text not null, -- what the row opens: the issue's slug, or the id of a chat with no issue
+  issue boolean not null, -- whether slug names an issue
+  session text,
+  title text not null, -- as it was when written: the app shows an issue's own title
+  agent text, -- the agent of a chat with no issue
+  why text not null, -- what happened, as pages.ts names it
+  says text not null, -- the row's second line, after who
+  kind text not null, -- review: Go or Approve decides it; needs: anything else
+  waits boolean not null, -- it stays listed, read or not, until answered: a question, a landing stuck, an issue to settle
+  at double precision not null, -- when it happened, in seconds
+  read double precision -- when you read it, in seconds; null while unread
 );
 create table if not exists changes ( -- the log: each change to a row the app holds, numbered as it was written
   seq bigint generated always as identity primary key,

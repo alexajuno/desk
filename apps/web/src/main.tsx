@@ -5,6 +5,7 @@ import { setNavigate } from "./app/nav";
 import { router } from "./app/routes";
 import { watchTheme } from "./frame/theme";
 import { startFrame } from "./store/frame";
+import { startInbox } from "./store/inbox";
 import { issues } from "./store/issues";
 import { connect } from "./sync/socket";
 import { installTooltips } from "./ui/tooltip";
@@ -19,6 +20,7 @@ watchTheme();
 installTooltips();
 connect(issues);
 startFrame();
+startInbox();
 setNavigate((to, opts) => router.navigate(to, opts));
 
 createRoot(document.getElementById("root")!).render(

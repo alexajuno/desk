@@ -7,6 +7,7 @@ import * as chats from "./chats.ts";
 import { PORT } from "./config.ts";
 import * as db from "./db.ts";
 import * as hosted from "./hosted.ts";
+import * as inbox from "./inbox.ts";
 import * as store from "./issues.ts";
 import * as land from "./land.ts";
 import * as models from "./models.ts";
@@ -30,6 +31,7 @@ await pins.open();
 await models.open();
 await slack.open();
 await turns.load(); // what each session does, as the session host last told desk
+await inbox.load();
 await web.build();
 const app = await create();
 await sync.start();

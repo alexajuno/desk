@@ -1,12 +1,12 @@
-// Sync for the app (ported from desk/sync.py): a WebSocket that gives the app every row it holds, issues, projects and
-// chats, then each change the moment it is written, numbered as the log numbers it (db.ts), whoever made it: a page, an
+// Sync for the app (ported from desk/sync.py): a WebSocket that gives the app every row it holds, issues, projects,
+// chats and the Inbox's, then each change the moment it is written, numbered as the log numbers it (db.ts), whoever made it: a page, an
 // agent's curl, desk itself, or the user's editor. The app's own changes go through the JSON API and come back this
 // way, like everyone else's. An app that lost desk, as when desk restarts, connects again with the last change it
 // applied, and gets only what it missed.
 //
 //     /api/sync?log=<log>&since=<seq>     the log and the last change the app applied; a new tab sends both empty
 //
-//     {"type": "snapshot", "log": "<log>", "seq": 812, "rows": {"issues": [<issue>, ...], "projects": [<project>, ...], "chats": [<chat>, ...]}}
+//     {"type": "snapshot", "log": "<log>", "seq": 812, "rows": {"issues": [<issue>, ...], "projects": [<project>, ...], "chats": [<chat>, ...], "inbox": [<row>, ...]}}
 //     {"type": "changes", "after": 811, "changes": [{"seq": 812, "kind": "issues", "key": "<slug>", "row": <issue>}, ...]}
 //     {"type": "frame", "frame": <frame>}                         on connect, then when it changed
 //     {"type": "files", "slugs": [<slug>, ...]}                   its other files changed
@@ -15,9 +15,9 @@
 // before it, whose last change is its "after": an app that holds another seq missed some, and connects again to get
 // them. A row is the table's, less what the app is not sent (db.ts, HELD): an <issue> is every field of issue.md but
 // its description, a <project> its slug, title, state and created, a <chat> its id, session, issue, title and who it is
-// with; a deleted row comes as null. A description is part of its issue's row, so a new one comes as a change: the page
-// showing it asks again. A <frame> is the sidebar and the Inbox's rows, with each open issue's session state (pages.ts,
-// framePage), which no table holds yet. "files" names the issues whose files beside issue.md changed (a session's
+// with, an Inbox <row> every column (inbox.ts); a deleted row comes as null. A description is part of its issue's row, so a new one comes as a change: the page
+// showing it asks again. A <frame> is the sidebar's sessions and desk's checkout, with each open issue's session state
+// (pages.ts, framePage), which no table holds yet. "files" names the issues whose files beside issue.md changed (a session's
 // plan.md, result.md, a screenshot), which no row holds either: a page showing one of them asks again.
 //
 // issue.md and project.md are only written out: one changed by hand is not read, and tells the apps nothing (db.ts).

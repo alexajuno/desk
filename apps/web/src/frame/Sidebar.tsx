@@ -71,18 +71,21 @@ export const Sidebar = observer(function Sidebar() {
   const held = (i: { slug: string; title: string; state: State }) => issues.bySlug.get(i.slug) ?? i;
   const [folded, toggle] = useFolded();
   // A session's row: its issue's state, or a ring for a chat with no issue, then on the right the dock's pulse while it
-  // works, or the Inbox's dot while it holds what you have not read. One with an issue opens the issue, where its chat
-  // docks, and goes by the issue's title.
-  const chatRow = (c: ChatRow, pinned: boolean) => (
-    <Go key={c.session} className={`nav-item${c.issue ? at(`/issue/${c.issue.slug}`) : ""}${at(`/sessions/${c.session}`)}`}
-      to={c.issue ? `/issue/${c.issue.slug}` : `/sessions/${c.session}`}
-      title={c.working ? "Working" : c.unread ? "Said something you have not read" : c.title}
-      onContextMenu={(e) => { e.preventDefault(); chatMenu(c, pinned, { x: e.clientX, y: e.clientY }); }}>
-      {c.issue ? <StateIcon state={issues.bySlug.get(c.issue.slug)?.state ?? c.issue.state} /> : <Ring />}
-      <span className="nav-title">{c.title}</span>
-      {c.working ? <span className="live-dot working" /> : c.unread ? <span className="unread" aria-label="Unread" /> : null}
-    </Go>
-  );
+  // works, or the Inbox's dot while its row there is unread. One with an issue opens the issue, where its chat docks,
+  // and goes by the issue's title.
+  const chatRow = (c: ChatRow, pinned: boolean) => {
+    const unread = issues.inbox.get(c.session)?.read === null;
+    return (
+      <Go key={c.session} className={`nav-item${c.issue ? at(`/issue/${c.issue.slug}`) : ""}${at(`/sessions/${c.session}`)}`}
+        to={c.issue ? `/issue/${c.issue.slug}` : `/sessions/${c.session}`}
+        title={c.working ? "Working" : unread ? "Said something you have not read" : c.title}
+        onContextMenu={(e) => { e.preventDefault(); chatMenu(c, pinned, { x: e.clientX, y: e.clientY }); }}>
+        {c.issue ? <StateIcon state={issues.bySlug.get(c.issue.slug)?.state ?? c.issue.state} /> : <Ring />}
+        <span className="nav-title">{c.title}</span>
+        {c.working ? <span className="live-dot working" /> : unread ? <span className="unread" aria-label="Unread" /> : null}
+      </Go>
+    );
+  };
   return (
     <aside className="side">
       {/* Linear's top row is the workspace switcher, then search and New issue. desk has one workspace, so its place holds the sidebar's toggle. */}
@@ -97,7 +100,7 @@ export const Sidebar = observer(function Sidebar() {
       </div>
       <Go className={`nav-item${at("/inbox")}`} to="/inbox" title="Go to inbox  G then I">
         <svg viewBox="0 0 16 16"><path d="M2 9h3l1 2h4l1-2h3M3 3h10l1 6v4H2V9z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
-        Inbox{d?.rows.length ? <span className="count">{d.rows.length}</span> : null}
+        Inbox{issues.unread.length > 0 && <span className="count">{issues.unread.length}</span>}
       </Go>
       {/* Linear's team section: Triage, the chats not settled yet, with how many; then Issues and its tabs. */}
       <Go className={`nav-item${at("/triage")}`} to="/triage" title={triageTip(triage)}>

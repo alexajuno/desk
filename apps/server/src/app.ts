@@ -274,7 +274,7 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/api/page/inbox", async (req: Req) => pages.inboxPage(req.query.i ?? ""));
   app.get("/api/page/search", async (req: Req) => pages.searchPage(req.query.q ?? ""));
   app.get("/api/page/file/:slug/:name", async (req: Req) => pages.filePage(req.params.slug, req.params.name));
-  // The Inbox's rows, newest first; every open tab asks every few seconds.
+  // The Inbox's rows, newest first, for an agent or a script: the app holds them itself (inbox.ts).
   app.get("/api/inbox", async () => pages.inboxRows());
 
   // An issue's own file: Markdown and D2 open as a document, the app's file page; anything else is served as is.
