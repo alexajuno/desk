@@ -3,6 +3,7 @@
 // clock and the Slack connection off, as a second desk for testing should.
 import { create } from "./app.ts";
 import * as automations from "./automations.ts";
+import * as chats from "./chats.ts";
 import { PORT } from "./config.ts";
 import * as db from "./db.ts";
 import * as hosted from "./hosted.ts";
@@ -17,6 +18,7 @@ await db.open();
 // The folders are the record: whatever changed there while desk was down is read in first.
 await store.readIn();
 await projects.readIn();
+await chats.readIn();
 await web.build();
 const app = await create();
 await sync.start();

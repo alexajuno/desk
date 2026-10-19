@@ -186,9 +186,10 @@ export function routes(app: FastifyInstance) {
     const chat = fields.state === "triage" ? await filer(req.body, fields.title!) : null;
     const i = store.blank(await store.newSlug(fields.title!), fields.title!);
     await apply(i, fields);
-    if (chat) i.session = chat.session;
-    await store.save(i);
-    if (chat) chats.bind(chat, i, baseOf(req));
+    if (chat) {
+      i.session = chat.session;
+      await chats.bind(chat, i, baseOf(req)); // the issue and its chat, as one write
+    } else await store.save(i);
     return reply.code(201).send(asJson(i, true));
   });
 
@@ -344,13 +345,12 @@ export function routes(app: FastifyInstance) {
       throw new HttpError(422, "Set the issue's folder first (PATCH folder; find it with /api/folders?q=<name>).");
     i.session = chat.session;
     i.state = triage ? "triage" : "running";
-    await store.save(i);
     const was = chat.issue;
+    await chats.bind(chat, i, baseOf(req)); // the issue and its chat, as one write
     if (was && was !== slug && (await store.exists(was))) {
       const old = await store.load(was);
       if (old.state === "triage") await store.move(old, { state: "dropped", link: `/issue/${slug}` });
     }
-    chats.bind(chat, i, baseOf(req));
     return asJson(i);
   });
 

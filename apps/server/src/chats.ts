@@ -8,12 +8,15 @@
 // desk prompt, and files no issue. Or it may be bare, a Chat in the composer's chip: Claude Code as `claude` runs from
 // the home folder, with no agent and no desk prompt, and it files no issue either.
 //
-// A chat is a JSON file in DESK_DATA/chats/.
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+// A chat is a row of the chats table, which the app holds (db.ts): "you should find whatever represent state, should
+// be in db" (the user, 19 Oct). Until then it was a JSON file in DESK_DATA/chats/.
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 import * as agents from "./agents.ts";
 import { CHATS_DIR, DATA_DIR, HOME, PORT, REPO } from "./config.ts";
+import * as db from "./db.ts";
+import type { Db } from "./db.ts";
 import * as hosted from "./hosted.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
@@ -35,7 +38,6 @@ export interface Chat {
   created: string;
   updated?: string;
   session: string;
-  messages: unknown[];
   issue?: string;
   folder?: string;
   cwd?: string;
@@ -45,7 +47,7 @@ export interface Chat {
   from?: string; // the script whose message started it (push)
   automation?: string; // the automation whose run it is, by slug (automations.ts)
   seen?: number; // when the user last looked at it, in seconds, until 19 Oct: seen.ts keeps it since
-  [key: string]: unknown;
+  [key: string]: unknown; // what else its file held, such as the messages of a chat from before the panel
 }
 
 export class NoChat extends Error {}
@@ -53,10 +55,10 @@ export class NoChat extends Error {}
 const CHAT_ID = /^[a-z0-9-]{1,80}$/;
 
 // --- the chats, kept ---------------------------------------------------------------------------------------------
-// desk alone writes a chat's file (save), and never removes one, so the files are read once, at the first ask, and
-// kept: a new chat is appended, a saved one replaced. "chat should be append and it's just there. no need to read all
-// files at once for that" (the user, 18 Oct): every sidebar rebuild used to read all of them five times. When each
-// last moved is kept beside it: its transcript's last write at that first read, then each turn starting or ending.
+// desk alone writes a chat's row (save), and never removes one, so the rows are read once, at start, and kept: a new
+// chat is appended, a saved one replaced. "chat should be append and it's just there. no need to read all files at once
+// for that" (the user, 18 Oct): every sidebar rebuild used to read all of them five times. When each last moved is kept
+// beside it: its transcript's last write at start, then each turn starting or ending.
 
 let kept: Map<string, Chat> | null = null; // by id
 const bySession = new Map<string, Chat>();
@@ -70,16 +72,8 @@ function keep(chats: Map<string, Chat>, chat: Chat) {
 }
 
 function all(): Map<string, Chat> {
-  if (kept) return kept;
-  const read = new Map<string, Chat>();
-  for (const name of existsSync(CHATS_DIR) ? readdirSync(CHATS_DIR) : []) {
-    if (!name.endsWith(".json")) continue;
-    const chat: Chat = JSON.parse(readFileSync(join(CHATS_DIR, name), "utf8"));
-    keep(read, chat);
-    const file = transcripts.pathOf(chat.session);
-    lastMoved.set(chat.id, file ? statSync(file).mtimeMs : Date.parse(chat.created));
-  }
-  return (kept = read);
+  if (!kept) throw new Error("The chats are not read in yet.");
+  return kept;
 }
 
 const ofSession = (session: string) => (all(), bySession.get(session));
@@ -102,24 +96,73 @@ export const movedAt = (chat: Chat) => lastMoved.get(chat.id) ?? 0;
 
 const now = () => store.now();
 
-// Python's json.dumps(chat, indent=1, ensure_ascii=False), so a chat file reads the same whichever wrote it.
-function pyJson(value: unknown, indent = 1, depth = 0): string {
-  const pad = (d: number) => "\n" + " ".repeat(indent * d);
-  if (Array.isArray(value)) return value.length ? `[${value.map((v) => pad(depth + 1) + pyJson(v, indent, depth + 1)).join(",")}${pad(depth)}]` : "[]";
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>);
-    return entries.length ? `{${entries.map(([k, v]) => `${pad(depth + 1)}${JSON.stringify(k)}: ${pyJson(v, indent, depth + 1)}`).join(",")}${pad(depth)}}` : "{}";
-  }
-  return JSON.stringify(value) ?? "null";
+// --- the table -------------------------------------------------------------------------------------------------------
+
+const COLUMNS = ["id", "kind", "title", "created", "updated", "session", "issue", "folder", "cwd", "agent", "bare", "named", "from", "automation", "seen"];
+
+const UPSERT = `insert into chats (${[...COLUMNS, "extra"].map((c) => `"${c}"`).join(", ")})
+  values (${[...COLUMNS, "extra"].map((_, n) => `$${n + 1}`).join(", ")})
+  on conflict (id) do update set ${[...COLUMNS.slice(1), "extra"].map((c) => `"${c}" = excluded."${c}"`).join(", ")}`;
+
+async function put(tx: Db, chat: Chat) {
+  const extra = Object.fromEntries(Object.entries(chat).filter(([k]) => !COLUMNS.includes(k)));
+  await tx.query(UPSERT, [...COLUMNS.map((c) => (c === "bare" ? Boolean(chat.bare) : (chat[c] ?? null))), extra]);
 }
 
-export function save(chat: Chat) {
+// The chat a row holds, with the fields it leaves empty left out, as its file did.
+function chatOf(row: Record<string, unknown>): Chat {
+  const { extra, bare, ...columns } = row;
+  const chat = Object.fromEntries(Object.entries(columns).filter(([, v]) => v !== null)) as Chat;
+  return { ...(extra as object), ...chat, ...(bare ? { bare: true } : {}) };
+}
+
+// Write the chat, and what more writes with it, as one write. The chat is kept before it commits, so the frame the apps
+// are sent once it does holds it.
+export async function save(chat: Chat, more?: (tx: Db) => Promise<unknown>) {
   const chats = all(), fresh = !chats.has(chat.id);
-  mkdirSync(CHATS_DIR, { recursive: true });
   chat.updated = now();
-  writeFileSync(join(CHATS_DIR, `${chat.id}.json`), pyJson(chat), "utf8");
-  keep(chats, structuredClone(chat));
+  const copy = structuredClone(chat);
+  await db.write(async (tx) => {
+    await more?.(tx);
+    await put(tx, copy);
+    keep(chats, copy);
+  });
   if (fresh) lastMoved.set(chat.id, Date.now());
+}
+
+// At start: the chats' files written since desk last looked are read in, then every row is kept. Every file, the first
+// time; then any a desk from before the table wrote, as an older branch on Try does, which wins over the row, being
+// newer.
+export async function readIn() {
+  await db.write(async (tx) => {
+    const since = Number((await tx.query<{ value: string }>("select value from meta where name = 'chats read'")).rows[0]?.value ?? 0);
+    let newest = since;
+    for (const name of existsSync(CHATS_DIR) ? readdirSync(CHATS_DIR) : []) {
+      const path = join(CHATS_DIR, name), at = statSync(path).mtimeMs;
+      if (!name.endsWith(".json") || at <= since) continue;
+      newest = Math.max(newest, at);
+      let chat: Chat;
+      try {
+        chat = JSON.parse(readFileSync(path, "utf8"));
+      } catch (error) {
+        console.error(`desk: could not read in ${path}: ${error}`);
+        continue;
+      }
+      // Checked first: a query that fails would end the whole read-in.
+      if (CHAT_ID.test(chat.id) && [chat.title, chat.created, chat.session].every((v) => typeof v === "string")) await put(tx, chat);
+      else console.error(`desk: ${path} is no chat`);
+    }
+    if (newest > since)
+      await tx.query("insert into meta values ('chats read', $1) on conflict (name) do update set value = excluded.value", [String(newest)]);
+  });
+  const read = new Map<string, Chat>();
+  for (const row of (await db.sql().query<Record<string, unknown>>("select * from chats")).rows) {
+    const chat = chatOf(row);
+    keep(read, chat);
+    const file = transcripts.pathOf(chat.session);
+    lastMoved.set(chat.id, file ? statSync(file).mtimeMs : Date.parse(chat.created));
+  }
+  kept = read;
 }
 
 export const exists = (id: string) => CHAT_ID.test(id) && all().has(id);
@@ -130,12 +173,13 @@ export function transcript(id: string): string {
   return [...said(load(id))].map(([who, text]) => `${names[who]}: ${text}`).join("\n\n");
 }
 
-// The chat becomes the issue's session, and desk moves it into the issue's folder once its turn ends. An issue in
-// Triage has no folder yet, so the chat stays where it runs.
-export function bind(chat: Chat, i: Issue, base: string) {
+// The chat becomes the issue's session: the issue, as the caller set it, and the chat are saved as one write. desk
+// moves the chat into the issue's folder once its turn ends. An issue in Triage has no folder yet, so the chat stays
+// where it runs.
+export async function bind(chat: Chat, i: Issue, base: string) {
   chat.issue = i.slug;
   chat.folder = i.folder ? resolve(agents.workdir(i)) : runsIn(chat);
-  save(chat);
+  await save(chat, (tx) => store.saveIn(tx, i));
   if (!same(chat.folder, runsIn(chat)) && !MOVING.has(chat.id)) {
     MOVING.add(chat.id);
     void move(chat.id, base);
@@ -186,14 +230,14 @@ export async function hostOptions(chat: Chat, cwd = runsIn(chat)): Promise<hoste
 // message, as for a Slack message the user tagged (slack.ts), the chat starts bound to the issue and works on the
 // message at once.
 export async function newChat(base: string, start?: { issue: Issue; message: string }): Promise<Chat> {
-  const chat: Chat = { id: newId(), kind: "panel", title: start?.issue.title ?? "New chat", created: now(), session: "", messages: [],
+  const chat: Chat = { id: newId(), kind: "panel", title: start?.issue.title ?? "New chat", created: now(), session: "",
     ...(start && { issue: start.issue.slug, folder: DATA_DIR }) }; // where bind() leaves a chat whose issue has no folder
   const s = settings.load(), runs = { model: s.chat_model, effort: s.chat_effort };
   const row = await hosted.start({ cwd: DATA_DIR, title: `desk chat ${stamp()}`, ...OPTIONS, ...runs, disallowedTools: [...OPTIONS.disallowedTools], append: await agentPrompt(chat, base),
     ...(start ? { message: start.message } : {}) });
   chat.session = row.id;
   models.keep(row.id, runs); // the chat keeps what it started on when Preferences change later
-  save(chat);
+  await save(chat);
   return chat;
 }
 
@@ -222,11 +266,11 @@ function agentRuns(agent: Agent): models.Pick {
 // one.
 export async function agentChat(agent: Agent | null, message?: hosted.Content, more: Partial<Chat> = {}): Promise<Chat> {
   const chat: Chat = { id: newId(), kind: "panel", ...(agent ? { agent: agent.name, title: agent.name } : { bare: true, title: "Chat" }), created: now(),
-    session: randomUUID(), messages: [], cwd: HOME, ...more };
+    session: randomUUID(), cwd: HOME, ...more };
   const s = settings.load();
   models.keep(chat.session, agent ? agentRuns(agent) : { model: s.chat_model, effort: s.chat_effort });
   await hosted.start({ ...(await hostOptions(chat)), title: `${agent?.name ?? "chat"} ${stamp()}`, ...(message ? { message } : {}) });
-  save(chat);
+  await save(chat);
   return chat;
 }
 
@@ -254,7 +298,7 @@ async function restartAs(chat: Chat, became: Partial<Chat>, runs: models.Pick, t
     throw error;
   }
   models.keep(chat.session, runs);
-  save(chat);
+  await save(chat);
 }
 
 // A script's message for the user (POST /api/agents/<name>/say): a new chat with the agent, whose first turn passes it
@@ -272,12 +316,12 @@ export const automationRun = (agent: Agent | null, title: string, slug: string, 
   agentChat(agent, message, { named: title, automation: slug });
 
 // The user's own title for the chat, or none to give it back Claude Code's. "Rename by hand" (the user, 18 Oct).
-export function rename(session: string, title: string) {
+export async function rename(session: string, title: string) {
   const chat = agentChatOf(session);
   if (!chat) throw new NoChat("No such chat");
   if (title) chat.named = title;
   else delete chat.named;
-  save(chat);
+  await save(chat);
 }
 
 // The title the user gave the session's chat, if any.
@@ -386,7 +430,7 @@ async function carryOver(id: string, base: string) {
   if ((row.kind === "interactive" && row.pid) || same(chat.folder!, runsIn(chat))) return;
   if (!Object.keys(row).length) { // nothing runs, so the next message starts it in the folder
     chat.cwd = chat.folder;
-    save(chat);
+    await save(chat);
     return;
   }
   if (row.kind === "host") {
@@ -409,6 +453,6 @@ async function carryOver(id: string, base: string) {
   chat = load(id);
   if (moved) {
     chat.cwd = chat.folder;
-    save(chat);
+    await save(chat);
   }
 }

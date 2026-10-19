@@ -563,12 +563,12 @@ export async function create(): Promise<FastifyInstance> {
     mustBePage(req);
     const { title } = (req.body ?? {}) as unknown as { title?: string };
     try {
-      chats.rename(sessionOf(req), String(title ?? "").replace(/\s+/g, " ").trim().slice(0, 200));
+      await chats.rename(sessionOf(req), String(title ?? "").replace(/\s+/g, " ").trim().slice(0, 200));
     } catch (error) {
-      throw new HttpError(404, (error as Error).message);
+      if (!(error instanceof chats.NoChat)) throw error;
+      throw new HttpError(404, error.message);
     }
-    sync.frameChanged();
-    return { ok: true };
+    return { ok: true }; // the write tells the apps, and the frame with it
   });
   // A sidebar row's Pin and Unpin: the session goes up into Pinned, or back to Chats.
   app.post("/api/live/:id/pin", async (req: Req) => {

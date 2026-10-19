@@ -23,6 +23,7 @@ export type Db = Pick<Transaction, "query">;
 const HELD: Record<string, { key: string; hidden: string[] }> = {
   issues: { key: "slug", hidden: ["body", "written"] },
   projects: { key: "slug", hidden: ["body", "written"] },
+  chats: { key: "id", hidden: ["folder", "cwd", "seen", "extra"] },
 };
 
 // The row as the app holds it, in SQL, from a row named t.
@@ -56,6 +57,24 @@ create table if not exists projects (
   created text not null,
   body text not null default '',
   written text
+);
+create table if not exists chats ( -- desk's chats (chats.ts): each a session, and the issue it works, if any
+  id text primary key,
+  kind text,
+  title text not null,
+  created text not null,
+  updated text,
+  session text not null default '',
+  issue text,
+  folder text,
+  cwd text,
+  agent text,
+  bare boolean not null default false,
+  named text,
+  "from" text,
+  automation text,
+  seen double precision,
+  extra jsonb not null default '{}' -- what else its file held, such as the messages of a chat from before the panel
 );
 create table if not exists automations ( -- what happened to each of automations/*.md, which hold the rest (automations.ts)
   slug text primary key,

@@ -215,8 +215,9 @@ async function autoClose(tx: Db, i: Issue, was: string | undefined): Promise<str
   return closed;
 }
 
-// Write the issue, then close what its new state closes by the automations; returns those slugs.
-async function saveIn(tx: Db, i: Issue): Promise<string[]> {
+// Write the issue, then close what its new state closes by the automations; returns those slugs. Inside a write, for one
+// that saves more with it (chats.ts, bind).
+export async function saveIn(tx: Db, i: Issue): Promise<string[]> {
   const was = (await tx.query<{ state: string }>("select state from issues where slug = $1", [i.slug])).rows[0]?.state;
   await put(tx, i);
   return autoClose(tx, i, was);
