@@ -150,20 +150,22 @@ function typed(text: string): string {
 // What Claude Code itself tells Claude in a user message that the user should see too, as a note: a task it ran beside
 // the conversation ended (<task-notification>, its <summary> such as `Agent "count files" finished`), a watch saw a
 // line (the same, with `Monitor event: "ticks"` and the line in <event>), or a slash command printed something
-// (<local-command-stdout>, such as "Set model to Sonnet"). Null for anything else.
-function notice(text: string): string | null {
+// (<local-command-stdout>, such as "Set model to Sonnet"). A task's note keeps the id of the tool call that started it
+// (<tool-use-id>), by which the panel opens what a subagent did. Null for anything else.
+function notice(text: string): Item | null {
   const t = text.trim();
   if (t.startsWith("<task-notification>")) {
     const summary = /<summary>([\s\S]*?)<\/summary>/.exec(t)?.[1]?.trim() ?? "", event = /<event>([\s\S]*?)<\/event>/.exec(t)?.[1]?.trim();
-    return event ? `Watch ${summary.replace(/^Monitor event:\s*/, "")}: ${cut(event, 200)}` : summary;
+    const tool = /<tool-use-id>([^<]*)<\/tool-use-id>/.exec(t)?.[1];
+    return { t: "note", key: "", text: event ? `Watch ${summary.replace(/^Monitor event:\s*/, "")}: ${cut(event, 200)}` : summary, ...(tool ? { id: tool } : {}) };
   }
   const out = /^<local-command-(?:stdout|stderr)>([\s\S]*?)<\/local-command-(?:stdout|stderr)>/.exec(t);
   if (!out) return null;
   const said = out[1].replace(/\x1b\[[0-9;]*m/g, "").trim();
-  return said.startsWith("Compacted") ? "" : cut(said, 400); // /compact's "Compacted": its boundary has a note already
+  return { t: "note", key: "", text: said.startsWith("Compacted") ? "" : cut(said, 400) }; // /compact's "Compacted": its boundary has a note already
 }
 
-const noted = (key: string, text: string): Item[] => (text ? [{ t: "note", key, text }] : []);
+const noted = (key: string, note: Item): Item[] => (note.text ? [{ ...note, key }] : []);
 
 // The items one transcript event stands for.
 export function itemsOf(e: Entry): Item[] {
@@ -253,7 +255,10 @@ export function items(session: string, limit = 400): [Item[], string | null, num
   const path = pathOf(session);
   if (!path) return [[], null, 0];
   const [entries, to] = read(path, 0);
-  const all = entries.flatMap(itemsOf);
+  // Each once: Claude Code writes some entries again after a compaction, under the same uuid (seen 19 Oct: a queued
+  // watch event and a compact boundary), as the live panel already takes them (live.ts, fresh).
+  const keys = new Set<string>();
+  const all = entries.flatMap(itemsOf).filter((i) => !keys.has(i.key) && keys.add(i.key));
   // A tool's result belongs to its step: keep the results whose steps are kept.
   let kept = all.slice(-limit);
   const steps = new Set(kept.filter((i) => i.t === "tool").map((i) => i.id));

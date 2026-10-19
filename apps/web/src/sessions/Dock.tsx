@@ -257,7 +257,10 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
         // One typed mid-turn is in the transcript once Claude takes it in, at its next step: by then it's sent, not queued.
         if (r.kind === "you") return <You key={r.item.key} text={r.item.text ?? ""} images={r.item.images} />;
         if (r.kind === "text") return <Reply key={r.item.key} text={r.item.text ?? ""} />;
-        if (r.kind === "note") return <p key={r.item.key} className="convo-note">{r.item.text}</p>;
+        if (r.kind === "note") {
+          const agent = r.item.id ? s.items.find((i) => i.t === "tool" && i.id === r.item.id && (i.name === "Agent" || i.name === "Task")) : undefined;
+          return agent ? <AgentNote key={r.item.key} s={s} note={r.item} /> : <p key={r.item.key} className="convo-note">{r.item.text}</p>;
+        }
         const running = n === rows.length - 1 && s.working ? liveSteps : [];
         return <Steps key={r.key} s={s} items={r.items} running={running} live={n === rows.length - 1 && s.working} />;
       })}
@@ -428,10 +431,31 @@ const AgentSteps = observer(function AgentSteps({ s, tool, result }: { s: LiveSe
   return (
     <div className="steps-list">
       {shown.map((i) => (i.t === "tool" ? <Step key={i.key} s={s} item={i} result={results.get(i.id!)} />
-        : <div key={i.key} className="step thought"><div className="thought-text">{i.text}</div></div>))}
+        : i.t === "thinking" ? <Thought key={i.key} text={i.text ?? ""} /> : <AgentText key={i.key} text={i.text ?? ""} />))}
     </div>
   );
 });
+
+// What a subagent says, its report above all, in Markdown as Claude's replies are, a size down.
+function AgentText({ text }: { text: string }) {
+  const html = useMemo(() => markdown(text), [text]);
+  return <div className="reply body agent-text" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+// A subagent's "finished" notice, as a fold: opened, it shows what the agent did and its report, at the source, rather
+// than only as Claude retells it.
+function AgentNote({ s, note }: { s: LiveSession; note: Item }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`steps agent-note${open ? " open" : ""}`}>
+      <button className="steps-head" type="button" onClick={() => setOpen(!open)}>
+        <svg className="steps-caret" width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M3 1.5l4 3.5-4 3.5z" /></svg>
+        <span>{note.text}</span>
+      </button>
+      {open && <AgentSteps s={s} tool={note.id!} />}
+    </div>
+  );
+}
 
 // --- what runs beside the conversation ---------------------------------------------------------------------------------
 
