@@ -45,6 +45,19 @@
 .toolbar button:hover, .toolbar button.on { background: var(--bg-pop-on); color: var(--text-1); }
 .toolbar button code { background: none; border: 0; padding: 0; font-size: 12px; }
 
+/* A link takes a hand even while typing, and a click on it while typing brings up Linear's link bar over it (measured
+   on linear.app on 2026-10-19, dark and light): the address in a 12px field, a rule, then 14px icons 10px apart,
+   each with a 22px target, filled only by their colour under the mouse. */
+.description a { cursor: pointer; }
+.link-bar { display: flex; align-items: center; padding: 4px; z-index: 10; background: var(--bg-tip); border: 0.5px solid var(--border-link-bar);
+            border-radius: 8px; box-shadow: var(--shadow-panel); }
+.link-bar input { width: 211px; height: 28px; box-sizing: border-box; margin: 0 4px 0 0; padding: 6px 12px; border: 0;
+                  border-right: 1px solid var(--rule-link-bar); background: none; outline: none; font: 400 12px var(--font); color: var(--text-tip); }
+.link-bar button { position: relative; display: grid; place-items: center; width: 14px; height: 14px; margin: 0 5px; padding: 0; border: 0;
+                   background: none; color: var(--text-tip-key); cursor: default; }
+.link-bar button::before { content: ""; position: absolute; inset: -4px; }
+.link-bar button:hover { color: var(--text-tip); }
+
 /* The title, a text box that looks like the heading it was. */
 .issue textarea.title, .project-overview textarea.title { display: block; width: 100%; box-sizing: border-box; resize: none; overflow: hidden; padding: 0; border: 0;
                         background: none; color: var(--text-1); outline: none; }

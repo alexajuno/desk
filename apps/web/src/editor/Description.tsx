@@ -12,8 +12,9 @@ import { Commands, linkMenu } from "./commands";
 import { extensions, parse, toMarkdown, type Parsed } from "./content";
 import { Diagrams, setDrawings } from "./diagrams";
 import { Folds } from "./folds";
+import { linkBar, Links, openLink } from "./links";
 
-const editorExtensions = [...extensions, Placeholder.configure({ placeholder: "Add description…" }), Folds, Diagrams, Commands];
+const editorExtensions = [...extensions, Placeholder.configure({ placeholder: "Add description…" }), Folds, Diagrams, Commands, Links];
 const SAVE_AFTER = 1000; // ms after the last change
 
 // The document needs a block to put the caret in.
@@ -72,6 +73,7 @@ export function Description({ body, html, save: store }: { body: string; html: s
     <>
       <EditorContent editor={editor} />
       <Toolbar editor={editor} />
+      <LinkBar editor={editor} />
     </>
   );
 }
@@ -89,7 +91,8 @@ function Toolbar({ editor }: { editor: Editor }) {
       onMouseDown={(e) => e.preventDefault()} onClick={run}>{label}</button>
   );
   return (
-    <BubbleMenu editor={editor} className="toolbar" shouldShow={({ editor: e, from, to }) => from !== to && e.isFocused && !e.isActive("codeBlock")}>
+    <BubbleMenu editor={editor} className="toolbar" shouldShow={({ editor: e, from, to }) =>
+      from !== to && e.isFocused && !e.isActive("codeBlock") && !linkBar.getState(e.state)}>
       {button("bold", <b>B</b>, "Bold  Ctrl B", () => editor.chain().focus().toggleBold().run())}
       {button("italic", <i>I</i>, "Italic  Ctrl I", () => editor.chain().focus().toggleItalic().run())}
       {button("strike", <s>S</s>, "Strikethrough  Ctrl Shift S", () => editor.chain().focus().toggleStrike().run())}
@@ -98,6 +101,56 @@ function Toolbar({ editor }: { editor: Editor }) {
     </BubbleMenu>
   );
 }
+
+// Linear's link bar, over a link clicked while typing: its address to change (Enter, or empty to unlink), then open
+// and remove.
+function LinkBar({ editor }: { editor: Editor }) {
+  const href = useEditorState({ editor, selector: ({ editor: e }) => (linkBar.getState(e.state) ? String(e.getAttributes("link").href ?? "") : null) });
+  const caretAfter = () => editor.chain().focus().setTextSelection(editor.state.selection.to).run();
+  const keep = (e: { preventDefault: () => void }) => e.preventDefault(); // a press on a button leaves the focus where it is
+  return (
+    <BubbleMenu editor={editor} pluginKey="linkBarMenu" className="link-bar" options={{ placement: "top", offset: 6 }}
+      shouldShow={({ editor: e }) => !!linkBar.getState(e.state)}>
+      {href !== null && (
+        <>
+          <input key={href} defaultValue={href} placeholder="Enter link URL" spellCheck={false} aria-label="Link address"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                const to = e.currentTarget.value.trim(), chain = editor.chain().focus().extendMarkRange("link");
+                (to ? chain.setLink({ href: to }) : chain.unsetLink()).run();
+                caretAfter();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation();
+                caretAfter();
+              }
+            }}
+            // Leaving the bar for anywhere but the description takes it down.
+            onBlur={(e) => { if (!e.currentTarget.parentElement!.contains(e.relatedTarget) && e.relatedTarget !== editor.view.dom) editor.view.dispatch(editor.state.tr.setMeta(linkBar, false)); }} />
+          <button type="button" title="Open link" onMouseDown={keep} onClick={() => openLink(href)}>{OPEN}</button>
+          <button type="button" title="Remove link" onMouseDown={keep} onClick={() => editor.chain().focus().extendMarkRange("link").unsetLink().run()}>{TRASH}</button>
+        </>
+      )}
+    </BubbleMenu>
+  );
+}
+
+const OPEN = (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7.5 1.75H4.25a2.5 2.5 0 0 0-2.5 2.5v7.5a2.5 2.5 0 0 0 2.5 2.5h7.5a2.5 2.5 0 0 0 2.5-2.5V8.5" />
+    <path d="M10 1.75h4.25V6M14.25 1.75 8 8" />
+  </svg>
+);
+
+// Linear's own.
+const TRASH = (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+    <path fillRule="evenodd" clipRule="evenodd" d="m2 3 1.652 9.911A2.5 2.5 0 0 0 6.118 15h3.764a2.5 2.5 0 0 0 2.466-2.089L14 3H2Zm1.77 1.5 1.361 8.164a1 1 0 0 0 .987.836h3.764a1 1 0 0 0 .987-.836l1.36-8.164H3.771Z" />
+    <path d="M5.5 2.5A1.5 1.5 0 0 1 7 1h2a1.5 1.5 0 0 1 1.5 1.5v1h-5v-1Z" />
+    <path d="M1 3.75A.75.75 0 0 1 1.75 3h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 3.75Z" />
+  </svg>
+);
 
 const LINK = (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">

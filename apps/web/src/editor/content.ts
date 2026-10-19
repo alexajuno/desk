@@ -25,8 +25,13 @@ export function escapeText(text: string): string {
     .replace(/^>/, "&gt;");
 }
 
-// A link whose text is its address stays a bare address, as it was typed, rather than [url](url).
+// A link whose text is its address stays a bare address, as it was typed, rather than [url](url). On the page it
+// carries its address for the tooltip, without https:// as Linear's shows it.
 const BareLink = Link.extend({
+  renderHTML(props) {
+    const [tag, attrs, hole] = this.parent!(props) as [string, Record<string, unknown>, 0];
+    return [tag, { ...attrs, "data-tip": String(attrs.href ?? "").replace(/^https?:\/\//, "") }, hole];
+  },
   renderMarkdown: (node, h, ctx) => {
     const href = String(node.attrs?.href ?? ""), shown = (ctx.meta as { markText?: string } | undefined)?.markText;
     if (shown !== undefined && (shown === href || `mailto:${shown}` === href) && escapeText(shown) === shown) return h.renderChildren(node);

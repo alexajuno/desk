@@ -4,9 +4,10 @@
 // keys lined up. The title moves into data-tip on the first hover, so the browser never shows its own; an icon-only
 // button keeps the label as its name. It shows after 450 ms, centred 8px under the element (12px under the list's
 // triangle), or above when the window has no room below, and keeps 8px inside the window. A sidebar link's shows 8px
-// to its right instead, as Linear's does (measured 2026-10-17), and a sidebar row with no title of its own shows its
-// title in full when the sidebar cuts it off. From one tooltip to the next it shows at once, as Linear's does, for
-// 300 ms after one hides. A click, a key or a scroll hides it.
+// to its right instead, as Linear's does (measured 2026-10-17), a description link's 5px under its first line, from its
+// left end (measured 2026-10-19), and a sidebar row with no title of its own shows its title in full when the sidebar
+// cuts it off. From one tooltip to the next it shows at once, as Linear's does, for 300 ms after one hides. A click, a
+// key or a scroll hides it.
 const tip = Object.assign(document.createElement("div"), { className: "tip", role: "tooltip" });
 let tipFor: Element | null = null, tipTimer = 0, tipHidden = 0;
 
@@ -65,7 +66,9 @@ export function showTip(el: HTMLElement) {
   tip.style.left = tip.style.top = "0"; // measured at the window's corner, so it is not squeezed by the edge it last sat at
   tip.remove();
   document.body.append(tip); // anew, so it fades in again
-  const at = el.getBoundingClientRect(), gap = el.matches(".group-toggle") ? 12 : 8;
+  const link = el.matches(".description a");
+  const at = link ? el.getClientRects()[0] : el.getBoundingClientRect(), gap = el.matches(".group-toggle") ? 12 : link ? 5 : 8;
+  if (link) tip.classList.add("link");
   if (el.matches(SIDE_LINK)) {
     tip.classList.add("right");
     const top = at.top + parseFloat(getComputedStyle(el).paddingTop); // a section's name sits under its padding
@@ -77,8 +80,8 @@ export function showTip(el: HTMLElement) {
   const below = at.bottom + gap + tip.offsetHeight <= innerHeight - 8;
   tip.classList.toggle("above", !below);
   tip.style.top = `${below ? at.bottom + gap : Math.max(8, at.top - gap - tip.offsetHeight)}px`;
-  const centred = at.left + at.width / 2 - tip.offsetWidth / 2;
-  tip.style.left = `${Math.max(8, Math.min(centred, innerWidth - tip.offsetWidth - 8))}px`;
+  const left = link ? at.left : at.left + at.width / 2 - tip.offsetWidth / 2;
+  tip.style.left = `${Math.max(8, Math.min(left, innerWidth - tip.offsetWidth - 8))}px`;
 }
 
 export function hideTip(fade = true) {
