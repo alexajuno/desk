@@ -7,7 +7,8 @@
 // A row is written when something happens: a reply, a question, a landing stuck, an issue to settle (pages.ts says what
 // each session's row says now, and take() writes what moved). Something new makes the row unread, unless you watch the
 // session as it comes, or wrote to it since. Opening the row, or the session's chat, writes that you read it, through
-// the one write path, so every tab hears it. A read row stays a week, for the row open now and what comes after it.
+// the one write path, so every tab hears it. A read row stays a day, for the row open now, and so that its session's
+// reply is not news again: the app holds every row, and a day of them was 83 on 19 Oct, a week 221.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DATA_DIR } from "./config.ts";
@@ -39,7 +40,7 @@ export interface Want extends Omit<Row, "at" | "read"> {
   seed: number | null;
 }
 
-const WEEK = 7 * 86400; // seconds a read row stays
+const DAY = 86400; // seconds a read row stays
 const COLUMNS = ["id", "slug", "issue", "session", "title", "agent", "why", "says", "kind", "waits", "at", "read"] as const;
 
 // The table, as desk last wrote it: desk is its one writer.
@@ -49,6 +50,19 @@ let filled = false; // whether the table has filled once, from the Inbox's marks
 export async function load() {
   for (const r of (await sql().query<Row>(`select ${COLUMNS.join(", ")} from inbox`)).rows) rows.set(r.id, r);
   filled = (await sql().query("select 1 from meta where name = 'inbox'")).rows.length > 0;
+  if (filled) await readBack();
+}
+
+// What a desk of a branch from before the table read while Try ran it, as it kept it in seen.json: each unread row
+// whose session it read since the row's news is read, as desk starts again on its own branch.
+async function readBack() {
+  const marks = before().sessions;
+  const now = [...rows.values()].filter((r) => r.read === null && (marks[r.id] ?? 0) >= r.at);
+  if (!now.length) return;
+  await db.write(async (tx) => {
+    for (const r of now) await tx.query("update inbox set read = $1 where id = $2", [marks[r.id], r.id]);
+  });
+  for (const r of now) rows.set(r.id, { ...r, read: marks[r.id] });
 }
 
 // --- reading -------------------------------------------------------------------------------------------------------
@@ -66,8 +80,9 @@ export const unread = (session: string) => rows.get(session)?.read === null;
 
 export const unreadCount = () => [...rows.values()].filter((r) => r.read === null).length;
 
-// When the user last read each session, before the table (seen.json, 19 Oct), and when that file began: read once, as
-// the table first fills. desk writes the file no more; a branch from before reads it still.
+// When the user last read each session, before the table (seen.json, 19 Oct), and when that file began: read as the
+// table first fills, and at each start for what a branch from before read meanwhile. desk writes the file no more; such
+// a branch reads it still. Once no branch from before is left, reading it can go.
 export function before(): { since: number; sessions: Record<string, number> } {
   try {
     return JSON.parse(readFileSync(join(DATA_DIR, "seen.json"), "utf8"));
@@ -87,7 +102,7 @@ async function put(tx: db.Db, r: Row) {
 
 // Write what each row says now, as one write: something new, a reply later than the row's, or a question or a landing
 // stuck where it said something else, makes it unread unless you saw it come; else it keeps its time and its read,
-// and says what it says now, as when its issue moved. A row no longer wanted leaves, as a read one a week old; one the
+// and says what it says now, as when its issue moved. A row no longer wanted leaves, as a read one a day old; one the
 // table never had that is older than that is no news, and starts read.
 export function take(wanted: Want[]): Promise<void> {
   return db.write(async (tx) => {
@@ -97,10 +112,10 @@ export function take(wanted: Want[]): Promise<void> {
       const at = w.at ?? (had && had.why === w.why && had.waits === w.waits ? had.at : now);
       const fresh = !had || at > had.at;
       const seenIt = (when: number) => (w.looked >= when ? w.looked : null);
-      const read = !filled ? w.seed : !had && at < now - WEEK ? at : fresh ? seenIt(at) : had.read ?? seenIt(had.at);
+      const read = !filled ? w.seed : !had && at < now - DAY ? at : fresh ? seenIt(at) : had.read ?? seenIt(had.at);
       const { looked: _l, seed: _s, ...shown } = w;
       const row: Row = { ...shown, at: fresh ? at : had.at, read };
-      if (row.read !== null && !row.waits && row.at < now - WEEK) continue;
+      if (row.read !== null && !row.waits && row.at < now - DAY) continue;
       next.set(row.id, row);
       if (!had || !same(had, row)) await put(tx, row);
     }

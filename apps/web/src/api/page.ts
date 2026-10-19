@@ -68,11 +68,14 @@ export function usePage<T>(url: string, also: string | number = "") {
   }, [url]);
 
   // A new address: what was seen of it shows at once. Its loader's answer, just fetched with no issue changed since,
-  // stands as the page's first; anything else, and every change to an issue, is fetched again.
+  // stands as the page's first; anything else, and every change to an issue, is fetched again. The old address's
+  // answers still coming are dropped: opening an Inbox row writes that you read it, a change that has the page left
+  // fetch itself again as the router moves on, and its late answer drew the Inbox with nothing open (19 Oct).
   const shownUrl = useRef<string | null>(null);
   useEffect(() => {
     const moved = shownUrl.current !== url;
     shownUrl.current = url;
+    if (moved) ++asked.current;
     const known = seen.get(url);
     if (moved && known) {
       setError(null);
