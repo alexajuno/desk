@@ -257,7 +257,7 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/favicon.svg", async (_req, reply) => web.asset(reply, "favicon.svg", "no-cache"));
 
   // --- the pages' data
-  app.get("/api/page/frame", async () => pages.framePage());
+  app.get("/api/page/frame", async () => pages.framePage(sync.oldTabs()));
   app.get("/api/page/issue/:slug", async (req: Req) => pages.issuePage(req.params.slug));
   app.get("/api/page/issues", async (req) => pages.issuesPage("", rawQuery(req)));
   app.get("/api/page/issues/:tab", async (req: Req) => {
@@ -611,7 +611,7 @@ export async function create(): Promise<FastifyInstance> {
     preValidation: async (req, reply) => {
       if (!fromDesk(req)) await reply.code(403).send();
     },
-  }, (socket) => sync.connect(socket));
+  }, (socket, req) => void sync.connect(socket, req.query as Record<string, string | undefined>));
 
   return app;
 }

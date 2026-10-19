@@ -6,7 +6,9 @@ import { observer } from "mobx-react-lite";
 import { useState, type ReactNode } from "react";
 import { useLocation } from "react-router";
 import { deskPath, Go } from "../app/nav";
-import { frame, type ChatRow } from "../store/frame";
+import type { State } from "../lib/desk";
+import { frame, talkOf, type ChatRow } from "../store/frame";
+import { issues } from "../store/issues";
 import { ui } from "../store/ui";
 import { pinChat, renameChat } from "../sessions/live";
 import { GLYPH, Ring, SIDE_ICON, StateIcon, TRIANGLE } from "../ui/icons";
@@ -16,8 +18,8 @@ import { toggleSide } from "./side";
 
 // Triage's hover: how many of its chats wait for you, and its keys. The other links' say where they go and their keys,
 // as Linear's sidebar does; Issues' lists its tabs, as Linear's team Issues does.
-function triageTip(triage: { now: string }[]) {
-  const waits = triage.filter((p) => p.now === "idle").length;
+function triageTip(triage: { slug: string; session: string | null }[]) {
+  const waits = triage.filter((p) => talkOf(p) === "idle").length;
   return `${triage.length ? `${triage.length} not settled yet${waits ? `, ${waits} waiting for you` : ""}` : "Nothing to settle"}  G then T`;
 }
 const ISSUES_TIP = "All issues  G then E\nActive  G then A\nBacklog  G then B";
@@ -63,8 +65,10 @@ function Fold({ name, folded, toggle, children }: { name: string; folded: Set<st
 
 export const Sidebar = observer(function Sidebar() {
   const here = deskPath(useLocation().pathname);
-  const d = frame.data;
+  const d = frame.data, triage = issues.triage;
   const at = (path: string) => (here === path ? " here" : "");
+  // An issue's title and state as the rows say them, which a change brings before the frame that follows it.
+  const held = (i: { slug: string; title: string; state: State }) => issues.bySlug.get(i.slug) ?? i;
   const [folded, toggle] = useFolded();
   // A session's row: its issue's state, or a ring for a chat with no issue, then on the right the dock's pulse while it
   // works, or the Inbox's dot while it holds what you have not read. One with an issue opens the issue, where its chat
@@ -74,7 +78,7 @@ export const Sidebar = observer(function Sidebar() {
       to={c.issue ? `/issue/${c.issue.slug}` : `/sessions/${c.session}`}
       title={c.working ? "Working" : c.unread ? "Said something you have not read" : c.title}
       onContextMenu={(e) => { e.preventDefault(); chatMenu(c, pinned, { x: e.clientX, y: e.clientY }); }}>
-      {c.issue ? <StateIcon state={c.issue.state} /> : <Ring />}
+      {c.issue ? <StateIcon state={issues.bySlug.get(c.issue.slug)?.state ?? c.issue.state} /> : <Ring />}
       <span className="nav-title">{c.title}</span>
       {c.working ? <span className="live-dot working" /> : c.unread ? <span className="unread" aria-label="Unread" /> : null}
     </Go>
@@ -93,12 +97,12 @@ export const Sidebar = observer(function Sidebar() {
       </div>
       <Go className={`nav-item${at("/inbox")}`} to="/inbox" title="Go to inbox  G then I">
         <svg viewBox="0 0 16 16"><path d="M2 9h3l1 2h4l1-2h3M3 3h10l1 6v4H2V9z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
-        Inbox{d?.inbox ? <span className="count">{d.inbox}</span> : null}
+        Inbox{d?.rows.length ? <span className="count">{d.rows.length}</span> : null}
       </Go>
       {/* Linear's team section: Triage, the chats not settled yet, with how many; then Issues and its tabs. */}
-      <Go className={`nav-item${at("/triage")}`} to="/triage" title={triageTip(d?.triage ?? [])}>
+      <Go className={`nav-item${at("/triage")}`} to="/triage" title={triageTip(triage)}>
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9.5h3.25l1 1.75h3.5l1-1.75H14" /><path d="M2 9.5l1.6-5.1c.13-.42.52-.65.95-.65h6.9c.43 0 .82.23.95.65L14 9.5v2.75c0 .55-.45 1-1 1H3c-.55 0-1-.45-1-1z" /><path d="M8 4.5v3.25M6.6 6.4 8 7.75 9.4 6.4" /></svg>
-        Triage{d && d.triage.length > 0 && <span className="count">{d.triage.length}</span>}
+        Triage{triage.length > 0 && <span className="count">{triage.length}</span>}
       </Go>
       <Go className={`nav-item${here === "/issues" || here.startsWith("/issues/") ? " here" : ""}`} to="/issues" title={ISSUES_TIP}>
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"><rect x="2.25" y="4.75" width="9" height="9" rx="2" /><path d="M4.75 2.25h7c1.1 0 2 .9 2 2v7" strokeLinecap="round" /></svg>
@@ -109,7 +113,7 @@ export const Sidebar = observer(function Sidebar() {
         Automations
       </Go>
       <Go className={`nav-label${at("/projects")}`} to="/projects" title="Go to projects  G then P">Projects</Go>
-      {d?.projects.map((pr) => (
+      {issues.activeProjects.map((pr) => (
         <Go key={pr.slug} className={`nav-item${here === `/project/${pr.slug}` || here.startsWith(`/project/${pr.slug}/`) ? " here" : ""}`} to={`/project/${pr.slug}`}>
           <svg viewBox="0 0 16 16"><path d="M8 2l5.5 3v6L8 14l-5.5-3V5z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
           <span className="nav-title">{pr.title}</span>
@@ -126,14 +130,14 @@ export const Sidebar = observer(function Sidebar() {
           <div className="nav-label" title={WHY}>Trying</div>
           {d.trying && (d.trying.issue ? (
             <Go className={`nav-item${at(`/issue/${d.trying.slug}`)}`} to={`/issue/${d.trying.slug}`} title={`${WHY} (${d.trying.branch})`}>
-              <StateIcon state={d.trying.issue.state} /><span className="nav-title">{d.trying.issue.title}</span>
+              <StateIcon state={held(d.trying.issue).state} /><span className="nav-title">{held(d.trying.issue).title}</span>
             </Go>
           ) : (
             <div className="nav-item static" title={WHY}><StateIcon state="review" /><span className="nav-title">{d.trying.branch}</span></div>
           ))}
           {d.line.map((w, i) => (
             <Go key={w.slug} className={`nav-item${at(`/issue/${w.slug}`)}`} to={`/issue/${w.slug}`} title={`In line for 8790, to ${w.for === "review" ? "try" : "test"} ${w.branch}`}>
-              <StateIcon state={w.issue.state} /><span className="nav-title">{w.issue.title}</span><span className="count">{i === 0 ? "next" : i + 1}</span>
+              <StateIcon state={held(w.issue).state} /><span className="nav-title">{held(w.issue).title}</span><span className="count">{i === 0 ? "next" : i + 1}</span>
             </Go>
           ))}
         </>

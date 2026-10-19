@@ -15,13 +15,14 @@ import * as web from "./web.ts";
 
 await db.open();
 // The folders are the record: whatever changed there while desk was down is read in first.
-await store.reconcile();
-await projects.reconcile();
+await store.readIn();
+await projects.readIn();
 await web.build();
 const app = await create();
 await sync.start();
 // A session host left from older code gives way to one of this code once none of its sessions works.
 setInterval(() => void hosted.keepCurrent().catch(() => {}), 60_000);
+setInterval(() => void db.prune().catch((error) => console.error("pruning the log", error)), 3600_000);
 if (process.env.DESK_CLOCK !== "0") {
   land.startClock(); // the line for desk's own checkout moves on its own
   slack.connect(); // Slack pushes each 🐧 the user adds, and its message comes into Triage

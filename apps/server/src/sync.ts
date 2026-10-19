@@ -1,20 +1,27 @@
-// Sync for the app (ported from desk/sync.py): a WebSocket that sends every issue when the app connects, then each change the moment
-// an issue changes, whoever made it: a page, an agent's curl, desk itself, or the user's editor. The app's own changes go
-// through the JSON API and come back this way, like everyone else's.
+// Sync for the app (ported from desk/sync.py): a WebSocket that gives the app every row it holds, issues and projects,
+// then each change the moment it is written, numbered as the log numbers it (db.ts), whoever made it: a page, an agent's
+// curl, desk itself, or the user's editor. The app's own changes go through the JSON API and come back this way, like
+// everyone else's. An app that lost desk, as when desk restarts, connects again with the last change it applied, and
+// gets only what it missed.
 //
-//     {"type": "snapshot", "seq": 7, "issues": [<issue>, ...], "projects": [<project>, ...]}   first, on every connect
-//     {"type": "changes",  "seq": 8, "upsert": [<issue>, ...], "delete": [<slug>, ...], "projects": [...]}
-//     {"type": "frame", "frame": <frame>}                                                       on connect, then when it changed
-//     {"type": "files", "slugs": [<slug>, ...]}                                                 its description or files changed
+//     /api/sync?log=<log>&since=<seq>     the log and the last change the app applied; a new tab sends both empty
 //
-// An <issue> is what GET /api/issues lists (api.ts, asJson); a <project> is {slug, title, state}. "projects" comes in a
-// change only when a project changed, as the whole list. A <frame> is the sidebar and the Inbox's rows, with each open
-// issue's session state (pages.ts, framePage). "files" names the issues whose description or other files changed (a
-// session's plan.md, result.md, a screenshot), which no field the apps hold says: a page showing one of them asks
-// again.
+//     {"type": "snapshot", "log": "<log>", "seq": 812, "rows": {"issues": [<issue>, ...], "projects": [<project>, ...]}}
+//     {"type": "changes", "after": 811, "changes": [{"seq": 812, "kind": "issues", "key": "<slug>", "row": <issue>}, ...]}
+//     {"type": "frame", "frame": <frame>}                         on connect, then when it changed
+//     {"type": "files", "slugs": [<slug>, ...]}                   its other files changed
 //
-// desk's own saves tell this module at once (issues.onChange). An editor's change to an issue.md or project.md is seen
-// on the folders, read into the database (reconcile), and sent the same way.
+// The first answer is the snapshot, or the changes the app missed, maybe none. Each "changes" goes on from the one
+// before it, whose last change is its "after": an app that holds another seq missed some, and connects again to get
+// them. A row is the table's, less what the app is not sent (db.ts, HELD): an <issue> is every field of issue.md but
+// its description, a <project> its slug, title, state and created; a deleted row comes as null. A description is part
+// of its issue's row, so a new one comes as a change: the page showing it asks again. A <frame> is the sidebar and the
+// Inbox's rows, with each open issue's session state (pages.ts, framePage), which no table holds yet. "files" names
+// the issues whose files beside issue.md changed (a session's plan.md, result.md, a screenshot), which no
+// row holds either: a page showing one of them asks again.
+//
+// An editor's change to an issue.md or project.md is seen on the folders and read in (issues.readIn), a write like any
+// other.
 import { mkdirSync, readdirSync, readFileSync, watch } from "node:fs";
 import { basename, dirname, join, sep } from "node:path";
 import type { WebSocket } from "ws";
@@ -22,24 +29,45 @@ import * as agents from "./agents.ts";
 import { asJson } from "./api.ts";
 import * as chats from "./chats.ts";
 import { HOME, ISSUES_DIR, PROJECTS_DIR } from "./config.ts";
+import * as db from "./db.ts";
+import type { Change } from "./db.ts";
 import * as store from "./issues.ts";
+import type { Issue } from "./issues.ts";
 import * as pages from "./pages.ts";
 import * as projects from "./projects.ts";
 
-let issues = new Map<string, string>(); // slug: the issue as the apps were last told, as JSON
-let bodies = new Map<string, string>(); // slug: its description, which the apps do not hold, as last read
-let projectList = "[]";
-let seq = 0;
 const listeners = new Set<WebSocket>();
 
-async function snapshot(): Promise<[Map<string, string>, Map<string, string>]> {
-  const all = [...(await store.loadAll())];
-  return [new Map(all.map(([slug, i]) => [slug, JSON.stringify(asJson(i))])), new Map(all.map(([slug, i]) => [slug, i.body]))];
+// Each write's changes, as it commits, to every app: still under db.locked, so an app joining sees them in order.
+function told(changes: db.Change[], after: number) {
+  const message = JSON.stringify({ type: "changes", after, changes });
+  for (const ws of listeners) ws.send(message);
+  if (legacy.size) {
+    const old = oldChanges(changes);
+    for (const ws of legacy) ws.send(old);
+  }
+  void frame(); // the sidebar and the Inbox read the issues too
 }
 
-async function listProjects(): Promise<string> {
-  const all = [...(await projects.loadAll()).values()].sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
-  return JSON.stringify(all.map((p) => ({ slug: p.slug, title: p.title, state: p.state })));
+// --- a tab still on the app from before the log (19 Oct), which reads issues as GET /api/issues lists them, and the
+// Inbox's count, Triage and the projects from the frame (pages.ts, framePage): until it reloads.
+
+const legacy = new Set<WebSocket>();
+
+// Whether such a tab is open, whose frame, fetched too after an action, then carries what it reads there.
+export const oldTabs = () => legacy.size > 0;
+
+async function oldSnapshot(): Promise<string> {
+  const { seq, rows } = await db.snapshot();
+  const listed = rows.projects.sort((a, b) => String(a.created).localeCompare(String(b.created)));
+  return JSON.stringify({ type: "snapshot", seq, issues: rows.issues.map((i) => asJson(i as unknown as Issue)),
+    projects: listed.map((p) => ({ slug: p.slug, title: p.title, state: p.state })) });
+}
+
+function oldChanges(changes: Change[]): string {
+  const issues = changes.filter((c) => c.kind === "issues");
+  return JSON.stringify({ type: "changes", seq: changes.at(-1)!.seq, upsert: issues.filter((c) => c.row).map((c) => asJson(c.row as unknown as Issue)),
+    delete: issues.filter((c) => !c.row).map((c) => c.key) });
 }
 
 // One run at a time, and one more after it when asked meanwhile.
@@ -66,30 +94,6 @@ function serial(name: string, work: () => Promise<void>): () => Promise<void> {
   };
 }
 
-// Read every issue again and tell the apps what differs from what they were told.
-// A description is no field the apps hold, so one rewritten, as by an agent's PATCH, goes as "files": the page showing
-// that issue asks for it again.
-async function checkNow() {
-  const [next, nextBodies] = await snapshot(), listed = await listProjects();
-  const upsert = [...next].filter(([slug, i]) => issues.get(slug) !== i).map(([, i]) => i);
-  const gone = [...issues.keys()].filter((slug) => !next.has(slug));
-  const moved = listed !== projectList;
-  const rewritten = [...nextBodies].filter(([slug, body]) => bodies.has(slug) && bodies.get(slug) !== body).map(([slug]) => slug);
-  issues = next;
-  bodies = nextBodies;
-  projectList = listed;
-  if (rewritten.length) {
-    const message = JSON.stringify({ type: "files", slugs: rewritten });
-    for (const ws of listeners) ws.send(message);
-  }
-  if (!upsert.length && !gone.length && !moved) return;
-  seq++;
-  const message = `{"type":"changes","seq":${seq},"upsert":[${upsert.join(",")}],"delete":${JSON.stringify(gone)}${moved ? `,"projects":${listed}` : ""}}`;
-  for (const ws of listeners) ws.send(message);
-}
-
-export const check = serial("sync", checkNow);
-
 // --- the frame ---------------------------------------------------------------------------------------------------------
 // A session that starts or stops working, or writes its plan or result, changes no issue, yet the Inbox and the
 // strips say it. Claude Code rewrites ~/.claude/sessions/<pid>.json the moment a session's turn starts or ends
@@ -104,16 +108,16 @@ const TICK = 5000; // ms
 let frameText = ""; // the frame as the apps were last told
 
 async function frameNow() {
-  if (!listeners.size) {
+  if (!listeners.size && !legacy.size) {
     frameText = ""; // an app that connects next is told afresh
     return;
   }
   await agents.live(true); // the frame's own asks reuse this answer
-  const text = JSON.stringify(await pages.framePage());
+  const text = JSON.stringify(await pages.framePage(legacy.size > 0));
   if (text === frameText) return;
   frameText = text;
   const message = `{"type":"frame","frame":${text}}`;
-  for (const ws of listeners) ws.send(message);
+  for (const ws of [...listeners, ...legacy]) ws.send(message);
 }
 
 const frame = serial("sync frame", frameNow);
@@ -154,21 +158,18 @@ function soon(fn: () => void, ms = 50): () => void {
 const interesting = (path: string) =>
   [store.MAIN, projects.MAIN].includes(basename(path)) || [ISSUES_DIR, PROJECTS_DIR].includes(dirname(path));
 
-// Watch the folders for changes desk did not make, read them in, and tell the apps; watch the sessions, and tell the
-// apps the frame.
+// Tell the apps each write; watch the folders for changes desk did not make, and read in the issue or project each
+// was to; watch the sessions, and tell the apps the frame.
 export async function start() {
-  [issues, bodies] = await snapshot();
-  projectList = await listProjects();
-  const changed = () => {
-    void check();
-    void frame();
-  };
-  store.onChange(changed);
-  projects.onChange(changed);
+  db.onWrite(told);
+  const edited = { [ISSUES_DIR]: new Set<string>(), [PROJECTS_DIR]: new Set<string>() };
   const readIn = soon(async () => {
+    const issues = [...edited[ISSUES_DIR]], projectSlugs = [...edited[PROJECTS_DIR]];
+    edited[ISSUES_DIR].clear();
+    edited[PROJECTS_DIR].clear();
     try {
-      const a = await store.reconcile(), b = await projects.reconcile();
-      if (a || b) changed();
+      if (issues.length) await store.readIn(issues);
+      if (projectSlugs.length) await projects.readIn(projectSlugs);
     } catch (error) {
       console.error("sync watcher", error);
     }
@@ -178,17 +179,20 @@ export async function start() {
   const tellFiles = soon(() => {
     const message = JSON.stringify({ type: "files", slugs: [...touched] });
     touched.clear();
-    for (const ws of listeners) ws.send(message);
+    for (const ws of [...listeners, ...legacy]) ws.send(message);
   });
   for (const root of [ISSUES_DIR, PROJECTS_DIR]) {
     mkdirSync(root, { recursive: true });
     watch(root, { recursive: true }, (_event, name) => {
       if (!name) return;
       const path = join(root, name.toString());
-      if (interesting(path)) return readIn();
-      if (root !== ISSUES_DIR) return;
       const slug = name.toString().split(sep)[0];
       if (slug.startsWith(".")) return; // a hidden folder, not an issue
+      if (interesting(path)) {
+        edited[root].add(slug);
+        return readIn();
+      }
+      if (root !== ISSUES_DIR) return;
       touched.add(slug);
       tellFiles();
       if (AGENT_FILES.includes(basename(path))) agentWrote();
@@ -209,22 +213,43 @@ export async function start() {
     if (name?.toString().endsWith(".json")) moved();
   });
   setInterval(() => {
-    if (listeners.size) void frame();
+    if (listeners.size || legacy.size) void frame();
   }, TICK);
 }
 
-// A connected app: the snapshot and the frame first, then each change until it leaves.
-export function connect(ws: WebSocket) {
-  listeners.add(ws);
-  ws.send(`{"type":"snapshot","seq":${seq},"issues":[${[...issues.values()].join(",")}],"projects":${projectList}}`);
-  if (frameText) ws.send(`{"type":"frame","frame":${frameText}}`);
+// A connected app: every row, or what it missed since the change it names, and the frame; then each change until it
+// leaves. An app that names no change at all is one from before the log.
+export async function connect(ws: WebSocket, query: Record<string, string | undefined>) {
+  const leave = () => {
+    listeners.delete(ws);
+    legacy.delete(ws);
+  };
+  ws.on("close", leave);
+  ws.on("error", leave);
+  try {
+    await db.locked(async () => {
+      if (ws.readyState !== ws.OPEN) return;
+      if (query.since === undefined) {
+        ws.send(await oldSnapshot());
+        legacy.add(ws);
+        return;
+      }
+      const missed = query.since ? await db.since(query.log ?? "", Number(query.since)) : null;
+      ws.send(JSON.stringify(missed ? { type: "changes", after: Number(query.since), changes: missed } : { type: "snapshot", ...(await db.snapshot()) }));
+      listeners.add(ws);
+    });
+  } catch (error) {
+    console.error("sync connect", error);
+    ws.close(1011);
+    return;
+  }
+  if (frameText && ws.readyState === ws.OPEN) ws.send(`{"type":"frame","frame":${frameText}}`);
   void frame(); // what it was told may be from before the last app left
-  ws.on("close", () => listeners.delete(ws));
-  ws.on("error", () => listeners.delete(ws));
 }
 
 // The process is stopping: close every socket, so the apps reconnect to the desk that comes next (code 1012, restart).
 export function closeAll() {
-  for (const ws of listeners) ws.close(1012);
+  for (const ws of [...listeners, ...legacy]) ws.close(1012);
   listeners.clear();
+  legacy.clear();
 }

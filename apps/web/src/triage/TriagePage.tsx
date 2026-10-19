@@ -8,7 +8,8 @@
 //   Park       Backlog at once
 //
 // Accept and Duplicate go through the chat, since its agent knows what the work needs and whether the other issue can
-// take the chat. The list is the frame's (store/frame.ts), so it follows every chat as it works or settles.
+// take the chat. The list is the issues in Triage the app holds (store/issues.ts), each with where its chat stands
+// from the frame (store/frame.ts), so it follows every chat as it works or settles.
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
 import { useSearchParams } from "react-router";
@@ -16,22 +17,23 @@ import { go, Go } from "../app/nav";
 import { Bar } from "../frame/Bar";
 import { setField } from "../issues/actions";
 import { actionsMenu } from "../issues/menus";
-import { fold, fromSlack, type IssueRow, type State } from "../lib/desk";
+import { fold, fromSlack, shortDate, type State } from "../lib/desk";
 import { SessionView } from "../sessions/Dock";
 import { live } from "../sessions/live";
-import { frame } from "../store/frame";
+import { frame, talkOf } from "../store/frame";
+import { issues, type Issue } from "../store/issues";
 import { ui } from "../store/ui";
 import { StateIcon } from "../ui/icons";
 import { openMenu, toggled, type MenuOptions } from "../ui/menu";
 import { toast } from "../ui/toast";
 
-type Row = IssueRow & { now: string };
+type Row = Issue & { now: string };
 type Where = Pick<MenuOptions, "anchor" | "x" | "y">;
 
 const NOW: Record<string, string> = { working: "Its chat is working", idle: "Its chat waits for you", none: "It has no chat" };
 
 // Newest first, as chats come in.
-const rows = (): Row[] => [...(frame.data?.triage ?? [])].sort((a, b) => (a.created < b.created ? 1 : a.created > b.created ? -1 : 0));
+const rows = (): Row[] => issues.triage.map((i) => ({ ...i, now: talkOf(i) }));
 
 // After a row leaves Triage, the next one opens, or the one above when it was the last.
 function next(slug: string) {
@@ -109,7 +111,7 @@ export const TriagePage = observer(function TriagePage() {
                   <span className={`triage-now ${p.now}`} title={NOW[p.now]}><StateIcon state="triage" /></span>
                   <span className="lines">
                     <span className="line"><span className="title">{p.title}</span>{fromSlack(p.link) && <span className="from" title="Tagged in Slack">🐧</span>}</span>
-                    <span className="line sub"><span className="says">{NOW[p.now]}</span><span className="age" title={p.created}>{p.created_short}</span></span>
+                    <span className="line sub"><span className="says">{NOW[p.now]}</span><span className="age" title={p.created}>{shortDate(p.created)}</span></span>
                   </span>
                 </Go>
               ))}

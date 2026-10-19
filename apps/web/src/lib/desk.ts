@@ -30,6 +30,14 @@ export const nameOf = (field: Field, value: string): string =>
 // Vietnamese titles match without their marks: "viec" finds "việc".
 export const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d").toLowerCase();
 
+// "Oct 16" for "2026-10-16T19:26:20", read as local time, as desk writes a short date (the server's when.ts, shortDate).
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export function shortDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso.replace(" ", "T"));
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
 // Whether the issue came from a Slack message the user tagged with 🐧 (slack.ts), whose link it keeps.
 export const fromSlack = (link: string | null) => /^https:\/\/[\w-]+\.slack\.com\//.test(link ?? "");
 

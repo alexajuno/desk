@@ -1,14 +1,16 @@
 // Issues (ported from desk/issues.py). Postgres holds every issue's fields; each issue also keeps its folder in ISSUES_DIR, where
 // issue.md is written on every save, as before, and where its other files live: a plan, a design doc, a diagram, an
 // agent's result. So agents, git and an editor still find each issue where they always did, and an issue.md an
-// editor changes is read back in (sync.ts watches the folders).
+// editor changes is read back in (sync.ts watches the folders). Every write here goes through db.write, which logs it
+// for the apps.
 //
 // Nesting is a `parent` slug, not nested folders, so a sub-issue can have its own sub-issues to any depth. Deleting
 // moves an issue and its sub-issues to TRASH_DIR/<slug>/, one folder each, so undo is a move back.
 import { existsSync, mkdirSync, opendirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ISSUES_DIR, TRASH_DIR } from "./config.ts";
-import { sql } from "./db.ts";
+import * as db from "./db.ts";
+import { sql, type Db } from "./db.ts";
 import { asText, dump, split } from "./frontmatter.ts";
 import * as settings from "./settings.ts";
 
@@ -125,10 +127,6 @@ const fromRow = (r: Row): Issue => {
   return i;
 };
 
-let changed_: () => void = () => {};
-// sync.ts learns of each save here, as it learns of an editor's change from the folders.
-export const onChange = (fn: () => void) => { changed_ = fn; };
-
 // Each name in the folder with its place in the folder's own listing, unsorted, as os.scandir gives it (Node's readdir
 // sorts its answer).
 export function listingOrder(dir: string): Map<string, number> {
@@ -143,8 +141,8 @@ export function listingOrder(dir: string): Map<string, number> {
   return at;
 }
 
-export async function loadAll(): Promise<Map<string, Issue>> {
-  const rows = (await sql().query<Row>('select * from issues order by slug collate "C"')).rows;
+export async function loadAll(q: Db = sql()): Promise<Map<string, Issue>> {
+  const rows = (await q.query<Row>('select * from issues order by slug collate "C"')).rows;
   // In the order the folder lists them, as the Python's glob read them: issues filed in the same second keep their order.
   const at = listingOrder(ISSUES_DIR);
   rows.sort((a, b) => (at.get(a.slug) ?? Infinity) - (at.get(b.slug) ?? Infinity));
@@ -155,31 +153,23 @@ export async function exists(slug: string): Promise<boolean> {
   return validSlug(slug) && (await sql().query("select 1 from issues where slug = $1", [slug])).rows.length > 0;
 }
 
-export async function load(slug: string): Promise<Issue> {
-  const row = (await sql().query<Row>("select * from issues where slug = $1", [slug])).rows[0];
+export async function load(slug: string, q: Db = sql()): Promise<Issue> {
+  const row = (await q.query<Row>("select * from issues where slug = $1", [slug])).rows[0];
   if (!row) throw new Error(`No issue ${slug}`);
   return fromRow(row);
 }
 
-async function upsert(i: Issue, written: string) {
+async function upsert(tx: Db, i: Issue, written: string) {
   const cols = ["slug", ...FIELDS, "body", "written"];
   const values = [i.slug, ...FIELDS.map((f) => i[f]), i.body, written];
-  await sql().query(
+  await tx.query(
     `insert into issues (${cols.join(", ")}) values (${cols.map((_, n) => `$${n + 1}`).join(", ")})
      on conflict (slug) do update set ${cols.slice(1).map((c) => `${c} = excluded.${c}`).join(", ")}`,
     values,
   );
 }
 
-// One save at a time, and move's read and save as one (issues.py's lock).
-let queue: Promise<unknown> = Promise.resolve();
-export function locked<T>(fn: () => Promise<T>): Promise<T> {
-  const run = queue.then(fn, fn);
-  queue = run.catch(() => undefined);
-  return run;
-}
-
-async function write(i: Issue) {
+async function put(tx: Db, i: Issue) {
   // The wait's note belongs to the wait: one that ends drops it, so a later wait starts afresh. So do the review's and
   // Landing's.
   if (i.state !== "waiting") i.waiting_on = i.waiting_since = null;
@@ -191,21 +181,21 @@ async function write(i: Issue) {
   const text = render(i);
   mkdirSync(folder(i.slug), { recursive: true });
   writeFileSync(join(folder(i.slug), MAIN), text, "utf8");
-  await upsert(parse(i.slug, text), text); // as a load reads it back from the file, as the Python's did
+  await upsert(tx, parse(i.slug, text), text); // as a load reads it back from the file, as the Python's did
 }
 
 // Linear's two Workflow automations (linear.app/docs/parent-and-sub-issues#status-automation), each a toggle in
 // Settings, run on every save that closes an open issue, whoever made it: a page, an agent's curl, a session landing.
 // Returns the slugs they closed besides the issue.
-async function autoClose(i: Issue, was: string | undefined): Promise<string[]> {
+async function autoClose(tx: Db, i: Issue, was: string | undefined): Promise<string[]> {
   if (was === undefined || CLOSED.has(was) || !CLOSED.has(i.state)) return [];
   const on = settings.load();
   if (!on.sub_issue_auto_close && !on.parent_auto_close) return [];
-  const all = await loadAll(), closed: string[] = [];
+  const all = await loadAll(tx), closed: string[] = [];
   all.set(i.slug, i);
   const close = async (other: Issue, state: string) => {
     other.state = state;
-    await write(other);
+    await put(tx, other);
     closed.push(other.slug);
   };
   // Down: every open sub-issue, at any depth, closes as the parent did. One landing is left to finish its merge.
@@ -226,33 +216,27 @@ async function autoClose(i: Issue, was: string | undefined): Promise<string[]> {
 }
 
 // Write the issue, then close what its new state closes by the automations; returns those slugs.
-async function saveNow(i: Issue): Promise<string[]> {
-  const was = (await sql().query<{ state: string }>("select state from issues where slug = $1", [i.slug])).rows[0]?.state;
-  await write(i);
-  return autoClose(i, was);
+async function saveIn(tx: Db, i: Issue): Promise<string[]> {
+  const was = (await tx.query<{ state: string }>("select state from issues where slug = $1", [i.slug])).rows[0]?.state;
+  await put(tx, i);
+  return autoClose(tx, i, was);
 }
 
-// Save the issue; returns the slugs the Workflow automations closed with it.
-export async function save(i: Issue): Promise<string[]> {
-  const closed = await locked(() => saveNow(i));
-  changed_();
-  return closed;
-}
+// Save the issue, and what the Workflow automations close with it, as one write; returns the slugs they closed.
+export const save = (i: Issue): Promise<string[]> => db.write((tx) => saveIn(tx, i));
 
 // Set fields on the issue as it is now, if its state and landing are still those of `i`, a copy read a moment ago;
 // false, and nothing written, when another request changed them since (issues.py, move: 15 Oct, an issue approved
 // twice).
-export async function move(i: Issue, changes: Partial<Issue>): Promise<boolean> {
-  const done = await locked(async () => {
-    const current = await load(i.slug);
+export function move(i: Issue, changes: Partial<Issue>): Promise<boolean> {
+  return db.write(async (tx) => {
+    const current = await load(i.slug, tx);
     if (current.state !== i.state || current.landing !== i.landing) return false;
     Object.assign(current, changes);
     Object.assign(i, changes);
-    await saveNow(current);
+    await saveIn(tx, current);
     return true;
   });
-  if (done) changed_();
-  return done;
 }
 
 // The issue's own files besides issue.md, by name.
@@ -308,19 +292,17 @@ export function descendants(issues: Map<string, Issue>, slug: string): string[] 
 }
 
 // Move the issue and all its sub-issues to TRASH_DIR/<slug>/; returns their slugs, the issue first.
-export async function trash(slug: string): Promise<string[]> {
-  const moved = await locked(async () => {
-    const names = [slug, ...descendants(await loadAll(), slug)];
+export function trash(slug: string): Promise<string[]> {
+  return db.write(async (tx) => {
+    const names = [slug, ...descendants(await loadAll(tx), slug)];
     const bin = join(TRASH_DIR, slug);
     mkdirSync(bin, { recursive: true });
     for (const name of names) {
       if (existsSync(folder(name))) renameSync(folder(name), join(bin, name));
-      await sql().query("delete from issues where slug = $1", [name]);
+      await tx.query("delete from issues where slug = $1", [name]);
     }
     return names;
   });
-  changed_();
-  return moved;
 }
 
 export class Missing extends Error {}
@@ -331,7 +313,7 @@ export class Clash extends Error {}
 export async function restore(slug: string): Promise<string[]> {
   const bin = join(TRASH_DIR, slug);
   if (!validSlug(slug) || !existsSync(bin)) throw new Missing(slug);
-  const back = await locked(async () => {
+  return db.write(async (tx) => {
     const trashed = readdirSync(bin, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
     const clash = trashed.filter((name) => existsSync(join(folder(name), MAIN)));
     if (clash.length) throw new Clash(clash.join(", "));
@@ -342,38 +324,33 @@ export async function restore(slug: string): Promise<string[]> {
           if (!existsSync(join(folder(name), item))) renameSync(join(bin, name, item), join(folder(name), item));
         rmSync(join(bin, name), { recursive: true, force: true });
       }
-      await readIn(name);
+      await readOne(tx, name);
     }
     rmdirSync(bin);
     return [slug, ...trashed.filter((name) => name !== slug)];
   });
-  changed_();
-  return back;
 }
 
-// Read an issue's issue.md into the database, as an editor or a restore left it; false when it is desk's own write.
-export async function readIn(slug: string): Promise<boolean> {
+// Bring an issue's row in line with its folder, as an editor or a restore left it: an issue.md desk did not write is
+// read in, and an issue whose issue.md is gone is let go. Desk's own write changes nothing.
+async function readOne(tx: Db, slug: string) {
   const path = join(folder(slug), MAIN);
-  if (!existsSync(path)) return false;
+  const row = (await tx.query<{ written: string | null }>("select written from issues where slug = $1", [slug])).rows[0];
+  if (!existsSync(path)) {
+    if (row) await tx.query("delete from issues where slug = $1", [slug]);
+    return;
+  }
   const text = readFileSync(path, "utf8");
-  const row = (await sql().query<{ written: string | null }>("select written from issues where slug = $1", [slug])).rows[0];
-  if (row && row.written === text) return false;
-  await upsert(parse(slug, text), text);
-  return true;
+  if (row && row.written === text) return;
+  await upsert(tx, parse(slug, text), text);
 }
 
-// Bring the database in line with the folders: an issue.md written or changed outside desk is read in, and an issue
-// whose folder is gone is let go. At start, and whenever the folders change (sync.ts).
-export async function reconcile(): Promise<boolean> {
-  let moved = false;
-  const onDisk = new Set(existsSync(ISSUES_DIR) ? readdirSync(ISSUES_DIR).filter((s) => existsSync(join(ISSUES_DIR, s, MAIN))) : []);
-  await locked(async () => {
-    for (const slug of onDisk) if (await readIn(slug)) moved = true;
-    for (const { slug } of (await sql().query<{ slug: string }>("select slug from issues")).rows)
-      if (!onDisk.has(slug)) {
-        await sql().query("delete from issues where slug = $1", [slug]);
-        moved = true;
-      }
+// Read in the issues whose folders changed outside desk (sync.ts watches them), or, with no slugs, every issue, as at
+// start: whatever changed while desk was down.
+export function readIn(slugs?: string[]): Promise<void> {
+  return db.write(async (tx) => {
+    const all = slugs ?? [...new Set([...(existsSync(ISSUES_DIR) ? readdirSync(ISSUES_DIR) : []),
+      ...(await tx.query<{ slug: string }>("select slug from issues")).rows.map((r) => r.slug)])];
+    for (const slug of all) if (validSlug(slug)) await readOne(tx, slug);
   });
-  return moved;
 }

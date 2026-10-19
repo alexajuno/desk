@@ -1,6 +1,8 @@
-// The sidebar on every page, the Inbox's rows, and where each open issue's session stands (pages.ts, framePage). desk
-// sends it over the sync socket (sync/socket.ts) when it connects and whenever it changed, the moment a session starts
-// or stops working; an action asks for it once more, as it asks for its page.
+// What the sidebar shows that no row the app holds says yet: the Inbox's rows, the sessions, desk's checkout, and where
+// each open issue's session stands (pages.ts, framePage). desk sends it over the sync socket (sync/socket.ts) when it
+// connects and whenever it changed, the moment a session starts or stops working; an action asks for it once more, as
+// it asks for its page. The rest the app works out from its rows (store/issues.ts), as the Inbox's count from these
+// rows.
 //
 // A row no desk tab had becomes a desktop notification, unless a desk tab has the focus, where the count shows it.
 // The tabs share the rows they last had in localStorage.inboxNotified as "<slug>:<why>" keys, so one event notifies
@@ -23,11 +25,8 @@ export interface InboxRow {
 export interface ChatRow { session: string; title: string; issue: { slug: string; state: State } | null; working: boolean; unread: boolean }
 
 export interface FrameData {
-  inbox: number;
-  triage: (IssueRow & { now: string })[];
   trying: { slug: string; branch: string; issue: IssueRow | null } | null;
   line: { slug: string; branch: string; for: string; issue: IssueRow }[];
-  projects: { slug: string; title: string }[];
   pinned: ChatRow[]; // the sessions the user pinned, in the order pinned
   chats: ChatRow[]; // the other sessions still in hand, the newest first
   rows: InboxRow[];
@@ -38,7 +37,7 @@ export interface FrameData {
 // A frame with nothing in it. A frame from a desk of another version can lack a list this app reads, such as a tab
 // reopened on the app it last had while desk runs a newer or older commit (18 Oct: the sidebar's Agents crashed the
 // page); the list then draws empty until the tab reloads.
-const EMPTY: FrameData = { inbox: 0, triage: [], trying: null, line: [], projects: [], pinned: [], chats: [], rows: [], live: {} };
+const EMPTY: FrameData = { trying: null, line: [], pinned: [], chats: [], rows: [], live: {} };
 
 class Frame {
   data: FrameData | null = null;
@@ -68,6 +67,9 @@ class Frame {
 }
 
 export const frame = new Frame();
+
+// Where an open issue's chat stands, as the frame says: working, idle (your move), or none, with no chat.
+export const talkOf = (i: { slug: string; session: string | null }) => (i.session ? frame.data?.live[i.slug] ?? "idle" : "none");
 
 // Which branch runs on 8790 and which wait for it, which an issue's Try button says.
 export const lineKey = () => (frame.data ? [frame.data.trying?.slug, ...frame.data.line.map((w) => w.slug)].join(" ") : "");

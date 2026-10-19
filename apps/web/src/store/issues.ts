@@ -1,83 +1,97 @@
 import { makeAutoObservable, observable } from "mobx";
+import type { Priority, Protocol, State } from "../lib/desk";
 
-// The fields /api/sync sends for each issue: what GET /api/issues lists (the server's api.ts, asJson).
-export type State = "triage" | "backlog" | "running" | "waiting" | "review" | "landing" | "done" | "dropped";
-export type Priority = "urgent" | "high" | "medium" | "low" | "none";
+// The rows desk syncs (the server's sync.ts and db.ts): every issue and project, each as its table holds it, less what
+// the app is not sent. The app works out what it shows from these, as a list and its count from the same rows, so the
+// two cannot disagree.
 
+// An issue: every field of its issue.md but the description.
 export interface Issue {
   slug: string;
   title: string;
-  state: State;
   priority: Priority;
+  state: State;
   parent: string | null;
   project: string | null;
   folder: string | null;
-  protocol: "quick" | "brief" | "design";
+  protocol: Protocol | null; // none runs design
+  link: string | null;
+  landing: string | null;
   session: string | null;
+  waiting_on: string | null;
+  waiting_since: string | null;
+  review_of: string | null;
+  review_since: string | null;
   created: string;
-  url: string;
-  waiting_on?: string | null;
-  waiting_since?: string | null;
 }
-
-// desk's order and names (the server's issues.ts, STATES and STATE_NAMES).
-export const STATES: State[] = ["triage", "backlog", "running", "waiting", "review", "landing", "done", "dropped"];
-export const STATE_NAMES: Record<State, string> = {
-  triage: "Triage", backlog: "Backlog", running: "In progress", waiting: "Waiting",
-  review: "In review", landing: "Landing", done: "Done", dropped: "Dropped",
-};
-const PRIORITY_ORDER: Priority[] = ["urgent", "high", "medium", "low", "none"];
 
 export interface Project {
   slug: string;
   title: string;
   state: "active" | "archived";
+  created: string;
 }
 
+// One change from desk's log: the row as it is now, or null once deleted. kind is its table.
+interface Change { seq: number; kind: string; key: string; row: Record<string, unknown> | null }
+
 export type SyncMessage =
-  | { type: "snapshot"; seq: number; issues: Issue[]; projects: Project[] }
-  | { type: "changes"; seq: number; upsert: Issue[]; delete: string[]; projects?: Project[] }
+  | { type: "snapshot"; log: string; seq: number; rows: { issues: Issue[]; projects: Project[] } }
+  | { type: "changes"; after: number; changes: Change[] }
   | { type: "files"; slugs: string[] };
 
-// Every issue, in memory. The screen draws from here, and MobX redraws only what read a field that changed.
+const newestFirst = (a: { created: string }, b: { created: string }) => (a.created < b.created ? 1 : a.created > b.created ? -1 : 0);
+
+// Every issue and project, in memory. The screen draws from here, and MobX redraws only what read a field that changed.
 export class IssueStore {
   bySlug = observable.map<string, Issue>();
+  projects = observable.map<string, Project>();
   files = observable.map<string, number>(); // slug: how many times its other files changed (a plan, a result)
-  projects: Project[] = [];
   connected = false;
-  seq = -1;
+  log = ""; // the name of desk's log these rows follow
+  seq = -1; // the last change of it applied
 
   constructor() {
     makeAutoObservable(this);
   }
 
-  apply(message: SyncMessage) {
+  // Apply what desk sent; false when it does not follow on from the last change applied, so one was missed and the
+  // socket must ask again.
+  apply(message: SyncMessage): boolean {
     if (message.type === "files") {
       for (const slug of message.slugs) this.files.set(slug, (this.files.get(slug) ?? 0) + 1);
-      return;
+      return true;
     }
     if (message.type === "snapshot") {
-      this.bySlug.replace(message.issues.map((i) => [i.slug, i]));
-    } else {
-      for (const issue of message.upsert) this.bySlug.set(issue.slug, issue);
-      for (const slug of message.delete) this.bySlug.delete(slug);
+      this.bySlug.replace(message.rows.issues.map((i) => [i.slug, i]));
+      this.projects.replace(message.rows.projects.map((p) => [p.slug, p]));
+      this.log = message.log;
+      this.seq = message.seq;
+      return true;
     }
-    if (message.projects) this.projects = message.projects;
-    this.seq = message.seq;
+    if (message.after !== this.seq) return false;
+    const tables: Record<string, Map<string, unknown>> = { issues: this.bySlug, projects: this.projects };
+    for (const c of message.changes) {
+      const table = tables[c.kind]; // a table this app does not hold yet is a newer desk's
+      if (table && c.row) table.set(c.key, c.row);
+      else table?.delete(c.key);
+      this.seq = c.seq;
+    }
+    return true;
   }
 
   setConnected(connected: boolean) {
     this.connected = connected;
   }
 
-  // Each state with its issues, most urgent first, then newest: desk's default list.
-  get byState(): [State, Issue[]][] {
-    const groups = new Map<State, Issue[]>(STATES.map((s) => [s, []]));
-    for (const issue of this.bySlug.values()) groups.get(issue.state)?.push(issue);
-    for (const list of groups.values()) {
-      list.sort((a, b) => PRIORITY_ORDER.indexOf(a.priority) - PRIORITY_ORDER.indexOf(b.priority) || b.created.localeCompare(a.created));
-    }
-    return [...groups].filter(([, list]) => list.length > 0);
+  // Triage: the issues whose chat has not settled them yet, the newest first, as chats come in.
+  get triage(): Issue[] {
+    return [...this.bySlug.values()].filter((i) => i.state === "triage").sort(newestFirst);
+  }
+
+  // The active projects, the oldest first, as the sidebar lists them.
+  get activeProjects(): Project[] {
+    return [...this.projects.values()].filter((p) => p.state === "active").sort((a, b) => newestFirst(b, a));
   }
 }
 

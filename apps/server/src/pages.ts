@@ -448,27 +448,27 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
 
 // --- the pages ---------------------------------------------------------------------------------------------------------
 
-// The sidebar on every page, with the Inbox's rows and where each open issue's session stands (live, which its strip
-// says):
-// sync.ts sends it to the app whenever it changed.
-export async function framePage() {
+// The sidebar's parts that no table the app holds says, with the Inbox's rows and where each open issue's session
+// stands (live, which its strip says): sync.ts sends it to the app whenever it changed. The app works out the rest
+// from the rows it holds, the Inbox's count from these rows; old, for a tab still on the app from before 19 Oct,
+// adds what that app read here: the count, Triage and the projects.
+export async function framePage(old = false) {
   const all = await store.loadAll();
   const notices = await notifications(all); // moves the issues on first
-  const triage = [...all.values()].filter((i) => i.state === "triage").sort(byRank);
   const now = await land.running(land.DESK_REPO);
   const line = await land.line(land.DESK_REPO);
-  const everyProject = await projects.loadAll();
-  const active = [...everyProject.values()].filter((p) => p.state === "active").sort(byCreated);
   return {
-    inbox: notices.length,
-    triage: triage.map((i) => ({ ...issueJson(i), now: talkOf(i) })),
     trying: now && { slug: now.slug, branch: now.branch, issue: (now.slug && all.has(now.slug)) ? issueJson(all.get(now.slug)!) : null },
     line: line.filter((w) => all.has(w.slug)).map((w) => ({ slug: w.slug, branch: w.branch ?? null, for: w.for ?? null, issue: issueJson(all.get(w.slug)!) })),
-    projects: active.map((p) => ({ slug: p.slug, title: p.title })),
     ...chatsNow(all),
     rows: rowsOf(notices),
     automations: automations.stamp(), // a page of automations fetches itself again when it moves
     live: Object.fromEntries([...all.values()].filter((i) => i.session && !CLOSED.has(i.state)).map((i) => [i.slug, talkOf(i)])),
+    ...(old ? {
+      inbox: notices.length,
+      triage: [...all.values()].filter((i) => i.state === "triage").sort(byRank).map((i) => ({ ...issueJson(i), now: talkOf(i) })),
+      projects: [...(await projects.loadAll()).values()].filter((p) => p.state === "active").sort(byCreated).map((p) => ({ slug: p.slug, title: p.title })),
+    } : {}),
   };
 }
 
