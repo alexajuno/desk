@@ -198,6 +198,8 @@ export async function agentPrompt(chat: Chat, base: string): Promise<string> {
   let prompt = fill(PROMPT, { today: "the date your environment gives", day: "15 Oct", reference, chat: chat.id, plan_rules: PLAN_RULES, work,
     protocols: fill(PROTOCOLS, { plan: join(folder, "plan.md") }), ...rules });
   if (slug) prompt += `\n\nThis chat works the issue /issue/${slug}, in ${chat.folder}.`;
+  else if (chat.cwd && !same(chat.cwd, DATA_DIR))
+    prompt += `\n\nThe user started this chat in ${chat.cwd}, picked in its composer: when you accept its issue, that is its folder, unless the talk names another.`;
   return prompt;
 }
 
@@ -274,17 +276,24 @@ export async function agentChat(agent: Agent | null, message?: hosted.Content, m
   return chat;
 }
 
-// @name as the first words of a new chat: the chat, which nobody has written in yet, becomes the agent's.
+// @name as the first words of a new chat: the chat, which nobody has written in yet, becomes the agent's. It runs from
+// the home folder, or from the one picked in its composer (startIn).
 export const becomeAgent = (chat: Chat, agent: Agent, message: hosted.Content) =>
-  restartAs(chat, { agent: agent.name, title: agent.name, cwd: HOME }, agentRuns(agent), `${agent.name} ${stamp()}`, message);
+  restartAs(chat, { agent: agent.name, title: agent.name, cwd: chat.cwd ?? HOME }, agentRuns(agent), `${agent.name} ${stamp()}`, message);
 
 // The composer's chip set to Chat when the first message is sent: the chat becomes bare, on the model and effort
-// picked for it so far.
-export const becomeBare = (chat: Chat, message: hosted.Content) => restartAs(chat, { bare: true, cwd: HOME }, runsOn(chat), `chat ${stamp()}`, message);
+// picked for it so far, in the folder picked for it, or the home folder.
+export const becomeBare = (chat: Chat, message: hosted.Content) =>
+  restartAs(chat, { bare: true, cwd: chat.cwd ?? HOME }, runsOn(chat), `chat ${stamp()}`, message);
+
+// The composer's folder chip, before the first message: the new chat's session starts again in the folder, idle, and
+// the chat runs there whatever its first message makes it. "allowing me to select the dir in the beginning" (the
+// user, 19 Oct).
+export const startIn = (chat: Chat, folder: string) => restartAs(chat, { cwd: folder }, runsOn(chat), `desk chat ${stamp()}`);
 
 // A new chat's session starts again as what it became, with the message as typed, so the panel finds it in the
-// transcript. When that session will not start, the chat stays desk's.
-async function restartAs(chat: Chat, became: Partial<Chat>, runs: models.Pick, title: string, message: hosted.Content) {
+// transcript, or idle with none. When that session will not start, the chat stays as it was.
+async function restartAs(chat: Chat, became: Partial<Chat>, runs: models.Pick, title: string, message?: hosted.Content) {
   if (await hosted.holds(chat.session)) {
     await hosted.close(chat.session).catch(() => {});
     await hosted.released(chat.session);
@@ -292,7 +301,7 @@ async function restartAs(chat: Chat, became: Partial<Chat>, runs: models.Pick, t
   const was = { ...chat };
   Object.assign(chat, became);
   try {
-    await hosted.start({ ...(await hostOptions(chat)), ...runs, title, message });
+    await hosted.start({ ...(await hostOptions(chat)), ...runs, title, ...(message ? { message } : {}) });
   } catch (error) {
     Object.assign(chat, was);
     throw error;

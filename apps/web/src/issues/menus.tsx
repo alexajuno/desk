@@ -4,7 +4,7 @@ import { CLOSED, PROTOCOL_HINTS, PROTOCOLS, STATES, fold, nameOf, type Field, ty
 import { GLYPH, StateIcon, fieldIcon } from "../ui/icons";
 import { openMenu, type MenuItem, type MenuOptions } from "../ui/menu";
 import { ui } from "../store/ui";
-import { copy, remove, setField, setFolder } from "./actions";
+import { copy, remove, setField } from "./actions";
 import { openSession } from "../sessions/Dock";
 
 type Where = Pick<MenuOptions, "anchor" | "x" | "y" | "onClose">;
@@ -114,9 +114,8 @@ export function projectPicker(current: string | null, where: Where, choose: (slu
   });
 }
 
-// Works in: your repos, or a path typed with Tab completing it.
-export function folderMenu(slug: string, current: string, anchor: Element) {
-  const set = (folder: string) => setFolder(slug, folder);
+// Works in, for an issue or a new chat: your repos and the folders used before, or a path typed with Tab completing it.
+export function folderMenu(current: string, anchor: Element, set: (folder: string) => unknown) {
   openMenu({
     anchor, filter: "input", className: "folders", placeholder: "Search repos, or type ~/path…", empty: "No folder matches",
     items: async (q) => ((await (await fetch(`/api/folders?q=${encodeURIComponent(q)}`)).json()) as string[])

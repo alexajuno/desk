@@ -45,12 +45,13 @@ interface Meta {
   chat: boolean;
   agent: string | null; // the agent a chat is with
   bare: boolean; // a chat with no agent and no desk prompt (chats.ts)
+  picked: boolean; // a new chat's folder, picked in its composer (chats.ts, startIn)
   runs: models.Shown; // the model and effort, for the composer's chip
 }
 
 const tilde = (path: string) => (path.startsWith(HOME) ? `~${path.slice(HOME.length)}` : path);
 
-async function meta(id: string): Promise<Meta> {
+export async function meta(id: string): Promise<Meta> {
   const chat = chats.agentChatOf(id);
   const all = await store.loadAll();
   const issue = [...all.values()].find((i) => i.session === id) ?? (chat?.issue ? all.get(chat.issue) : undefined) ?? null;
@@ -59,6 +60,7 @@ async function meta(id: string): Promise<Meta> {
   const { chatTitleOf, titleOf } = await import("./sessions.ts");
   return {
     id, cwd, folder: tilde(cwd), chat: Boolean(chat), agent: chat?.agent ?? null, bare: Boolean(chat?.bare),
+    picked: Boolean(chat?.cwd && !chat.issue && !chat.agent && !chat.bare), // a bound chat's cwd is its issue's folder
     // A bare chat by the title the sidebar's Chats give it, not by the name desk started its session with; any chat by
     // the user's own title.
     title: issue?.title || chat?.named || (chat?.bare ? chatTitleOf(id) : "") || (chat && chat.title !== "New chat" ? chat.title : "") || titleOf(id) || "New session",

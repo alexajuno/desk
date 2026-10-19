@@ -13,7 +13,7 @@ import { toggled } from "../ui/menu";
 import { showFolded } from "../ui/folds";
 import { toast } from "../ui/toast";
 import { reloadPages, ui } from "../store/ui";
-import { setField } from "./actions";
+import { setField, setFolder } from "./actions";
 import { openSession } from "../sessions/Dock";
 import { fieldMenu, folderMenu, projectPicker, waitingMenu } from "./menus";
 import { painted } from "./painted";
@@ -216,7 +216,7 @@ const Chips = observer(function Chips({ p, project }: { p: IssueRow; project: { 
         <span>{project ? project.title : p.project || "Project"}</span>
       </button>
       <button className={`field-chip folder-pick${p.folder ? "" : " unset"}`} type="button" data-slug={p.slug} data-value={p.folder ?? ""} title="Pick the folder the issue's session starts in; ~ until you pick one"
-        onClick={(e) => { if (!toggled(e.currentTarget)) folderMenu(p.slug, p.folder ?? "", e.currentTarget); }}>
+        onClick={(e) => { if (!toggled(e.currentTarget)) folderMenu(p.folder ?? "", e.currentTarget, (f) => setFolder(p.slug, f)); }}>
         <svg className="glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z" /></svg>
         <span>{p.folder || "Folder"}</span>
       </button>
@@ -263,7 +263,7 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
       </form>
       <div className="label">Works in</div>
       <button className="prop folder-pick" type="button" data-slug={p.slug} data-value={p.folder ?? ""} title="Pick the folder the issue's session starts in; ~ until you pick one"
-        onClick={(e) => { if (!toggled(e.currentTarget)) folderMenu(p.slug, p.folder ?? "", e.currentTarget); }}>
+        onClick={(e) => { if (!toggled(e.currentTarget)) folderMenu(p.folder ?? "", e.currentTarget, (f) => setFolder(p.slug, f)); }}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z" style={{ stroke: "var(--text-3)" }} strokeWidth="1.2" /></svg>
         <span>{p.folder || "~"}</span>
       </button>

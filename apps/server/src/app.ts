@@ -2,7 +2,7 @@
 // asks /api/page/... for their data (pages.ts); the forms the pages post answer with a redirect that may carry ?msg=
 // for the strip; the agents' JSON API is api.ts; the app's live sync is sync.ts.
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { extname, join } from "node:path";
+import { extname, join, resolve } from "node:path";
 import formbody from "@fastify/formbody";
 import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
@@ -193,7 +193,9 @@ async function folders(q: string): Promise<string[]> {
     }
     return names.slice(0, 30).map((n) => tilde(join(parent, n)));
   }
-  const used = new Set([...(await store.loadAll()).values()].map((i) => i.folder).filter((f): f is string => Boolean(f)));
+  // Used: the issues' folders, and the folders chats ran in, such as one picked for a new chat.
+  const used = [...[...(await store.loadAll()).values()].map((i) => i.folder), ...chats.agentChats().map((c) => c.cwd)]
+    .filter((f): f is string => Boolean(f)).map(tilde);
   const paths = [...new Set([...repos().map(tilde), ...used])].sort();
   const want = q.toLowerCase().split(/\s+/).filter(Boolean);
   return paths.filter((p) => want.every((w) => p.toLowerCase().includes(w))).slice(0, 30);
@@ -548,6 +550,22 @@ export async function create(): Promise<FastifyInstance> {
       throw new HttpError(409, (error as Error).message);
     }
     return { ok: true };
+  });
+  // A new chat's folder, picked in its composer before its first message: its session starts again there. Gives the
+  // chat's head and chips what they show now.
+  app.post("/api/live/:id/folder", async (req: Req) => {
+    mustBePage(req);
+    const typed = String(((req.body ?? {}) as { folder?: unknown }).folder ?? "").trim();
+    const path = resolve(typed === "~" || typed.startsWith("~/") ? HOME + typed.slice(1) : typed);
+    if (!typed || !isDir(path)) throw new HttpError(422, `No folder ${typed}.`);
+    const chat = chats.agentChatOf(sessionOf(req));
+    if (!chat || !chats.empty(chat)) throw new HttpError(409, "Only a new chat's folder is picked, before its first message.");
+    try {
+      await chats.startIn(chat, path);
+    } catch (error) {
+      throw new HttpError(502, (error as Error).message);
+    }
+    return live.meta(chat.session);
   });
   app.post("/api/live/:id/model", async (req: Req) => {
     mustBePage(req);

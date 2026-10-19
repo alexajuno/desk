@@ -59,6 +59,7 @@ export interface Meta {
   chat: boolean;
   agent: string | null; // the agent a chat is with
   bare: boolean; // a chat with no agent and no desk prompt
+  picked: boolean; // a new chat's folder, picked in its composer
   runs: { model: string; name: string; effort: string }; // for the composer's chip
 }
 
@@ -102,6 +103,7 @@ export class LiveSession {
   private readers = 0; // of the users, the views that show its conversation; the dock's pill shows only whether it works
   private retry: number | null = null;
   private check: number | null = null; // for messages still pending after the turn ended
+  private moving: Promise<void> = Promise.resolve(); // a new chat starting again in the folder picked, which its first message waits for
 
   constructor(id: string) {
     this.id = id;
@@ -266,6 +268,7 @@ export class LiveSession {
 
   async send(text: string, images: Image[]) {
     const p = this.sending(text, images);
+    await this.moving;
     const res = await postJson(`/api/live/${this.id}/send`, { text, images: images.map(({ media_type, data }) => ({ media_type, data })), uuid: p.key,
       ...(this.startAs === "chat" ? { as: "chat" } : {}) });
     this.sent(p, res.ok);
@@ -321,6 +324,19 @@ export class LiveSession {
       if (was) this.shows(was);
       toast(await reason(res));
     }
+  }
+
+  // The composer's folder chip, before the first message: the chat's session starts again in the folder. Picks go one
+  // after another.
+  startIn(folder: string) {
+    const was = this.meta;
+    if (was) this.shows({ ...was, folder, picked: true });
+    this.moving = this.moving.then(async () => {
+      const res = await postJson(`/api/live/${this.id}/folder`, { folder });
+      if (res.ok) return this.shows(await res.json());
+      if (was) this.shows(was);
+      toast(await reason(res));
+    });
   }
 
   shows(meta: Meta) {

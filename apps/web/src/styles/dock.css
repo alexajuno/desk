@@ -242,7 +242,9 @@
 .attach { cursor: pointer; display: inline-flex; align-items: center; }
 .runs { flex: none; gap: 4px; height: 28px; padding: 0 6px 0 8px; border-radius: 6px; background: transparent; font-size: 12px; color: var(--text-3); white-space: nowrap; }
 .runs:hover { background: var(--bg-icon-hover); color: var(--text-1); }
-.start-as .glyph { width: 14px; height: 14px; }
+.start-as .glyph, .start-in .glyph { width: 14px; height: 14px; }
+.start-in { flex: 0 1 auto; min-width: 0; }
+.start-in > span { overflow: hidden; text-overflow: ellipsis; }
 .send, .stop { flex: none; width: 28px; padding: 0; justify-content: center; border-radius: 50%; }
 .send { background: var(--btn-primary); color: var(--btn-primary-text); }
 .send:hover { background: var(--btn-primary-hover); }

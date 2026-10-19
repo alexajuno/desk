@@ -11,6 +11,7 @@ import { go } from "../app/nav";
 import { markdown } from "../lib/markdown";
 import { seenPage } from "../api/page";
 import { Title, type IssuePageData } from "../issues/IssueView";
+import { folderMenu } from "../issues/menus";
 import { dock, SIDE_WIDTH, type Layout, type Reading } from "../store/dock";
 import { issues } from "../store/issues";
 import { toggleSide as toggleSidebar } from "../frame/side";
@@ -188,7 +189,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
         <div className="convo">
           {!s.loaded ? <p className="convo-empty">Connecting…</p>
             : !s.items.length && !s.pending.length && !s.working ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
-              : m?.bare || (m?.chat && s.startAs === "chat") ? "Just Claude, as claude runs in a terminal from your home folder: no issue and no desk instructions."
+              : m?.bare || (m?.chat && s.startAs === "chat") ? `Just Claude, as claude runs in a terminal ${startsIn(s) === "~" ? "from your home folder" : `in ${startsIn(s)}`}: no issue and no desk instructions.`
               : m?.chat ? "Ask desk's agent anything: it files the work and does it here. Start with @ and a name to talk to one of your agents."
               : "Nothing said yet."}</p>
             : null}
@@ -217,8 +218,7 @@ const ChatHead = observer(function ChatHead({ s }: { s: LiveSession }) {
           ? <button type="button" className={`dock-issue${dock.sideShown ? " on" : ""}`} title={`${dock.sideShown ? "Hide" : "Show"} the issue  ]`} onClick={toggleIssue}>{m.issue.title}</button>
           : m?.chat && !m.issue ? <Title line title={m.title} save={(t) => renameChat(s.id, t)} />
           : <span>{m?.issue?.title ?? m?.title ?? ""}</span>}
-        {fresh(s) && s.startAs === "chat" ? <span className="dock-folder" title="Your home folder, where a Chat runs">~</span>
-          : m?.folder && <span className="dock-folder" title={m.cwd}>{m.folder}</span>}
+        {startsIn(s) && <span className="dock-folder" title={startsIn(s)}>{startsIn(s)}</span>}
       </div>
     </header>
   );
@@ -643,6 +643,12 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
     })
     .catch(() => (commands.current = null, [])));
 
+  // A new chat started again in the folder picked for it: its / names are that folder's.
+  useEffect(() => {
+    commands.current = null;
+    setKnown(null);
+  }, [s.meta?.cwd]);
+
   // A / in the text, typed or kept in a draft, asks for the names it may mark.
   useEffect(() => {
     if (!known && /(^|\s)\/\w/.test(text)) void commandList();
@@ -792,6 +798,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
         {fresh(s) && <StartAs s={s} />}
+        {fresh(s) && <StartIn s={s} />}
         <span className="spacer" />
         <Runs s={s} />
         {s.working && (
@@ -831,6 +838,24 @@ const StartAs = observer(function StartAs({ s }: { s: LiveSession }) {
     <button className="runs start-as" type="button" title="What this chat becomes  Shift Tab"
       onClick={(e) => { if (!toggled(e.currentTarget)) openMenu({ anchor: e.currentTarget, items }); }}>
       {now.icon}{now.label}
+      <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
+    </button>
+  );
+});
+
+// The folder the chat runs in: a Chat's is the home folder and desk's agent's its data folder, until one is picked.
+const startsIn = (s: LiveSession) => (fresh(s) && !s.meta?.picked && s.startAs === "chat" ? "~" : s.meta?.folder ?? "");
+
+// The chip by Issue and Chat, until the first message: the folder the chat runs in, picked as an issue's is.
+const StartIn = observer(function StartIn({ s }: { s: LiveSession }) {
+  const now = startsIn(s);
+  return (
+    <button className="runs start-in" type="button" title="The folder this chat runs in"
+      onClick={(e) => { if (!toggled(e.currentTarget)) folderMenu(now, e.currentTarget, (f) => {
+        s.startIn(f);
+        requestAnimationFrame(focusComposer); // back to typing the first message
+      }); }}>
+      {GLYPH.folder}<span>{now}</span>
       <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
     </button>
   );
