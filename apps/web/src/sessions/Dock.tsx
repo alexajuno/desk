@@ -40,10 +40,13 @@ export function focusComposer() {
 }
 
 // New session: an agent chat, in the middle. Its issue comes beside it once the agent files one (SessionFullRoute).
-export async function newSession() {
+// A draft, such as New automation's, waits typed in its composer.
+export async function newSession(draft = "") {
   const res = await postJson("/sessions/new");
   if (!res.ok) return toast(await reason(res));
-  openSession((await res.json()).id);
+  const { id } = await res.json();
+  if (draft && !drafts()[id]) keepDraft(id, draft);
+  openSession(id);
 }
 
 // A change of layout moves as one piece, through the browser's view transitions: the issue page shrinks into the side

@@ -756,6 +756,18 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
    padded 3px 6px with a 16px icon, 13px at 500 in --text-2, filled only under the mouse, where the label turns
    --text-1. The Description heading is the same, 16px over the text. Linear has a summary, Resources and updates
    between Properties and Description, which desk has not, so the 32px over Description is desk's own. */
+/* automations: the list and one automation's page, which are Projects' (the list row, the Overview's column and chips).
+   A row's end says when it fires next, or what keeps it from running. */
+.automation-row .icon { color: var(--text-3); cursor: default; }
+.automation-row .icon:hover { background: none; }
+.automation-row.paused .title { color: var(--text-3); }
+.automation-row .snippet { min-width: 80px; }
+.automation-row .pill { flex: none; }
+.automation-row .next { flex: none; min-width: 120px; }
+.automation-row .trouble, .automation-says.trouble { color: var(--urgent); }
+.automation-says { margin: 16px 0 0; font: 450 13px var(--font); color: var(--text-3); }
+.automation-last { margin: 0 0 6px; font: 450 13px/20px var(--font); }
+.automation-last a { color: var(--text-1); }
 .project-crumb { display: flex; align-items: center; gap: 8px; }
 .project-crumb .glyph { color: var(--text-2); }
 .project-overview { max-width: 805px; margin: 64px auto 24px; padding: 0 48px 40px; }

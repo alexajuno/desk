@@ -3,6 +3,8 @@ import { prime } from "../api/page";
 import { Frame } from "../frame/Frame";
 import { IssuePage } from "../issues/IssuePage";
 import { FilePage } from "../files/FilePage";
+import { AutomationPage } from "../lists/AutomationPage";
+import { AutomationsPage } from "../lists/AutomationsPage";
 import { InboxPage } from "../inbox/InboxPage";
 import { IssuesPage, TABS } from "../lists/IssuesPage";
 import { ProjectPage } from "../lists/ProjectPage";
@@ -43,6 +45,8 @@ export const router = createBrowserRouter(
     { path: "/project/:slug", element: <ProjectPage tab="" />, loader: at(({ params }) => `/api/page/project/${params.slug}`) },
     { path: "/project/:slug/issues", element: <ProjectPage tab="issues" />,
       loader: at(({ params, request }) => listUrl(`/project/${params.slug}/issues`, `/api/page/project/${params.slug}`, search(request))) },
+    { path: "/automations", element: <AutomationsPage />, loader: at(() => "/api/page/automations") },
+    { path: "/automation/:slug", element: <AutomationPage />, loader: at(({ params }) => `/api/page/automation/${params.slug}`) },
     { path: "/issue/:slug", element: <IssuePage />, loader: at(({ params }) => `/api/page/issue/${params.slug}`) },
     { path: "/issue/:slug/f/:name", element: <FilePage />,
       loader: at(({ params }) => `/api/page/file/${params.slug}/${encodeURIComponent(params.name ?? "")}`) },

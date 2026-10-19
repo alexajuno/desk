@@ -1,4 +1,4 @@
-// The sidebar on every page (templates/base.html's aside.side): Inbox, Triage, Issues and the projects,
+// The sidebar on every page (templates/base.html's aside.side): Inbox, Triage, Issues, Automations and the projects,
 // the newest bare chats, as claude.ai's Recents, then the lists to watch: what is in progress and landing, and what desk's
 // checkout runs.
 // Waiting issues stay in Issues, since waiting can last forever.
@@ -60,6 +60,10 @@ export const Sidebar = observer(function Sidebar() {
       <Go className={`nav-item${here === "/issues" || here.startsWith("/issues/") ? " here" : ""}`} to="/issues" title={ISSUES_TIP}>
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"><rect x="2.25" y="4.75" width="9" height="9" rx="2" /><path d="M4.75 2.25h7c1.1 0 2 .9 2 2v7" strokeLinecap="round" /></svg>
         Issues
+      </Go>
+      <Go className={`nav-item${here === "/automations" || here.startsWith("/automation/") ? " here" : ""}`} to="/automations" title="Agents that run on a time or a condition">
+        {GLYPH.clock}
+        Automations
       </Go>
       <Go className={`nav-label${at("/projects")}`} to="/projects" title="Go to projects  G then P">Projects</Go>
       {d?.projects.map((pr) => (

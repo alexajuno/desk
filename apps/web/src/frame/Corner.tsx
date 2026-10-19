@@ -17,7 +17,7 @@ export function Corner() {
   return (
     <div className="corner">
       <DockPill />
-      <button className="corner-new new-session" type="button" title="New session  Ctrl Shift O" onClick={newSession}>
+      <button className="corner-new new-session" type="button" title="New session  Ctrl Shift O" onClick={() => newSession()}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" /><path d="M4.5 6l2 2-2 2M8 10.5h3.5" /></svg>New session
       </button>
       <button className="dock-history" type="button" title="Sessions" onClick={(e) => { if (!toggled(e.currentTarget)) sessionsMenu(e.currentTarget); }}>

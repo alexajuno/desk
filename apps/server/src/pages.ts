@@ -433,7 +433,8 @@ export async function projectsPage() {
 async function automationJson(a: automations.Automation, full = false) {
   const json = await automations.asJson(a, full);
   return { ...json, description: a.body.split("\n").find((line) => line.trim())?.replace(/[#*_`>]/g, "").trim() ?? "",
-    next_text: json.next ? nearDay(parseLocal(json.next)) : "", last_text: json.last_run?.at ? nearDay(parseLocal(json.last_run.at)) : "" };
+    next_text: json.next ? nearDay(parseLocal(json.next)) : "", last_text: json.last_run?.at ? nearDay(parseLocal(json.last_run.at)) : "",
+    fired_text: json.fired ? nearDay(parseLocal(json.fired)) : "" };
 }
 
 export const automationsPage = () => Promise.all(automations.loadAll().map((a) => automationJson(a)));

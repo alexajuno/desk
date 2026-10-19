@@ -29,6 +29,7 @@ export interface FrameData {
   projects: { slug: string; title: string }[];
   chats: { session: string; title: string; working: boolean; unread: boolean }[]; // the newest bare chats
   rows: InboxRow[];
+  automations?: string; // moves whenever an automation does: its page fetches itself again
   live: Record<string, string>; // slug: where its session stands, for each open issue with one
 }
 

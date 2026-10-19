@@ -1,6 +1,6 @@
 ---
 name: desk
-description: Files, finds, updates and starts issues in desk, the user's own workspace at http://127.0.0.1:8790, through its JSON API with curl. Use whenever work should be parked for later, an issue filed or changed, desk's backlog or a running issue looked up, or an issue's own Claude Code session started in the background, even when desk is not named. Triggers include "park this", "add it to desk", "file an issue for that", "put it in the backlog", "what's running in desk", "start that issue", "hand it off to an agent". Not for Jira or Linear tickets.
+description: Files, finds, updates and starts issues in desk, the user's own workspace at http://127.0.0.1:8790, through its JSON API with curl. Use whenever work should be parked for later, an issue filed or changed, desk's backlog or a running issue looked up, or an issue's own Claude Code session started in the background, or an automation set up (an agent run at a time or on a condition, its report in desk's Inbox), even when desk is not named. Triggers include "park this", "add it to desk", "file an issue for that", "put it in the backlog", "what's running in desk", "start that issue", "hand it off to an agent", "every morning check X and tell me", "new automation". Not for Jira or Linear tickets.
 ---
 
 # desk
@@ -71,6 +71,26 @@ curl -s "http://127.0.0.1:8790/api/projects"
 curl -s "http://127.0.0.1:8790/api/projects/<slug>"
 curl -s "http://127.0.0.1:8790/api/projects" --json '{"title": "Site redesign", "body": "Ongoing: the new site, one piece at a time."}'
 curl -s "http://127.0.0.1:8790/api/projects/<slug>" -X PATCH --json '{"state": "archived"}'
+```
+
+Automations run one of the user's agents at a time, or when a check finds something, and its reply reaches the user's Inbox as a chat, as bin/jobs's daily list does. Each is a file, `automations/<slug>.md` in desk's data folder, which you change through the API, since it checks `when` and `agent`. Its page is `http://127.0.0.1:8790/automation/<slug>`. An automation's fields:
+
+- `title`
+- `when`: `every 15 min`, `every hour`, `every day 08:00`, `every day 08:00, 20:00`, `every weekday 08:00`, `every sunday 20:00` or `every mon, thu 09:30`, in local time; empty runs it only when called. A time missed while desk was down fires once when it is back
+- `check`: a shell command run first, from the home folder. What it prints goes into the run, and an empty output skips it, so a time and a check make a condition: `every 15 min` with a script that prints only new mail. A check that keeps failing is told to the user once
+- `agent`: one of the user's agents (`GET /api/agents`), or empty for a plain Claude chat
+- `body`: what the agent should do, given to it with what the check printed
+- `state`: active or paused
+
+When the user asks for one, such as a desk chat that opens with "New automation:", write its check script where it belongs (usually `~/projects/muse/bin`), create the automation, and fire it once to show it works; then settle your chat's own issue as done. `/run` fires one now, as a script's call or the page's Run now: it answers once its check has run, with how it went, and a `message` goes into the run:
+
+```bash
+curl -s "http://127.0.0.1:8790/api/automations"
+curl -s "http://127.0.0.1:8790/api/automations/<slug>"
+curl -s "http://127.0.0.1:8790/api/automations" --json '{"title": "Mail worth a reply", "when": "every 15 min", "check": "~/projects/muse/bin/mail-new", "agent": "", "body": "Tell me which of these mails need a reply from me, and why."}'
+curl -s "http://127.0.0.1:8790/api/automations/<slug>" -X PATCH --json '{"state": "paused"}'
+curl -s "http://127.0.0.1:8790/api/automations/<slug>/run" --json '{"message": "The deploy finished."}'
+curl -s "http://127.0.0.1:8790/api/automations/<slug>" -X DELETE
 ```
 
 Find the folder for an issue among the user's repos, by name:
