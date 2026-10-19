@@ -64,6 +64,7 @@ Each one cost a redo. Check your work against them.
 - **Squeezed or overflowing** (15 Oct). A long title squeezed the sidebar's toggle to 20px (fixed with `flex: none`), and a 1436px screenshot in a plan pushed the page sideways (fixed with `max-width: 100%`). Try long text and big images.
 - **A form over the list** (18 Oct). The Projects page opened with an input and a Create project button above its rows; the user asked for "linear flow": a New project button in the top bar and a modal, as Linear has.
 - **Responsive by guess** (15 Oct). The Inbox's open notification kept its properties column on a narrow window. Resize Linear and find where it changes: it was between an 817 and an 827px pane.
+- **Copied a part that means nothing in desk** (15 Oct, found 19 Oct). Linear's Inbox row starts with the avatar of the person who acted; desk drew the same session avatar on every row, and the user: "it's all chats right? and claude sessions. there is nobody". Copy what a part says as well as how it looks; where desk has no such thing, put there something that differs from row to row (the Inbox now draws the status in that spot).
 
 ## Keep this current
 
