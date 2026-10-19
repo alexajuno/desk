@@ -810,7 +810,7 @@ button.chip-part:hover { background: var(--bg-hover); color: var(--text-1); }
 .dp-select { position: relative; min-width: 116px; height: 24px; padding: 1px 18px 1px 8px; border-radius: 8px; justify-content: flex-start;
              background: var(--bg-dp-select); box-shadow: 0 0 0 0.5px var(--ring-dp), var(--shadow-panel); color: var(--text-tip); font: 400 12px var(--font);
              transition: background-color 0.15s, color 0.15s; }
-.dp-select svg { position: absolute; right: 6px; top: 10px; }
+.dp-select svg { position: absolute; right: 6px; top: 9.5px; }
 .dp-select:hover { background: var(--bg-dp-select-hover); box-shadow: 0 0 0 0.5px var(--ring-dp-strong), var(--shadow-panel); color: var(--text-dp-on); }
 .dp-dir { width: 24px; height: 24px; padding: 0; justify-content: center; border: 0; border-radius: 9999px; background: none; color: var(--text-3); }
 .dp-dir:hover { background: var(--bg-active); color: var(--text-1); }
