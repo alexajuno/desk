@@ -390,6 +390,7 @@ function Thought({ text }: { text: string }) {
 
 function Step({ s, item, result }: { s: LiveSession; item: Item; result?: Item }) {
   const [open, setOpen] = useState(false);
+  const agent = item.name === "Agent" || item.name === "Task";
   return (
     <div className={`step${result?.error ? " error" : ""}${result ? "" : " running"}`}>
       <button className="step-line" type="button" onClick={() => setOpen(!open)}>
@@ -399,17 +400,17 @@ function Step({ s, item, result }: { s: LiveSession; item: Item; result?: Item }
       {open && (
         <div className="step-detail">
           <pre>{item.input}</pre>
-          {(item.name === "Agent" || item.name === "Task") && <AgentSteps s={s} tool={item.id!} />}
-          {result && <pre className="step-result">{result.text || "(no output)"}</pre>}
+          {agent ? <AgentSteps s={s} tool={item.id!} result={result} /> : result && <pre className="step-result">{result.text || "(no output)"}</pre>}
         </div>
       )}
     </div>
   );
 }
 
-// A subagent's own steps, under its Agent step: read from its transcript when the step opens, and again at each step
-// it takes while it runs.
-const AgentSteps = observer(function AgentSteps({ s, tool }: { s: LiveSession; tool: string }) {
+// A subagent's own steps, under its Agent step, ending with its reply: read from its transcript when the step opens,
+// and again at each step it takes while it runs. Its tool result stands in only when no steps were kept; a subagent in
+// the background has none worth showing, only Claude Code's note to Claude that it started.
+const AgentSteps = observer(function AgentSteps({ s, tool, result }: { s: LiveSession; tool: string; result?: Item }) {
   const task = s.tasks.find((t) => t.tool === tool);
   const [items, setItems] = useState<Item[] | null>(null);
   useEffect(() => {
@@ -420,7 +421,10 @@ const AgentSteps = observer(function AgentSteps({ s, tool }: { s: LiveSession; t
   if (!items) return null;
   const results = new Map(items.filter((i) => i.t === "result").map((i) => [i.id!, i]));
   const shown = items.filter((i) => i.t === "tool" || i.t === "thinking" || i.t === "text");
-  if (!shown.length) return <p className="agent-none">{task ? "Starting…" : "No steps recorded."}</p>;
+  if (!shown.length) {
+    if (result && !result.text?.startsWith("Async agent launched")) return <pre className="step-result">{result.text || "(no output)"}</pre>;
+    return <p className="agent-none">{task ? "Starting…" : "No steps recorded."}</p>;
+  }
   return (
     <div className="steps-list">
       {shown.map((i) => (i.t === "tool" ? <Step key={i.key} s={s} item={i} result={results.get(i.id!)} />

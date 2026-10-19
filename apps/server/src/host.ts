@@ -218,10 +218,12 @@ async function read(s: Session) {
 // What Claude Code runs beside the conversation, kept from its task events (tried on 19 Oct: a background command and
 // a background subagent each sent task_started, background_tasks_changed, then task_updated and task_notification as
 // they ended; the subagent sent task_progress at each of its tool calls). Housekeeping tasks Claude Code marks ambient
-// stay out, and so do those a subagent started: the panel shows what the conversation started.
+// stay out, and so do those a subagent started (parent_task_id, or owned_by_subagent for its commands): the panel
+// shows what the conversation started. A foreground command that runs past a few seconds is a task too, which stays
+// out until it moves to the background: the turn's step shows it.
 function track(s: Session, e: Record<string, any>) {
   const before = JSON.stringify(tasksOf(s));
-  if (e.subtype === "task_started" && !e.ambient && !e.parent_task_id) {
+  if (e.subtype === "task_started" && !e.ambient && !e.parent_task_id && !e.owned_by_subagent && (e.is_backgrounded || e.task_type !== "local_bash")) {
     s.tasks.set(e.task_id, { id: e.task_id, tool: e.tool_use_id, kind: e.task_type ?? "", description: e.description, agent: e.subagent_type,
       background: Boolean(e.is_backgrounded), since: Date.now() });
   } else if (e.subtype === "task_progress") {
@@ -234,7 +236,7 @@ function track(s: Session, e: Record<string, any>) {
   } else if (e.subtype === "task_notification") s.tasks.delete(e.task_id);
   else if (e.subtype === "background_tasks_changed") {
     // Every background task there is now: one the turn waited on and that moved to the background is in it too.
-    const now = new Map((e.tasks as Record<string, any>[]).filter((t) => !t.ambient && !t.parent_task_id).map((t) => [t.task_id, t]));
+    const now = new Map((e.tasks as Record<string, any>[]).filter((t) => !t.ambient && !t.parent_task_id && !t.owned_by_subagent).map((t) => [t.task_id, t]));
     for (const t of s.tasks.values()) if (t.background && !now.has(t.id)) s.tasks.delete(t.id);
     for (const [id, t] of now) {
       const known = s.tasks.get(id);
