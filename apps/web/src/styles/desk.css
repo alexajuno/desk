@@ -38,6 +38,7 @@
   --link: #5e69d1;
   --bg-side-hover: lch(9.232% 0.85 272);
   --bg-icon-hover: lch(10.149% 0.689 272);
+  --scrollbar: lch(37.275% 1.2 272);       /* the sidebar's thin scrollbar, measured on linear.app 2026-10-19 */
   --bg-mark: rgb(94 105 209 / 0.3);
   --shadow-panel: lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
   /* buttons, and their fill under the mouse (the buttons block below) */
@@ -143,6 +144,7 @@
   --link: lch(44.073% 70 286.91);         /* labelLink */
   --bg-side-hover: lch(91.64% 0.5 282);   /* sidebar: an item under the mouse */
   --bg-icon-hover: lch(0% 0 0 / 0.06);    /* the sidebar's round search button */
+  --scrollbar: lch(64.94% 1.25 282);
   --shadow-panel: lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px;
   --btn: lch(99.997% 0.5 282);
   --btn-hover: lch(95.883% 0.157 282);
@@ -222,8 +224,11 @@ svg { flex: none; }
 kbd { font: 500 11px var(--font); color: var(--text-3); border: 1px solid var(--border-3); border-radius: 4px; padding: 0 4px; }
 
 /* sidebar */
-.side { position: fixed; top: 0; left: 0; bottom: 0; width: 244px; box-sizing: border-box; padding: 12px 12px 12px 12px;
-        overflow: auto; display: flex; flex-direction: column; }
+/* Linear's sidebar scrolls with a thin scrollbar whose room is always kept, its right padding 2px beside it (measured
+   2026-10-19 on /team/OE/all, dark and light): the rows stay as wide with or without it. */
+.side { position: fixed; top: 0; left: 0; bottom: 0; width: 244px; box-sizing: border-box; padding: 12px 2px 12px 12px;
+        overflow: auto; display: flex; flex-direction: column;
+        scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; scrollbar-gutter: stable; }
 .side > * { flex: none; }
 .side-head { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-bottom: 12px; }
 /* Linear's sidebar icon buttons, measured 2026-10-14: a 28px circle (radius 9999px) around a 14px filled icon */
