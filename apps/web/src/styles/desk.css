@@ -89,13 +89,16 @@
   --text-tip-raised: lch(91.554% 1.65 272);
   --border-tip-key-raised: lch(23.992% 2.38 272);
   --text-tip-key-raised: lch(66.215% 1.65 272);
-  /* Display options' List and Board: the one picked, and the other at rest and under the mouse (.dp-layout below) */
-  --bg-seg-on: lch(23.906% 1.429 272);
-  --text-seg-on: lch(100% 0 272);
-  --ring-seg-on: lch(100% 0 0 / 0.247);    /* also the other's ring under the mouse */
-  --bg-seg: lch(17.349% 1.043 272);
-  --bg-seg-hover: lch(21.206% 1.043 272);
-  --ring-seg: lch(100% 0 0 / 0.148);
+  /* Display options' controls (.dp-layout and .dp-select below): the layout picked, the other one and the selects, at
+     rest and under the mouse. A strong ring rounds the layout picked, and any of them under the mouse. */
+  --bg-dp-on: lch(23.906% 1.429 272);
+  --text-dp-on: lch(100% 0 272);          /* also a select's text under the mouse */
+  --bg-dp-layout: lch(17.349% 1.043 272);
+  --bg-dp-layout-hover: lch(21.206% 1.043 272);
+  --bg-dp-select: lch(17.349% 1.139 272);
+  --bg-dp-select-hover: lch(21.977% 1.525 272);
+  --ring-dp: lch(100% 0 0 / 0.148);
+  --ring-dp-strong: lch(100% 0 0 / 0.247);
   /* a link in a description, and the link bar over it while typing, measured on linear.app on 2026-10-19 (editor.css) */
   --text-link: lch(80% 80 288.43);
   --border-link-bar: lch(34.32% 1.93 272);
@@ -183,12 +186,14 @@
   --text-tip-raised: var(--text-tip);
   --border-tip-key-raised: var(--border-tip-key);
   --text-tip-key-raised: var(--text-tip-key);
-  --bg-seg-on: lch(95.543% 0 282);
-  --text-seg-on: lch(10% 0 282);
-  --ring-seg-on: lch(0% 0 0 / 0.147);
-  --bg-seg: lch(100% 0 282);
-  --bg-seg-hover: lch(96.914% 0 282);
-  --ring-seg: lch(0% 0 0 / 0.088);
+  --bg-dp-on: lch(95.543% 0 282);
+  --text-dp-on: lch(10% 0 282);
+  --bg-dp-layout: lch(100% 0 282);
+  --bg-dp-layout-hover: lch(96.914% 0 282);
+  --bg-dp-select: lch(100% 0 282);
+  --bg-dp-select-hover: lch(95.886% 0 282);
+  --ring-dp: lch(0% 0 0 / 0.088);
+  --ring-dp-strong: lch(0% 0 0 / 0.147);
   --text-link: lch(50% 80 288.43);
   --border-link-bar: lch(86.5% 0 282);
   --rule-link-bar: lch(90.55% 0 282);
@@ -797,13 +802,16 @@ button.chip-part:hover { background: var(--bg-hover); color: var(--text-1); }
 .item.context .icon, .item.context .pill, .item.context .date { opacity: 0.5; }
 .display-panel { position: fixed; z-index: 10; width: 300px; box-sizing: border-box; padding: 8px 16px 0; border-radius: 12px;
                  background: var(--bg-tip); border: 0.5px solid var(--border-tip); box-shadow: var(--shadow-keys); }
-.dp-row { display: flex; align-items: center; gap: 4px; height: 32px; font-size: 12px; font-weight: 500; color: var(--text-3); }
+/* A row's label and its select, measured again on linear.app's All issues on 2026-10-19 at 2x, dark and light: the select
+   is a filled button with Linear's ring and shadow, its text and chevron one colour, both brighter under the mouse. */
+.dp-row { display: flex; align-items: center; gap: 4px; height: 32px; font-size: 12px; font-weight: 500; color: var(--text-tip-key); }
 .dp-row > span { flex: 1; }
 .dp-row.switch { justify-content: space-between; }
-.dp-select { position: relative; min-width: 116px; height: 24px; padding: 1px 18px 1px 8px; border: 0; border-radius: 8px; justify-content: flex-start;
-             background: var(--bg-active); color: var(--text-1); font: 400 12px var(--font); }
-.dp-select svg { position: absolute; right: 7px; top: 10px; color: var(--text-3); }
-.dp-select:hover { background: var(--bg-pop-on); }
+.dp-select { position: relative; min-width: 116px; height: 24px; padding: 1px 18px 1px 8px; border-radius: 8px; justify-content: flex-start;
+             background: var(--bg-dp-select); box-shadow: 0 0 0 0.5px var(--ring-dp), var(--shadow-panel); color: var(--text-tip); font: 400 12px var(--font);
+             transition: background-color 0.15s, color 0.15s; }
+.dp-select svg { position: absolute; right: 6px; top: 10px; }
+.dp-select:hover { background: var(--bg-dp-select-hover); box-shadow: 0 0 0 0.5px var(--ring-dp-strong), var(--shadow-panel); color: var(--text-dp-on); }
 .dp-dir { width: 24px; height: 24px; padding: 0; justify-content: center; border: 0; border-radius: 9999px; background: none; color: var(--text-3); }
 .dp-dir:hover { background: var(--bg-active); color: var(--text-1); }
 .dp-dir.reversed svg { transform: scaleY(-1); }
@@ -898,10 +906,10 @@ button.set-pick svg { color: var(--text-3); }
    14px icon left of a 12px/500 label. The one picked is filled brighter, with a stronger ring and no shadow; the other
    reads --text-tip-key, and --text-tip under the mouse. */
 .dp-layout { display: flex; gap: 6px; margin: 8px 2px 18px; }
-.dp-layout button { flex: 1; padding: 6px 8px; justify-content: center; background: var(--bg-seg);
-                    box-shadow: 0 0 0 0.5px var(--ring-seg), var(--shadow-panel); color: var(--text-tip-key); transition: background-color 0.15s, color 0.15s; }
-.dp-layout button:hover { background: var(--bg-seg-hover); box-shadow: 0 0 0 0.5px var(--ring-seg-on), var(--shadow-panel); color: var(--text-tip); }
-.dp-layout button.on { background: var(--bg-seg-on); box-shadow: 0 0 0 0.5px var(--ring-seg-on); color: var(--text-seg-on); }
+.dp-layout button { flex: 1; padding: 6px 8px; justify-content: center; background: var(--bg-dp-layout);
+                    box-shadow: 0 0 0 0.5px var(--ring-dp), var(--shadow-panel); color: var(--text-tip-key); transition: background-color 0.15s, color 0.15s; }
+.dp-layout button:hover { background: var(--bg-dp-layout-hover); box-shadow: 0 0 0 0.5px var(--ring-dp-strong), var(--shadow-panel); color: var(--text-tip); }
+.dp-layout button.on { background: var(--bg-dp-on); box-shadow: 0 0 0 0.5px var(--ring-dp-strong); color: var(--text-dp-on); }
 .dp-layout svg { width: 14px; height: 14px; flex: none; }
 
 /* Triage (triage/TriagePage.tsx): the Inbox's split, its rows the chats not settled yet, and on the right the one picked

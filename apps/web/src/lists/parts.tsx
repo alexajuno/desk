@@ -205,8 +205,9 @@ export function Groups({ list, empty, here = null }: { list: ListData; empty: st
 
 // Shift+V: Linear's Display options panel, its rows measured on linear.app (16 Oct): a 300px panel, 12px labels on the
 // left, 24px selects on the right, the direction button beside Ordering, a 22x14 switch, and Reset at its foot. Its
-// choices are the page's own (views.ts, PAGES): Grouping and Ordering first, the rest under a line.
-const SELECT_CHEV = <svg width="9" height="5" viewBox="0 0 9 5" fill="currentColor"><path d="M.5.5h8L4.5 4.5z" /></svg>;
+// choices are the page's own (views.ts, PAGES): Grouping and Ordering first, the rest under a line. A select's chevron is
+// Linear's, copied on 19 Oct.
+const SELECT_CHEV = <svg width="9" height="5" viewBox="0 0 9 5" fill="currentColor"><path d="M1.915.557a.667.667 0 0 0-.943.943l2.862 2.862a.942.942 0 0 0 1.333 0L8.028 1.5a.667.667 0 0 0-.943-.943L4.5 3.14 1.915.557Z" /></svg>;
 // Linear's Direction icon: an arrow beside bars that shorten. Reversed, it flips.
 const DIRECTION = (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M8.23 3.674a.75.75 0 0 1-.961 1.152l-1.77-1.475V14.25a.75.75 0 0 1-1.5 0V3.351L2.23 4.826a.75.75 0 1 1-.96-1.152l3-2.5a.75.75 0 0 1 .96 0z" /><path fillRule="evenodd" clipRule="evenodd" d="M6.999 7.25a.75.75 0 0 1 .75-.75h6.5a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1-.75-.75M6.999 10.25a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75M6.999 13.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75" /></svg>
