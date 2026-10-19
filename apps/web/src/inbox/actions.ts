@@ -36,21 +36,22 @@ export const rowHref = (query: string, slug: string) => {
 
 const viewQuery = () => { const q = new URLSearchParams(location.search); q.delete("i"); return q.toString(); };
 
-async function call(url: string, body: object) {
+// How many rows it changed, or null when desk said no.
+async function call(url: string, body: object): Promise<number | null> {
   const res = await postJson(url, body);
   if (!res.ok) {
     toast(await reason(res));
-    return false;
+    return null;
   }
   await reloadPages();
-  return true;
+  return ((await res.json()) as { changed: number }).changed;
 }
 
 export const markAllRead = () => call("/api/inbox/read", {});
 // The open row closes when it goes too.
 export function deleteAll(onlyRead: boolean) {
-  const open = document.querySelector(".inbox-row.selected");
-  if (open && (!onlyRead || open.classList.contains("read"))) go(rowHref(viewQuery(), ""), { replace: true });
+  const open = document.querySelector<HTMLElement>(".inbox-row.selected");
+  if (open && open.dataset.waits !== "true" && (!onlyRead || open.classList.contains("read"))) go(rowHref(viewQuery(), ""), { replace: true });
   return call("/api/inbox/delete", onlyRead ? { read: true } : {});
 }
 
@@ -68,20 +69,31 @@ const inInbox = () => location.pathname === "/inbox";
 // The row U and Backspace act on: the one in focus, else the one open.
 const rowNow = () => (inInbox() ? document.querySelector<HTMLElement>(".inbox-row.focus[data-row-key], .inbox-row.selected[data-row-key]") : null);
 
-// U: the row read, or unread again. The open row closes as it turns unread, or its page would read it again at once.
+// U: the row read, or unread again. The open row closes as it turns unread, or its page would read it again at once:
+// the mark waits until the page has moved off it, so that no answer for the old address reads it after.
 export function toggleRead(): boolean {
   const row = rowNow();
   if (!row) return false;
-  const unread = row.classList.contains("read");
-  if (unread && row.classList.contains("selected")) go(rowHref(viewQuery(), ""), { replace: true });
-  void call("/api/inbox/read", { keys: [row.dataset.rowKey], unread });
+  const unread = row.classList.contains("read"), key = row.dataset.rowKey;
+  if (unread && row.classList.contains("selected")) {
+    go(rowHref(viewQuery(), ""), { replace: true });
+    void moved().then(() => call("/api/inbox/read", { keys: [key], unread }));
+  } else void call("/api/inbox/read", { keys: [key], unread });
   return true;
 }
 
+// Once the page drew what the router moved to: two frames.
+const moved = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+
 // Backspace: the row deleted; the open one gives way to the next, the one below it, else the one above, as Linear's.
+// A row that waits on you, a question or a landing stuck, stays until you answer it.
 export function deleteRow(): boolean {
   const row = rowNow();
   if (!row) return false;
+  if (row.dataset.waits === "true") {
+    toast("It waits on you: answer it, and it leaves the Inbox.");
+    return true;
+  }
   if (row.classList.contains("selected")) {
     const all = [...document.querySelectorAll<HTMLElement>(".inbox-row[data-row-key]")], at = all.indexOf(row);
     const next = all[at + 1] ?? all[at - 1];

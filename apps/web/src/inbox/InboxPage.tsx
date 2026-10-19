@@ -159,7 +159,7 @@ export const InboxPage = observer(function InboxPage() {
 const IssueNotice = observer(function IssueNotice({ n, issue, open, query }: { n: InboxRow; issue: Issue; open: string | null; query: string }) {
   return (
     <Go className={`item inbox-row${n.slug === open ? " selected" : ""}${n.read !== null ? " read" : ""}${ui.focused === n.slug ? " focus" : ""}`}
-      to={rowHref(query, n.slug)} title={issue.title} data-slug={n.slug} data-state={issue.state} data-priority={issue.priority} data-parent={issue.parent ?? ""} data-row-key={n.id}
+      to={rowHref(query, n.slug)} title={issue.title} data-slug={n.slug} data-state={issue.state} data-priority={issue.priority} data-parent={issue.parent ?? ""} data-row-key={n.id} data-waits={n.waits}
       onMouseMove={() => { if (ui.focused !== n.slug) ui.focus(n.slug, true); }}
       onContextMenu={(e) => { e.preventDefault(); ui.focus(n.slug); actionsMenu(issue, { x: e.clientX, y: e.clientY }, open); }}>
       <span className="avatar status" aria-label={STATE_NAMES[issue.state]}><StateIcon state={issue.state} />
@@ -183,7 +183,7 @@ const ChatRow = observer(function ChatRow({ n, open, query }: { n: InboxRow; ope
   const agent = n.agent;
   return (
     <Go className={`item inbox-row${open ? " selected" : ""}${n.read !== null ? " read" : ""}${ui.focused === n.slug ? " focus" : ""}`}
-      to={rowHref(query, n.slug)} title={n.title} data-key={n.slug} data-session={n.session ?? ""} data-row-key={n.id}
+      to={rowHref(query, n.slug)} title={n.title} data-key={n.slug} data-session={n.session ?? ""} data-row-key={n.id} data-waits={n.waits}
       onMouseMove={() => { if (ui.focused !== n.slug) ui.focus(n.slug, true); }}>
       {agent
         ? <span className="avatar agent" aria-label={agent}>{agent.slice(0, 1).toUpperCase()}</span>
