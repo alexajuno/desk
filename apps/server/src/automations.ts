@@ -217,7 +217,7 @@ export async function asJson(a: Automation, full = false) {
 
 // --- firing ----------------------------------------------------------------------------------------------------------
 
-const CHECK_LIMIT = 300; // s: bin/jobs, the slowest script now on a timer, took 61 s on 19 Oct
+const CHECK_LIMIT = 300; // s: muse-jobs.timer's bin/mail-daily and bin/jobs took about a minute on 19 Oct (08:00 to its chat at 08:01:01)
 const OUTPUT_LIMIT = 50_000; // characters of a check's output given to the agent, so a check that prints a log does not fill its context
 const FAILED = "Its check failed"; // how every failing check's note starts
 const firing = new Set<string>(); // slugs whose check runs now: a tick that comes meanwhile leaves them be
