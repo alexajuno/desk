@@ -244,6 +244,13 @@ button.side-icon { padding: 0; border: 0; }
 a.nav-label { text-decoration: none; } a.nav-label:hover, a.nav-label.here { color: var(--text-1); }
 .nav-label { display: flex; align-items: center; height: 28px; padding: 12px 6px 0; font-size: 12px; font-weight: 500; color: var(--text-3); }
 .nav-title { overflow: hidden; text-overflow: ellipsis; }
+/* Linear's sidebar section header (Workspace, Your teams), measured 2026-10-19 on /team/OE/all, dark and light, at 2x:
+   the whole row a 28px button with no fill, under the mouse too; its 12px/500 label and the 16px triangle right after
+   it in --text-3, both --text-1 under the mouse; the triangle points down when open, right when folded, in 0.15s. */
+button.nav-fold { box-sizing: content-box; justify-content: flex-start; gap: 2px; border: 0; border-radius: 0; background: none; cursor: default; }
+button.nav-fold:hover { background: none; color: var(--text-1); }
+.nav-fold svg { flex: none; fill: currentColor; transform: rotate(90deg); transition: transform 0.15s; }
+.nav-fold[aria-expanded="false"] svg { transform: none; }
 .nav-item .from { margin-left: auto; font-size: 12px; }
 /* a session in Chats: the dock's pulse while it works (dock.css's .live-dot), the Inbox row's dot while it is unread */
 .nav-item .live-dot { margin-left: auto; }

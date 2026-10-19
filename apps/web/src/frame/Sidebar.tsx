@@ -1,14 +1,15 @@
 // The sidebar on every page (templates/base.html's aside.side): Inbox, Triage, Issues, Automations and the projects,
-// the newest sessions, as claude.ai's Recents, then what desk's checkout runs. An issue in progress or landing shows
-// in Chats, by its session ("now that the chats section display all issues, feel like we don't need the in progress
+// the sessions you pinned and those still in hand, as claude.ai's Starred and Recents, then what desk's checkout runs.
+// An issue in progress or landing shows in Chats, by its session ("now that the chats section display all issues, feel like we don't need the in progress
 // section anymore", the user, 19 Oct); the rest stay in Issues.
 import { observer } from "mobx-react-lite";
+import { useState, type ReactNode } from "react";
 import { useLocation } from "react-router";
 import { deskPath, Go } from "../app/nav";
-import { frame } from "../store/frame";
+import { frame, type ChatRow } from "../store/frame";
 import { ui } from "../store/ui";
-import { renameChat } from "../sessions/live";
-import { GLYPH, Ring, SIDE_ICON, StateIcon } from "../ui/icons";
+import { pinChat, renameChat } from "../sessions/live";
+import { GLYPH, Ring, SIDE_ICON, StateIcon, TRIANGLE } from "../ui/icons";
 import { openMenu, toggled } from "../ui/menu";
 import { helpMenu } from "./help";
 import { toggleSide } from "./side";
@@ -22,20 +23,62 @@ function triageTip(triage: { now: string }[]) {
 const ISSUES_TIP = "All issues  G then E\nActive  G then A\nBacklog  G then B";
 const WHY = "desk runs this branch instead of main: a session's test, or your Try";
 
-// A chat's right-click menu: Rename, typed over its title. An empty one gives it back Claude Code's.
-function chatMenu(c: { session: string; title: string }, at: { x: number; y: number }) {
+// A row's right-click menu: Pin or Unpin, and for a chat with no issue, Rename, typed over its title. An empty one
+// gives it back Claude Code's.
+function chatMenu(c: ChatRow, pinned: boolean, at: { x: number; y: number }) {
   const rename = () => openMenu({
     ...at, filter: "input", className: "folders", query: c.title, placeholder: "Rename chat…",
     items: () => [], empty: "Enter saves it; empty gives back its own title",
     onEnter: (typed) => void renameChat(c.session, typed.replace(/\s+/g, " ").trim()),
   });
-  openMenu({ ...at, className: "actions", items: () => [{ icon: GLYPH.pencil, label: "Rename…", hint: "R", key: "r", more: true, run: rename }] });
+  openMenu({ ...at, className: "actions", items: () => [
+    { icon: GLYPH.pin, label: pinned ? "Unpin" : "Pin", hint: "P", key: "p", run: () => void pinChat(c.session, !pinned) },
+    ...(c.issue ? [] : [{ icon: GLYPH.pencil, label: "Rename…", hint: "R", key: "r", more: true, run: rename }]),
+  ] });
+}
+
+// The sections folded by a click on their label, as Linear's sidebar sections fold, kept in localStorage.sideFolded.
+function useFolded(): [Set<string>, (name: string) => void] {
+  const [folded, setFolded] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.sideFolded ?? "[]")));
+  const toggle = (name: string) => {
+    const now = new Set(folded);
+    if (!now.delete(name)) now.add(name);
+    if (now.size) localStorage.sideFolded = JSON.stringify([...now]);
+    else delete localStorage.sideFolded;
+    setFolded(now);
+  };
+  return [folded, toggle];
+}
+
+// A section's label, Linear's sidebar section header: a click folds what is under it, and the triangle turns.
+function Fold({ name, folded, toggle, children }: { name: string; folded: Set<string>; toggle: (name: string) => void; children: ReactNode }) {
+  const open = !folded.has(name);
+  return (
+    <>
+      <button className="nav-label nav-fold" type="button" aria-expanded={open} onClick={() => toggle(name)}>{name}{TRIANGLE}</button>
+      {open && children}
+    </>
+  );
 }
 
 export const Sidebar = observer(function Sidebar() {
   const here = deskPath(useLocation().pathname);
   const d = frame.data;
   const at = (path: string) => (here === path ? " here" : "");
+  const [folded, toggle] = useFolded();
+  // A session's row: its issue's state, or a ring for a chat with no issue, then on the right the dock's pulse while it
+  // works, or the Inbox's dot while it holds what you have not read. One with an issue opens the issue, where its chat
+  // docks, and goes by the issue's title.
+  const chatRow = (c: ChatRow, pinned: boolean) => (
+    <Go key={c.session} className={`nav-item${c.issue ? at(`/issue/${c.issue.slug}`) : ""}${at(`/sessions/${c.session}`)}`}
+      to={c.issue ? `/issue/${c.issue.slug}` : `/sessions/${c.session}`}
+      title={c.working ? "Working" : c.unread ? "Said something you have not read" : c.title}
+      onContextMenu={(e) => { e.preventDefault(); chatMenu(c, pinned, { x: e.clientX, y: e.clientY }); }}>
+      {c.issue ? <StateIcon state={c.issue.state} /> : <Ring />}
+      <span className="nav-title">{c.title}</span>
+      {c.working ? <span className="live-dot working" /> : c.unread ? <span className="unread" aria-label="Unread" /> : null}
+    </Go>
+  );
   return (
     <aside className="side">
       {/* Linear's top row is the workspace switcher, then search and New issue. desk has one workspace, so its place holds the sidebar's toggle. */}
@@ -72,25 +115,10 @@ export const Sidebar = observer(function Sidebar() {
           <span className="nav-title">{pr.title}</span>
         </Go>
       ))}
-      {/* Every session desk keeps, the newest first: its issue's state, or a ring for a chat with no issue, then on the
-          right the dock's pulse while it works, or the Inbox's dot while it holds what you have not read. One with an
-          issue opens the issue, where its chat docks, and goes by the issue's title. Older ones are in the corner's
-          history. */}
-      {d && d.chats.length > 0 && (
-        <>
-          <div className="nav-label">Chats</div>
-          {d.chats.map((c) => (
-            <Go key={c.session} className={`nav-item${c.issue ? at(`/issue/${c.issue.slug}`) : ""}${at(`/sessions/${c.session}`)}`}
-              to={c.issue ? `/issue/${c.issue.slug}` : `/sessions/${c.session}`}
-              title={c.working ? "Working" : c.unread ? "Said something you have not read" : c.title}
-              onContextMenu={c.issue ? undefined : (e) => { e.preventDefault(); chatMenu(c, { x: e.clientX, y: e.clientY }); }}>
-              {c.issue ? <StateIcon state={c.issue.state} /> : <Ring />}
-              <span className="nav-title">{c.title}</span>
-              {c.working ? <span className="live-dot working" /> : c.unread ? <span className="unread" aria-label="Unread" /> : null}
-            </Go>
-          ))}
-        </>
-      )}
+      {/* The sessions you pinned, then every other one still in hand, the newest first, with no cap (pages.ts's
+          chatsNow). Older ones are in the corner's history. */}
+      {d && d.pinned.length > 0 && <Fold name="Pinned" folded={folded} toggle={toggle}>{d.pinned.map((c) => chatRow(c, true))}</Fold>}
+      {d && d.chats.length > 0 && <Fold name="Chats" folded={folded} toggle={toggle}>{d.chats.map((c) => chatRow(c, false))}</Fold>}
       {/* desk's own checkout on no branch: a session testing its branch, or your Try, and under it the line of who
           waits for it. Read only: desk moves the line on its own. */}
       {d && (d.trying || d.line.length > 0) && (

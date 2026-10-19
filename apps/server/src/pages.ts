@@ -12,6 +12,7 @@ import * as store from "./issues.ts";
 import { byRank, CLOSED, runs, type Issue } from "./issues.ts";
 import * as land from "./land.ts";
 import * as live_ from "./live.ts";
+import * as pins from "./pins.ts";
 import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
 import { toHtml, toHtmlWithToc } from "./render.ts";
@@ -292,21 +293,33 @@ const rowsOf = (notices: Notice[]) => notices.map((n) => ({
 
 export const inboxRows = async () => rowsOf(await notifications(await store.loadAll()));
 
-// The sidebar's Chats: every session desk keeps, the newest few, the one that moved last first, each with its issue's
-// state, whether it works now, and whether it said something you have not read, which the Inbox lists too: "just
-// literally list all sessions with status icon related to their issue if there is" (the user, 19 Oct). An automation's
-// runs are its own page's, and a chat nobody wrote in has nothing to show. Older ones are in the corner's history.
-const CHATS_SHOWN = 8;
+// The sidebar's Pinned and Chats, each session with its issue's state, whether it works now, and whether it said
+// something you have not read, which the Inbox lists too ("just literally list all sessions with status icon related to
+// their issue if there is", the user, 19 Oct). Pinned holds the sessions the user pinned, in the order pinned (pins.ts).
+// Chats holds the rest still in hand, the one that moved last first, with no cap: an issue's session while the issue is
+// open, and a chat with no issue for a day after it last moved, or while it works or holds a reply you have not read.
+// "the chats section only has at max 8 latest chats, which sounds wrong to me" (the user, 19 Oct): the newest 8 of any
+// kind dropped a quiet issue in progress. An automation's runs are its own page's, and a chat nobody wrote in has
+// nothing to show. Older ones are in the corner's history.
+const IN_HAND = new Set(["triage", "running", "waiting", "review", "landing"]);
+const DAY = 24 * 3600 * 1000;
 
 function chatsNow(all: Map<string, Issue>) {
   const table = sessions.refresh();
   const moved = (h: Held) => Math.max(h.chat ? chats.movedAt(h.chat) : 0, (table.get(h.session)?.moved ?? 0) * 1000);
-  return held(all).filter((h) => table.has(h.session) && !h.chat?.automation)
-    .sort((a, b) => moved(b) - moved(a)).slice(0, CHATS_SHOWN)
-    .map((h) => ({
-      session: h.session, title: h.issue?.title ?? chatTitle(h.chat!), issue: h.issue && { slug: h.issue.slug, state: h.issue.state },
-      working: sessions.working(h.session), unread: unread(h) > 0,
-    }));
+  const shown = held(all).filter((h) => table.has(h.session) && !h.chat?.automation);
+  const row = (h: Held) => ({
+    session: h.session, title: h.issue?.title ?? chatTitle(h.chat!), issue: h.issue && { slug: h.issue.slug, state: h.issue.state },
+    working: sessions.working(h.session), unread: unread(h) > 0,
+  });
+  const bySession = new Map(shown.map((h) => [h.session, h]));
+  const pinned = pins.all().filter((s) => bySession.has(s));
+  const inHand = (h: Held) => (h.issue ? IN_HAND.has(h.issue.state)
+    : Date.now() - moved(h) < DAY || sessions.working(h.session) || unread(h) > 0);
+  return {
+    pinned: pinned.map((s) => row(bySession.get(s)!)),
+    chats: shown.filter((h) => !pinned.includes(h.session) && inHand(h)).sort((a, b) => moved(b) - moved(a)).map(row),
+  };
 }
 
 // --- what an issue shows -----------------------------------------------------------------------------------------------
@@ -461,7 +474,7 @@ export async function framePage() {
     trying: now && { slug: now.slug, branch: now.branch, issue: (now.slug && all.has(now.slug)) ? issueJson(all.get(now.slug)!) : null },
     line: line.filter((w) => all.has(w.slug)).map((w) => ({ slug: w.slug, branch: w.branch ?? null, for: w.for ?? null, issue: issueJson(all.get(w.slug)!) })),
     projects: active.map((p) => ({ slug: p.slug, title: p.title })),
-    chats: chatsNow(all),
+    ...chatsNow(all),
     rows: rowsOf(notices),
     automations: automations.stamp(), // a page of automations fetches itself again when it moves
     live: Object.fromEntries([...all.values()].filter((i) => i.session && !CLOSED.has(i.state)).map((i) => [i.slug, talkOf(i)])),

@@ -16,6 +16,7 @@ import * as land from "./land.ts";
 import * as live from "./live.ts";
 import * as models from "./models.ts";
 import * as pages from "./pages.ts";
+import * as pins from "./pins.ts";
 import { HttpError } from "./pages.ts";
 import * as projects from "./projects.ts";
 import * as sessions from "./sessions.ts";
@@ -565,6 +566,14 @@ export async function create(): Promise<FastifyInstance> {
     } catch (error) {
       throw new HttpError(404, (error as Error).message);
     }
+    sync.frameChanged();
+    return { ok: true };
+  });
+  // A sidebar row's Pin and Unpin: the session goes up into Pinned, or back to Chats.
+  app.post("/api/live/:id/pin", async (req: Req) => {
+    mustBePage(req);
+    const { pinned } = (req.body ?? {}) as unknown as { pinned?: boolean };
+    pins.set(sessionOf(req), pinned !== false);
     sync.frameChanged();
     return { ok: true };
   });

@@ -314,6 +314,12 @@ export function live(id: string): LiveSession {
 
 // A chat's own title, from its head or the sidebar's menu: an open chat shows it at once, and the server's next meta
 // confirms it. An empty one gives the chat back Claude Code's title.
+// A sidebar row's Pin and Unpin. The frame desk sends back moves the row.
+export async function pinChat(id: string, pinned: boolean) {
+  const res = await postJson(`/api/live/${id}/pin`, { pinned });
+  if (!res.ok) toast(await reason(res));
+}
+
 export async function renameChat(id: string, title: string) {
   const s = open.get(id), was = s?.meta;
   if (s && was && title) s.shows({ ...was, title });

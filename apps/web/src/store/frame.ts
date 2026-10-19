@@ -19,13 +19,17 @@ export interface InboxRow {
   who?: string; // the agent, on a row from a chat with one; else the row is an issue's session's
 }
 
+// A session as the sidebar lists it.
+export interface ChatRow { session: string; title: string; issue: { slug: string; state: State } | null; working: boolean; unread: boolean }
+
 export interface FrameData {
   inbox: number;
   triage: (IssueRow & { now: string })[];
   trying: { slug: string; branch: string; issue: IssueRow | null } | null;
   line: { slug: string; branch: string; for: string; issue: IssueRow }[];
   projects: { slug: string; title: string }[];
-  chats: { session: string; title: string; issue: { slug: string; state: State } | null; working: boolean; unread: boolean }[]; // the newest sessions
+  pinned: ChatRow[]; // the sessions the user pinned, in the order pinned
+  chats: ChatRow[]; // the other sessions still in hand, the newest first
   rows: InboxRow[];
   automations?: string; // moves whenever an automation does: its page fetches itself again
   live: Record<string, string>; // slug: where its session stands, for each open issue with one
@@ -34,7 +38,7 @@ export interface FrameData {
 // A frame with nothing in it. A frame from a desk of another version can lack a list this app reads, such as a tab
 // reopened on the app it last had while desk runs a newer or older commit (18 Oct: the sidebar's Agents crashed the
 // page); the list then draws empty until the tab reloads.
-const EMPTY: FrameData = { inbox: 0, triage: [], trying: null, line: [], projects: [], chats: [], rows: [], live: {} };
+const EMPTY: FrameData = { inbox: 0, triage: [], trying: null, line: [], projects: [], pinned: [], chats: [], rows: [], live: {} };
 
 class Frame {
   data: FrameData | null = null;
