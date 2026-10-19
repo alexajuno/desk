@@ -18,7 +18,8 @@
 // with, an Inbox <row> every column (inbox.ts); a deleted row comes as null. A description is part of its issue's row, so a new one comes as a change: the page
 // showing it asks again. A <frame> is the sidebar's sessions and desk's checkout, with each open issue's session state
 // (pages.ts, framePage), which no table holds yet. "files" names the issues whose files beside issue.md may have changed
-// (a session's plan.md, result.md, a screenshot), which no row holds either: a page showing one of them asks again.
+// (a screenshot, or an older issue's plan.md and result.md), which no row holds either: a page showing one of them asks
+// again.
 //
 // desk watches no file and asks nothing again on a timer: "when agent changes sth, it calls api, not edit file and desk
 // fetches from file later" (the user, 19 Oct). Each change comes from a write, through the one write path, or from the
@@ -95,11 +96,12 @@ function serial(name: string, work: () => Promise<void>): () => Promise<void> {
 }
 
 // --- the frame ---------------------------------------------------------------------------------------------------------
-// A session that starts or stops working, asks you something, or writes its plan or result, changes no row the app
-// holds, yet the Inbox and the strips say it. So the frame goes again after every write that changed a row of any
-// table (db.onCommit), such as the line's, and on each word from the session host: a turn started or ended, a question
-// waits, a process ended (turns.ts). What a session wrote beside its issue is read again once its turn ends. Only time
-// moves the frame on its own, when a landing has been stuck for a minute: one timer, set for that moment.
+// A session that starts or stops working, or asks you something, changes no row the app holds, yet the Inbox and the
+// strips say it. So the frame goes again after every write that changed a row of any table (db.onCommit), such as the
+// line's, and on each word from the session host: a turn started or ended, a question waits, a process ended (turns.ts).
+// What a session wrote beside its issue, such as a screenshot, is read again once its turn ends. Only time moves the
+// frame on its own, when a landing has been stuck for a minute: one timer, set for that moment. (While a host of older
+// code runs, which says nothing, turns.ts looks again every few seconds instead, until it gives way.)
 
 let frameText = ""; // the frame as the apps were last told
 
