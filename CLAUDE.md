@@ -30,4 +30,4 @@ desk is the user's own vibe-coded workspace, TypeScript end to end in one pnpm w
 
 - Issues live outside the repo, in `DESK_DATA` (default `~/.local/share/desk`, its own git repo), so code work and merges never touch them.
 - Each `issue.md` and `project.md` is the record: desk writes it on every save, and reads in any change made to it by hand within a moment, and again at every start. Postgres keeps them for desk to read, in `DESK_DATA/.db`, whose own `.gitignore` keeps it out of the data repo. Change issues through the API, not the files: a file edited by hand wins over what the database held.
-- One writer per file: the user and desk write `issue.md`; an issue's session writes `questions.md` and `result.md`.
+- One writer per file: the user and desk write `issue.md`; an issue's session writes `result.md`, and asks its questions in its chat.

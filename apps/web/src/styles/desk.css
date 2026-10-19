@@ -407,8 +407,8 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .section-label { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 600; color: var(--text-1); margin: 32px 0 8px; }
 .section-label .muted { font-size: 13px; font-weight: 450; }
 .section-label a.muted { color: var(--text-3); }
-/* A document under one of those headings (the plan, the result, the questions) has its own headings a step
-   below it. The plan is a design doc whose title repeats the issue's, so its title is left out. */
+/* A document under one of those headings (the plan, the result) has its own headings a step below
+   it. The plan is a design doc whose title repeats the issue's, so its title is left out. */
 .sec-body > .body h2, .review .body h2 { font-size: 16px; } .sec-body > .body h3, .review .body h3 { font-size: 15px; }
 .plan > h1:first-child { display: none; }
 /* A code block as a chat reply draws one (dock.css .reply pre), rather than each line boxed as inline code. */

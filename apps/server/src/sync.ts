@@ -10,8 +10,8 @@
 // An <issue> is what GET /api/issues lists (api.ts, asJson); a <project> is {slug, title, state}. "projects" comes in a
 // change only when a project changed, as the whole list. A <frame> is the sidebar and the Inbox's rows, with each open
 // issue's session state (pages.ts, framePage). "files" names the issues whose description or other files changed (a
-// session's plan.md, questions.md, result.md, a screenshot), which no field the apps hold says: a page showing one of
-// them asks again.
+// session's plan.md, result.md, a screenshot), which no field the apps hold says: a page showing one of them asks
+// again.
 //
 // desk's own saves tell this module at once (issues.onChange). An editor's change to an issue.md or project.md is seen
 // on the folders, read into the database (reconcile), and sent the same way.
@@ -91,14 +91,14 @@ async function checkNow() {
 export const check = serial("sync", checkNow);
 
 // --- the frame ---------------------------------------------------------------------------------------------------------
-// A session that starts or stops working, or writes its plan, questions or result, changes no issue, yet the Inbox and
-// the strips say it. Claude Code rewrites ~/.claude/sessions/<pid>.json the moment a session's turn starts or ends
+// A session that starts or stops working, or writes its plan or result, changes no issue, yet the Inbox and the
+// strips say it. Claude Code rewrites ~/.claude/sessions/<pid>.json the moment a session's turn starts or ends
 // ("status": busy or idle; `claude agents` reads it there) and removes it when the process ends, so desk watches those
 // and the files a session writes beside issue.md, and sends the frame again when it changed. A tick catches what no
 // file shows: time (a landing stuck for a minute) and the window in front (a chat's reply read as it came).
 
 const SESSIONS = join(HOME, ".claude", "sessions");
-const AGENT_FILES = ["plan.md", "questions.md", "result.md"];
+const AGENT_FILES = ["plan.md", "result.md"];
 const TICK = 5000; // ms
 
 let frameText = ""; // the frame as the apps were last told

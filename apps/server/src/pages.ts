@@ -63,14 +63,6 @@ const isFile = (path: string) => existsSync(path) && statSync(path).isFile();
 const resultOf = (slug: string) => join(store.folder(slug), "result.md");
 const iso = (t: string) => parseLocal(t).getTime() / 1000;
 
-// Whether questions.md asks something you have not answered: it changed after you last wrote to the session.
-function hasQuestions(i: Issue): boolean {
-  const path = join(store.folder(i.slug), "questions.md");
-  if (!isFile(path) || read(path).trim() === "") return false;
-  const answered = i.session ? sessions.prompted(i.session) : null;
-  return !answered || statSync(path).mtimeMs / 1000 > answered;
-}
-
 // Whether the session's result says, on its first line, that the work landed, and the pull request it opened, if any.
 export function landed(result: string): [boolean, string | null] {
   const text = read(result).trim();
@@ -111,14 +103,14 @@ function turnEnded(i: Issue): boolean {
 }
 
 // What a turn that ended with no word from its session left for you, from the files it wrote since your last message:
-// a result, questions, a plan, or else just its reply.
+// a result, a plan, or else just its reply, as a question it asked in its chat reads.
 export function handed(i: Issue): string {
   const since = (i.session && sessions.prompted(i.session)) || 0;
   const wrote = (name: string) => {
     const path = join(store.folder(i.slug), name);
     return isFile(path) && statSync(path).mtimeMs / 1000 > since;
   };
-  return wrote("result.md") ? "result" : wrote("questions.md") ? "question" : wrote("plan.md") ? "plan" : "reply";
+  return wrote("result.md") ? "result" : wrote("plan.md") ? "plan" : "reply";
 }
 
 // What an issue in review holds: a review from before 19 Oct held a result.
@@ -221,7 +213,7 @@ function replyWhy(i: Issue, result: boolean): string {
 const NOTICES: Record<string, string> = {
   "chat replied": "replied: your turn in its chat", "waiting for you": "is waiting for you", "plan ready": "wrote its plan: read it, then press Go",
   "no chat": "has no chat: settle it in Triage",
-  "has questions": "saved questions for you", "asks you": "asks you something: answer in its chat", "landing stuck": "stopped before the work landed",
+  "asks you": "asks you something: answer in its chat", "landing stuck": "stopped before the work landed",
   "result ready": "finished: the result is ready", "check it": "finished, with no result.md",
   landed: "landed the work: the issue is done", done: "replied: the issue is done", dropped: "replied: the issue was dropped",
   parked: "replied: the issue is in the backlog",
@@ -252,12 +244,12 @@ export interface Notice {
   session: string | null;
 }
 
-// The Inbox: each session that needs you, newest first. It needs you while it asks to allow a tool, has questions you
-// have not answered, or stopped short of landing, and once it replied and you have not read it, whatever its issue's
-// state: "inbox is now somewhat when a session needs my attention rather than issue based anymore" (the user, 19 Oct).
-// The issue says only what its row reads as. A row you have read leaves (keeping it, as Linear does, is the backlog's
-// "The Inbox keeps what you've read"), but the one open now (keep) stays until another opens. An issue in Triage with
-// no chat is the one row with no session.
+// The Inbox: each session that needs you, newest first. It needs you while it asks to allow a tool, or stopped short of
+// landing, and once it replied and you have not read it, whatever its issue's state: "inbox is now somewhat when a
+// session needs my attention rather than issue based anymore" (the user, 19 Oct). The issue says only what its row
+// reads as. A row you have read leaves (keeping it, as Linear does, is the backlog's "The Inbox keeps what you've
+// read"), but the one open now (keep) stays until another opens. An issue in Triage with no chat is the one row with no
+// session.
 export async function notifications(all: Map<string, Issue>, keep = ""): Promise<Notice[]> {
   await advance(all);
   const asks = await asking();
@@ -269,7 +261,6 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
     if (i?.state === "landing") { // and no further: a landing session works, asks and replies on its way to Done
       if (landingStuck(i, asks)) why = "landing stuck";
     } else if (asks.has(h.session)) why = "waiting for you";
-    else if (i?.state === "running" && !working(i) && hasQuestions(i)) why = "has questions";
     else if (unread(h) || (slug === keep && replied)) {
       why = i ? replyWhy(i, isFile(resultOf(i.slug))) : sessions.prompted(h.session) ? "agent replied" : "agent wrote";
     }
@@ -425,7 +416,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
   const kidsOf = allKids(all);
   // The plan, a design doc the session keeps in plan.md, shows on the page with the agent's files.
   const agentFiles: Record<string, string> = {};
-  for (const name of ["plan.md", "questions.md", "result.md"]) {
+  for (const name of ["plan.md", "result.md"]) {
     const path = join(store.folder(slug), name);
     if (isFile(path)) agentFiles[name] = toHtml(read(path), `/issue/${slug}/f/`);
   }

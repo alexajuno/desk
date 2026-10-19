@@ -145,8 +145,8 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
           )}
           {/* What there is to read leads: the result (in review, the card above), then the plan. Then the sub-issues, which
               the agent files, so the section shows only once there is one (Add sub-issue is in the ⋯ menu), then the
-              Context, a line or two, and the agent's saved questions. */}
-          {"result.md" in data.agent_files && !(p.state === "review" && data.reviewing) && <AgentFile name="result.md" html={data.agent_files["result.md"]} />}
+              Context, a line or two. */}
+          {"result.md" in data.agent_files && !(p.state === "review" && data.reviewing) && <Result html={data.agent_files["result.md"]} />}
           {"plan.md" in data.agent_files && (
             <section className="sec" data-sec="plan.md">
               <div className="section-label sec-head"><Fold />Plan <Go className="muted" to={`/issue/${p.slug}/f/plan.md`} title="Open the plan on its own page, with its contents">plan.md</Go></div>
@@ -162,7 +162,6 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
             </section>
           )}
           <Description key={p.slug} body={data.body} html={data.body_html} save={(t) => setField(p.slug, "body", t)} />
-          {"questions.md" in data.agent_files && <AgentFile name="questions.md" html={data.agent_files["questions.md"]} />}
         </div>
         <Properties data={data} p={p} />
       </div>
@@ -170,11 +169,11 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
   );
 });
 
-// A file the issue's session writes, under its own head: its result, or the questions it saved for the user.
-function AgentFile({ name, html }: { name: string; html: string }) {
+// The result the issue's session wrote, under its own head.
+function Result({ html }: { html: string }) {
   return (
-    <section className="sec" data-sec={name}>
-      <div className="section-label sec-head"><Fold />{name === "questions.md" ? "Saved questions" : "Result"} <span className="muted">from the agent · {name}</span></div>
+    <section className="sec" data-sec="result.md">
+      <div className="section-label sec-head"><Fold />Result <span className="muted">from the agent · result.md</span></div>
       <div className="sec-body"><Html className="body" html={html} /></div>
     </section>
   );
