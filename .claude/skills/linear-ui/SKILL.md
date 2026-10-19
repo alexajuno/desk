@@ -43,6 +43,8 @@ desk.css holds the numbers, and its comments say where and when each was measure
 - Help, the shortcuts and the theme live in the ? at the sidebar's foot. No control stands alone in a corner.
 - Linear lays a pane out by the pane's width, not the window's: the Inbox's open notification drops its Properties column below about 820px.
 
+**Links in a document.** Linear's editor has two modes for a link (measured 19 Oct on OE-705's description). Not typing, a click opens it, in a new tab, and puts no caret there; typing, a click selects the whole link and brings up a link bar over it (its address, then icons). Ctrl+click opens it either way. Hovering shows the address without `https://` in a tooltip under the link. desk's description does the same (`editor/links.ts`).
+
 **Motion.** Colours change in 0.1s; a group's triangle turns in 0.15s; a tooltip grows in from 98% in about 70ms and fades out in about 200ms.
 
 **The screen.** The user's screen is 2x (eDP-1 at scale 2). Linear picks its hairlines when a page loads, by the screen: 0.5px rings on a 2x screen, and 1px rings with fainter colours on a 1x one. desk takes the 2x values, so check that `devicePixelRatio` is 2 before you read a ring or a border.

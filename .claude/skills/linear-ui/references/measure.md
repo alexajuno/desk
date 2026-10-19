@@ -13,6 +13,7 @@ Use the agents' Chrome, through the `chrome` skill (load it before the first `mc
 | Views | `/alexajuno/team/OE/views/issues` |
 | The Agent | `/alexajuno/agent` |
 | Projects, and its New project modal | `/alexajuno/projects/all` |
+| An issue whose description has links (the description editor, the link bar) | `/alexajuno/issue/OE-705/understand-how-keys-delete-others-images`. A click in its text starts typing; press Escape twice to leave, changing nothing |
 | A project's page | `/alexajuno/project/muse-99b877fd75f2/overview` and `/issues`. Open it with the tab in the address: `/project/muse-99b877fd75f2` alone hung the agents' Chrome for 30 minutes on 18 Oct |
 
 For any other page, list the sidebar's links in `browser_evaluate`: `[...document.querySelectorAll('a')].map(a => a.textContent.trim() + ' -> ' + a.getAttribute('href'))`.
