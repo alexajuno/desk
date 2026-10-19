@@ -5,7 +5,7 @@ description: Files, finds, updates and starts issues in desk, the user's own wor
 
 # desk
 
-desk keeps the user's work as issues, in its database. Each issue also has a folder of files: `issue.md` (YAML front matter, then sections such as `## Context` and `## Plan`), which desk writes out on every save, and anything else that belongs to it. Each issue has one Claude Code session, which does its work in the issue's folder and writes `result.md` when it is done. The user sees an issue at `http://127.0.0.1:8790/issue/<slug>`.
+desk keeps the user's work as issues, in its database. Each issue has one document, its body: `## Context`, what the user asks, then `## Plan` and `## Result`, which its Claude Code session writes through the API as it plans and when it is done. Everything about the issue goes in it, every diagram and every decision talked over. desk writes it out on every save as `issue.md` (YAML front matter, then the body) in the issue's folder, which also holds the session's screenshots. The user sees an issue at `http://127.0.0.1:8790/issue/<slug>`.
 
 Change issues through the API below. `issue.md` is only for reading: desk never reads an edit to it, and its next save writes over the edit.
 
@@ -16,11 +16,11 @@ Every call is one line, `curl -s "<url>"`, with the URL in double quotes. A body
 An issue's fields:
 
 - `title`
-- `body`: Markdown sections, usually `## Context`: what the user asks in a line or two, in their words, quoted and dated, not their whole message (the user reads it at a glance; the talk stays in the chat)
+- `body`: the issue's document, Markdown under `##` headings: `## Context`, what the user asks in a line or two, in their words, quoted and dated, not their whole message (the user reads it at a glance; the talk stays in the chat), then `## Plan` and `## Result`. A body sent to an issue sets the sections it holds, and the others stay
 - `priority`: urgent, high, medium, low or none
 - `state`: triage (a desk chat's own issue, filed in its first reply, until the talk settles it; only desk's agent chat files one), backlog, running (shown as In progress: its session works on it, planning or carrying it out), waiting (someone else's move, such as QA's), review (shown as In review: the user's move, once its session's turn ends on a plan, a question or a result; the user's reply, or Go, moves it back to In progress), landing (approved: its session lands the work; only the user's Approve sets it), done or dropped
 - `waiting_on`: for a waiting issue, who or what it waits on, such as `QA on #570`, sent with `"state": "waiting"` or on its own after; desk notes since when, and drops both when the issue leaves waiting
-- `review_of`: for an issue in review, what its session hands the user: `plan` (waits for go: the user's Go button says it), `question` (only the user can answer), `result` (result.md, for Approve) or `reply`. An issue's session sends it with `"state": "review"` as it ends each turn; sent without it, or when a turn ends with no call, the issue shows In review on a `reply`: desk reads nothing from the files the turn wrote
+- `review_of`: for an issue in review, what its session hands the user: `plan` (waits for go: the user's Go button says it), `question` (only the user can answer), `result` (the Result, for Approve) or `reply`. An issue's session sends it with `"state": "review"` as it ends each turn; sent without it, or when a turn ends with no call, the issue shows In review on a `reply`: desk reads nothing from the files the turn wrote
 - `landed`: for a done issue, where its work landed: the commit and its branch, or the pull request's link (which becomes the issue's `link`). Once the user's Approve lands the work, its session sends it with `"state": "done"`, which moves the issue from Landing to Done; desk reads it from no file
 - `parent`: the slug of the issue it belongs under, or null
 - `project`: the slug of the project it belongs to, or null. A project is ongoing work that is never done, such as desk itself; its issues finish, it does not. It is a separate thing from `parent`, which is for sub-issues
@@ -55,6 +55,13 @@ Set fields, sending only the ones that change; null clears a parent or a folder:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"priority": "urgent", "parent": "desk"}'
+```
+
+Write one section of the document, `Context`, `Plan`, `Result` or any other, with the Markdown as the request's body: keep a draft where you like (with the Write or Edit tool, as `/tmp/desk-drafts/<slug>/plan.md`) and send it whole each time it changes. Its own headings start at `###`, since a `##` would start another section; an empty one takes the section out. GET reads it back:
+
+```bash
+curl -s "http://127.0.0.1:8790/api/issues/<slug>/sections/Plan" -X PUT --data-binary @/tmp/desk-drafts/<slug>/plan.md
+curl -s "http://127.0.0.1:8790/api/issues/<slug>/sections/Plan"
 ```
 
 Closing an issue (done or dropped) can close others with it, by the user's Settings › Workflows & automations, as Linear's do: `sub_issue_auto_close` (on unless the user turned it off) closes its open sub-issues the same way, and `parent_auto_close` closes its parent once its last sub-issue is closed. The reply then lists them as `closed`. Read the settings, or change one only when the user asks:
@@ -109,7 +116,7 @@ desk's own agent chat works an issue itself; it starts no other session. Bind th
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/work" --json '{"chat": "<chat id>"}'
 ```
 
-Then work it by its protocol, in the chat: write `plan.md` in the issue's folder, a three-line brief for quick and brief, and for design a sketch built with the user in short words, as the design-doc skill says, ending with Done when and Decide alone. Go straight on for quick; for the others, end your turn on `"review_of": "plan"` and wait for the user's "go". Carry the work out in the chat, write `result.md` with the review card, and end your turn on `"review_of": "result"`; the user's Approve sends the chat a message to land the work by the repo's rules:
+Then work it by its protocol, in the chat: send its Plan section, a three-line brief for quick and brief, and for design a sketch built with the user in short words, as the design-doc skill says, ending with Done when and Decide alone. Go straight on for quick; for the others, end your turn on `"review_of": "plan"` and wait for the user's "go". Carry the work out in the chat, send its Result section with the review card, and end your turn on `"review_of": "result"`; the user's Approve sends the chat a message to land the work by the repo's rules:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"state": "review", "review_of": "result"}'

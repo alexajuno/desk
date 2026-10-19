@@ -2,8 +2,8 @@
 // how each step works and what was checked on Claude Code 2.1.285 and 2.1.300).
 //
 //   Plan       a session in the session host (host.ts), in the issue's folder: the repo's own rules say where the
-//              session works. The session plans by the issue's protocol and keeps the plan in plan.md.
-//   "go"       said in its panel: the same session carries out the plan, then writes its review card in result.md.
+//              session works. The session plans by the issue's protocol and keeps the plan in the issue's Plan section.
+//   "go"       said in its panel: the same session carries out the plan, then writes its review card in the Result.
 //   Approve    the same session lands the work by the repo's rules: desk sends it the message, which waits its turn
 //              when the session is working.
 //
@@ -98,8 +98,8 @@ export function status(row: Row): string {
   return row.pid ? "idle" : "stopped";
 }
 
-// What a session's prompt names: the issue, its files, and the address it tells desk its turn's end at.
-const paths = (i: Issue, folder: string) => ({ title: i.title, file: join(folder, "issue.md"), plan: join(folder, "plan.md"), dir: folder,
+// What a session's prompt names: the issue, its folder, its drafts, and the address it tells desk its turn's end at.
+const paths = (i: Issue, folder: string) => ({ title: i.title, file: join(folder, "issue.md"), dir: folder, drafts: store.drafts(i.slug),
   slug: i.slug, base: `http://127.0.0.1:${PORT}` });
 
 // Claude Code refused to start a session because nobody accepted its trust prompt in the folder. The host runs

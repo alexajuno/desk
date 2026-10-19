@@ -192,11 +192,11 @@ export async function agentPrompt(chat: Chat, base: string): Promise<string> {
   const reference = readFileSync(SKILL, "utf8").replace(/^---\n[\s\S]*?\n---\n/, "").replaceAll(SKILL_BASE, base);
   const slug = chat.issue;
   const folder = slug && (await store.exists(slug)) ? store.folder(slug) : "<the issue's folder>";
-  const work = fill(WORK, { dir: folder, file: join(folder, "issue.md"), plan: join(folder, "plan.md"), base, slug: slug || "<slug>" });
+  const work = fill(WORK, { dir: folder, drafts: store.drafts(slug || "<slug>"), base, slug: slug || "<slug>" });
   const rules = Object.fromEntries(Object.entries(WINDOW_RULES).map(([k, v]) => [k, fill(v, { base })]));
   // A chat may run for days, and Claude Code gives it the date.
   let prompt = fill(PROMPT, { today: "the date your environment gives", day: "15 Oct", reference, chat: chat.id, plan_rules: PLAN_RULES, work,
-    protocols: fill(PROTOCOLS, { plan: join(folder, "plan.md") }), ...rules });
+    protocols: PROTOCOLS, ...rules });
   if (slug) prompt += `\n\nThis chat works the issue /issue/${slug}, in ${chat.folder}.`;
   else if (chat.cwd && !same(chat.cwd, DATA_DIR))
     prompt += `\n\nThe user started this chat in ${chat.cwd}, picked in its composer: when you accept its issue, that is its folder, unless the talk names another.`;

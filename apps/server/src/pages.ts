@@ -59,8 +59,8 @@ export function version(): string {
 }
 
 const read = (path: string) => readFileSync(path, "utf8");
+const readOr = (path: string) => (isFile(path) ? read(path) : "");
 const isFile = (path: string) => existsSync(path) && statSync(path).isFile();
-const resultOf = (slug: string) => join(store.folder(slug), "result.md");
 const iso = (t: string) => parseLocal(t).getTime() / 1000;
 
 // Whether a turn of the issue's session runs, as the session host told desk (turns.ts): a chat the host closed, or that
@@ -182,7 +182,7 @@ const NOTICES: Record<string, string> = {
   "chat replied": "replied: your turn in its chat", "waiting for you": "is waiting for you", "plan ready": "wrote its plan: read it, then press Go",
   "no chat": "has no chat: settle it in Triage",
   "asks you": "asks you something: answer in its chat", "landing stuck": "stopped before the work landed",
-  "result ready": "finished: the result is ready", "check it": "finished, with no result.md",
+  "result ready": "finished: the result is ready", "check it": "finished, with no result",
   landed: "landed the work: the issue is done", done: "replied: the issue is done", dropped: "replied: the issue was dropped",
   parked: "replied: the issue is in the backlog",
   "agent replied": "replied", "agent wrote": "wrote to you",
@@ -214,7 +214,7 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
       if (landingStuck(i, asks)) why = "landing stuck";
     } else if (asks.has(h.session)) why = "waiting for you";
     else if (replied) {
-      why = i ? replyWhy(i, isFile(resultOf(i.slug))) : turns.prompted(h.session) ? "agent replied" : "agent wrote";
+      why = i ? replyWhy(i, Boolean(store.result(i))) : turns.prompted(h.session) ? "agent replied" : "agent wrote";
       waits = false;
     }
     if (!why) continue;
@@ -291,12 +291,12 @@ function treeJson(items: Issue[], kidsOf: KidsOf): unknown[] {
   return items.map((p) => ({ ...issueJson(p), open: kidsOf(p.slug).filter((k) => !CLOSED.has(k.state)).length, kids: treeJson(kidsOf(p.slug), kidsOf) }));
 }
 
-const DETAILS = /^## Details[ \t]*$/m;
+const DETAILS = /^#{2,3} Details[ \t]*$/m;
 // Python-Markdown starts a list only after a blank line, and a card's list often sits right under its label.
 const LIST_UNDER_LINE = /^(?![-*+] |\p{Nd}+\. )(\S[^\n]*)\n(?=[-*+] |\p{Nd}+\. )/gmu;
 
-// A result written as a review card: the card above its "## Details" heading, the write-up under it; null for a result
-// without one, which shows whole.
+// A result written as a review card: the card above its "### Details" heading (an older result.md's "## Details"), the
+// write-up under it; null for a result without one, which shows whole.
 export function splitResult(text: string): [string, string] | null {
   const m = DETAILS.exec(text);
   if (!m) return null;
@@ -307,8 +307,7 @@ type Button = { label: string; action?: string; chat?: boolean; disabled?: boole
 
 // The strip pinned at the top of an issue: where it stands, and its one button, the next step. Only Plan and Approve
 // are clicks; everything else is said in the issue's chat, which Open chat brings up in a window over desk.
-export function strip(i: Issue, asks: Set<string>, hasPlan: boolean, result: string): { text: string; button: Button } {
-  const hasResult = isFile(result);
+export function strip(i: Issue, asks: Set<string>, hasPlan: boolean, hasResult: boolean): { text: string; button: Button } {
   const chat = { label: "Open chat", chat: true };
   if (i.state === "backlog") {
     if (i.session) return { text: "Backlog", button: chat };
@@ -368,35 +367,36 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     up = all.get(up)!.parent;
   }
   const kidsOf = allKids(all);
-  // The plan, a design doc the session keeps in plan.md, shows on the page with the agent's files.
+  // The plan and the result are sections of the issue's document; an older issue kept them in plan.md and result.md,
+  // which show under their own heads while the document lacks the section.
   const agentFiles: Record<string, string> = {};
-  for (const name of ["plan.md", "result.md"]) {
+  for (const [name, head] of [[store.PLAN, "Plan"], [store.RESULT, "Result"]]) {
     const path = join(store.folder(slug), name);
-    if (isFile(path)) agentFiles[name] = toHtml(read(path), `/issue/${slug}/f/`);
+    if (!store.section(i, head) && isFile(path)) agentFiles[name] = toHtml(read(path), `/issue/${slug}/f/`);
   }
   const direct = store.children(all, slug);
   const session = await agents.liveRow(i.session);
-  const result = resultOf(slug);
+  const result = store.result(i);
   const everyProject = await projects.loadAll();
   const project = i.project ? everyProject.get(i.project) ?? null : null;
   // The review shows a result only while it holds one: a plan or a question is read in the plan and the chat.
   const of = i.state === "review" ? reviewOf(i) : null;
-  const reviewing = of === "result" || (of === "reply" && isFile(result));
+  const reviewing = of === "result" || (of === "reply" && Boolean(result));
   let card: string[] | null = null;
-  if (reviewing && isFile(result)) {
-    const parts = splitResult(read(result));
+  if (reviewing && result) {
+    const parts = splitResult(result);
     if (parts) card = parts.map((part) => toHtml(part, `/issue/${slug}/f/`));
   }
   return {
-    issue: issueJson(i), body: i.body.trim(), body_html: toHtml(i.body),
+    issue: issueJson(i), body: i.body.trim(), body_html: toHtml(i.body, `/issue/${slug}/f/`), result_html: result && toHtml(result, `/issue/${slug}/f/`),
     project: project && { slug: project.slug, title: project.title },
     all_projects: [...everyProject.values()].filter((x) => x.state === "active" || x.slug === i.project).map((x) => ({ slug: x.slug, title: x.title, state: x.state })),
     trail: trail.map((t) => ({ slug: t.slug, title: t.title })),
     kids: treeJson(kidsOf(slug), kidsOf),
     progress: [direct.filter((k) => k.state === "done").length, direct.filter((k) => k.state !== "dropped").length],
-    files: store.files(slug), agent_files: agentFiles, card, reviewing,
+    agent_files: agentFiles, plan: store.section(i, "Plan") || readOr(join(store.folder(slug), store.PLAN)), result, card, reviewing,
     session_kind: session.kind ?? null, live: talkOf(i),
-    strip: strip(i, await asking(), store.hasPlan(i), result), trial: await tryButton(i),
+    strip: strip(i, await asking(), store.hasPlan(i), Boolean(result)), trial: await tryButton(i),
   };
 }
 

@@ -338,7 +338,17 @@ export async function create(): Promise<FastifyInstance> {
 
   // --- an issue's fields: one, or the same one on every issue of a list's selection (slugs, field and value as JSON).
   // Each answers with the issues the Workflow automations closed besides them, for the page to say so.
-  app.post("/issue/:slug/set", async (req: Req) => ({ closed: await setFields([req.params.slug], field(req, "field", null), field(req, "value")) }));
+  app.post("/issue/:slug/set", async (req: Req) => {
+    const name = field(req, "field", null), base = req.body?.base;
+    let value = field(req, "value");
+    // An edit to the issue's document on its page, which sends the document it started from: a section it left as it
+    // was keeps what a session wrote there meanwhile.
+    if (name === "body" && typeof base === "string") {
+      await mustExist(req.params.slug);
+      value = store.merged((await store.load(req.params.slug)).body, value, base);
+    }
+    return { closed: await setFields([req.params.slug], name, value) };
+  });
 
   app.post("/issues/set", async (req) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -461,7 +471,7 @@ export async function create(): Promise<FastifyInstance> {
     } catch (error) {
       if (error instanceof land.MainMoved) {
         try {
-          await agents.say(i, `Approved, but ${error.message} Rebase onto it, resolve the conflicts, check the work again, then rewrite ${store.folder(slug)}/result.md with a fresh card.`);
+          await agents.say(i, `Approved, but ${error.message} Rebase onto it, resolve the conflicts, check the work again, then send a fresh Result, with a fresh card.`);
         } catch (failed) {
           return stay(`${error.message} ${(failed as Error).message}`);
         }

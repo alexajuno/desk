@@ -37,8 +37,10 @@ export interface IssuePageData {
   trail: { slug: string; title: string }[];
   kids: TreeRow[];
   progress: [number, number];
-  files: string[];
-  agent_files: Record<string, string>;
+  agent_files: Record<string, string>; // an older issue's plan.md and result.md, while its document lacks the section
+  plan: string; // the Plan, as Markdown, or ""
+  result: string; // the Result, as Markdown, or ""
+  result_html: string;
   card: [string, string] | null;
   reviewing: boolean; // in review, holding a result to approve rather than a plan or a question
   session_kind: string | null;
@@ -139,20 +141,21 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
                   <Html className="body review-card" html={data.card[0]} />
                   <details className="review-details"><summary>Details</summary><Html className="body" html={data.card[1]} /></details>
                 </>
-              ) : "result.md" in data.agent_files ? <Html className="body" html={data.agent_files["result.md"]} />
-                : <p className="muted">No result.md: this was done in a chat, so check the work itself.</p>}
+              ) : data.result ? <Html className="body" html={data.result_html} />
+                : <p className="muted">No result: this was done in a chat, so check the work itself.</p>}
             </div>
           )}
-          {/* What there is to read leads: the result (in review, the card above), then the plan. Then the sub-issues, which
-              the agent files, so the section shows only once there is one (Add sub-issue is in the ⋯ menu), then the
-              Context, a line or two. */}
-          {"result.md" in data.agent_files && !(p.state === "review" && data.reviewing) && <Result html={data.agent_files["result.md"]} />}
+          {/* The issue's one document: its Context, then its Plan and its Result, which its session writes through the
+              API. An older issue's plan.md and result.md follow it, in the same order. Then the sub-issues, which the
+              agent files, so the section shows only once there is one (Add sub-issue is in the ⋯ menu). */}
+          <Description key={p.slug} body={data.body} html={data.body_html} save={(t, base) => setField(p.slug, "body", t, base)} />
           {"plan.md" in data.agent_files && (
             <section className="sec" data-sec="plan.md">
               <div className="section-label sec-head"><Fold />Plan <Go className="muted" to={`/issue/${p.slug}/f/plan.md`} title="Open the plan on its own page, with its contents">plan.md</Go></div>
               <div className="sec-body"><Html className="body plan" html={data.agent_files["plan.md"]} /></div>
             </section>
           )}
+          {"result.md" in data.agent_files && !(p.state === "review" && data.reviewing) && <Result html={data.agent_files["result.md"]} />}
           {data.kids.length > 0 && (
             <section className="sec" data-sec="sub-issues">
               <div className="section-label sec-head"><Fold />Sub-issues
@@ -161,7 +164,6 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
               <div className="sec-body"><Tree items={data.kids} /></div>
             </section>
           )}
-          <Description key={p.slug} body={data.body} html={data.body_html} save={(t) => setField(p.slug, "body", t)} />
         </div>
         <Properties data={data} p={p} />
       </div>
@@ -169,7 +171,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
   );
 });
 
-// The result the issue's session wrote, under its own head.
+// The result.md an older issue's session wrote, under its own head.
 function Result({ html }: { html: string }) {
   return (
     <section className="sec" data-sec="result.md">
@@ -268,12 +270,6 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
         <span>{p.folder || "~"}</span>
       </button>
       {p.link && (<><div className="label">Link</div><div className="prop static"><a href={p.link}>{fromSlack(p.link) ? "🐧 Slack" : p.link.split("/").pop()}</a></div></>)}
-      {data.files.length > 0 && (
-        <>
-          <div className="label">Files</div>
-          {data.files.map((f) => <div className="prop static" key={f}><Go to={`/issue/${p.slug}/f/${f}`}>{f}</Go></div>)}
-        </>
-      )}
       {p.session && (
         <>
           {/* What the strip's button acts on. Opening it in kitty instead is in the … menu. */}

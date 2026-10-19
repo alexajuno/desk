@@ -5,7 +5,9 @@
 //     GET    /api/issues/<slug>         one issue, with its body and files
 //     POST   /api/issues                create one: title, body, priority, state, parent, project, folder, protocol
 //     PATCH  /api/issues/<slug>         set any of those fields; its session also says what its turn hands you (review_of)
-//                                       and where its work landed (landed)
+//                                       and where its work landed (landed); a body sets the sections it holds
+//     GET    /api/issues/<slug>/sections/<name>   one section of the issue's document, as Markdown
+//     PUT    /api/issues/<slug>/sections/<name>   write it, the Markdown as the request's body; empty takes it out
 //     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
 //     POST   /api/issues/<slug>/work    the agent chat works it itself: the chat becomes the issue's session
 //     POST   /api/issues/<slug>/try     run the issue's branch in its folder's checkout, to test it (land.ts)
@@ -119,7 +121,7 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
   }
   if (fields.project && !(await projects.exists(fields.project))) throw new HttpError(422, `No project ${fields.project}. List them with GET /api/projects.`);
   if (fields.folder && !isDir(expand(fields.folder))) throw new HttpError(422, `No folder ${fields.folder}. Find one with GET /api/folders?q=<name>.`);
-  if ("body" in fields) fields.body = fields.body || "";
+  if ("body" in fields) fields.body = store.withSections(i.body, fields.body || "");
   const target = i as unknown as Record<string, string | null>;
   for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "project", "folder", "waiting_on", "landed"].includes(name) ? value || null : value;
 }
@@ -166,6 +168,7 @@ function applyAutomation(a: Automation, fields: Record<string, string | null>) {
 export const baseOf = (req: FastifyRequest) => `${req.protocol}://${req.headers.host ?? "127.0.0.1"}`;
 
 type Req = FastifyRequest<{ Params: { slug: string }; Querystring: Record<string, string> }>;
+type SectionReq = FastifyRequest<{ Params: { slug: string; name: string } }>;
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 
 // The chat filing its own issue in Triage: the one whose id the call sends, or, when it sends none, the one whose
@@ -215,6 +218,32 @@ export function routes(app: FastifyInstance) {
     await apply(i, given(req.body, FIELDS));
     const closed = await store.save(i);
     return { ...asJson(i, true), ...(closed.length ? { closed } : {}) };
+  });
+
+  // One section of the issue's document: Context, Plan, Result, or any other. A session writes its plan and its result
+  // here, as Markdown, from a draft it keeps where it likes: curl -X PUT --data-binary @<draft>.
+  app.get("/api/issues/:slug/sections/:name", async (req: SectionReq, reply) => {
+    const text = store.section(await loadIssue(req.params.slug), req.params.name);
+    if (!text) throw new HttpError(404, `${req.params.slug} has no ## ${req.params.name} section.`);
+    return reply.type("text/markdown; charset=utf-8").send(`${text}\n`);
+  });
+
+  app.register(async (raw) => {
+    // The Markdown comes as it is, whatever type curl gave it (--data-binary sends a form's), or as JSON's text.
+    raw.removeContentTypeParser("application/x-www-form-urlencoded");
+    raw.addContentTypeParser("*", { parseAs: "string" }, (_req, body, done) => done(null, body));
+    raw.put("/api/issues/:slug/sections/:name", async (req: SectionReq) => {
+      const i = await loadIssue(req.params.slug), name = req.params.name;
+      const sent = typeof req.body === "string" ? req.body : str(((req.body ?? {}) as Record<string, unknown>).text);
+      if (!/^[\p{L}\p{N}][\p{L}\p{N} ’'-]*$/u.test(name)) throw new HttpError(422, `${name} is no section name: use words, such as Plan.`);
+      try {
+        store.setSection(i, name, store.sectionText(name, sent));
+      } catch (error) {
+        throw new HttpError(422, (error as Error).message);
+      }
+      await store.save(i);
+      return { ...asJson(i), section: name, written: Boolean(sent.trim()) };
+    });
   });
 
   app.get("/api/agents", async () => roster.list().map(({ name, description }) => ({ name, description })));

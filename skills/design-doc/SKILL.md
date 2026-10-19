@@ -1,6 +1,6 @@
 ---
 name: design-doc
-description: How Claude plans with the user - as a discussion partner, the way two engineers talk at a whiteboard - saying the idea in short words, one piece at a time, and drawing a sketch of only what has been said, never handing over a whole document to review. The plan.md it keeps holds five things (a Now line, the sketch in d2, Said so far with one line per decision and the user's reason, Done when, Decide alone) and fits on one screen. Use whenever planning anything with the user before it is built - a plan.md, a design, a spec, an RFC or a proposal, weighing directions, or drawing how a workflow or system will work - including every desk issue on the design protocol, even when nobody says "design doc". Triggers include "let's plan this", "write the plan", "plan.md", "design doc", "design it", "let's discuss", "how should we build this", "what are our options", "draw the workflow".
+description: How Claude plans with the user - as a discussion partner, the way two engineers talk at a whiteboard - saying the idea in short words, one piece at a time, and drawing a sketch of only what has been said, never handing over a whole document to review. The plan it keeps (in desk, the issue's Plan section; elsewhere a plan.md) holds five things (a Now line, the sketch in d2, Said so far with one line per decision and the user's reason, Done when, Decide alone) and fits on one screen. Use whenever planning anything with the user before it is built - a plan.md, a design, a spec, an RFC or a proposal, weighing directions, or drawing how a workflow or system will work - including every desk issue on the design protocol, even when nobody says "design doc". Triggers include "let's plan this", "write the plan", "plan.md", "design doc", "design it", "let's discuss", "how should we build this", "what are our options", "draw the workflow".
 ---
 
 # Planning with the user
@@ -15,20 +15,18 @@ Plan as a discussion partner, the way two engineers talk at a whiteboard: one sa
 - **Detail goes in a picture, not in paragraphs.** Where cases or states matter, draw them: a state diagram for states, a sequence for who does what in order, a table of cases for edge cases.
 - **End each reply on what you need:** a reaction, a pick, or "go".
 
-## plan.md
+## The plan
 
-The sketch you both look at. desk shows it beside the chat and redraws it whenever it changes. It holds five things and fits on one screen, under about 250 words outside the diagrams:
+The sketch you both look at. In desk it is the Plan section of the issue's one document, which you send through desk's API as the desk skill says, and desk shows it on the issue's page and redraws it each time you send it. It holds five things and fits on one screen, under about 250 words outside the diagrams. The issue's title heads the page, so the plan has none, and its headings start at ###, since a ## would start another section of the document:
 
 ~~~markdown
-# <what we are solving, in the user's words>
-
 > **Now (<HH:MM>):** <where the talk stands, and what you need next>.
 
 ```d2
 <the sketch: only what has been said>
 ```
 
-## Said so far
+### Said so far
 
 - **<The decision, in a few words.>** "<the user's reason, in their words>" (<date>).
 - **Mine, yours to change: <your pick>.** <Why, in one line.>
@@ -47,9 +45,9 @@ The sketch you both look at. desk shows it beside the chat and redraws it whenev
 ## Writing it live
 
 - Write a first draft as soon as you understand the problem: the Now line, a first sketch, and what the user has said. No more.
-- Rewrite it after each exchange that changes it, with the Write or Edit tool. In the chat, say the change in short words; don't paste the plan.
+- Rewrite it after each exchange that changes it, with the Write or Edit tool, in its draft, then send it again. In the chat, say the change in short words; don't paste the plan.
 - Something bigger than one plan, such as a whole system, is an overview sketch first, then a plan per part.
-- Outside desk, keep plan.md in the folder you work in, or draw the sketch in the chat when there is no folder.
+- Outside desk, keep the plan in a plan.md in the folder you work in, with a `# <what we are solving>` title and `## Said so far`, or draw the sketch in the chat when there is no folder.
 
 ## Diagrams
 

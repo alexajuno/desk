@@ -8,6 +8,7 @@
 // moves an issue and its sub-issues to TRASH_DIR/<slug>/, one folder each, and their rows to the trashed table, so undo
 // is a move back.
 import { existsSync, mkdirSync, opendirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ISSUES_DIR, TRASH_DIR } from "./config.ts";
 import * as db from "./db.ts";
@@ -16,7 +17,11 @@ import { asText, dump, split } from "./frontmatter.ts";
 import * as settings from "./settings.ts";
 
 export const MAIN = "issue.md";
-export const PLAN = "plan.md"; // the plan, kept by the issue's session while the user plans with it
+// Where a session kept its plan and its result until 19 Oct, beside issue.md: an older issue still shows them.
+export const PLAN = "plan.md";
+export const RESULT = "result.md";
+// Where a session keeps its drafts of the document's sections, which it sends through the API: scratch, not the record.
+export const drafts = (slug: string) => join(tmpdir(), "desk-drafts", slug);
 
 // Linear's priority levels, most urgent first.
 export const PRIORITIES = ["urgent", "high", "medium", "low", "none"];
@@ -78,16 +83,116 @@ export const byRank = (a: Issue, b: Issue) => rank(a)[0] - rank(b)[0] || (a.crea
 
 const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// The text of a "## <name>" section, as issues.py's section.
-export function section(i: Issue, name: string): string {
-  const m = new RegExp(`^## ${escapeRe(name)}\\n([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, "m").exec(i.body);
-  return m ? m[1].trim() : "";
+// --- the document ------------------------------------------------------------------------------------------------
+// An issue's body is its one document: ## Context, the ask; ## Plan, which its session keeps while the user plans with
+// it; ## Result, its review card and write-up. "seemingly we don't need multiple files. instead having a single content
+// for the issue would be better" (the user, 19 Oct). Sessions write a section at a time through the API, so the user's
+// edit to one and a session's to another never overwrite each other.
+
+export const ORDER = ["Context", "Plan", "Result"];
+
+interface Part { name: string; raw: string } // raw: the heading line and all up to the next; the lead has no name
+
+const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+
+// Each line of a Markdown text, ending with its \n, and whether it is outside every code fence.
+function* lines(text: string): Generator<[string, boolean]> {
+  let fence = "";
+  for (const line of text.split(/(?<=\n)/)) {
+    const f = FENCE.exec(line.trimEnd());
+    if (fence) {
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim()) fence = "";
+      yield [line, false];
+    } else {
+      if (f) fence = f[1];
+      yield [line, !f];
+    }
+  }
 }
 
+// The document's parts, split at its ## headings outside code fences: a d2 sketch's "## " is no heading.
+export function parts(body: string): Part[] {
+  const out: Part[] = [{ name: "", raw: "" }];
+  for (const [line, outside] of lines(body)) {
+    const h = outside && /^## +(.+?)[ \t#]*$/.exec(line.trimEnd());
+    if (h) out.push({ name: h[1], raw: line });
+    else out[out.length - 1].raw += line;
+  }
+  return out;
+}
+
+const textOf = (p: Part) => (p.name ? p.raw.replace(/^.*\n?/, "") : p.raw).trim();
+const named = (list: Part[], name: string) => list.find((p) => p.name.toLowerCase() === name.toLowerCase());
+
+// The text of a "## <name>" section, without its heading.
+export function section(i: Issue, name: string): string {
+  const p = named(parts(i.body), name);
+  return p ? textOf(p) : "";
+}
+
+// Where a section the document lacks goes: Context, Plan and Result in that order, any other at the end.
+function insert(list: Part[], part: Part) {
+  const rank = ORDER.indexOf(part.name);
+  const at = rank < 0 ? -1 : list.findIndex((p) => ORDER.indexOf(p.name) > rank);
+  list.splice(at < 0 ? list.length : at, 0, part);
+}
+
+function joined(list: Part[]): string {
+  const text = list.map((p) => p.raw.trim()).filter(Boolean).join("\n\n");
+  return text && `${text}\n`;
+}
+
+// Set one section's text, adding it in its place, or with no text taking it out.
 export function setSection(i: Issue, name: string, text: string) {
-  const block = `## ${name}\n\n${text.trim()}\n\n`;
-  const re = new RegExp(`^## ${escapeRe(name)}\\n[\\s\\S]*?(?=^## |(?![\\s\\S]))`, "m");
-  i.body = re.test(i.body) ? i.body.replace(re, () => block) : `${i.body.trimEnd()}\n\n${block}`;
+  const list = parts(i.body), was = named(list, name);
+  const canonical = ORDER.find((n) => n.toLowerCase() === name.toLowerCase()) ?? was?.name ?? name;
+  const part = { name: canonical, raw: `## ${canonical}\n\n${text.trim()}\n` };
+  if (was) list.splice(list.indexOf(was), 1, ...(text.trim() ? [part] : []));
+  else if (text.trim()) insert(list, part);
+  i.body = joined(list);
+}
+
+// A section's text as a session sent it: its own heading, if it wrote one, comes off, and its inner headings start
+// at ###, since a # or ## would split the document. Throws the reason, for the session to fix.
+export function sectionText(name: string, text: string): string {
+  text = text.replace(new RegExp(`^\\s*## +${escapeRe(name)}[ \\t#]*\\n`, "i"), "");
+  for (const [line, outside] of lines(text))
+    if (outside && /^#{1,2}(\s|$)/.test(line))
+      throw new Error(`"${line.trim()}" would split the issue's document: a section's own headings start at ###.`);
+  return text;
+}
+
+// The document with the sections `sent` holds set, as the API's body sets them: each replaces the one of its name or
+// goes in its place, a lead before any heading replaces the document's, and the sections it leaves out stay. So a
+// session that rewrites the Context keeps the Plan.
+export function withSections(current: string, sent: string): string {
+  const list = parts(current);
+  for (const p of parts(sent)) {
+    const was = named(list, p.name);
+    if (!p.name) list[0] = p.raw.trim() ? p : list[0];
+    else if (was) list[list.indexOf(was)] = p;
+    else insert(list, p);
+  }
+  return joined(list);
+}
+
+const same = (a: Part | undefined, b: Part | undefined) =>
+  (a ? textOf(a).replace(/\n{3,}/g, "\n\n") : null) === (b ? textOf(b).replace(/\n{3,}/g, "\n\n") : null);
+
+// The document after the user's edit in the app: `sent`, edited from `base`, the document as the page had it. A section
+// the user left as it was keeps what the document holds now, which a session may have written meanwhile, and one a
+// session added meanwhile stays.
+export function merged(current: string, sent: string, base: string): string {
+  const now = parts(current), was = parts(base), out: Part[] = [];
+  for (const p of parts(sent)) {
+    if (!same(p, named(was, p.name))) out.push(p);
+    else {
+      const kept = named(now, p.name);
+      if (kept) out.push(kept);
+    }
+  }
+  for (const p of now.slice(1)) if (!named(was, p.name) && !named(out, p.name)) insert(out, p);
+  return joined(out);
 }
 
 // --- issue.md ----------------------------------------------------------------------------------------------------
@@ -266,8 +371,19 @@ export function changed(slug: string): number {
   return latest;
 }
 
-// plan.md, or a ## Plan section: older issues have one, and the desk agent's Start writes one.
-export const hasPlan = (i: Issue) => existsSync(join(folder(i.slug), PLAN)) || Boolean(section(i, "Plan"));
+// The document's Plan, or an older issue's plan.md.
+export const hasPlan = (i: Issue) => Boolean(section(i, "Plan")) || existsSync(join(folder(i.slug), PLAN));
+
+// The document's Result, or an older issue's result.md; "" when there is none.
+export function result(i: Issue): string {
+  const text = section(i, "Result");
+  if (text) return text;
+  try {
+    return readFileSync(join(folder(i.slug), RESULT), "utf8");
+  } catch {
+    return "";
+  }
+}
 
 export async function newSlug(title: string): Promise<string> {
   const base = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "issue";

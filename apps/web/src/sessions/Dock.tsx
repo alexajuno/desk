@@ -65,10 +65,10 @@ function move(next: Layout, change: () => void) {
 // idle, no result yet), or its card from review on. A mark of both tells when the agent wrote either anew.
 const CARDED = ["review", "landing", "waiting", "done"];
 export function readingOf(data: IssuePageData): Reading {
-  const plan = data.agent_files["plan.md"], result = data.agent_files["result.md"], state = data.issue.state;
+  const { plan, result } = data, state = data.issue.state;
   const want = data.issue.review_of === "plan" ? Boolean(plan)
     : result ? CARDED.includes(state) : ["running", "review"].includes(state) && Boolean(plan) && data.live !== "working";
-  return { want, has: Boolean(plan || result), mark: `${hash(plan ?? "")}.${hash(result ?? "")}` };
+  return { want, has: Boolean(plan || result), mark: `${hash(plan)}.${hash(result)}` };
 }
 
 function hash(text: string) {

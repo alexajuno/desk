@@ -20,8 +20,9 @@ const SAVE_AFTER = 1000; // ms after the last change
 // The document needs a block to put the caret in.
 const editable = (parsed: Parsed) => (parsed.doc.content?.length ? parsed.doc : { type: "doc", content: [{ type: "paragraph" }] });
 
-// save stores the Markdown; the page keys this by what it describes, so save is the same function all along.
-export function Description({ body, html, save: store }: { body: string; html: string; save: (text: string) => Promise<unknown> }) {
+// save stores the Markdown, with the Markdown it was edited from; the page keys this by what it describes, so save is
+// the same function all along.
+export function Description({ body, html, save: store }: { body: string; html: string; save: (text: string, base: string) => Promise<unknown> }) {
   const parsed = useRef<Parsed | null>(null);
   parsed.current ??= parse(body);
   const saved = useRef(body); // what the file holds, as far as this page knows
@@ -33,9 +34,10 @@ export function Description({ body, html, save: store }: { body: string; html: s
     timer.current = 0;
     const text = toMarkdown(editor.getJSON(), parsed.current!);
     if (text === saved.current) return;
+    const base = saved.current;
     saved.current = text;
     saving.current++;
-    store(text).finally(() => saving.current--);
+    store(text, base).finally(() => saving.current--);
   }
 
   const editor = useEditor({
