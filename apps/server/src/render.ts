@@ -134,16 +134,6 @@ function mixedLists(text: string): string {
   }).join("\n");
 }
 
-// Python-Markdown reads a line that starts with # as a heading even with no space after it ("#23 and #3 are merged"),
-// in a list item too; CommonMark wants the space.
-function bareHeadings(text: string): string {
-  let fence = false;
-  return text.split("\n").map((line) => {
-    if (/^\s*```/.test(line)) fence = !fence;
-    return fence ? line : line.replace(/^( *(?:(?:[-*+]|\d+\.) +)?)(#{1,6})(?=[^#\s])/, "$1$2 ");
-  }).join("\n");
-}
-
 // Python-Markdown puts an item's text in a paragraph only around a blank line inside the list: the item before the
 // blank and the item after it (markdown/blockprocessors.py, OListProcessor.run: the previous item's text moves into a
 // <p>, and the first item after the blank is parsed as a loose list). An item holding more than one block shows its
@@ -217,7 +207,7 @@ export function toHtmlWithToc(text: string, base = ""): [string, string] {
   });
   const md = markdown(base);
   const env = {};
-  const source = listLevels(bareHeadings(mixedLists(quotedLists(listsAfterText(held)))));
+  const source = listLevels(mixedLists(quotedLists(listsAfterText(held))));
   const tokens = md.parse(source, env);
   pythonLooseness(tokens, source.split("\n"));
   const ids = new Set<string>();
