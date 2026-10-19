@@ -228,7 +228,7 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/version", async (_req, reply) => reply.type("text/plain; charset=utf-8").send(pages.version()));
 
   // desk's pages are the app's: each address answers with it, and the app asks /api/page/... for the data.
-  for (const path of ["/issues", "/issues/:tab", "/triage", "/projects", "/project/:slug", "/project/:slug/issues", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
+  for (const path of ["/issues", "/issues/:tab", "/triage", "/projects", "/project/:slug", "/project/:slug/issues", "/automations", "/automation/:slug", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
     app.get(path, async (_req, reply) => web.index(reply));
   app.get("/", async (_req, reply) => reply.redirect("/issues", 307));
   // The Backlog listed every open issue, and became All issues on 17 Oct; /park was its name before that.
@@ -264,6 +264,8 @@ export async function create(): Promise<FastifyInstance> {
   });
   app.get("/api/page/project/:slug", async (req: Req) => pages.projectPage(req.params.slug, rawQuery(req)));
   app.get("/api/page/projects", async () => pages.projectsPage());
+  app.get("/api/page/automations", async () => pages.automationsPage());
+  app.get("/api/page/automation/:slug", async (req: Req) => pages.automationPage(req.params.slug));
   app.get("/api/page/inbox", async (req: Req) => pages.inboxPage(req.query.i ?? ""));
   app.get("/api/page/search", async (req: Req) => pages.searchPage(req.query.q ?? ""));
   app.get("/api/page/file/:slug/:name", async (req: Req) => pages.filePage(req.params.slug, req.params.name));

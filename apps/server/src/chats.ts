@@ -41,8 +41,9 @@ export interface Chat {
   cwd?: string;
   agent?: string; // the agent the chat is with, by name; none for desk's own
   bare?: boolean; // a Chat: no agent and no desk prompt
-  named?: string; // the title the user gave it, over Claude Code's
+  named?: string; // the title the user gave it, or its automation's, over Claude Code's
   from?: string; // the script whose message started it (push)
+  automation?: string; // the automation whose run it is, by slug (automations.ts)
   seen?: number; // when the user last looked at it, in seconds: the Inbox leaves out what the agent said before
   [key: string]: unknown;
 }
@@ -214,12 +215,14 @@ function agentRuns(agent: Agent): models.Pick {
   return { model: agent.model ?? s.chat_model, effort: agent.effort ?? s.chat_effort };
 }
 
-// A new chat with the agent, its session started in the host, with a first message when given one.
-export async function agentChat(agent: Agent, message?: hosted.Content, from?: string): Promise<Chat> {
-  const chat: Chat = { id: newId(), kind: "panel", agent: agent.name, title: agent.name, created: now(), session: randomUUID(), messages: [], cwd: HOME,
-    ...(from ? { from } : {}) };
-  models.keep(chat.session, agentRuns(agent));
-  await hosted.start({ ...(await hostOptions(chat)), title: `${agent.name} ${stamp()}`, ...(message ? { message } : {}) });
+// A new chat with the agent, or a bare one with none, its session started in the host, with a first message when given
+// one.
+export async function agentChat(agent: Agent | null, message?: hosted.Content, more: Partial<Chat> = {}): Promise<Chat> {
+  const chat: Chat = { id: newId(), kind: "panel", ...(agent ? { agent: agent.name, title: agent.name } : { bare: true, title: "Chat" }), created: now(),
+    session: randomUUID(), messages: [], cwd: HOME, ...more };
+  const s = settings.load();
+  models.keep(chat.session, agent ? agentRuns(agent) : { model: s.chat_model, effort: s.chat_effort });
+  await hosted.start({ ...(await hostOptions(chat)), title: `${agent?.name ?? "chat"} ${stamp()}`, ...(message ? { message } : {}) });
   save(chat);
   return chat;
 }
@@ -257,8 +260,13 @@ export function push(agent: Agent, text: string, from: string): Promise<Chat> {
   const who = from.replace(/["<>\n]/g, " ").trim().slice(0, 60) || "a script";
   const message = `<desk-push from="${who}">\n${text.trim()}\n</desk-push>\n\n${who} sent this for the user. desk opens a chat with you for it: your ` +
     "reply is the first thing the user reads, and they may answer you there. Tell them what matters in it, briefly.";
-  return agentChat(agent, message, who);
+  return agentChat(agent, message, { from: who });
 }
+
+// An automation's run (automations.ts): a chat with its agent, or a bare one, named after it, which starts on the
+// message and waits in the Inbox with its reply.
+export const automationRun = (agent: Agent | null, title: string, slug: string, message: string) =>
+  agentChat(agent, message, { named: title, automation: slug });
 
 // The user looked at the agent's or the bare chat now: what it said so far is read.
 export function seenNow(session: string) {

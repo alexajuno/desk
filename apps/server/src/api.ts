@@ -17,10 +17,18 @@
 //     PATCH  /api/settings              set any of them
 //     GET    /api/agents                the user's own agents, whom a chat can be with (roster.ts)
 //     POST   /api/agents/<name>/say     a script's message for the user: message, from; a new chat with the agent passes it on
+//     GET    /api/automations           list automations (automations.ts)
+//     GET    /api/automations/<slug>    one automation, with its description
+//     POST   /api/automations           create one: title, when, check, agent, body, state
+//     PATCH  /api/automations/<slug>    set any of those fields
+//     DELETE /api/automations/<slug>    delete it
+//     POST   /api/automations/<slug>/run   fire it now: its check, then a run with its agent; message goes in with them
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import * as agents from "./agents.ts";
+import * as automations from "./automations.ts";
+import type { Automation } from "./automations.ts";
 import * as chats from "./chats.ts";
 import { HOME } from "./config.ts";
 import * as store from "./issues.ts";
@@ -51,6 +59,7 @@ async function loadIssue(slug: string): Promise<Issue> {
 }
 
 const FIELDS = ["title", "body", "priority", "state", "parent", "project", "folder", "protocol", "waiting_on"];
+const AUTOMATION_FIELDS = ["title", "when", "check", "agent", "body", "state"];
 
 // The fields the body sends, as pydantic read them: strings or null, the rest left out.
 function given(body: unknown, names: string[]): Record<string, string | null> {
@@ -107,6 +116,24 @@ function applyProject(p: Project, fields: Record<string, string | null>) {
   if ("title" in fields && !fields.title) throw new HttpError(422, "title cannot be empty");
   const target = p as unknown as Record<string, string | null>;
   for (const [name, value] of Object.entries(fields)) target[name] = name === "body" ? value || "" : value;
+}
+
+async function loadAutomation(slug: string): Promise<Automation> {
+  if (!automations.exists(slug)) throw new HttpError(404, `No automation ${slug}. List them with GET /api/automations.`);
+  return automations.load(slug);
+}
+
+function applyAutomation(a: Automation, fields: Record<string, string | null>) {
+  if ("title" in fields && !fields.title) throw new HttpError(422, "title cannot be empty");
+  if ("state" in fields && !automations.STATES.includes(fields.state as string)) throw new HttpError(422, `state must be one of: ${automations.STATES.join(", ")}`);
+  if (fields.agent && !roster.find(fields.agent)) throw new HttpError(422, `No agent ${fields.agent} in ~/.claude/agents. List them with GET /api/agents, or send "" for a plain Claude chat.`);
+  try {
+    if (fields.when) automations.schedule(fields.when);
+  } catch (error) {
+    throw new HttpError(422, (error as Error).message);
+  }
+  const target = a as unknown as Record<string, string>;
+  for (const [name, value] of Object.entries(fields)) target[name] = value ?? "";
 }
 
 // desk's own address as the request reached it, for the links desk writes into a chat.
@@ -175,6 +202,41 @@ export function routes(app: FastifyInstance) {
     try {
       const chat = await chats.push(agent, str(body.message), str(body.from));
       return { chat: chat.id, session: chat.session, url: `/inbox?i=${chat.id}` };
+    } catch (error) {
+      throw new HttpError(502, (error as Error).message);
+    }
+  });
+
+  app.get("/api/automations", async () => Promise.all(automations.loadAll().map((a) => automations.asJson(a))));
+
+  app.get("/api/automations/:slug", async (req: Req) => automations.asJson(await loadAutomation(req.params.slug), true));
+
+  app.post("/api/automations", async (req, reply) => {
+    const fields = given(req.body, AUTOMATION_FIELDS);
+    if (!fields.title) throw new HttpError(422, "title is required");
+    const a: Automation = { slug: automations.newSlug(fields.title), title: fields.title, when: "", check: "", agent: "", state: "active", body: "" };
+    applyAutomation(a, fields);
+    automations.save(a);
+    return reply.code(201).send(await automations.asJson(a, true));
+  });
+
+  app.patch("/api/automations/:slug", async (req: Req) => {
+    const a = await loadAutomation(req.params.slug);
+    applyAutomation(a, given(req.body, AUTOMATION_FIELDS));
+    automations.save(a);
+    return automations.asJson(a, true);
+  });
+
+  app.delete("/api/automations/:slug", async (req: Req) => {
+    await automations.remove((await loadAutomation(req.params.slug)).slug);
+    return { deleted: req.params.slug };
+  });
+
+  // Answers once its check has run, which can take minutes, with how it went: "Started a run.", or why not.
+  app.post("/api/automations/:slug/run", async (req: Req) => {
+    const a = await loadAutomation(req.params.slug);
+    try {
+      return { said: await automations.fire(a, "on a call", str(((req.body ?? {}) as Record<string, unknown>).message).trim()) };
     } catch (error) {
       throw new HttpError(502, (error as Error).message);
     }

@@ -11,6 +11,7 @@ export const DATA_DIR = resolve(expand(process.env.DESK_DATA ?? "~/.local/share/
 export const ISSUES_DIR = join(DATA_DIR, "issues");
 export const TRASH_DIR = join(DATA_DIR, "trash");
 export const PROJECTS_DIR = join(DATA_DIR, "projects");
+export const AUTOMATIONS_DIR = join(DATA_DIR, "automations");
 export const CHATS_DIR = join(DATA_DIR, "chats");
 // The database, beside the data it holds, in DATA_DIR/.db, which git leaves alone (db.ts writes its .gitignore).
 export const DB_DIR = resolve(expand(process.env.DESK_DB ?? join(DATA_DIR, ".db", "pg")));

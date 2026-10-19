@@ -50,8 +50,8 @@ export interface Issue {
 const FIELDS = ["title", "priority", "state", "parent", "project", "folder", "protocol", "link", "landing", "session",
   "waiting_on", "waiting_since", "created"] as const;
 
-export const now = () => {
-  const d = new Date(), pad = (n: number) => String(n).padStart(2, "0");
+export const now = (d = new Date()) => {
+  const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 };
 

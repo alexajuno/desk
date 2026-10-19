@@ -31,3 +31,12 @@ export function waited(iso: string | null | undefined): string {
   const when = iso ? parseLocal(iso) : new Date();
   return sameDay(when, new Date()) ? "today" : ago(when);
 }
+
+// "today 08:00", "tomorrow 08:00", "yesterday 08:00", else "Oct 25, 20:00": when an automation fires next, or last fired.
+export function nearDay(d: Date): string {
+  const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const today = new Date(), days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() -
+    new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 86_400_000);
+  const word = ({ [-1]: "yesterday", 0: "today", 1: "tomorrow" } as Record<number, string>)[days];
+  return word ? `${word} ${time}` : dayAndTime(d);
+}

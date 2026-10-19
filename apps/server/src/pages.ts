@@ -4,6 +4,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import * as agents from "./agents.ts";
+import * as automations from "./automations.ts";
 import * as chats from "./chats.ts";
 import { ISSUES_DIR, PROJECTS_DIR } from "./config.ts";
 import * as hosted from "./hosted.ts";
@@ -14,10 +15,11 @@ import * as live_ from "./live.ts";
 import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
 import { toHtml, toHtmlWithToc } from "./render.ts";
+import * as roster from "./roster.ts";
 import { find } from "./search.ts";
 import * as sessions from "./sessions.ts";
 import * as views from "./views.ts";
-import { ago, dayAndTime, parseLocal, shortDate, waited } from "./when.ts";
+import { ago, dayAndTime, nearDay, parseLocal, shortDate, waited } from "./when.ts";
 
 export class HttpError extends Error {
   status: number;
@@ -204,7 +206,7 @@ export async function inboxRows() {
 const CHATS_SHOWN = 8;
 
 async function chatsNow() {
-  const bare = chats.agentChats().filter((c) => c.bare).slice(0, CHATS_SHOWN);
+  const bare = chats.agentChats().filter((c) => c.bare && !c.automation).slice(0, CHATS_SHOWN); // a run is its automation's
   return Promise.all(bare.map(async (c) => ({
     session: c.session, title: sessions.chatTitleOf(c.session) || "New chat", working: (await agents.liveRow(c.session)).status === "busy", unread: unread(c) > 0,
   })));
@@ -357,6 +359,7 @@ export async function framePage() {
     projects: active.map((p) => ({ slug: p.slug, title: p.title })),
     chats: await chatsNow(),
     rows: await inboxRows(),
+    automations: automations.stamp(), // a page of automations fetches itself again when it moves
     live: Object.fromEntries([...all.values()].filter((i) => i.session && !CLOSED.has(i.state)).map((i) => [i.slug, talkOf(i)])),
   };
 }
@@ -424,6 +427,21 @@ export async function projectsPage() {
   const all = await store.loadAll();
   return everyone.map((p) => ({ slug: p.slug, title: p.title, state: p.state, created_short: shortDate(p.created),
     open: projects.issuesOf(all, p.slug).filter((i) => !CLOSED.has(i.state)).length }));
+}
+
+// An automation as its row and its page show it: when it fires next and last ran, in words.
+async function automationJson(a: automations.Automation, full = false) {
+  const json = await automations.asJson(a, full);
+  return { ...json, description: a.body.split("\n").find((line) => line.trim())?.replace(/[#*_`>]/g, "").trim() ?? "",
+    next_text: json.next ? nearDay(parseLocal(json.next)) : "", last_text: json.last_run?.at ? nearDay(parseLocal(json.last_run.at)) : "" };
+}
+
+export const automationsPage = () => Promise.all(automations.loadAll().map((a) => automationJson(a)));
+
+export async function automationPage(slug: string) {
+  if (!automations.exists(slug)) throw new HttpError(404, "That automation is gone.");
+  const a = automations.load(slug);
+  return { automation: { ...(await automationJson(a, true)), body_html: toHtml(a.body) }, agents: roster.list().map(({ name, description }) => ({ name, description })) };
 }
 
 // The Inbox's rows, newest first, and the one picked (?i=<slug>) as its issue page shows it, or an agent's or a bare

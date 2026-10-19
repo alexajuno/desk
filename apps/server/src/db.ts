@@ -35,6 +35,14 @@ create table if not exists projects (
   created text not null,
   body text not null default '',
   written text
+);
+create table if not exists automations ( -- what happened to each of automations/*.md, which hold the rest (automations.ts)
+  slug text primary key,
+  seen text not null,
+  fired text,
+  chat text,
+  ran text,
+  note text not null default ''
 );`;
 
 export async function open(): Promise<PGlite> {
