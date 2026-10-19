@@ -27,7 +27,6 @@ export interface FrameData {
   trying: { slug: string; branch: string; issue: IssueRow | null } | null;
   line: { slug: string; branch: string; for: string; issue: IssueRow }[];
   projects: { slug: string; title: string }[];
-  others: { id: string; title: string; folder: string; state: "working" | "waiting" | "open" }[]; // running, with no issue
   chats: { session: string; title: string; working: boolean; unread: boolean }[]; // the newest bare chats
   rows: InboxRow[];
   live: Record<string, string>; // slug: where its session stands, for each open issue with one
@@ -36,7 +35,7 @@ export interface FrameData {
 // A frame with nothing in it. A frame from a desk of another version can lack a list this app reads, such as a tab
 // reopened on the app it last had while desk runs a newer or older commit (18 Oct: the sidebar's Agents crashed the
 // page); the list then draws empty until the tab reloads.
-const EMPTY: FrameData = { inbox: 0, triage: [], running: [], landing: [], trying: null, line: [], projects: [], others: [], chats: [], rows: [], live: {} };
+const EMPTY: FrameData = { inbox: 0, triage: [], running: [], landing: [], trying: null, line: [], projects: [], chats: [], rows: [], live: {} };
 
 class Frame {
   data: FrameData | null = null;

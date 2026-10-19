@@ -1,5 +1,5 @@
 // Claude Code's sessions on this laptop (ported from desk/sessions.py): the corner's history menu, which finds any of them
-// and opens it in desk's panel, and the sidebar's Other sessions, those running now that work no issue.
+// and opens it in desk's panel.
 //
 // Claude Code keeps each session as a transcript, ~/.claude/projects/<the folder it ran in, as a name>/<session>.jsonl,
 // one JSON event per line, written as it runs. desk keeps one row per transcript with only what the list shows, saved
@@ -263,36 +263,6 @@ export async function rows(query = "") {
     found.push({ id: sid, title: name, folder: folder(row.cwd), moved: new Date((row.moved ?? 0) * 1000), state: state(live.get(sid) ?? {}) });
   }
   return found;
-}
-
-const RUNNING = join(HOME, ".claude", "sessions"); // Claude Code's <pid>.json for each session whose process lives
-
-// What started the process: "cli" for `claude` in a terminal, "sdk-cli" for `claude -p`, "sdk-ts" for the Agent SDK,
-// which desk's host and anything it runs inherit. Claude Code's own state, read from the files on 17 Oct.
-function entrypoint(pid: number | undefined): string {
-  try {
-    return pid && pid > 0 ? JSON.parse(readFileSync(join(RUNNING, `${pid}.json`), "utf8")).entrypoint ?? "" : "";
-  } catch {
-    return ""; // it ended meanwhile
-  }
-}
-
-// The sidebar's Other sessions: those running now that work no issue, such as a `claude` started in a terminal or one
-// opened from the corner's history, the newest first. Not a script (`claude -p`), which ends on its own with nobody to
-// talk to it, nor an agent chat nobody has written in yet, nor a chat with one of the user's agents or a bare one,
-// which the sidebar lists under Agents and Chats.
-export async function others() {
-  const issues = await issuesBySession(), mine = new Map(chats.agentChats().map((c) => [c.session, c]));
-  const running = new Map<string, agents.Row>();
-  for (const row of (await agents.live()).values()) if (row.sessionId && row.pid && !issues.has(row.sessionId)) running.set(row.sessionId, row);
-  const found: { id: string; title: string; folder: string; state: string; started: number }[] = [];
-  const t = running.size ? refresh() : table;
-  for (const [sid, row] of running) {
-    const chat = mine.get(sid), kept = t.get(sid);
-    if (chat?.agent || chat?.bare || (chat ? chats.said(chat).next().done : entrypoint(row.pid) === "sdk-cli")) continue;
-    found.push({ id: sid, title: (kept && shown(kept, null, Boolean(chat))) || row.name || "Untitled session", folder: folder(row.cwd), state: state(row), started: Number(row.startedAt ?? 0) });
-  }
-  return found.sort((a, b) => b.started - a.started);
 }
 
 // --- opening one -----------------------------------------------------------------------------------------------------

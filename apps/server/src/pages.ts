@@ -334,8 +334,8 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
 
 // --- the pages ---------------------------------------------------------------------------------------------------------
 
-// The sidebar on every page, with the sessions running that work no issue (others), the Inbox's rows, and where each
-// open issue's session stands (live, which its strip says):
+// The sidebar on every page, with the Inbox's rows and where each open issue's session stands (live, which its strip
+// says):
 // sync.ts sends it to the app whenever it changed.
 export async function framePage() {
   const all = await store.loadAll();
@@ -355,7 +355,6 @@ export async function framePage() {
     trying: now && { slug: now.slug, branch: now.branch, issue: (now.slug && all.has(now.slug)) ? issueJson(all.get(now.slug)!) : null },
     line: line.filter((w) => all.has(w.slug)).map((w) => ({ slug: w.slug, branch: w.branch ?? null, for: w.for ?? null, issue: issueJson(all.get(w.slug)!) })),
     projects: active.map((p) => ({ slug: p.slug, title: p.title })),
-    others: await sessions.others(),
     chats: await chatsNow(),
     rows: await inboxRows(),
     live: Object.fromEntries([...all.values()].filter((i) => i.session && !CLOSED.has(i.state)).map((i) => [i.slug, talkOf(i)])),

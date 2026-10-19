@@ -1,5 +1,5 @@
 // The sidebar on every page (templates/base.html's aside.side): Inbox, Triage, Issues and the projects,
-// the newest bare chats, as claude.ai's Recents, then the lists to watch: what is in progress and landing, the sessions running with no issue, and what desk's
+// the newest bare chats, as claude.ai's Recents, then the lists to watch: what is in progress and landing, and what desk's
 // checkout runs.
 // Waiting issues stay in Issues, since waiting can last forever.
 import { observer } from "mobx-react-lite";
@@ -21,7 +21,6 @@ function triageTip(triage: { now: string }[]) {
 }
 const ISSUES_TIP = "All issues  G then E\nActive  G then A\nBacklog  G then B";
 const WHY = "desk runs this branch instead of main: a session's test, or your Try";
-const SAYS = { working: "Working", waiting: "Waiting for you", open: "Open, idle" };
 
 // A chat's right-click menu: Rename, typed over its title. An empty one gives it back Claude Code's.
 function chatMenu(c: { session: string; title: string }, at: { x: number; y: number }) {
@@ -98,19 +97,6 @@ export const Sidebar = observer(function Sidebar() {
           <div className="nav-label">Landing</div>
           {d.landing.map((p) => (
             <Go key={p.slug} className={`nav-item${at(`/issue/${p.slug}`)}`} to={`/issue/${p.slug}`}><StateIcon state="landing" /><span className="nav-title">{p.title}</span></Go>
-          ))}
-        </>
-      )}
-      {/* Sessions running that work no issue, such as a `claude` started in a terminal: shown only while one runs, each
-          with its state as an issue's would be. desk's own chats are in Triage or In progress from their first reply. */}
-      {d && d.others.length > 0 && (
-        <>
-          <div className="nav-label">Other sessions</div>
-          {d.others.map((s) => (
-            <Go key={s.id} className={`nav-item${at(`/sessions/${s.id}`)}`} to={`/sessions/${s.id}`} title={`${SAYS[s.state]}${s.folder ? `, in ${s.folder}` : ""}`}>
-              {s.state === "working" ? <StateIcon state="running" /> : s.state === "waiting" ? <StateIcon state="review" /> : <Ring />}
-              <span className="nav-title">{s.title}</span>
-            </Go>
           ))}
         </>
       )}
