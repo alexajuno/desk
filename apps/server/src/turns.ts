@@ -51,13 +51,23 @@ const rows = new Map<string, Row>();
 let reporting = false;
 let host: WebSocket | null = null; // the host's socket now
 let stopping = false;
-let changed: () => void = () => {};
+const listeners = new Set<Listener>();
+const waiters = new Set<() => void>(); // settled's, each looking again at every change
 
 const COLUMNS = `id, open, working, asks, extract(epoch from prompted)::float8 as prompted, extract(epoch from replied)::float8 as replied,
   extract(epoch from ended)::float8 as ended, extract(epoch from updated)::float8 as updated`;
 
-// sync.ts hears here of each change, and sends the frame again.
-export const onChange = (fn: () => void) => { changed = fn; };
+// The sessions that changed, or null when every one may have, as when the host first says hello; and those of them
+// whose turn ended, so that what they wrote beside their issue is read again.
+type Listener = (sessions: string[] | null, ended: string[]) => void;
+
+// Each change, as the host says it: sync.ts sends the frame and the open chats again, and the line looks (land.ts).
+export const onChange = (fn: Listener) => { listeners.add(fn); };
+
+function changed(sessions: string[] | null, ended: string[] = []) {
+  for (const fn of listeners) fn(sessions, ended);
+  for (const look of waiters) look();
+}
 
 // --- reading -----------------------------------------------------------------------------------------------------------
 
@@ -88,6 +98,26 @@ export async function asking(): Promise<Set<string>> {
   return new Set([...rows.values()].filter((r) => r.open && r.asks).map((r) => r.id));
 }
 
+// Whether the host holds the session's process now.
+export const hosting = async (session: string): Promise<boolean> => (reporting ? Boolean(rows.get(session)?.open) : Boolean(await hosted.holds(session)));
+
+// Once no turn of the session runs and nothing of it waits on the user: true, or false when that took longer than
+// seconds. Looked at again on each word from the host, not asked over and over.
+export function settled(session: string, seconds: number): Promise<boolean> {
+  const now = () => !working(session) && !(reporting && rows.get(session)?.asks);
+  if (now()) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const done = (yes: boolean) => {
+      waiters.delete(look);
+      clearTimeout(late);
+      resolve(yes);
+    };
+    const look = () => { if (now()) done(true); };
+    const late = setTimeout(() => done(false), seconds * 1000);
+    waiters.add(look);
+  });
+}
+
 // --- writing -----------------------------------------------------------------------------------------------------------
 
 const seconds = (ms: number | null) => (ms === null ? null : ms / 1000);
@@ -114,13 +144,16 @@ const closeAll = (tx: db.Db, except: string[] = []) =>
   tx.query<Row>(`update sessions set open = false, working = false, asks = 0, ended = case when working then now() else ended end, updated = now()
     where open and not (id = any($1)) returning ${COLUMNS}`, [except]);
 
-// Keep what a write returned; a chat whose turn started or ended moved now (chats.ts), and the frame is told.
+// Keep what a write returned; a chat whose turn started or ended moved now (chats.ts), and the listeners are told.
 function kept(written: Row[]) {
+  const ended: string[] = [];
   for (const r of written) {
-    if ((rows.get(r.id)?.working ?? false) !== r.working) chats.moved(r.id);
+    const was = rows.get(r.id)?.working ?? false;
+    if (was !== r.working) chats.moved(r.id);
+    if (was && !r.working) ended.push(r.id);
     rows.set(r.id, r);
   }
-  if (written.length) changed();
+  if (written.length) changed(written.map((r) => r.id), ended);
 }
 
 // The sessions desk keeps, issues' and chats', that ran where no host of this code told desk, such as an older host
@@ -156,7 +189,7 @@ async function hello(ws: WebSocket, states: State[]) {
   if (!reporting) {
     await catchUp();
     reporting = true;
-    changed();
+    changed(null);
   }
 }
 

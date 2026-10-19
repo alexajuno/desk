@@ -1,7 +1,7 @@
 // Sync for the app (ported from desk/sync.py): a WebSocket that gives the app every row it holds, issues, projects,
 // chats and the Inbox's, then each change the moment it is written, numbered as the log numbers it (db.ts), whoever made it: a page, an
-// agent's curl, desk itself, or the user's editor. The app's own changes go through the JSON API and come back this
-// way, like everyone else's. An app that lost desk, as when desk restarts, connects again with the last change it
+// agent's curl, or desk itself. The app's own changes go through the JSON API and come back this way, like everyone
+// else's. An app that lost desk, as when desk restarts, connects again with the last change it
 // applied, and gets only what it missed.
 //
 //     /api/sync?log=<log>&since=<seq>     the log and the last change the app applied; a new tab sends both empty
@@ -17,21 +17,23 @@
 // its description, a <project> its slug, title, state and created, a <chat> its id, session, issue, title and who it is
 // with, an Inbox <row> every column (inbox.ts); a deleted row comes as null. A description is part of its issue's row, so a new one comes as a change: the page
 // showing it asks again. A <frame> is the sidebar's sessions and desk's checkout, with each open issue's session state
-// (pages.ts, framePage), which no table holds yet. "files" names the issues whose files beside issue.md changed (a session's
-// plan.md, result.md, a screenshot), which no row holds either: a page showing one of them asks again.
+// (pages.ts, framePage), which no table holds yet. "files" names the issues whose files beside issue.md may have changed
+// (a session's plan.md, result.md, a screenshot), which no row holds either: a page showing one of them asks again.
 //
-// issue.md and project.md are only written out: one changed by hand is not read, and tells the apps nothing (db.ts).
-import { mkdirSync, readdirSync, readFileSync, watch } from "node:fs";
-import { basename, dirname, join, sep } from "node:path";
+// desk watches no file and asks nothing again on a timer: "when agent changes sth, it calls api, not edit file and desk
+// fetches from file later" (the user, 19 Oct). Each change comes from a write, through the one write path, or from the
+// session host's word (turns.ts). issue.md and project.md are only written out: one changed by hand is not read, and
+// tells the apps nothing (db.ts).
 import type { WebSocket } from "ws";
 import * as agents from "./agents.ts";
 import { asJson } from "./api.ts";
+import * as automations from "./automations.ts";
 import * as chats from "./chats.ts";
-import { HOME, ISSUES_DIR } from "./config.ts";
 import * as db from "./db.ts";
 import type { Change } from "./db.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
+import * as live from "./live.ts";
 import * as pages from "./pages.ts";
 import * as turns from "./turns.ts";
 
@@ -45,7 +47,6 @@ function told(changes: db.Change[], after: number) {
     const old = oldChanges(changes);
     for (const ws of legacy) ws.send(old);
   }
-  void frame(); // the sidebar and the Inbox read the issues too
 }
 
 // --- a tab still on the app from before the log (19 Oct), which reads issues as GET /api/issues lists them, and the
@@ -94,16 +95,11 @@ function serial(name: string, work: () => Promise<void>): () => Promise<void> {
 }
 
 // --- the frame ---------------------------------------------------------------------------------------------------------
-// A session that starts or stops working, asks you something, or writes its plan or result, changes no issue, yet the
-// Inbox and the strips say it. The session host tells desk the moment a turn starts or ends, a question waits, or a
-// process ends (turns.ts), so the frame goes again then, and when a session writes a file beside issue.md. Until a host
-// of this code tells desk, Claude Code's own ~/.claude/sessions/<pid>.json says when a turn starts or ends ("status":
-// busy or idle; `claude agents` reads it there), so desk watches those too. A tick catches what neither shows: time (a
-// landing stuck for a minute) and the window in front (a chat's reply read as it came).
-
-const SESSIONS = join(HOME, ".claude", "sessions");
-const AGENT_FILES = ["plan.md", "result.md"];
-const TICK = 5000; // ms
+// A session that starts or stops working, asks you something, or writes its plan or result, changes no row the app
+// holds, yet the Inbox and the strips say it. So the frame goes again after every write that changed a row of any
+// table (db.onCommit), such as the line's, and on each word from the session host: a turn started or ended, a question
+// waits, a process ended (turns.ts). What a session wrote beside its issue is read again once its turn ends. Only time
+// moves the frame on its own, when a landing has been stuck for a minute: one timer, set for that moment.
 
 let frameText = ""; // the frame as the apps were last told
 
@@ -113,7 +109,9 @@ async function frameNow() {
     return;
   }
   if (!turns.reports()) await agents.live(true); // the frame's own asks of the host reuse this answer
-  const text = JSON.stringify(await pages.framePage(legacy.size > 0));
+  const all = await store.loadAll();
+  const text = JSON.stringify(await pages.framePage(legacy.size > 0, all));
+  wakeAt(pages.nextMove(all));
   if (text === frameText) return;
   frameText = text;
   const message = `{"type":"frame","frame":${text}}`;
@@ -122,80 +120,44 @@ async function frameNow() {
 
 const frame = serial("sync frame", frameNow);
 
-// Something the frame shows changed that no write or watcher sees, such as a pin: tell the apps now.
+// Something the frame shows changed that no write says: tell the apps now.
 export const frameChanged = () => void frame();
 
-// What each running session is doing, as its state file says: busy or idle, by session id.
-function sessionStates(): Map<string, string> {
-  const states = new Map<string, string>();
-  let names: string[];
-  try {
-    names = readdirSync(SESSIONS).filter((n) => n.endsWith(".json"));
-  } catch {
-    return states;
-  }
-  for (const n of names) {
-    try {
-      const s = JSON.parse(readFileSync(join(SESSIONS, n), "utf8"));
-      states.set(s.sessionId, s.status);
-    } catch {
-      states.set(n, ""); // written as we read: its next write tells again
-    }
-  }
-  return states;
+let wake: NodeJS.Timeout | null = null;
+
+// The frame goes again at the moment time alone will move it, if any (ms).
+function wakeAt(at: number | null) {
+  if (wake) clearTimeout(wake);
+  wake = at === null ? null : setTimeout(() => { wake = null; void frame(); }, Math.max(0, at - Date.now()));
 }
 
-// Gathers a burst of writes into one call of fn.
-function soon(fn: () => void, ms = 50): () => void {
-  let timer: NodeJS.Timeout | null = null;
-  return () => {
-    if (!timer) timer = setTimeout(() => { timer = null; fn(); }, ms);
-  };
+// The issues whose files a session may have written, now that its turn ended: its own, and a chat's.
+async function wroteIn(sessions: string[]): Promise<string[]> {
+  const ended = new Set(sessions), slugs = new Set<string>();
+  for (const i of (await store.loadAll()).values()) if (i.session && ended.has(i.session)) slugs.add(i.slug);
+  for (const chat of chats.agentChats()) if (chat.issue && ended.has(chat.session)) slugs.add(chat.issue);
+  return [...slugs];
 }
 
-// Desk's own writes in the issues' folders, told as writes already: an issue.md, or a folder coming or going (a new
-// issue, a delete into the trash).
-const desks = (path: string) => basename(path) === store.MAIN || dirname(path) === ISSUES_DIR;
+function tellFiles(slugs: string[]) {
+  if (!slugs.length) return;
+  const message = JSON.stringify({ type: "files", slugs });
+  for (const ws of [...listeners, ...legacy]) ws.send(message);
+}
 
-// Tell the apps each write; watch the issues' folders for the files a session writes beside issue.md (result.md,
-// screenshots), which no row holds, and the sessions, and tell the apps the frame.
+// Tell the apps each write, and the frame after it and after each word from the host; and the open chats.
 export async function start() {
   db.onWrite(told);
-  turns.onChange(() => void frame());
-  const agentWrote = soon(() => void frame());
-  const touched = new Set<string>();
-  const tellFiles = soon(() => {
-    const message = JSON.stringify({ type: "files", slugs: [...touched] });
-    touched.clear();
-    for (const ws of [...listeners, ...legacy]) ws.send(message);
-  });
-  mkdirSync(ISSUES_DIR, { recursive: true });
-  watch(ISSUES_DIR, { recursive: true }, (_event, name) => {
-    if (!name) return;
-    const path = join(ISSUES_DIR, name.toString());
-    const slug = name.toString().split(sep)[0];
-    if (slug.startsWith(".") || desks(path)) return; // a hidden folder is not an issue
-    touched.add(slug);
-    tellFiles();
-    if (AGENT_FILES.includes(basename(path))) agentWrote();
-  });
-  mkdirSync(SESSIONS, { recursive: true });
-  let states = sessionStates();
-  const moved = soon(() => {
-    const now = sessionStates();
-    const turned = [...now.keys()].filter((sid) => states.get(sid) !== now.get(sid));
-    const ended = [...states.keys()].some((sid) => !now.has(sid));
-    states = now;
-    if (!turned.length && !ended) return; // a write that changed no session's state, such as its name
-    for (const sid of turned) chats.moved(sid); // a turn started or ended: the chat moved now
+  db.onCommit(() => {
     void frame();
+    live.moved(null);
   });
-  watch(SESSIONS, (_event, name) => {
-    if (name?.toString().endsWith(".json")) moved();
+  turns.onChange((sessions, ended) => {
+    void frame();
+    live.moved(sessions);
+    if (ended.length) void wroteIn(ended).then(tellFiles).catch((error) => console.error("sync files", error));
   });
-  setInterval(() => {
-    if (listeners.size || legacy.size) void frame();
-  }, TICK);
+  automations.onChange(() => void frame());
 }
 
 // A connected app: every row, or what it missed since the change it names, and the frame; then each change until it

@@ -69,17 +69,26 @@ export const load = (slug: string) => parse(slug, readFileSync(file(slug), "utf8
 export const loadAll = () => slugs().map(load).sort((a, b) => Number(a.state !== "active") - Number(b.state !== "active") || a.title.localeCompare(b.title));
 
 let version = 0; // moves on every save and every firing, for stamp()
+let changed: () => void = () => {};
+
+// sync.ts hears here of each save, delete and firing, and sends the frame, which carries the stamp.
+export const onChange = (fn: () => void) => { changed = fn; };
+
+function moved() {
+  version++;
+  changed();
+}
 
 export function save(a: Automation) {
   mkdirSync(AUTOMATIONS_DIR, { recursive: true });
   writeFileSync(file(a.slug), render(a), "utf8");
-  version++;
+  moved();
 }
 
 export async function remove(slug: string) {
   unlinkSync(file(slug));
   await sql().query("delete from automations where slug = $1", [slug]);
-  version++;
+  moved();
 }
 
 export function newSlug(title: string): string {
@@ -90,7 +99,7 @@ export function newSlug(title: string): string {
 }
 
 // What the pages show changed: a file written, by desk or by hand, or a firing. The frame carries it, and a page of
-// automations fetches itself again when it moves.
+// automations fetches itself again when it moves. A file written by hand shows with the next frame desk sends.
 export const stamp = () => `${version}:${slugs().map((s) => `${s}@${statSync(file(s)).mtimeMs}`).join(",")}`;
 
 // --- when ------------------------------------------------------------------------------------------------------------
@@ -186,7 +195,7 @@ export async function stateOf(slug: string): Promise<State> {
 async function note(slug: string, fields: Partial<State>) {
   const names = Object.keys(fields) as (keyof State)[];
   await sql().query(`update automations set ${names.map((n, i) => `${n} = $${i + 2}`).join(", ")} where slug = $1`, [slug, ...names.map((n) => fields[n])]);
-  version++;
+  moved();
 }
 
 // When it fires next by its clock, or null when it has none, is paused, or its `when` does not read.

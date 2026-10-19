@@ -9,6 +9,7 @@
 // line: try while another branch runs puts the issue in line; whenever the checkout is back on main, desk switches it to
 // the first one's branch, and once it runs there, messages that session to carry on (tick). A session holds the
 // checkout only while it tests; desk takes it back once the session's turn ended without giving it back (LINE_GRACE).
+// The line looks at start, on each word from the session host, and when a grace runs out (start), never on a clock.
 // The user's Try holds it until they put it back or the work lands, and goes ahead of the sessions in line.
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -20,13 +21,13 @@ import { sql } from "./db.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import { run } from "./proc.ts";
+import * as turns from "./turns.ts";
 
 // desk's own checkout, the one with the line. DESK_LINE_REPO names another for a test desk, so its line runs on a
 // throwaway repo and never touches the checkout desk runs from.
 export const DESK_REPO = process.env.DESK_LINE_REPO ? resolve(process.env.DESK_LINE_REPO) : REPO;
 // How long a session that holds desk's checkout may go without a turn running before desk takes the checkout back.
 const LINE_GRACE = 120;
-const TICK = 5; // seconds between the line's checks (tick)
 
 const WAKE = "Your turn in line came: desk runs {branch} on 8790 now. Wait until http://127.0.0.1:8790/version answers, then carry on where you stopped: test the path you changed and screenshot it. Then give 8790 back, before you write your card: `curl -s -X POST http://127.0.0.1:8790/api/issues/{slug}/back-to-main`. desk takes it back on its own once your turn ends.";
 
@@ -35,7 +36,7 @@ export class Blocked extends Error {}
 // main moved after the branch began, and the branch does not rebase onto it cleanly.
 export class MainMoved extends Blocked {}
 
-// The API's requests and the line's clock both switch the checkout and rewrite its notes: one at a time.
+// The API's requests and the line's own looks both switch the checkout and rewrite its notes: one at a time.
 let queue: Promise<unknown> = Promise.resolve();
 function locked<T>(fn: () => Promise<T>): Promise<T> {
   const next = queue.then(fn, fn);
@@ -232,7 +233,9 @@ export async function tryBranch(i: Issue, branch: string | null = null, by = "te
     await saveLine(top, data);
     if (!(await freeFor(top, i.slug, by))) return join(top, i.slug, chosen, by);
     await leaveLine(top, i.slug);
-    return (await switchTo(top, i.slug, chosen, by)) + restartIfDesk(top);
+    const message = (await switchTo(top, i.slug, chosen, by)) + restartIfDesk(top);
+    look(); // its grace starts now
+    return message;
   });
 }
 
@@ -332,24 +335,42 @@ export async function backToMain(i: Issue): Promise<string> {
   return message === null ? "" : message + restartIfDesk(top);
 }
 
-// Run tick every few seconds for as long as desk runs.
-export function startClock() {
-  const clock = async () => {
-    try {
-      await tick();
-    } catch (error) {
-      console.error("line clock", error);
+let look: () => void = () => {}; // start's, once the line runs
+
+// Run tick now, on each word from the session host (a turn of the session holding the checkout ended, or of one desk
+// could not tell yet), and when the grace of the session holding it runs out; one at a time, and one more after it
+// when asked meanwhile. A checkout put back on main by hand moves the line on with the next of these.
+export function start() {
+  let running: Promise<void> | null = null, again = false, grace: NodeJS.Timeout | null = null;
+  look = () => {
+    if (running) {
+      again = true;
+      return;
     }
-    setTimeout(clock, TICK * 1000);
+    running = (async () => {
+      do {
+        again = false;
+        try {
+          const at = await tick();
+          if (grace) clearTimeout(grace);
+          grace = at === null ? null : setTimeout(look, Math.max(0, at * 1000 - Date.now()));
+        } catch (error) {
+          console.error("line", error);
+        }
+      } while (again);
+      running = null;
+    })();
   };
-  void clock();
+  turns.onChange(look);
+  look();
 }
 
 const sameNote = (a: Note | null, b: Note) => a !== null && JSON.stringify(a) === JSON.stringify(b);
 
-// The line's clock: hand a checkout freed by hand or by landing to the next in line, message the session it was handed
+// The line's look: hand a checkout freed by hand or by landing to the next in line, message the session it was handed
 // to, and take it back from a session whose turn ended while it held it, as a crash or a forgotten back-to-main leaves it.
-export async function tick(top: string = DESK_REPO) {
+// Returns when, in seconds, the grace of the session holding it runs out, for a look then; null when no grace runs.
+export async function tick(top: string = DESK_REPO): Promise<number | null> {
   const found = await locked(async () => {
     const now = await trying(top);
     if (!now) {
@@ -360,7 +381,7 @@ export async function tick(top: string = DESK_REPO) {
     const i = (await store.exists(now.slug)) ? await store.load(now.slug) : null;
     return { now, i };
   });
-  if (!found) return;
+  if (!found) return null;
   const { now, i } = found;
   // Told by the desk that switched, about to restart, a quick session could test the old code; in desk's own repo the
   // desk that restarted on the branch tells it.
@@ -370,18 +391,18 @@ export async function tick(top: string = DESK_REPO) {
     try {
       await agents.say(i, WAKE.replace("{branch}", now.branch).replace("{slug}", i.slug));
     } catch {
-      told = false; // still in the turn that joined the line, or open in a terminal: on the next tick, or LINE_GRACE
+      told = false; // still in the turn that joined the line, or open in a terminal: once its turn ends, or LINE_GRACE
     }
     if (told) {
+      const since = Date.now() / 1000;
       await locked(async () => {
-        if (sameNote(await trying(top), now)) await saveNote(top, { ...now, told: true, since: Date.now() / 1000 });
+        if (sameNote(await trying(top), now)) await saveNote(top, { ...now, told: true, since });
       });
-      return;
+      return since + LINE_GRACE;
     }
   }
-  if (Date.now() / 1000 - now.since < LINE_GRACE) return;
-  const row = i && i.session ? await agents.liveRow(i.session, true) : {};
-  if (agents.status(row) === "working") return;
+  if (Date.now() / 1000 - now.since < LINE_GRACE) return now.since + LINE_GRACE;
+  if (i?.session && turns.working(i.session)) return null; // its turn's end looks again
   await locked(async () => {
     if (sameNote(await trying(top), now)) {
       await putBack(top, now);
@@ -389,6 +410,7 @@ export async function tick(top: string = DESK_REPO) {
       restartIfDesk(top);
     }
   });
+  return null;
 }
 
 // Fast-forward the branch of a session in a desk-made worktree into the folder's checkout, rebasing it first when the

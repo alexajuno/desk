@@ -12,8 +12,14 @@
 //
 // An <item> is transcript.ts's. The app sends {"type": "visible", "visible": true} as its tab shows or hides, so desk
 // knows whether the user reads a chat's reply as it comes (the Inbox then leaves it out).
+//
+// While the host holds the session, its stream says everything as it happens. The rest a panel looks at again when
+// desk says something moved (moved): a write that changed a row, such as the chat's title or the session's model, or
+// the host's word that the session's turn started or ended, or that the host took it in. It then reads what the
+// transcript gained, which the host's stream may have missed, as across a restart. A session the host does not hold,
+// such as one in a terminal, shows what its transcript held when the panel opened and when desk last looked.
 import { execFile } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync, watch, type FSWatcher } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { WebSocket } from "ws";
 import * as agents from "./agents.ts";
@@ -26,10 +32,18 @@ import * as models from "./models.ts";
 import * as roster from "./roster.ts";
 import * as transcript from "./transcript.ts";
 import type { Item } from "./transcript.ts";
+import * as turns from "./turns.ts";
 
 export const SESSION_ID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 
 const visible = new Map<WebSocket, string>(); // the panels showing now, and their sessions
+const panels = new Map<WebSocket, [string, () => void]>(); // each open panel's session, and its look again
+
+// Something an open panel shows may have moved: the sessions named, or null for any (sync.ts). Each of their panels
+// looks again.
+export function moved(sessions: string[] | null) {
+  for (const [id, look] of panels.values()) if (!sessions || sessions.includes(id)) look();
+}
 
 // Whether a panel the user looks at shows the session now.
 export function watching(session: string | null | undefined): boolean {
@@ -88,7 +102,7 @@ export async function connect(ws: WebSocket, id: string) {
   });
   ws.on("close", () => { if (visible.delete(ws)) void inbox.read({ session: id }); });
   const sent = new Set<string>(); // the items' keys the panel has, so each comes once from whichever source is first
-  let path: string | null = null, readTo = 0, file: FSWatcher | null = null, host: WebSocket | null = null, closed = false;
+  let path: string | null = null, readTo = 0, host: WebSocket | null = null, closed = false;
   let lastMeta = "";
   const say = (event: Record<string, unknown>) => {
     if (!closed && ws.readyState === ws.OPEN) ws.send(JSON.stringify(event));
@@ -101,8 +115,7 @@ export async function connect(ws: WebSocket, id: string) {
   readTo = to;
   const m = await meta(id);
   lastMeta = JSON.stringify(m);
-  const row = await agents.liveRow(id, true);
-  say({ type: "hello", meta: m, items, working: row.status === "busy" || row.status === "waiting", asks: [], partial: [] });
+  say({ type: "hello", meta: m, items, working: turns.working(id), asks: [], partial: [] });
 
   // New lines in the transcript, whoever wrote them.
   const readMore = () => {
@@ -111,7 +124,6 @@ export async function connect(ws: WebSocket, id: string) {
     if (now !== path) { // a move goes on in the new folder's transcript
       path = now;
       readTo = 0;
-      watchFile();
     }
     if (!path) return;
     const [entries, next] = transcript.read(path, readTo);
@@ -123,18 +135,6 @@ export async function connect(ws: WebSocket, id: string) {
   const soon = () => {
     if (!timer) timer = setTimeout(() => { timer = null; readMore(); }, 40);
   };
-  const watchFile = () => {
-    file?.close();
-    file = null;
-    if (path) {
-      try {
-        file = watch(path, soon);
-      } catch {
-        // gone again
-      }
-    }
-  };
-  watchFile();
 
   // The host's stream: the words as they come, whether it works, its questions. Joined whenever the host holds the
   // session, which it may take in later, with the panel's first message.
@@ -161,32 +161,43 @@ export async function connect(ws: WebSocket, id: string) {
       if (host === h) host = null;
     });
   };
-  if (row.kind === "host") joinHost();
+  if (await turns.hosting(id)) joinHost();
 
-  // Now and then: whether the host took the session in, or a session in the daemon or a terminal works, and whether
-  // its title, folder or issue changed.
-  const tick = setInterval(async () => {
-    try {
-      const r = await agents.liveRow(id);
-      if (r.kind === "host") joinHost();
-      else say({ type: "working", working: r.status === "busy" });
-      const next = await meta(id);
-      const text = JSON.stringify(next);
-      if (text !== lastMeta) {
-        lastMeta = text;
-        say({ type: "meta", meta: next });
-      }
-      soon();
-    } catch {
-      // the next tick tries again
+  // Whether the host took the session in, and whether its title, folder, issue or model changed: one look at a time,
+  // and one more after it when told meanwhile.
+  let looking: Promise<void> | null = null, again = false;
+  const look = () => {
+    if (closed) return;
+    if (looking) {
+      again = true;
+      return;
     }
-  }, 1500);
+    looking = (async () => {
+      do {
+        again = false;
+        try {
+          if (await turns.hosting(id)) joinHost();
+          const next = await meta(id);
+          const text = JSON.stringify(next);
+          if (text !== lastMeta) {
+            lastMeta = text;
+            say({ type: "meta", meta: next });
+          }
+          soon();
+        } catch (error) {
+          console.error(`desk: the panel of ${id}`, error); // the next change looks again
+        }
+      } while (again && !closed);
+      looking = null;
+    })();
+  };
+  panels.set(ws, [id, look]);
+  look(); // what moved while it said hello
 
   const end = () => {
     closed = true;
-    clearInterval(tick);
+    panels.delete(ws);
     if (timer) clearTimeout(timer);
-    file?.close();
     host?.close();
   };
   ws.on("close", end);
@@ -221,14 +232,17 @@ export async function send(id: string, m: Sent): Promise<{ queued: boolean }> {
   const agent = tag && roster.find(tag[1]);
   if (agent) {
     await chats.becomeAgent(chat!, agent, content(m));
+    moved([id]);
     return { queued: false };
   }
   if (fresh && m.as === "chat") {
     await chats.becomeBare(chat!, content(m));
+    moved([id]);
     return { queued: false };
   }
   try {
     await agents.tell(id, content(m), m.uuid);
+    moved([id]); // the host holds it now: its panels join its stream
     return { queued: false };
   } catch (error) {
     if (!(error instanceof agents.Busy)) throw error;
@@ -239,6 +253,7 @@ export async function send(id: string, m: Sent): Promise<{ queued: boolean }> {
     return { queued: true };
   }
   waiting.set(id, [m]);
+  // Only Claude Code knows when a turn in its daemon ends, so desk asks it, while a message waits on one.
   void (async () => {
     try {
       while ((await agents.liveRow(id, true)).status === "busy") await new Promise((r) => setTimeout(r, 2000));
@@ -246,6 +261,7 @@ export async function send(id: string, m: Sent): Promise<{ queued: boolean }> {
       waiting.delete(id);
       const text = all.map((x) => x.text).filter(Boolean).join("\n\n");
       await agents.tell(id, content({ text, images: all.flatMap((x) => x.images ?? []) }));
+      moved([id]);
     } catch (error) {
       waiting.delete(id);
       console.error(`desk: could not send to ${id}: ${error}`);

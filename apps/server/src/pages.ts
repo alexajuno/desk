@@ -75,8 +75,17 @@ const asking = turns.asking;
 
 // Whether a landing issue's session stopped short of landing it: not working, or asking you something, a minute after
 // Approve.
+const STUCK = 60000; // ms
+const stuckFrom = (i: Issue) => parseLocal(i.landing!).getTime() + STUCK;
 function landingStuck(i: Issue, asks: Set<string>): boolean {
-  return (!working(i) || asks.has(i.session!)) && Date.now() - parseLocal(i.landing!).getTime() > 60000;
+  return (!working(i) || asks.has(i.session!)) && Date.now() > stuckFrom(i);
+}
+
+// The next moment time alone moves what the frame and the Inbox show, in ms, or null for none: a landing turning
+// stuck. Anything else moves with a write, or with the session host's word (sync.ts).
+export function nextMove(all: Map<string, Issue>): number | null {
+  const at = [...all.values()].filter((i) => i.state === "landing" && i.landing).map(stuckFrom).filter((t) => t >= Date.now());
+  return at.length ? Math.min(...at) + 1 : null;
 }
 
 // When issue.md was last written, in seconds: when the issue last moved, as into In progress, or changed since.
@@ -406,8 +415,8 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
 // strip says): sync.ts sends it to the app whenever it changed. The app works out the rest from the rows it holds, the
 // Inbox's count and its dots from the Inbox's rows (inbox.ts); old, for a tab still on the app from before 19 Oct,
 // adds what that app read here: the count, Triage and the projects.
-export async function framePage(old = false) {
-  const all = await store.loadAll();
+export async function framePage(old = false, all?: Map<string, Issue>) {
+  all ??= await store.loadAll();
   await notifications(all); // moves the issues on first, and writes what the Inbox's rows say now
   const now = await land.running(land.DESK_REPO);
   const line = await land.line(land.DESK_REPO);

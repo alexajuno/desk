@@ -27,6 +27,7 @@ import type { Agent } from "./roster.ts";
 import * as settings from "./settings.ts";
 import type { Effort } from "./settings.ts";
 import * as transcripts from "./transcript.ts";
+import * as turns from "./turns.ts";
 
 const SKILL = join(REPO, "skill", "SKILL.md");
 const SKILL_BASE = "http://127.0.0.1:8790"; // the address SKILL.md is written for; each chat swaps in its own
@@ -85,7 +86,7 @@ export function load(id: string): Chat {
   return structuredClone(chat);
 }
 
-// A turn of this session started or ended now (sync.ts sees it in ~/.claude/sessions).
+// A turn of this session started or ended now, as the session host told desk (turns.ts).
 export function moved(session: string) {
   const chat = ofSession(session);
   if (chat) lastMoved.set(chat.id, Date.now());
@@ -429,13 +430,8 @@ async function move(id: string, base: string) {
 // When the folder will not take it, start it where it was, telling it why. Its panel follows by itself: the host
 // holds the same session id again.
 async function carryOver(id: string, base: string) {
-  const began = performance.now() / 1000;
-  let row: agents.Row;
-  while ((row = await agents.liveRow(load(id).session, true)).status === "busy" || row.status === "waiting") {
-    const waited = performance.now() / 1000 - began;
-    if (waited > MOVE_WAIT) return;
-    await new Promise((r) => setTimeout(r, waited < 60 ? 200 : 2000)); // the turn usually ends right after the bind
-  }
+  if (!(await turns.settled(load(id).session, MOVE_WAIT))) return; // the turn usually ends right after the bind
+  const row = await agents.liveRow(load(id).session, true);
   let chat = load(id);
   if ((row.kind === "interactive" && row.pid) || same(chat.folder!, runsIn(chat))) return;
   if (!Object.keys(row).length) { // nothing runs, so the next message starts it in the folder

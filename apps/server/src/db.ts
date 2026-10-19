@@ -233,6 +233,7 @@ export interface Change {
 let queue: Promise<unknown> = Promise.resolve();
 let pushed = 0; // the newest change told to the apps
 let tell: (changes: Change[], after: number) => void = () => {};
+let wrote: () => void = () => {};
 
 // One at a time: each write, and each read of the log that must not see a write half told.
 export function locked<T>(fn: () => Promise<T>): Promise<T> {
@@ -242,18 +243,27 @@ export function locked<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 // The one way to write a row: fn's queries run in one transaction, which every query of it must use, never sql(),
-// whose query would wait for this transaction to end. Once it commits, what it logged is told (onWrite). A write must
-// not start another.
+// whose query would wait for this transaction to end. Once it commits, what it logged is told (onWrite), and that it
+// changed a row, of any table (onCommit). A write must not start another.
 export function write<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return locked(async () => {
-    const done = await sql().transaction(fn);
+    const [done, changed] = await sql().transaction(async (tx) => {
+      const done = await fn(tx);
+      // Postgres gives a transaction its id at its first write: none, and it changed nothing.
+      return [done, (await tx.query<{ id: unknown }>("select txid_current_if_assigned() as id")).rows[0].id !== null] as const;
+    });
     await told();
+    if (changed) wrote();
     return done;
   });
 }
 
 // sync.ts hears here of each write's changes, with the change told before them.
 export const onWrite = (fn: typeof tell) => { tell = fn; };
+
+// And here of each write that changed a row, of a table the app holds or not, such as the line's or a session's: what
+// the frame and the open chats show may have moved.
+export const onCommit = (fn: () => void) => { wrote = fn; };
 
 const last = async (q: Db) => Number((await q.query<{ seq: number | null }>("select max(seq) as seq from changes")).rows[0].seq ?? 0);
 
