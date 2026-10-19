@@ -148,13 +148,19 @@ function typed(text: string): string {
 }
 
 // What Claude Code itself tells Claude in a user message that the user should see too, as a note: a task it ran beside
-// the conversation ended (<task-notification>, its <summary> such as `Agent "count files" finished`), or a slash
-// command printed something (<local-command-stdout>, such as "Set model to Sonnet"). Null for anything else.
+// the conversation ended (<task-notification>, its <summary> such as `Agent "count files" finished`), a watch saw a
+// line (the same, with `Monitor event: "ticks"` and the line in <event>), or a slash command printed something
+// (<local-command-stdout>, such as "Set model to Sonnet"). Null for anything else.
 function notice(text: string): string | null {
   const t = text.trim();
-  if (t.startsWith("<task-notification>")) return /<summary>([\s\S]*?)<\/summary>/.exec(t)?.[1]?.trim() ?? "";
+  if (t.startsWith("<task-notification>")) {
+    const summary = /<summary>([\s\S]*?)<\/summary>/.exec(t)?.[1]?.trim() ?? "", event = /<event>([\s\S]*?)<\/event>/.exec(t)?.[1]?.trim();
+    return event ? `Watch ${summary.replace(/^Monitor event:\s*/, "")}: ${cut(event, 200)}` : summary;
+  }
   const out = /^<local-command-(?:stdout|stderr)>([\s\S]*?)<\/local-command-(?:stdout|stderr)>/.exec(t);
-  return out ? cut(out[1].replace(/\x1b\[[0-9;]*m/g, "").trim(), 400) : null;
+  if (!out) return null;
+  const said = out[1].replace(/\x1b\[[0-9;]*m/g, "").trim();
+  return said.startsWith("Compacted") ? "" : cut(said, 400); // /compact's "Compacted": its boundary has a note already
 }
 
 const noted = (key: string, text: string): Item[] => (text ? [{ t: "note", key, text }] : []);
