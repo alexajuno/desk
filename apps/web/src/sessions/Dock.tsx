@@ -446,11 +446,12 @@ const agentPicks = () => (agentList ??= fetch("/api/agents").then((r) => r.json(
   .then((list: { name: string; description: string }[]) => list.map((a) => ({ label: `@${a.name}`, hint: a.description, insert: `@${a.name} ` })))
   .catch(() => (agentList = null, [])));
 
-// A word being typed that the composer completes: a / at the start, or an @ after a space.
+// A word being typed that the composer completes: a / at the start, or after a space once a letter follows it, as
+// Claude Code's terminal does; or an @ after a space.
 function tokenAt(text: string, caret: number): { kind: "/" | "@"; start: number; word: string } | null {
   const before = text.slice(0, caret);
-  const slash = /^\/([\w:.-]*)$/.exec(before);
-  if (slash) return { kind: "/", start: 0, word: slash[1] };
+  const slash = /^\/([\w:.-]*)$/.exec(before) ?? /\s\/([\w:.-]+)$/.exec(before);
+  if (slash) return { kind: "/", start: before.length - slash[1].length - 1, word: slash[1] };
   const at = /(^|\s)@([^\s]*)$/.exec(before);
   if (at) return { kind: "@", start: before.length - at[2].length - 1, word: at[2] };
   return null;
@@ -519,7 +520,8 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
     }
     if (n !== asked.current) return; // a later keystroke asked again
     setPicks(list);
-    setAt(0);
+    // A / mid-message runs only if Claude takes it up, so, as in Claude Code, no row is picked: Enter still sends.
+    setAt(t.kind === "/" && t.start > 0 ? -1 : 0);
   }
 
   function choose(p: Pick) {
@@ -605,10 +607,10 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
             flipStartAs(s);
           } else if (picks.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
             e.preventDefault();
-            setAt((at + (e.key === "ArrowDown" ? 1 : picks.length - 1)) % picks.length);
-          } else if (picks.length && (e.key === "Enter" || e.key === "Tab")) {
+            setAt(e.key === "ArrowDown" ? (at + 1) % picks.length : (at <= 0 ? picks.length : at) - 1);
+          } else if (picks.length && (e.key === "Tab" || (e.key === "Enter" && at >= 0))) {
             e.preventDefault();
-            choose(picks[at]);
+            choose(picks[Math.max(at, 0)]);
           } else if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             void send();
@@ -631,7 +633,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
         {fresh(s) && <StartAs s={s} />}
-        <span className="composer-hint">{!typing ? "I to type" : fresh(s) ? "Shift Tab switches Issue or Chat · Enter sends" : queued ? "↑ edits the queued · Ctrl C stops" : s.working ? "Enter queues · Ctrl C stops" : "Enter sends · Shift Enter for a new line"}</span>
+        <span className="composer-hint">{!typing ? "I to type" : picks.length && at < 0 ? "Tab picks · Enter sends as typed" : fresh(s) ? "Shift Tab switches Issue or Chat · Enter sends" : queued ? "↑ edits the queued · Ctrl C stops" : s.working ? "Enter queues · Ctrl C stops" : "Enter sends · Shift Enter for a new line"}</span>
         <Runs s={s} />
         {s.working && (
           <button className="stop" type="button" title="Stop  Ctrl C" onClick={() => void s.interrupt()}>
