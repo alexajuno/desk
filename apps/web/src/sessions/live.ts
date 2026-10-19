@@ -67,7 +67,7 @@ export class LiveSession {
   asks: Ask[] = [];
   partial: Block[] = [];
   pending: Pending[] = []; // sent, and not yet in the transcript
-  startAs: "issue" | "chat" = "issue"; // a new desk chat's chip: what its first message makes it
+  startAs: "issue" | "chat" = localStorage.startAs === "chat" ? "chat" : "issue"; // a new desk chat's chip: what its first message makes it, as last picked in this browser
   connected = false;
   loaded = false;
   private ws: WebSocket | null = null;

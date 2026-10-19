@@ -656,13 +656,16 @@ const START_AS = {
   chat: { label: "Chat", icon: GLYPH.chat, sub: "just talk, lands in Chats" },
 } as const;
 
+// A pick sticks: the next new chat starts on it (live.ts).
+const pickStartAs = (s: LiveSession, k: "issue" | "chat") => runInAction(() => { s.startAs = k; localStorage.startAs = k; });
+
 // Shift Tab in the composer: the chip's other choice.
-const flipStartAs = (s: LiveSession) => runInAction(() => { s.startAs = s.startAs === "issue" ? "chat" : "issue"; });
+const flipStartAs = (s: LiveSession) => pickStartAs(s, s.startAs === "issue" ? "chat" : "issue");
 
 const StartAs = observer(function StartAs({ s }: { s: LiveSession }) {
   const now = START_AS[s.startAs];
   const items = () => (["issue", "chat"] as const).map((k) => ({ ...START_AS[k], group: 1, heading: "This chat becomes", current: k === s.startAs,
-    run: () => runInAction(() => { s.startAs = k; }) }));
+    run: () => pickStartAs(s, k) }));
   return (
     <button className="runs start-as" type="button" title="What this chat becomes  Shift Tab"
       onClick={(e) => { if (!toggled(e.currentTarget)) openMenu({ anchor: e.currentTarget, items }); }}>
