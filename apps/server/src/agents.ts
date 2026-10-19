@@ -155,11 +155,11 @@ export const say = (i: Issue, message: string) => tell(i.session!, message);
 
 // Give a session its next message, as the user would in its panel. The host holds it, or takes it in: from the folder
 // it runs in, and from Claude Code's daemon when it ran in the background before. A message to a session at work waits
-// its turn, as Enter does in its terminal.
-export async function tell(session: string, content: hosted.Content, uuid?: string) {
+// its turn, as Enter does in its terminal, or with now, goes in at once, as Ctrl+Enter does.
+export async function tell(session: string, content: hosted.Content, uuid?: string, now = false) {
   if (await hosted.holds(session)) {
     try {
-      await hosted.send(session, content, uuid);
+      await hosted.send(session, content, uuid, now);
       return;
     } catch (error) {
       if (!(error instanceof hosted.HostError && error.status === 404)) throw error; // closed as we asked: start it again

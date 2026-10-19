@@ -181,8 +181,9 @@ export async function start(o: StartOptions): Promise<HostRow> {
   return row;
 }
 
-export async function send(id: string, content: Content, uuid?: string): Promise<HostRow> {
-  return call<HostRow>("POST", `/sessions/${id}/send`, { content, ...(uuid ? { uuid } : {}) });
+// Now: Claude reads it at once, as Claude Code's send now (host.ts, /send). A host of older code sends it as any other.
+export async function send(id: string, content: Content, uuid?: string, now = false): Promise<HostRow> {
+  return call<HostRow>("POST", `/sessions/${id}/send`, { content, ...(uuid ? { uuid } : {}), ...(now ? { priority: "now" } : {}) });
 }
 
 export const withdraw = async (id: string, uuid: string) => (await call<{ withdrawn: boolean }>("POST", `/sessions/${id}/withdraw`, { uuid })).withdrawn;

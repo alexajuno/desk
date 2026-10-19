@@ -211,6 +211,7 @@ export interface Sent {
   images?: { media_type: string; data: string }[];
   uuid?: string; // the panel's, to take it back while it waits
   as?: "chat"; // a new chat's chip set to Chat
+  now?: boolean; // Ctrl+Enter: Claude reads it at once, as Claude Code's send now
 }
 
 const waiting = new Map<string, Sent[]>(); // messages for sessions still busy in the daemon, sent once it is idle
@@ -241,7 +242,7 @@ export async function send(id: string, m: Sent): Promise<{ queued: boolean }> {
     return { queued: false };
   }
   try {
-    await agents.tell(id, content(m), m.uuid);
+    await agents.tell(id, content(m), m.uuid, m.now);
     moved([id]); // the host holds it now: its panels join its stream
     return { queued: false };
   } catch (error) {

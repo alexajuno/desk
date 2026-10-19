@@ -170,9 +170,11 @@ async function* inbox(s: Session): AsyncGenerator<SDKUserMessage> {
   }
 }
 
-// The uuid, when the panel gave one, is how the message is taken back while it waits (withdraw).
-function userMessage(content: Content, uuid?: string): SDKUserMessage {
-  return { type: "user", message: { role: "user", content: content as never }, parent_tool_use_id: null, session_id: "", origin: { kind: "human" }, ...(uuid ? { uuid } : {}) } as SDKUserMessage;
+// The uuid, when the panel gave one, is how the message is taken back while it waits (withdraw). Priority "now" has
+// Claude Code read it at once, cutting short the reply it writes, rather than at the turn's next step.
+function userMessage(content: Content, uuid?: string, priority?: SDKUserMessage["priority"]): SDKUserMessage {
+  return { type: "user", message: { role: "user", content: content as never }, parent_tool_use_id: null, session_id: "", origin: { kind: "human" },
+    ...(uuid ? { uuid } : {}), ...(priority ? { priority } : {}) } as SDKUserMessage;
 }
 
 function start(o: StartOptions): Session {
@@ -408,10 +410,13 @@ app.post<{ Body: StartOptions }>("/sessions", async (req) => {
   return row(start(o));
 });
 
+// Priority "now" is Claude Code's send now (Ctrl+Enter in its terminal). The priority alone waits for a running command
+// or subagent to finish, so it goes to the background, as Ctrl+B does, and the turn reads the message on.
 app.post<{ Params: { id: string }; Body: { content: Content; uuid?: string; priority?: "now" | "next" | "later" } }>("/sessions/:id/send", async (req) => {
-  const s = find(req.params.id);
-  s.inbox.push(userMessage(req.body.content, req.body.uuid));
+  const s = find(req.params.id), now = req.body.priority === "now" && s.working;
+  s.inbox.push(userMessage(req.body.content, req.body.uuid, req.body.priority));
   s.wake?.();
+  if (now) await s.q.backgroundTasks().catch(() => {}); // it throws when background tasks are turned off: then it waits
   return row(s);
 });
 

@@ -266,8 +266,9 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
       })}
       {liveSteps.length > 0 && last?.kind !== "steps" && <Steps s={s} items={[]} running={liveSteps} live />}
       {liveText.map((b) => <Reply key={`${b.msg}:${b.index}`} text={b.text} streaming />)}
-      {s.pending.map((p) => (
-        <You key={p.key} text={p.text} images={p.images.length} queued={s.working && !p.lost} lost={p.lost} onSend={() => void s.resend(p)} />
+      {s.pending.map((p, n) => (
+        <You key={p.key} text={p.text} images={p.images.length} queued={s.working && !p.lost} lost={p.lost} onSend={() => void s.resend(p)}
+          onSendNow={n === s.pending.length - 1 ? () => void s.sendNow("", []) : undefined} />
       ))}
       {s.working && !liveText.length && !s.asks.length && <Working since={s.since} status={s.status} />}
     </>
@@ -276,7 +277,8 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
 
 const LONG = 600; // characters past which a message shows its first lines only, as claude.ai shows a long paste
 
-function You({ text, images, queued, lost, onSend }: { text: string; images?: number; queued?: boolean; lost?: boolean; onSend?: () => void }) {
+function You({ text, images, queued, lost, onSend, onSendNow }: { text: string; images?: number; queued?: boolean; lost?: boolean; onSend?: () => void;
+  onSendNow?: () => void }) {
   const [all, setAll] = useState(false);
   const long = text.length > LONG && !all;
   return (
@@ -286,7 +288,12 @@ function You({ text, images, queued, lost, onSend }: { text: string; images?: nu
         {text}
       </div>
       {long && <button className="you-more" type="button" onClick={() => setAll(true)}>Show all</button>}
-      {queued && <span className="you-queued">{GLYPH.clock}Queued</span>}
+      {queued && (
+        <span className="you-queued">
+          {GLYPH.clock}Queued
+          {onSendNow && <button className="you-more" type="button" title="Send now  Ctrl Enter" onClick={onSendNow}>Send now</button>}
+        </span>
+      )}
       {lost && (
         <span className="you-queued">
           {GLYPH.none}Not sent
@@ -713,6 +720,19 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
     }
   }
 
+  // Ctrl+Enter while Claude works, Claude Code's send now: what is typed and what is queued go in at once.
+  async function sendNow() {
+    const t = text.trim(), sending = images;
+    setText("");
+    setImages([]);
+    setPicks([]);
+    const left = await s.sendNow(t, sending);
+    if (left) {
+      setText(left.text); // put back what failed to go
+      setImages(left.images);
+    }
+  }
+
   // ↑ on the box's first line while messages wait: they come back into the box, above what is typed, to edit.
   async function takeBack() {
     const back = await s.withdraw();
@@ -775,6 +795,9 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
             } else if (picks.length && (e.key === "Tab" || (e.key === "Enter" && at >= 0))) {
               e.preventDefault();
               choose(picks[Math.max(at, 0)]);
+            } else if (e.key === "Enter" && e.ctrlKey && s.working) {
+              e.preventDefault();
+              void sendNow();
             } else if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               void send();
@@ -806,7 +829,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
             <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><rect x="1" y="1" width="8" height="8" rx="1.5" /></svg>
           </button>
         )}
-        <button className="send" type="button" title={s.working ? "Queue  Enter" : "Send  Enter"} disabled={!text.trim() && !images.length} onClick={() => void send()}>
+        <button className="send" type="button" title={s.working ? "Queue  Enter\nSend now  Ctrl Enter" : "Send  Enter"} disabled={!text.trim() && !images.length} onClick={() => void send()}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" /></svg>
         </button>
       </div>

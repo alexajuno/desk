@@ -266,11 +266,11 @@ export class LiveSession {
     if (!ok) this.pending = this.pending.filter((x) => x.key !== p.key);
   }
 
-  async send(text: string, images: Image[]) {
+  async send(text: string, images: Image[], now = false) {
     const p = this.sending(text, images);
     await this.moving;
     const res = await postJson(`/api/live/${this.id}/send`, { text, images: images.map(({ media_type, data }) => ({ media_type, data })), uuid: p.key,
-      ...(this.startAs === "chat" ? { as: "chat" } : {}) });
+      ...(this.startAs === "chat" ? { as: "chat" } : {}), ...(now ? { now: true } : {}) });
     this.sent(p, res.ok);
     if (!res.ok) toast(await reason(res));
     else if ((await res.json()).queued) toast("It's still working in the background: your message goes in when this turn ends.");
@@ -298,6 +298,16 @@ export class LiveSession {
     this.took(back);
     if (read) toast(queued.length === 1 ? "Claude has read it already." : `Claude has read ${read} of them already.`);
     return back.length ? { text: back.map((p) => p.text).filter(Boolean).join("\n"), images: back.flatMap((p) => p.images) } : null;
+  }
+
+  // Ctrl+Enter while Claude works, as Claude Code's send now: the queued messages and what is typed go in at once, as
+  // one message. Claude Code takes no word to hurry a message it holds, so the queued ones are taken back and sent
+  // again. What could not go comes back, for the box.
+  async sendNow(text: string, images: Image[]): Promise<{ text: string; images: Image[] } | null> {
+    const back = await this.withdraw();
+    const all = { text: [back?.text, text].filter(Boolean).join("\n"), images: [...(back?.images ?? []), ...images] };
+    if (!all.text && !all.images.length) return null;
+    return (await this.send(all.text, all.images, true)) ? null : all;
   }
 
   took(back: Pending[]) {
