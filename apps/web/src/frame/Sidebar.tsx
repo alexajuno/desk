@@ -1,5 +1,5 @@
 // The sidebar on every page (templates/base.html's aside.side): Inbox, Triage, Issues, Automations and the projects,
-// the newest bare chats, as claude.ai's Recents, then the lists to watch: what is in progress and landing, and what desk's
+// the newest sessions, as claude.ai's Recents, then the lists to watch: what is in progress and landing, and what desk's
 // checkout runs.
 // Waiting issues stay in Issues, since waiting can last forever.
 import { observer } from "mobx-react-lite";
@@ -72,17 +72,21 @@ export const Sidebar = observer(function Sidebar() {
           <span className="nav-title">{pr.title}</span>
         </Go>
       ))}
-      {/* The chats started as Chat, with no issue and no desk instructions, the newest first; older ones are in the
-          corner's history. */}
+      {/* Every session desk keeps, the newest first: its issue's state, or a ring for a chat with no issue, then on the
+          right the dock's pulse while it works, or the Inbox's dot while it holds what you have not read. One with an
+          issue opens the issue, where its chat docks, and goes by the issue's title. Older ones are in the corner's
+          history. */}
       {d && d.chats.length > 0 && (
         <>
           <div className="nav-label">Chats</div>
           {d.chats.map((c) => (
-            <Go key={c.session} className={`nav-item${at(`/sessions/${c.session}`)}`} to={`/sessions/${c.session}`}
+            <Go key={c.session} className={`nav-item${c.issue ? at(`/issue/${c.issue.slug}`) : ""}${at(`/sessions/${c.session}`)}`}
+              to={c.issue ? `/issue/${c.issue.slug}` : `/sessions/${c.session}`}
               title={c.working ? "Working" : c.unread ? "Said something you have not read" : c.title}
-              onContextMenu={(e) => { e.preventDefault(); chatMenu(c, { x: e.clientX, y: e.clientY }); }}>
-              {c.working ? <StateIcon state="running" /> : c.unread ? <StateIcon state="review" /> : <Ring />}
+              onContextMenu={c.issue ? undefined : (e) => { e.preventDefault(); chatMenu(c, { x: e.clientX, y: e.clientY }); }}>
+              {c.issue ? <StateIcon state={c.issue.state} /> : <Ring />}
               <span className="nav-title">{c.title}</span>
+              {c.working ? <span className="live-dot working" /> : c.unread ? <span className="unread" aria-label="Unread" /> : null}
             </Go>
           ))}
         </>

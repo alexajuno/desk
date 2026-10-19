@@ -17,6 +17,7 @@ import type { Project } from "./projects.ts";
 import { toHtml, toHtmlWithToc } from "./render.ts";
 import * as roster from "./roster.ts";
 import { find } from "./search.ts";
+import * as seen from "./seen.ts";
 import * as sessions from "./sessions.ts";
 import * as views from "./views.ts";
 import { ago, dayAndTime, nearDay, parseLocal, shortDate, waited } from "./when.ts";
@@ -93,17 +94,12 @@ function landingStuck(i: Issue, asks: Set<string>): boolean {
   return (!working(i) || asks.has(i.session!)) && Date.now() - parseLocal(i.landing!).getTime() > 60000;
 }
 
-type Item = [Issue, string];
-
-// What needs you and what waits for your review. desk moves the state here, from the session: In progress to In review
-// once it wrote result.md and stopped working, back to In progress when you ask it for a change and it works again,
-// from Landing to Done once result.md says it landed, and from Waiting to In progress once you write in its chat after
-// the wait began. An issue in Triage or In progress needs you once its chat is not working, a Triage one unless its
-// window is the one in front, or when it has no chat. Whether a process still holds the chat never counts (18 Oct: "we
-// should write code in the way we don't care"): its next message resumes it.
-export async function inboxItems(all: Map<string, Issue>): Promise<[Item[], Item[]]> {
-  const needs: Item[] = [], review: Item[] = [];
-  const asks = await asking();
+// desk moves an issue's state here, from its session: In progress to In review once it wrote result.md and stopped
+// working, back to In progress when you ask it for a change and it works again, from Landing to Done once result.md
+// says it landed, and from Waiting to In progress once you write in its chat after the wait began. Whether a process
+// still holds the chat never counts (18 Oct: "we should write code in the way we don't care"): its next message
+// resumes it.
+export async function advance(all: Map<string, Issue>) {
   for (const i of all.values()) {
     const busy = working(i);
     const result = resultOf(i.slug), hasResult = isFile(result);
@@ -120,24 +116,66 @@ export async function inboxItems(all: Map<string, Issue>): Promise<[Item[], Item
     } else if (i.state === "review" && busy) {
       await store.move(i, { state: "running" });
     }
-    if (i.state === "review") review.push([i, hasResult ? "result ready" : "check it"]);
-    else if (i.state === "landing") { // and no further: the asking rule below would list it during the minute
-      if (landingStuck(i, asks)) needs.push([i, "landing stuck"]);
-    } else if (i.state === "running" && !busy && hasQuestions(i)) {
-      needs.push([i, "has questions"]);
-    } else if (i.state === "triage" && !i.session) {
-      needs.push([i, "no chat"]);
-    } else if (i.state === "triage" && !busy && !live_.watching(i.session)) {
-      needs.push([i, "chat replied"]);
-    } else if (i.state === "running" && i.session && !busy) {
-      const ready = !hasResult && store.hasPlan(i);
-      needs.push([i, !ready ? "chat replied" : runs(i) === "quick" ? "waiting for you" : "plan ready"]);
-    } else if (i.session && asks.has(i.session) && !CLOSED.has(i.state) && i.state !== "waiting") {
-      needs.push([i, "waiting for you"]);
-    }
   }
-  const byFirst = (a: Item, b: Item) => byRank(a[0], b[0]);
-  return [needs.sort(byFirst), review.sort(byFirst)];
+}
+
+// --- the sessions, for the Inbox and the sidebar's Chats ------------------------------------------------------------------
+
+// A session desk keeps, with the issue it works, if any.
+interface Held { session: string; issue: Issue | null; chat: chats.Chat | null }
+
+// Every session desk keeps, each once: the chats (desk's own, an agent's, a bare one, an automation's run), the one
+// that moved last first, then the issues' sessions desk started in the background, which have no chat. Of two issues
+// with one session, such as a chat's Triage one dropped as a duplicate, the open one.
+function held(all: Map<string, Issue>): Held[] {
+  const issueOf = new Map<string, Issue>();
+  for (const i of all.values()) {
+    const had = i.session && issueOf.get(i.session);
+    if (i.session && (!had || CLOSED.has(had.state))) issueOf.set(i.session, i);
+  }
+  const found: Held[] = [], had = new Set<string>();
+  for (const chat of chats.agentChats()) {
+    if (!chat.session || had.has(chat.session)) continue;
+    had.add(chat.session);
+    found.push({ session: chat.session, issue: (chat.issue && all.get(chat.issue)) || issueOf.get(chat.session) || null, chat });
+  }
+  for (const [session, issue] of issueOf) if (!had.has(session)) found.push({ session, issue, chat: null });
+  return found;
+}
+
+// The states whose session's reply the Inbox listed before it went by sessions (seen.ts): their last reply starts unread.
+const LISTED = new Set(["triage", "running", "review"]);
+
+// When the user last read the session. A chat with one of the user's agents, or a bare one, kept it in its own file
+// until 19 Oct, and began unread.
+function readTo(h: Held): number {
+  const at = seen.of(h.session);
+  if (at !== undefined) return at;
+  if (h.chat && (h.chat.agent || h.chat.bare)) return h.chat.seen ?? 0;
+  return h.issue && LISTED.has(h.issue.state) ? 0 : seen.since();
+}
+
+// When the session's last reply came, if the user has not read it: it ended after the user last read the session and
+// after the user last wrote in it, and no panel shows it now; else 0. A script's chat starts that way.
+function unread(h: Held): number {
+  const replied = sessions.replied(h.session);
+  if (!replied || replied <= readTo(h) || live_.watching(h.session)) return 0;
+  const wrote = sessions.prompted(h.session); // none in a script's chat until the user answers
+  return wrote && wrote > replied ? 0 : replied; // at work on the user's message
+}
+
+// What a session's unread reply reads as, by where its issue stands. An issue closed while you were away tells you so:
+// on 19 Oct a Triage issue was settled as dropped, and its session's last word reached nowhere.
+function replyWhy(i: Issue, result: boolean): string {
+  switch (i.state) {
+    case "running": return result || !store.hasPlan(i) ? "chat replied" : runs(i) === "quick" ? "waiting for you" : "plan ready";
+    case "review": return result ? "result ready" : "check it";
+    case "done": return result && landed(resultOf(i.slug))[0] ? "landed" : "done";
+    case "dropped": return "dropped";
+    case "backlog": return "parked";
+    case "waiting": return "waiting";
+    default: return "chat replied";
+  }
 }
 
 // What each reason for being in the Inbox reads as, in a row's second line, after "Session".
@@ -146,70 +184,88 @@ const NOTICES: Record<string, string> = {
   "no chat": "has no chat: settle it in Triage",
   "has questions": "saved questions for you", "landing stuck": "stopped before the work landed",
   "result ready": "finished: the result is ready", "check it": "finished, with no result.md",
+  landed: "landed the work: the issue is done", done: "replied: the issue is done", dropped: "replied: the issue was dropped",
+  parked: "replied: the issue is in the backlog",
+  "agent replied": "replied", "agent wrote": "wrote to you",
 };
 
-export interface Notice { p: Issue; why: string; says: string; kind: string; at: Date }
-
-// The Inbox's rows, newest first.
-export async function notifications(all: Map<string, Issue>): Promise<Notice[]> {
-  const [needs, review] = await inboxItems(all);
-  // A chat's reply changes no file: its transcript says when, so each reply shows unread.
-  const changed = (i: Issue) => Math.max(store.changed(i.slug), (i.session && sessions.replied(i.session)) || 0);
-  const rows: Notice[] = [];
-  for (const [list, kind] of [[needs, "needs"], [review, "review"]] as const)
-    for (const [p, why] of list) rows.push({ p, why, says: NOTICES[why] ?? why, kind, at: new Date(changed(p) * 1000) });
-  return rows.sort((a, b) => b.at.getTime() - a.at.getTime());
-}
-
-// What the user's agents and bare chats said that the user has not read (chats.ts), as unread() says.
-export interface ChatNotice { chat: chats.Chat; title: string; why: string; says: string; at: Date }
-
-// When the chat's last reply came, if the user has not read it: it ended after the user last looked at the chat and
-// after the user last wrote in it, and no panel shows it now; else 0. A script's chat starts that way.
-function unread(chat: chats.Chat): number {
-  const replied = sessions.replied(chat.session);
-  if (!replied || replied <= (chat.seen ?? 0) || live_.watching(chat.session)) return 0;
-  const wrote = sessions.prompted(chat.session); // none in a script's chat until the user answers
-  return wrote && wrote > replied ? 0 : replied; // at work on the user's message
-}
+const saysOf = (why: string, i: Issue | null) => (why === "waiting" ? `replied: the issue waits on ${i?.waiting_on || "someone"}` : NOTICES[why] ?? why);
 
 // An agent's or a bare chat's title: Claude Code's own, or the user's first words, or who sent it the message it began
 // with.
 const chatTitle = (chat: chats.Chat) => sessions.chatTitleOf(chat.session) || (chat.from ? `From ${chat.from}` : chat.agent ?? "New chat");
 
-// A bare chat's reply is your turn in it, as an agent's is: "wanna have chat response to my turn in inbox" (the user,
-// 19 Oct).
-export function chatNotices(): ChatNotice[] {
-  const found: ChatNotice[] = [];
-  for (const chat of chats.agentChats()) {
-    const replied = (chat.agent || chat.bare) && unread(chat);
-    if (!replied) continue;
-    const wrote = sessions.prompted(chat.session);
-    found.push({ chat, title: chatTitle(chat), why: wrote ? "agent replied" : "agent wrote",
-      says: wrote ? "replied" : "wrote to you", at: new Date(replied * 1000) });
-  }
-  return found;
-}
-
-// Who a chat's row names: its agent, or "Chat" for a bare one.
+// Who a chat's row names: its agent, or "Chat" for any other with no issue.
 const whoOf = (chat: chats.Chat) => chat.agent ?? "Chat";
 
-// The Inbox's rows, newest first, as /api/inbox lists them: the issues' sessions' and the chats', each named by who.
-export async function inboxRows() {
-  const issues = (await notifications(await store.loadAll())).map((n) => ({ slug: n.p.slug, title: n.p.title, why: n.why, says: n.says, url: `/inbox?i=${n.p.slug}`, at: n.at }));
-  const theirs = chatNotices().map((n) => ({ slug: n.chat.id, title: n.title, why: n.why, says: n.says, url: `/inbox?i=${n.chat.id}`, who: whoOf(n.chat), at: n.at }));
-  return [...issues, ...theirs].sort((a, b) => b.at.getTime() - a.at.getTime()).map(({ at: _, ...row }) => row);
+export interface Notice {
+  slug: string; // the issue's, or the chat's id for a chat with no issue
+  title: string;
+  why: string;
+  says: string;
+  kind: "needs" | "review";
+  at: Date;
+  issue: Issue | null;
+  chat: chats.Chat | null;
+  session: string | null;
 }
 
-// The sidebar's Chats: the bare chats, the newest few, the one that moved last first; whether each works now, and
-// whether it said something the user has not read, which the Inbox lists too. Older ones are in the corner's history.
+// The Inbox: each session that needs you, newest first. It needs you while it asks to allow a tool, has questions you
+// have not answered, or stopped short of landing, and once it replied and you have not read it, whatever its issue's
+// state: "inbox is now somewhat when a session needs my attention rather than issue based anymore" (the user, 19 Oct).
+// The issue says only what its row reads as. A row you have read leaves (keeping it, as Linear does, is the backlog's
+// "The Inbox keeps what you've read"), but the one open now (keep) stays until another opens. An issue in Triage with
+// no chat is the one row with no session.
+export async function notifications(all: Map<string, Issue>, keep = ""): Promise<Notice[]> {
+  await advance(all);
+  const asks = await asking();
+  const rows: Notice[] = [];
+  for (const h of held(all)) {
+    const i = h.issue, slug = i?.slug ?? h.chat!.id;
+    const replied = sessions.replied(h.session) ?? 0;
+    let why = "";
+    if (i?.state === "landing") { // and no further: a landing session works, asks and replies on its way to Done
+      if (landingStuck(i, asks)) why = "landing stuck";
+    } else if (asks.has(h.session)) why = "waiting for you";
+    else if (i?.state === "running" && !working(i) && hasQuestions(i)) why = "has questions";
+    else if (unread(h) || (slug === keep && replied)) {
+      why = i ? replyWhy(i, isFile(resultOf(i.slug))) : sessions.prompted(h.session) ? "agent replied" : "agent wrote";
+    }
+    if (!why) continue;
+    // A chat's reply changes no file: its transcript says when, so each reply shows unread.
+    const at = Math.max(replied, i ? store.changed(i.slug) : 0);
+    rows.push({ slug, title: i ? i.title : chatTitle(h.chat!), why, says: saysOf(why, i), kind: i?.state === "review" ? "review" : "needs",
+      at: new Date(at * 1000), issue: i, chat: h.chat, session: h.session });
+  }
+  for (const i of all.values())
+    if (i.state === "triage" && !i.session)
+      rows.push({ slug: i.slug, title: i.title, why: "no chat", says: saysOf("no chat", i), kind: "needs", at: new Date(store.changed(i.slug) * 1000), issue: i, chat: null, session: null });
+  return rows.sort((a, b) => b.at.getTime() - a.at.getTime());
+}
+
+// The Inbox's rows, newest first, as /api/inbox lists them and the frame carries them, each named by who: a row from a
+// chat with no issue names its agent, or "Chat".
+const rowsOf = (notices: Notice[]) => notices.map((n) => ({
+  slug: n.slug, title: n.title, why: n.why, says: n.says, url: `/inbox?i=${n.slug}`, ...(n.issue ? {} : { who: whoOf(n.chat!) }),
+}));
+
+export const inboxRows = async () => rowsOf(await notifications(await store.loadAll()));
+
+// The sidebar's Chats: every session desk keeps, the newest few, the one that moved last first, each with its issue's
+// state, whether it works now, and whether it said something you have not read, which the Inbox lists too: "just
+// literally list all sessions with status icon related to their issue if there is" (the user, 19 Oct). An automation's
+// runs are its own page's, and a chat nobody wrote in has nothing to show. Older ones are in the corner's history.
 const CHATS_SHOWN = 8;
 
-async function chatsNow() {
-  const bare = chats.agentChats().filter((c) => c.bare && !c.automation).slice(0, CHATS_SHOWN); // a run is its automation's
-  return Promise.all(bare.map(async (c) => ({
-    session: c.session, title: sessions.chatTitleOf(c.session) || "New chat", working: (await agents.liveRow(c.session)).status === "busy", unread: unread(c) > 0,
-  })));
+function chatsNow(all: Map<string, Issue>) {
+  const table = sessions.refresh();
+  const moved = (h: Held) => Math.max(h.chat ? chats.movedAt(h.chat) : 0, (table.get(h.session)?.moved ?? 0) * 1000);
+  return held(all).filter((h) => table.has(h.session) && !h.chat?.automation)
+    .sort((a, b) => moved(b) - moved(a)).slice(0, CHATS_SHOWN)
+    .map((h) => ({
+      session: h.session, title: h.issue?.title ?? chatTitle(h.chat!), issue: h.issue && { slug: h.issue.slug, state: h.issue.state },
+      working: sessions.working(h.session), unread: unread(h) > 0,
+    }));
 }
 
 // --- what an issue shows -----------------------------------------------------------------------------------------------
@@ -341,24 +397,23 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
 // sync.ts sends it to the app whenever it changed.
 export async function framePage() {
   const all = await store.loadAll();
-  const [needs, review] = await inboxItems(all);
+  const notices = await notifications(all); // moves the issues on first
   // Sub-issues too: a session runs whether or not its issue sits under another.
   const inState = (s: string) => [...all.values()].filter((i) => i.state === s).sort(byRank);
   const now = await land.running(land.DESK_REPO);
   const line = await land.line(land.DESK_REPO);
   const everyProject = await projects.loadAll();
   const active = [...everyProject.values()].filter((p) => p.state === "active").sort(byCreated);
-  const theirs = chatNotices();
   return {
-    inbox: needs.length + review.length + theirs.length,
+    inbox: notices.length,
     triage: inState("triage").map((i) => ({ ...issueJson(i), now: talkOf(i) })),
     running: inState("running").map(issueJson),
     landing: inState("landing").map(issueJson),
     trying: now && { slug: now.slug, branch: now.branch, issue: (now.slug && all.has(now.slug)) ? issueJson(all.get(now.slug)!) : null },
     line: line.filter((w) => all.has(w.slug)).map((w) => ({ slug: w.slug, branch: w.branch ?? null, for: w.for ?? null, issue: issueJson(all.get(w.slug)!) })),
     projects: active.map((p) => ({ slug: p.slug, title: p.title })),
-    chats: await chatsNow(),
-    rows: await inboxRows(),
+    chats: chatsNow(all),
+    rows: rowsOf(notices),
     automations: automations.stamp(), // a page of automations fetches itself again when it moves
     live: Object.fromEntries([...all.values()].filter((i) => i.session && !CLOSED.has(i.state)).map((i) => [i.slug, talkOf(i)])),
   };
@@ -369,7 +424,7 @@ const byCreated = (a: Project, b: Project) => (a.created < b.created ? -1 : a.cr
 export async function issuePage(slug: string) {
   const all = await store.loadAll();
   if (!all.has(slug)) throw new HttpError(404, "That issue is gone.");
-  await inboxItems(all); // moves it on first, as the page does
+  await advance(all); // moves it on first, as the page does
   return issuePageJson(all, slug);
 }
 
@@ -445,22 +500,19 @@ export async function automationPage(slug: string) {
   return { automation: { ...(await automationJson(a, true)), body_html: toHtml(a.body) }, agents: roster.list().map(({ name, description }) => ({ name, description })) };
 }
 
-// The Inbox's rows, newest first, and the one picked (?i=<slug>) as its issue page shows it, or an agent's or a bare
-// chat (?i=<chat id>) as the chat, which stays open once reading it has taken its row out of the Inbox.
+// The Inbox's rows, newest first, and the one picked (?i=<slug>) as its issue page shows it, or a chat with no issue
+// (?i=<chat id>) as the chat. Opening a row reads its session, and the row stays while it is open.
 export async function inboxPage(picked: string) {
   const all = await store.loadAll();
-  const rows = (await notifications(all)).map((n) => ({
-    ...issueJson(n.p), why: n.why, says: n.says, kind: n.kind, seen: `${n.p.slug}:${n.why}:${Math.floor(n.at.getTime() / 1000)}`,
-    ago: ago(n.at), at: dayAndTime(n.at), when: n.at,
-  }));
-  const theirs = chatNotices().map((n) => ({
-    slug: n.chat.id, title: n.title, why: n.why, says: n.says, kind: "needs", seen: `${n.chat.id}:${n.why}:${Math.floor(n.at.getTime() / 1000)}`,
-    ago: ago(n.at), at: dayAndTime(n.at), when: n.at, chat: { session: n.chat.session, agent: n.chat.agent ?? null },
-  }));
-  const items = [...rows, ...theirs].sort((a, b) => b.when.getTime() - a.when.getTime()).map(({ when: _, ...item }) => item);
-  const chat = picked && chats.exists(picked) ? chats.load(picked) : null;
+  const opened = held(all).find((h) => (h.issue?.slug ?? h.chat?.id) === picked);
+  if (opened) seen.now(opened.session);
+  const items = (await notifications(all, picked)).map((n) => {
+    const row = { why: n.why, says: n.says, kind: n.kind, seen: `${n.slug}:${n.why}:${Math.floor(n.at.getTime() / 1000)}`, ago: ago(n.at), at: dayAndTime(n.at) };
+    return n.issue ? { ...issueJson(n.issue), ...row } : { slug: n.slug, title: n.title, ...row, chat: { session: n.session, agent: n.chat!.agent ?? null } };
+  });
+  const chat = !opened?.issue && opened?.chat;
   return { items, open: picked && all.has(picked) ? await issuePageJson(all, picked) : null,
-    chat: chat && (chat.agent || chat.bare) ? { slug: chat.id, session: chat.session, agent: chat.agent ?? null, title: chatTitle(chat) } : null };
+    chat: chat ? { slug: chat.id, session: chat.session, agent: chat.agent ?? null, title: chatTitle(chat) } : null };
 }
 
 // Search's hits, best match first, their matched words marked.

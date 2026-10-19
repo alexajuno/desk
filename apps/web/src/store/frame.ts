@@ -6,7 +6,7 @@
 // The tabs share the rows they last had in localStorage.inboxNotified as "<slug>:<why>" keys, so one event notifies
 // once; the rows a tab finds when it opens are not news.
 import { makeAutoObservable, observableRef } from "mobx";
-import type { IssueRow } from "../lib/desk";
+import type { IssueRow, State } from "../lib/desk";
 import { post } from "../api/http";
 import { onReload } from "./ui";
 
@@ -27,7 +27,7 @@ export interface FrameData {
   trying: { slug: string; branch: string; issue: IssueRow | null } | null;
   line: { slug: string; branch: string; for: string; issue: IssueRow }[];
   projects: { slug: string; title: string }[];
-  chats: { session: string; title: string; working: boolean; unread: boolean }[]; // the newest bare chats
+  chats: { session: string; title: string; issue: { slug: string; state: State } | null; working: boolean; unread: boolean }[]; // the newest sessions
   rows: InboxRow[];
   automations?: string; // moves whenever an automation does: its page fetches itself again
   live: Record<string, string>; // slug: where its session stands, for each open issue with one

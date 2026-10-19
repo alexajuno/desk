@@ -71,7 +71,7 @@ function back(reply: FastifyReply, slug: string, message: string | null = null, 
 // Back to the Inbox after acting on one of its notifications, as Linear moves on: the next one opens, the one below it,
 // else the one above, and the note says in a toast what happened.
 async function onward(reply: FastifyReply, before: string[], slug: string, note: string) {
-  const now = new Set((await pages.notifications(await store.loadAll())).map((n) => n.p.slug));
+  const now = new Set((await pages.notifications(await store.loadAll())).map((n) => n.slug));
   const at = before.includes(slug) ? before.indexOf(slug) : 0;
   const following = [...before.slice(at + 1), ...before.slice(0, at).reverse()].filter((s) => now.has(s));
   return reply.redirect(`/inbox?${urlencode({ ...(following.length ? { i: following[0] } : {}), note: cut(note, 300) })}`, 303);
@@ -410,7 +410,7 @@ export async function create(): Promise<FastifyInstance> {
   app.post("/issue/:slug/approve", async (req: Req, reply) => {
     const slug = req.params.slug, i = await store.load(slug);
     const fromInbox = field(req, "src") === "inbox";
-    const before = fromInbox ? (await pages.notifications(await store.loadAll())).map((n) => n.p.slug) : [];
+    const before = fromInbox ? (await pages.notifications(await store.loadAll(), slug)).map((n) => n.slug) : []; // with the one open
     const stay = (message: string | null = null, trust = false) => back(reply, slug, message, trust, fromInbox);
     if (i.state !== "review") return stay("Only an issue in review can be approved.");
     let message = `Approved: ${i.title}`;

@@ -1,9 +1,10 @@
 // Linear's Inbox (templates/inbox.html): the notifications on the left, newest first; the one picked (?i=<slug>) opens
-// on the right, as the issue's page shows it. Each row is the issue's session telling you something: its status where
-// Linear draws who acted, since every row's session would look the same (19 Oct: "there is nobody"), a dot until you
-// open it, the issue's title, then what the session did and how long ago. A row may instead be one of the
-// user's agents or a bare chat writing (?i=<chat id>), whose chat opens on the right, as Triage shows one. The top bar splits at the
-// list's edge: "Inbox" over the list, the open notification's title over it.
+// on the right, as the issue's page shows it. Each row is a session that needs you (pages.ts, notifications), and leaves
+// once you have read it: its issue's status where Linear draws who acted, since every row's session would look the
+// same (19 Oct: "there is nobody"), a dot until you open it, the issue's title, then what the session did and how long
+// ago. A row may instead be a chat with no issue, one of the user's agents or a bare one (?i=<chat id>), whose chat
+// opens on the right, as Triage shows one. The top bar splits at the list's edge: "Inbox" over the list, the open
+// notification's title over it.
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -29,13 +30,13 @@ interface InboxItem extends IssueRow {
   seen: string; // "<slug>:<why>:<time>": a new event on the issue is a new key, so it shows unread again
   ago: string;
   at: string;
-  chat?: { session: string; agent: string | null }; // a row from a chat with one of the user's agents, or a bare one
+  chat?: { session: string; agent: string | null }; // a row from a chat with no issue: one of the user's agents, or none
 }
 
 interface InboxData {
   items: InboxItem[];
   open: IssuePageData | null;
-  chat: { slug: string; session: string; agent: string | null; title: string } | null; // the agent's or bare chat picked
+  chat: { slug: string; session: string; agent: string | null; title: string } | null; // the chat with no issue picked
 }
 
 // The rows you have opened (localStorage.inboxSeen, shared with the old pages): a read row loses its dot, as in
@@ -143,7 +144,7 @@ export const InboxPage = observer(function InboxPage() {
   );
 });
 
-// An agent's or a bare chat's row: what it said, unread until you open it, which opens its chat on the right. It is no
+// A chat's row, one with no issue: what it said, unread until you open it, which opens its chat on the right. It is no
 // issue, so it has no status, and the issue keys pass it by. An agent shows its initial, a bare chat a speech bubble.
 const ChatRow = observer(function ChatRow({ n, open, read }: { n: InboxItem; open: boolean; read: boolean }) {
   const agent = n.chat!.agent;

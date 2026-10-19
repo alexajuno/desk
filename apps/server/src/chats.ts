@@ -44,7 +44,7 @@ export interface Chat {
   named?: string; // the title the user gave it, or its automation's, over Claude Code's
   from?: string; // the script whose message started it (push)
   automation?: string; // the automation whose run it is, by slug (automations.ts)
-  seen?: number; // when the user last looked at it, in seconds: the Inbox leaves out what the agent said before
+  seen?: number; // when the user last looked at it, in seconds, until 19 Oct: seen.ts keeps it since
   [key: string]: unknown;
 }
 
@@ -96,6 +96,9 @@ export function moved(session: string) {
   const chat = ofSession(session);
   if (chat) lastMoved.set(chat.id, Date.now());
 }
+
+// When the chat last moved, in ms.
+export const movedAt = (chat: Chat) => lastMoved.get(chat.id) ?? 0;
 
 const now = () => store.now();
 
@@ -267,14 +270,6 @@ export function push(agent: Agent, text: string, from: string): Promise<Chat> {
 // message and waits in the Inbox with its reply.
 export const automationRun = (agent: Agent | null, title: string, slug: string, message: string) =>
   agentChat(agent, message, { named: title, automation: slug });
-
-// The user looked at the agent's or the bare chat now: what it said so far is read.
-export function seenNow(session: string) {
-  const chat = agentChatOf(session);
-  if (!chat?.agent && !chat?.bare) return;
-  chat.seen = Date.now() / 1000;
-  save(chat);
-}
 
 // The user's own title for the chat, or none to give it back Claude Code's. "Rename by hand" (the user, 18 Oct).
 export function rename(session: string, title: string) {
