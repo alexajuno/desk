@@ -555,13 +555,13 @@ export async function create(): Promise<FastifyInstance> {
   // chat's head and chips what they show now.
   app.post("/api/live/:id/folder", async (req: Req) => {
     mustBePage(req);
-    const typed = String(((req.body ?? {}) as { folder?: unknown }).folder ?? "").trim();
+    const body = (req.body ?? {}) as { folder?: unknown; as?: string }, typed = String(body.folder ?? "").trim();
     const path = resolve(typed === "~" || typed.startsWith("~/") ? HOME + typed.slice(1) : typed);
     if (!typed || !isDir(path)) throw new HttpError(422, `No folder ${typed}.`);
     const chat = chats.agentChatOf(sessionOf(req));
     if (!chat || !chats.empty(chat)) throw new HttpError(409, "Only a new chat's folder is picked, before its first message.");
     try {
-      await chats.startIn(chat, path);
+      await chats.startIn(chat, path, body.as === "chat");
     } catch (error) {
       throw new HttpError(502, (error as Error).message);
     }

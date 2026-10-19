@@ -332,7 +332,7 @@ export class LiveSession {
     const was = this.meta;
     if (was) this.shows({ ...was, folder, picked: true });
     this.moving = this.moving.then(async () => {
-      const res = await postJson(`/api/live/${this.id}/folder`, { folder });
+      const res = await postJson(`/api/live/${this.id}/folder`, { folder, ...(this.startAs === "chat" ? { as: "chat" } : {}) });
       if (res.ok) return this.shows(await res.json());
       if (was) this.shows(was);
       toast(await reason(res));

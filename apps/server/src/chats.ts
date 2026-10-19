@@ -287,9 +287,10 @@ export const becomeBare = (chat: Chat, message: hosted.Content) =>
   restartAs(chat, { bare: true, cwd: chat.cwd ?? HOME }, runsOn(chat), `chat ${stamp()}`, message);
 
 // The composer's folder chip, before the first message: the new chat's session starts again in the folder, idle, and
-// the chat runs there whatever its first message makes it. "allowing me to select the dir in the beginning" (the
-// user, 19 Oct).
-export const startIn = (chat: Chat, folder: string) => restartAs(chat, { cwd: folder }, runsOn(chat), `desk chat ${stamp()}`);
+// the chat runs there whatever its first message makes it. The folder it starts in anyway, the home folder for a Chat
+// and DESK_DATA for desk's agent, is no pick. "allowing me to select the dir in the beginning" (the user, 19 Oct).
+export const startIn = (chat: Chat, folder: string, bare: boolean) =>
+  restartAs(chat, { cwd: same(folder, bare ? HOME : DATA_DIR) ? undefined : folder }, runsOn(chat), `desk chat ${stamp()}`);
 
 // A new chat's session starts again as what it became, with the message as typed, so the panel finds it in the
 // transcript, or idle with none. When that session will not start, the chat stays as it was.
