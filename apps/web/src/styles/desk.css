@@ -89,6 +89,13 @@
   --text-tip-raised: lch(91.554% 1.65 272);
   --border-tip-key-raised: lch(23.992% 2.38 272);
   --text-tip-key-raised: lch(66.215% 1.65 272);
+  /* Display options' List and Board: the one picked, and the other at rest and under the mouse (.dp-layout below) */
+  --bg-seg-on: lch(23.906% 1.429 272);
+  --text-seg-on: lch(100% 0 272);
+  --ring-seg-on: lch(100% 0 0 / 0.247);    /* also the other's ring under the mouse */
+  --bg-seg: lch(17.349% 1.043 272);
+  --bg-seg-hover: lch(21.206% 1.043 272);
+  --ring-seg: lch(100% 0 0 / 0.148);
   /* a link in a description, and the link bar over it while typing, measured on linear.app on 2026-10-19 (editor.css) */
   --text-link: lch(80% 80 288.43);
   --border-link-bar: lch(34.32% 1.93 272);
@@ -176,6 +183,12 @@
   --text-tip-raised: var(--text-tip);
   --border-tip-key-raised: var(--border-tip-key);
   --text-tip-key-raised: var(--text-tip-key);
+  --bg-seg-on: lch(95.543% 0 282);
+  --text-seg-on: lch(10% 0 282);
+  --ring-seg-on: lch(0% 0 0 / 0.147);
+  --bg-seg: lch(100% 0 282);
+  --bg-seg-hover: lch(96.914% 0 282);
+  --ring-seg: lch(0% 0 0 / 0.088);
   --text-link: lch(50% 80 288.43);
   --border-link-bar: lch(86.5% 0 282);
   --rule-link-bar: lch(90.55% 0 282);
@@ -880,12 +893,16 @@ button.set-pick svg { color: var(--text-3); }
 .card-chip { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; height: 20px; line-height: 20px;
              padding: 0 7px; border-radius: 48px; box-shadow: inset 0 0 0 0.5px var(--border-3); font-size: 11.5px; color: var(--text-2); }
 .card-props .date { min-width: 0; }
-/* Display options' Layout: Linear's two buttons over the rest */
-.dp-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 8px; }
-.dp-layout button { flex-direction: column; gap: 4px; height: 52px; justify-content: center; border: 0; border-radius: 8px;
-                    background: none; box-shadow: inset 0 0 0 0.5px var(--border-tip); color: var(--text-3); font: 500 12px var(--font); }
-.dp-layout button:hover { background: var(--bg-active); color: var(--text-1); }
-.dp-layout button.on { background: var(--bg-active); color: var(--text-1); }
+/* Display options' Layout, measured on linear.app's All issues on 2026-10-19 at 2x, dark and light: two 28px pills side
+   by side over the rest, 18px in from the panel's sides and 6px apart, 16px under its top and 18px over Grouping, a
+   14px icon left of a 12px/500 label. The one picked is filled brighter, with a stronger ring and no shadow; the other
+   reads --text-tip-key, and --text-tip under the mouse. */
+.dp-layout { display: flex; gap: 6px; margin: 8px 2px 18px; }
+.dp-layout button { flex: 1; padding: 6px 8px; justify-content: center; background: var(--bg-seg);
+                    box-shadow: 0 0 0 0.5px var(--ring-seg), var(--shadow-panel); color: var(--text-tip-key); transition: background-color 0.15s, color 0.15s; }
+.dp-layout button:hover { background: var(--bg-seg-hover); box-shadow: 0 0 0 0.5px var(--ring-seg-on), var(--shadow-panel); color: var(--text-tip); }
+.dp-layout button.on { background: var(--bg-seg-on); box-shadow: 0 0 0 0.5px var(--ring-seg-on); color: var(--text-seg-on); }
+.dp-layout svg { width: 14px; height: 14px; flex: none; }
 
 /* Triage (triage/TriagePage.tsx): the Inbox's split, its rows the chats not settled yet, and on the right the one picked
    as its chat under Linear's bar of triage actions. The chat's own head goes: the top bar names it. */
