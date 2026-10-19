@@ -626,7 +626,6 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   const commands = useRef<Promise<Pick[]> | null>(null);
   const [known, setKnown] = useState<Set<string> | null>(null); // the names / takes, once asked
   const asked = useRef(0);
-  const [typing, setTyping] = useState(false); // the cursor is here: the hint says the keys of this mode
   const focus = wantsFocus.get() === s.id;
   // Messages waiting for Claude's next step, or not sent, which ↑ takes back.
   const queued = (s.working && s.pending.length > 0) || s.pending.some((p) => p.lost);
@@ -755,7 +754,6 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           placeholder={s.working ? "Queue a message for when it's ready…" : "Reply…"}
           onScroll={(e) => { if (layer.current) layer.current.scrollTop = e.currentTarget.scrollTop; }}
           onChange={(e) => { setText(e.target.value); void complete(tokenAt(e.target.value, e.target.selectionStart)); }}
-          onFocus={() => setTyping(true)} onBlur={() => setTyping(false)}
           onPaste={(e) => {
             const files = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
             if (files.length) { e.preventDefault(); void attach(files); }
@@ -794,14 +792,14 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
         {fresh(s) && <StartAs s={s} />}
-        <span className="composer-hint">{!typing ? "I to type" : picks.length ? (at < 0 ? "Tab picks · Enter sends as typed" : "Enter picks · Esc closes") : fresh(s) ? "Shift Tab switches Issue or Chat · Enter sends" : queued ? (s.working ? "↑ edits the queued · Ctrl C stops" : "↑ edits the unsent · Enter sends") : s.working ? "Enter queues · Ctrl C stops" : "Enter sends · Shift Enter for a new line"}</span>
+        <span className="spacer" />
         <Runs s={s} />
         {s.working && (
           <button className="stop" type="button" title="Stop  Ctrl C" onClick={() => void s.interrupt()}>
             <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><rect x="1" y="1" width="8" height="8" rx="1.5" /></svg>
           </button>
         )}
-        <button className="send" type="button" title="Send  Enter" disabled={!text.trim() && !images.length} onClick={() => void send()}>
+        <button className="send" type="button" title={s.working ? "Queue  Enter" : "Send  Enter"} disabled={!text.trim() && !images.length} onClick={() => void send()}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" /></svg>
         </button>
       </div>
