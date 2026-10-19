@@ -14,7 +14,9 @@
 //
 // A host of older code says nothing. While one runs, as for the hours after this landed until it gave way to one of
 // this code (hosted.ts swaps it once its sessions are quiet), desk reads as it did before, from the transcripts
-// (sessions.ts) and the host's list; so does the moment after desk starts, before the host's hello.
+// (sessions.ts) and the host's list, and looks again every few seconds, since nothing tells it (lookWhileOlder); so
+// does the moment after desk starts, before the host's hello. On 19 Oct 8790's host had run since the night before,
+// its sessions never all quiet.
 import { statSync } from "node:fs";
 import type { WebSocket } from "ws";
 import * as chats from "./chats.ts";
@@ -182,6 +184,12 @@ async function catchUp() {
   if (behind.length) kept(await db.write((tx) => upsertAll(tx, behind)));
 }
 
+// While a host of older code runs, which tells desk nothing, desk looks again at every session every few seconds, as
+// it did before the host told it: the listeners read the transcripts then (sessions.ts). The host's hello ends it.
+const OLDER_LOOK = 5000; // ms
+let older: NodeJS.Timeout | null = null;
+const lookWhileOlder = () => { older ??= setInterval(() => changed(null), OLDER_LOOK); };
+
 async function hello(ws: WebSocket, states: State[]) {
   host = ws;
   // Those the host no longer holds ended while desk was away.
@@ -189,6 +197,8 @@ async function hello(ws: WebSocket, states: State[]) {
   if (!reporting) {
     await catchUp();
     reporting = true;
+    if (older) clearInterval(older);
+    older = null;
     changed(null);
   }
 }
@@ -222,7 +232,7 @@ export function connect(ws: WebSocket) {
 // one of this code says hello in a moment; an older one says nothing until it gives way.
 export async function load() {
   for (const r of (await db.sql().query<Row>(`select ${COLUMNS} from sessions`)).rows) rows.set(r.id, r);
-  if ((await hosted.standing()) !== "none") return;
+  if ((await hosted.standing()) !== "none") return lookWhileOlder();
   kept((await db.write((tx) => closeAll(tx))).rows);
   await catchUp();
   reporting = true;
