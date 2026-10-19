@@ -1,6 +1,7 @@
 // Linear's Inbox (templates/inbox.html): the notifications on the left, newest first; the one picked (?i=<slug>) opens
-// on the right, as the issue's page shows it. Each row is the issue's session telling you something: a dot until you
-// open it, the issue's title and status, then what the session did and how long ago. A row may instead be one of the
+// on the right, as the issue's page shows it. Each row is the issue's session telling you something: its status where
+// Linear draws who acted, since every row's session would look the same (19 Oct: "there is nobody"), a dot until you
+// open it, the issue's title, then what the session did and how long ago. A row may instead be one of the
 // user's agents or a bare chat writing (?i=<chat id>), whose chat opens on the right, as Triage shows one. The top bar splits at the
 // list's edge: "Inbox" over the list, the open notification's title over it.
 import { observer } from "mobx-react-lite";
@@ -14,7 +15,7 @@ import { actionsMenu } from "../issues/menus";
 import { painted } from "../issues/painted";
 import { useLive } from "../issues/useLive";
 import { SessionView } from "../sessions/Dock";
-import type { IssueRow } from "../lib/desk";
+import { STATE_NAMES, type IssueRow } from "../lib/desk";
 import { frame, lineKey } from "../store/frame";
 import { issues } from "../store/issues";
 import { ui } from "../store/ui";
@@ -108,7 +109,7 @@ export const InboxPage = observer(function InboxPage() {
                   to={`/inbox?i=${n.slug}`} title={n.title} data-slug={n.slug} data-state={n.state} data-priority={n.priority} data-parent={n.parent ?? ""} data-seen={n.seen}
                   onMouseMove={() => { if (ui.focused !== n.slug) ui.focus(n.slug, true); }}
                   onContextMenu={(e) => { e.preventDefault(); ui.focus(n.slug); actionsMenu(n, { x: e.clientX, y: e.clientY }, open?.issue.slug ?? null); }}>
-                  <span className="avatar" aria-label="Session"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4.07 3.83a.17.17 0 0 0-.22.18l1.96 9.13c.04.19.28.22.37.04l1.73-3.53c.21-.45.61-.78 1.09-.92l3.78-1.08c.17-.05.18-.29.02-.36L4.07 3.83ZM3.75 2.34c.3-.05.6-.02.89.1l8.65 3.51c1.46.6 1.35 2.7-.17 3.14L9.34 10.18a.25.25 0 0 0-.16.13l-1.72 3.53c-.7 1.42-2.79 1.16-3.12-.38L2.38 4.33a1.6 1.6 0 0 1 1.37-1.99Z" /></svg>
+                  <span className="avatar status" aria-label={STATE_NAMES[n.state]}><StateIcon state={n.state} />
                     <span className="badge">
                       {n.kind === "review"
                         ? <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 8.5l3 3 6-7" /></svg>
@@ -116,7 +117,7 @@ export const InboxPage = observer(function InboxPage() {
                     </span>
                   </span>
                   <span className="lines">
-                    <span className="line"><span className="dot" aria-label="Unread" /><span className="title">{n.title}</span><span className="state"><StateIcon state={n.state} /></span></span>
+                    <span className="line"><span className="dot" aria-label="Unread" /><span className="title">{n.title}</span></span>
                     <span className="line sub"><span className="says">{`Session ${n.says}`}</span><span className="age" title={n.at}>{n.ago}</span></span>
                   </span>
                 </Go>

@@ -59,7 +59,7 @@
   --bg-pop-on: lch(16.706% 0.979 272);
   --border-pop: lch(16.32% 1.48 272);
   --shadow-pop: lch(0 0 0 / 0.4) 0 7px 32px;
-  --avatar-session: lch(58% 45 290);       /* the Inbox's avatar for an issue's session */
+  --avatar-session: lch(58% 45 290);       /* the Inbox's avatar for an agent's chat */
   --shadow-keys: lch(0 0 0 / 0.125) 0 3px 8px, lch(0 0 0 / 0.125) 0 2px 5px, lch(0 0 0 / 0.125) 0 1px 1px; /* the shortcuts panel */
   --overlay: lch(0 0 0 / 0.4);             /* behind a modal, measured on Linear's Create project on 2026-10-18 */
   /* Linear's modals: the new project panel (its block below) */
@@ -564,7 +564,8 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 /* The Inbox (inbox.html), as Linear's, measured on linear.app on 2026-10-15: a list beside the open notification.
    Rows are 55px with 8px corners, 10px in from the list's edges: a 32px avatar with a 16px badge
    for the kind of notice, then two lines 2px apart, 10px from the row's top and bottom. The first holds an 8px
-   unread dot, the 13px title and the 14px status icon; the second, in 12px, who did what and how long ago.
+   unread dot, the 13px title and the 14px status icon; the second, in 12px, who did what and how long ago. desk
+   draws the status in the avatar's place instead, at its size: every row's avatar was the same session (19 Oct).
    The list is 400px, or half the panel when that is less. With the sidebar showing on a window of 890 to 1029px,
    Linear narrows it to 240px so the notification keeps its room; under 770px only one of them shows. */
 /* Half is the panel's width (cqw), so the list, the bar's line and "Inbox" over the list all measure the same. */
@@ -600,6 +601,8 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .inbox-row .avatar { position: relative; flex: none; display: grid; place-items: center; width: 32px; height: 32px;
                      border-radius: 50%; background: var(--avatar-session); color: var(--on-accent); }
 .inbox-row .avatar.agent { font: 500 13px var(--font); } /* an agent's initial, as a person's avatar has */
+.inbox-row .avatar.status { background: none; }
+.inbox-row .avatar.status > svg, .triage-now > svg { width: 32px; height: 32px; }
 .inbox-row .badge { position: absolute; left: 19.5px; top: 17.5px; display: grid; place-items: center; width: 16px; height: 16px;
                     border-radius: 50%; background: var(--bg-panel); color: var(--text-3); }
 .inbox-row .lines { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 10px 0; }
@@ -608,7 +611,6 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .inbox-row.read .dot { display: none; }
 .item.inbox-row .title { flex: 1; min-width: 0; font: 500 13px var(--font); color: var(--text-2); }
 .inbox-row.read .title { color: var(--text-3); }
-.inbox-row .state { flex: none; display: inline-flex; margin-left: 4px; }
 .inbox-row .sub { height: 15px; font: 450 12px var(--font); color: var(--text-3); }
 .inbox-row .says { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inbox-row .age { flex: none; margin-left: 4px; }
@@ -914,7 +916,7 @@ button.set-pick svg { color: var(--text-3); }
 
 /* Triage (triage/TriagePage.tsx): the Inbox's split, its rows the chats not settled yet, and on the right the one picked
    as its chat under Linear's bar of triage actions. The chat's own head goes: the top bar names it. */
-.triage-now { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--bg-raised); }
+.triage-now { flex: none; display: grid; place-items: center; width: 32px; height: 32px; }
 .triage-open { display: flex; flex-direction: column; overflow: hidden; }
 .triage-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .triage-pane .session-view { flex: 1; min-height: 0; height: auto; }
