@@ -40,6 +40,7 @@ export interface IssuePageData {
   files: string[];
   agent_files: Record<string, string>;
   card: [string, string] | null;
+  reviewing: boolean; // in review, holding a result to approve rather than a plan or a question
   session_kind: string | null;
   live: string;
   strip: { text: string; button: StripButton | null };
@@ -79,8 +80,8 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
   // happened (app.ts, onward).
   async function act(action: string) {
     const slug = p.slug;
-    if (action === "approve") {
-      ui.paint(slug, "state", "landing");
+    if (action === "approve" || action === "go") {
+      ui.paint(slug, "state", action === "go" ? "running" : "landing");
       setNote({ slug, msg: null, trust: false });
     }
     try {
@@ -128,8 +129,9 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
         <div>
           <Title title={p.title} save={(t) => setField(p.slug, "title", t)} />
           <Chips p={p} project={data.project} />
-          {/* In review the card comes first, right under the strip whose Approve decides on it. */}
-          {p.state === "review" && (
+          {/* In review the card comes first, right under the strip whose Approve decides on it. A plan to say go to
+              shows as the plan, below. */}
+          {p.state === "review" && data.reviewing && (
             <div className="review">
               <div className="section-label" style={{ marginTop: 0 }}>Review</div>
               {data.card ? (
@@ -144,7 +146,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
           {/* What there is to read leads: the result (in review, the card above), then the plan. Then the sub-issues, which
               the agent files, so the section shows only once there is one (Add sub-issue is in the ⋯ menu), then the
               Context, a line or two, and the agent's saved questions. */}
-          {"result.md" in data.agent_files && p.state !== "review" && <AgentFile name="result.md" html={data.agent_files["result.md"]} />}
+          {"result.md" in data.agent_files && !(p.state === "review" && data.reviewing) && <AgentFile name="result.md" html={data.agent_files["result.md"]} />}
           {"plan.md" in data.agent_files && (
             <section className="sec" data-sec="plan.md">
               <div className="section-label sec-head"><Fold />Plan <Go className="muted" to={`/issue/${p.slug}/f/plan.md`} title="Open the plan on its own page, with its contents">plan.md</Go></div>

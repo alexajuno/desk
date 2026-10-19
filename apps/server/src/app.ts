@@ -404,6 +404,23 @@ export async function create(): Promise<FastifyInstance> {
     return back(reply, i.slug, `Trusted ${agents.workdir(i)}. Press ${runs(i) === "quick" ? "Start" : "Plan"} again.`);
   });
 
+  // Go, on a plan in review: the issue's session carries it out, as "go" said in its chat tells it to, and the issue is
+  // In progress again. From the Inbox you stay in the Inbox, as after Approve.
+  app.post("/issue/:slug/go", async (req: Req, reply) => {
+    const slug = req.params.slug, i = await store.load(slug);
+    const fromInbox = field(req, "src") === "inbox";
+    const before = fromInbox ? (await pages.notifications(await store.loadAll(), slug)).map((n) => n.slug) : []; // with the one open
+    const stay = (message: string | null = null) => back(reply, slug, message, false, fromInbox);
+    if (i.state !== "review" || !i.session) return stay("Only a plan in review can be told to go.");
+    try {
+      await agents.say(i, "go");
+    } catch (error) {
+      return stay((error as Error).message);
+    }
+    await store.move(i, { state: "running" });
+    return fromInbox ? onward(reply, before, slug, `Go: ${i.title}`) : back(reply, slug);
+  });
+
   // Approve, the gate: the issue's session lands the work by its repo's rules, and the issue shows Landing until its
   // result says it landed. With nothing to land, no repo or no session, it is done at once. A session in a worktree desk
   // made cannot merge, so desk merges for it. From the Inbox you stay in the Inbox: the next notification opens.

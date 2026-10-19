@@ -184,6 +184,12 @@ async function join(top: string, slug: string, branch: string, by: string): Prom
   place = by === "review" ? 0 : place === null ? rest.length : place;
   data.line = [...rest.slice(0, place), { slug, branch, for: by }, ...rest.slice(place)];
   await saveLine(top, data);
+  // A session in line waits on its turn, someone else's move, until desk messages it that its branch runs (pages.ts,
+  // advance): "yeah, waiting status" (the user, 19 Oct).
+  if (by === "test" && (await store.exists(slug))) {
+    const i = await store.load(slug);
+    if (i.state === "running") await store.move(i, { state: "waiting", waiting_on: "its turn on 8790" });
+  }
   const now = await running(top);
   if (by === "review") return `Next on 8790: ${branch} runs once ${now ? now.branch : "the switch before it"} is done.`;
   return `Queued, number ${place + 1} in line: ${top} runs ${now ? now.branch : "another branch"} now. ` +

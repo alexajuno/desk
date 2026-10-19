@@ -18,8 +18,9 @@ An issue's fields:
 - `title`
 - `body`: Markdown sections, usually `## Context`: what the user asks in a line or two, in their words, quoted and dated, not their whole message (the user reads it at a glance; the talk stays in the chat)
 - `priority`: urgent, high, medium, low or none
-- `state`: triage (a desk chat's own issue, filed in its first reply, until the talk settles it; only desk's agent chat files one), backlog, running (shown as In progress: planned with its session, or being carried out), waiting (someone else's move, such as QA's), review, landing (approved: its session lands the work; only the user's Approve sets it), done or dropped
+- `state`: triage (a desk chat's own issue, filed in its first reply, until the talk settles it; only desk's agent chat files one), backlog, running (shown as In progress: its session works on it, planning or carrying it out), waiting (someone else's move, such as QA's), review (shown as In review: the user's move, once its session's turn ends on a plan, a question or a result; the user's reply, or Go, moves it back to In progress), landing (approved: its session lands the work; only the user's Approve sets it), done or dropped
 - `waiting_on`: for a waiting issue, who or what it waits on, such as `QA on #570`, sent with `"state": "waiting"` or on its own after; desk notes since when, and drops both when the issue leaves waiting
+- `review_of`: for an issue in review, what its session hands the user: `plan` (waits for go: the user's Go button says it), `question` (only the user can answer), `result` (result.md, for Approve) or `reply`. An issue's session sends it with `"state": "review"` as it ends each turn; sent without it, desk reads it from the files the turn wrote, and a turn that ends with no call shows In review the same way
 - `parent`: the slug of the issue it belongs under, or null
 - `project`: the slug of the project it belongs to, or null. A project is ongoing work that is never done, such as desk itself; its issues finish, it does not. It is a separate thing from `parent`, which is for sub-issues
 - `folder`: where its session works, usually a repo, such as `~/projects/desk`
@@ -107,9 +108,13 @@ desk's own agent chat works an issue itself; it starts no other session. Bind th
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/work" --json '{"chat": "<chat id>"}'
 ```
 
-Then work it by its protocol, in the chat: write `plan.md` in the issue's folder, a three-line brief for quick and brief, and for design a sketch built with the user in short words, as the design-doc skill says, ending with Done when and Decide alone. Go straight on for quick; for the others, wait for the user's "go". Carry the work out in the chat, write `result.md` with the review card, and stop; the issue shows In review, and the user's Approve sends the chat a message to land the work by the repo's rules.
+Then work it by its protocol, in the chat: write `plan.md` in the issue's folder, a three-line brief for quick and brief, and for design a sketch built with the user in short words, as the design-doc skill says, ending with Done when and Decide alone. Go straight on for quick; for the others, end your turn on `"review_of": "plan"` and wait for the user's "go". Carry the work out in the chat, write `result.md` with the review card, and end your turn on `"review_of": "result"`; the user's Approve sends the chat a message to land the work by the repo's rules:
 
-Any other Claude Code session (not the agent chat) can still start an issue's own background session. Send a plan: Direction (what to do, and which way), Done when, and What you may decide alone. A quick or brief issue may start with no plan, `--json '{}'`: its session writes its own brief, then works at once (quick) or waits for the user's "go" (brief). Only a backlog issue, or one in progress whose session has only planned it, can start. If the call answers 409 "Workspace not trusted", tell the user to press Trust folder on the issue's page, then start again.
+```bash
+curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"state": "review", "review_of": "result"}'
+```
+
+Any other Claude Code session (not the agent chat) can still start an issue's own background session. Send a plan: Direction (what to do, and which way), Done when, and What you may decide alone. A quick or brief issue may start with no plan, `--json '{}'`: its session writes its own brief, then works at once (quick) or waits for the user's "go" (brief). Only a backlog issue, or one in progress or in review whose session has only planned it, can start. If the call answers 409 "Workspace not trusted", tell the user to press Trust folder on the issue's page, then start again.
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/start" --json '{"plan": "Direction:\n\n- Send the user back to the page they came from after login.\n\nDone when: logging in from /pricing lands on /pricing.\n\nWhat you may decide alone: where the return address is kept."}'

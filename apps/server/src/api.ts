@@ -34,7 +34,7 @@ import { HOME } from "./config.ts";
 import * as store from "./issues.ts";
 import { byRank, type Issue } from "./issues.ts";
 import * as land from "./land.ts";
-import { HttpError } from "./pages.ts";
+import { handed, HttpError } from "./pages.ts";
 import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
 import * as roster from "./roster.ts";
@@ -49,6 +49,7 @@ export function asJson(i: Issue, full = false) {
     protocol: store.runs(i), session: i.session, created: i.created, url: `/issue/${i.slug}`,
   };
   if (i.state === "waiting") Object.assign(data, { waiting_on: i.waiting_on, waiting_since: i.waiting_since });
+  if (i.state === "review") Object.assign(data, { review_of: i.review_of ?? "result", review_since: i.review_since });
   if (full) Object.assign(data, { file: join(store.folder(i.slug), store.MAIN), files: store.files(i.slug), body: i.body });
   return data;
 }
@@ -58,7 +59,7 @@ async function loadIssue(slug: string): Promise<Issue> {
   return store.load(slug);
 }
 
-const FIELDS = ["title", "body", "priority", "state", "parent", "project", "folder", "protocol", "waiting_on"];
+const FIELDS = ["title", "body", "priority", "state", "parent", "project", "folder", "protocol", "waiting_on", "review_of"];
 const AUTOMATION_FIELDS = ["title", "when", "check", "agent", "body", "state"];
 
 // The fields the body sends, as pydantic read them: strings or null, the rest left out.
@@ -79,11 +80,20 @@ const isDir = (path: string) => existsSync(path) && statSync(path).isDirectory()
 
 async function apply(i: Issue, fields: Record<string, string | null>) {
   if (fields.state === "planning") fields.state = "running"; // the name the In progress state had before 15 Oct
-  for (const [name, allowed] of [["priority", store.PRIORITIES], ["state", store.STATES], ["protocol", store.PROTOCOLS]] as const)
+  for (const [name, allowed] of [["priority", store.PRIORITIES], ["state", store.STATES], ["protocol", store.PROTOCOLS], ["review_of", store.REVIEWS]] as const)
     if (name in fields && !allowed.includes(fields[name] as string)) throw new HttpError(422, `${name} must be one of: ${allowed.join(", ")}`);
   if (fields.state === "landing" && i.state !== "landing") throw new HttpError(422, "Only Approve lands an issue: the user presses it in desk.");
   if (fields.waiting_on && (fields.state ?? i.state) !== "waiting")
     throw new HttpError(422, 'waiting_on is for an issue in waiting: send "state": "waiting" with it');
+  if (fields.review_of && (fields.state ?? i.state) !== "review")
+    throw new HttpError(422, 'review_of is for an issue in review: send "state": "review" with it');
+  // A session that ends its turn says what it hands you, and its review starts then, even when the issue was in review
+  // already: your reply after it is what moves the issue back to In progress (pages.ts, advance). Sent with no
+  // review_of, desk reads it from the files the turn wrote, as when the session says nothing.
+  if (fields.state === "review" || fields.review_of) {
+    i.review_since = null;
+    if (!fields.review_of) fields.review_of = handed(i);
+  }
   if ("title" in fields && !fields.title) throw new HttpError(422, "title cannot be empty");
   const parent = fields.parent;
   if (parent) {
@@ -287,8 +297,10 @@ export function routes(app: FastifyInstance) {
     const slug = req.params.slug, i = await loadIssue(slug);
     const body = (req.body ?? {}) as Record<string, unknown>;
     const plan = str(body.plan), chat = str(body.chat);
-    if (!(i.state === "backlog" || (i.state === "running" && i.session)))
-      throw new HttpError(409, `${slug} is ${i.state}; only a backlog issue, or one in progress that its session has only planned, can start.`);
+    // A session that has only planned it shows In review, holding the plan, once its turn ended.
+    const planned = i.state === "running" || (i.state === "review" && (i.review_of ?? "result") !== "result");
+    if (!(i.state === "backlog" || (planned && i.session)))
+      throw new HttpError(409, `${slug} is ${i.state}; only a backlog issue, or one in progress or in review that its session has only planned, can start.`);
     if (plan.trim()) {
       store.setSection(i, "Plan", plan);
       await store.save(i);
@@ -322,8 +334,8 @@ export function routes(app: FastifyInstance) {
     const slug = req.params.slug, i = await loadIssue(slug);
     const id = str(((req.body ?? {}) as Record<string, unknown>).chat);
     if (!id) throw new HttpError(422, "chat is required", [{ type: "missing", loc: ["body", "chat"], msg: "Field required", input: req.body ?? null }]);
-    if (!["triage", "backlog", "running"].includes(i.state))
-      throw new HttpError(409, `${slug} is ${i.state}; only an issue in triage, the backlog or in progress can be worked.`);
+    if (!["triage", "backlog", "running", "review"].includes(i.state))
+      throw new HttpError(409, `${slug} is ${i.state}; only an issue in triage, the backlog, in progress or in review can be worked.`);
     if (!chats.exists(id)) throw new HttpError(404, "No such chat");
     const chat = chats.load(id);
     if (i.session && i.session !== chat.session) throw new HttpError(409, `${slug} already has its own session; open its page to talk to it.`);

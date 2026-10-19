@@ -20,6 +20,9 @@ export const PRIORITIES = ["urgent", "high", "medium", "low", "none"];
 // The states (desk/issues.py, in git history, said why each exists).
 export const STATES = ["triage", "backlog", "running", "waiting", "review", "landing", "done", "dropped"];
 export const PROTOCOLS = ["quick", "brief", "design"];
+// What an issue in review holds for you, as its session said when its turn ended, or desk read from what the turn
+// wrote: a plan to say go to, a question to answer, a result to approve, or a reply in its chat.
+export const REVIEWS = ["plan", "question", "result", "reply"];
 export const STATE_NAMES: Record<string, string> = {
   triage: "Triage", backlog: "Backlog", running: "In progress", waiting: "Waiting", review: "In review",
   landing: "Landing", done: "Done", dropped: "Dropped",
@@ -42,13 +45,15 @@ export interface Issue {
   session: string | null; // the one Claude Code session bound to this issue, from planning to done
   waiting_on: string | null; // in waiting, who or what it waits on, such as "QA on #570"
   waiting_since: string | null;
+  review_of: string | null; // in review, one of REVIEWS; none in a review from before 19 Oct, which held a result
+  review_since: string | null;
   created: string;
   body: string;
 }
 
 // The fields in issue.md, in the order issues.py's dataclass wrote them.
 const FIELDS = ["title", "priority", "state", "parent", "project", "folder", "protocol", "link", "landing", "session",
-  "waiting_on", "waiting_since", "created"] as const;
+  "waiting_on", "waiting_since", "review_of", "review_since", "created"] as const;
 
 export const now = (d = new Date()) => {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -57,7 +62,7 @@ export const now = (d = new Date()) => {
 
 export function blank(slug: string, title: string): Issue {
   return { slug, title, priority: "none", state: "backlog", parent: null, project: null, folder: null, protocol: null, link: null,
-    landing: null, session: null, waiting_on: null, waiting_since: null, created: now(), body: "" };
+    landing: null, session: null, waiting_on: null, waiting_since: null, review_of: null, review_since: null, created: now(), body: "" };
 }
 
 // The protocol the issue runs.
@@ -175,9 +180,12 @@ export function locked<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 async function write(i: Issue) {
-  // The wait's note belongs to the wait: one that ends drops it, so a later wait starts afresh. So does Landing's time.
+  // The wait's note belongs to the wait: one that ends drops it, so a later wait starts afresh. So do the review's and
+  // Landing's.
   if (i.state !== "waiting") i.waiting_on = i.waiting_since = null;
   else if (!i.waiting_since) i.waiting_since = now();
+  if (i.state !== "review") i.review_of = i.review_since = null;
+  else if (!i.review_since) i.review_since = now();
   if (i.state !== "landing") i.landing = null;
   else if (!i.landing) i.landing = now();
   const text = render(i);

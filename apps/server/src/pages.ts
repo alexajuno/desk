@@ -94,11 +94,41 @@ function landingStuck(i: Issue, asks: Set<string>): boolean {
   return (!working(i) || asks.has(i.session!)) && Date.now() - parseLocal(i.landing!).getTime() > 60000;
 }
 
-// desk moves an issue's state here, from its session: In progress to In review once it wrote result.md and stopped
-// working, back to In progress when you ask it for a change and it works again, from Landing to Done once result.md
-// says it landed, and from Waiting to In progress once you write in its chat after the wait began. Whether a process
-// still holds the chat never counts (18 Oct: "we should write code in the way we don't care"): its next message
-// resumes it.
+// When issue.md was last written, in seconds: when the issue last moved, as into In progress, or changed since.
+const savedAt = (i: Issue) => {
+  const path = join(store.folder(i.slug), store.MAIN);
+  return isFile(path) ? statSync(path).mtimeMs / 1000 : 0;
+};
+
+// Whether the session's turn ended since the issue was last saved, as when it moved to In progress: it is not working,
+// and it replied, or last heard from you, after that. So a message desk is still handing over, as Go's, ends nothing,
+// and an issue you move to In progress yourself stays there until the turn after.
+function turnEnded(i: Issue): boolean {
+  if (!i.session || working(i)) return false;
+  const asked = sessions.prompted(i.session);
+  return asked !== null && Math.max(asked, sessions.replied(i.session) ?? 0) > savedAt(i);
+}
+
+// What a turn that ended with no word from its session left for you, from the files it wrote since your last message:
+// a result, questions, a plan, or else just its reply.
+export function handed(i: Issue): string {
+  const since = (i.session && sessions.prompted(i.session)) || 0;
+  const wrote = (name: string) => {
+    const path = join(store.folder(i.slug), name);
+    return isFile(path) && statSync(path).mtimeMs / 1000 > since;
+  };
+  return wrote("result.md") ? "result" : wrote("questions.md") ? "question" : wrote("plan.md") ? "plan" : "reply";
+}
+
+// What an issue in review holds: a review from before 19 Oct held a result.
+export const reviewOf = (i: Issue) => i.review_of ?? "result";
+
+// desk moves an issue's state here, from its session. In progress means the session works: once its turn ends, it is
+// your move, and the issue shows In review, holding what the session said it handed you (api.ts), or else what desk
+// reads from the files the turn wrote; "in progress means the agent in progress, and when sth is ready to be reviewed,
+// even just the plan, it should change to be in in review" (the user, 19 Oct). Your reply, or Go, moves it back to In
+// progress, as one in Waiting. From Landing it moves to Done once result.md says it landed. Whether a process still
+// holds the chat never counts (18 Oct: "we should write code in the way we don't care"): its next message resumes it.
 export async function advance(all: Map<string, Issue>) {
   for (const i of all.values()) {
     const busy = working(i);
@@ -107,14 +137,16 @@ export async function advance(all: Map<string, Issue>) {
       // A result that says it landed counts however old it is.
       const [done, pr] = hasResult ? landed(result) : [false, null];
       if (hasResult && !busy && (done || statSync(result).mtimeMs > parseLocal(i.landing!).getTime()))
-        await store.move(i, { state: done ? "done" : "review", link: i.link || (done ? pr : null) });
-    } else if (i.state === "running" && hasResult && !busy) {
-      await store.move(i, { state: "review" });
+        await store.move(i, { state: done ? "done" : "review", review_of: done ? null : "result", link: i.link || (done ? pr : null) });
+    } else if (i.state === "running" && turnEnded(i)) {
+      await store.move(i, { state: "review", review_of: handed(i) });
     } else if (i.state === "waiting" && i.session && i.waiting_since) {
       const wrote = sessions.prompted(i.session);
       if (wrote && wrote > iso(i.waiting_since)) await store.move(i, { state: "running" });
-    } else if (i.state === "review" && busy) {
-      await store.move(i, { state: "running" });
+    } else if (i.state === "review" && i.session) {
+      // A review from before 19 Oct has no review_since: it moves back once its session works again.
+      const wrote = sessions.prompted(i.session);
+      if (i.review_since ? wrote !== null && wrote > iso(i.review_since) : busy) await store.move(i, { state: "running" });
     }
   }
 }
@@ -169,7 +201,13 @@ function unread(h: Held): number {
 function replyWhy(i: Issue, result: boolean): string {
   switch (i.state) {
     case "running": return result || !store.hasPlan(i) ? "chat replied" : runs(i) === "quick" ? "waiting for you" : "plan ready";
-    case "review": return result ? "result ready" : "check it";
+    case "review": {
+      const of = reviewOf(i);
+      if (of === "plan") return "plan ready";
+      if (of === "question") return "asks you";
+      if (of === "reply" && !result) return "chat replied";
+      return result ? "result ready" : "check it";
+    }
     case "done": return result && landed(resultOf(i.slug))[0] ? "landed" : "done";
     case "dropped": return "dropped";
     case "backlog": return "parked";
@@ -180,14 +218,17 @@ function replyWhy(i: Issue, result: boolean): string {
 
 // What each reason for being in the Inbox reads as, in a row's second line, after "Session".
 const NOTICES: Record<string, string> = {
-  "chat replied": "replied: your turn in its chat", "waiting for you": "is waiting for you", "plan ready": "wrote its plan: read it, then say go in its chat",
+  "chat replied": "replied: your turn in its chat", "waiting for you": "is waiting for you", "plan ready": "wrote its plan: read it, then press Go",
   "no chat": "has no chat: settle it in Triage",
-  "has questions": "saved questions for you", "landing stuck": "stopped before the work landed",
+  "has questions": "saved questions for you", "asks you": "asks you something: answer in its chat", "landing stuck": "stopped before the work landed",
   "result ready": "finished: the result is ready", "check it": "finished, with no result.md",
   landed: "landed the work: the issue is done", done: "replied: the issue is done", dropped: "replied: the issue was dropped",
   parked: "replied: the issue is in the backlog",
   "agent replied": "replied", "agent wrote": "wrote to you",
 };
+
+// The reasons a row holds something to decide on, Go or Approve, rather than something to answer.
+const REVIEWED = new Set(["plan ready", "result ready", "check it"]);
 
 const saysOf = (why: string, i: Issue | null) => (why === "waiting" ? `replied: the issue waits on ${i?.waiting_on || "someone"}` : NOTICES[why] ?? why);
 
@@ -234,7 +275,7 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
     if (!why) continue;
     // A chat's reply changes no file: its transcript says when, so each reply shows unread.
     const at = Math.max(replied, i ? store.changed(i.slug) : 0);
-    rows.push({ slug, title: i ? i.title : chatTitle(h.chat!), why, says: saysOf(why, i), kind: i?.state === "review" ? "review" : "needs",
+    rows.push({ slug, title: i ? i.title : chatTitle(h.chat!), why, says: saysOf(why, i), kind: i?.state === "review" && REVIEWED.has(why) ? "review" : "needs",
       at: new Date(at * 1000), issue: i, chat: h.chat, session: h.session });
   }
   for (const i of all.values())
@@ -275,6 +316,7 @@ export function issueJson(i: Issue) {
     slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, project: i.project, folder: i.folder,
     protocol: runs(i), link: i.link, session: i.session, waiting_on: i.waiting_on, waiting_since: i.waiting_since,
     waiting_since_short: shortDate(i.waiting_since), waited: i.state === "waiting" ? waited(i.waiting_since) : "",
+    review_of: i.state === "review" ? reviewOf(i) : null,
     created: i.created, created_short: shortDate(i.created),
   };
 }
@@ -329,7 +371,14 @@ export function strip(i: Issue, asks: Set<string>, hasPlan: boolean, result: str
     if (since !== "today") since = `${shortDate(i.waiting_since)} (${since})`;
     return { text: `Waiting on ${i.waiting_on || "someone"} since ${since}`, button: i.session ? chat : null };
   }
-  if (i.state === "review") return { text: hasResult ? "In review" : "In review, no card", button: { label: "Approve", action: "approve" } };
+  if (i.state === "review") {
+    // Approve lands a result, and only a result: on a plan the button says go.
+    const of = reviewOf(i);
+    if (of === "plan") return { text: "Plan ready: press Go, or reply in its chat", button: { label: "Go", action: "go" } };
+    if (of === "question") return { text: "Asks you something: answer in its chat", button: chat };
+    if (of === "reply" && !hasResult) return { text: "Replied: your turn in its chat", button: chat };
+    return { text: hasResult ? "In review" : "In review, no card", button: { label: "Approve", action: "approve" } };
+  }
   if (i.state === "done" && hasResult && landed(result)[0]) {
     // The session's own words on where it landed: the commit, or the pull request.
     const where = read(result).trim().split(/\r\n|\r|\n/)[0].replace(/^\*\*Landed:\*\*/, "");
@@ -372,8 +421,11 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
   const result = resultOf(slug);
   const everyProject = await projects.loadAll();
   const project = i.project ? everyProject.get(i.project) ?? null : null;
+  // The review shows a result only while it holds one: a plan or a question is read in the plan and the chat.
+  const of = i.state === "review" ? reviewOf(i) : null;
+  const reviewing = of === "result" || (of === "reply" && isFile(result));
   let card: string[] | null = null;
-  if (i.state === "review" && isFile(result)) {
+  if (reviewing && isFile(result)) {
     const parts = splitResult(read(result));
     if (parts) card = parts.map((part) => toHtml(part, `/issue/${slug}/f/`));
   }
@@ -384,7 +436,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     trail: trail.map((t) => ({ slug: t.slug, title: t.title })),
     kids: treeJson(kidsOf(slug), kidsOf),
     progress: [direct.filter((k) => k.state === "done").length, direct.filter((k) => k.state !== "dropped").length],
-    files: store.files(slug), agent_files: agentFiles, card,
+    files: store.files(slug), agent_files: agentFiles, card, reviewing,
     session_kind: session.kind ?? null, live: talkOf(i),
     strip: strip(i, await asking(), store.hasPlan(i), result), trial: await tryButton(i),
   };

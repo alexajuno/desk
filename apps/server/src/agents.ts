@@ -10,7 +10,7 @@
 // A session from before the host, still in Claude Code's background daemon, moves into the host with its next message.
 import { existsSync, readFileSync, renameSync, statSync, chmodSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { HOME } from "./config.ts";
+import { HOME, PORT } from "./config.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as hosted from "./hosted.ts";
@@ -98,7 +98,9 @@ export function status(row: Row): string {
   return row.pid ? "idle" : "stopped";
 }
 
-const paths = (i: Issue, folder: string) => ({ title: i.title, file: join(folder, "issue.md"), plan: join(folder, "plan.md"), dir: folder });
+// What a session's prompt names: the issue, its files, and the address it tells desk its turn's end at.
+const paths = (i: Issue, folder: string) => ({ title: i.title, file: join(folder, "issue.md"), plan: join(folder, "plan.md"), dir: folder,
+  slug: i.slug, base: `http://127.0.0.1:${PORT}` });
 
 // Claude Code refused to start a session because nobody accepted its trust prompt in the folder. The host runs
 // Claude Code headless, which asks no trust, so only a page's Trust folder press still meets it.

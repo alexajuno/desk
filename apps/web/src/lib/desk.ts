@@ -49,6 +49,7 @@ export interface IssueRow {
   waiting_since: string | null;
   waiting_since_short: string;
   waited: string;
+  review_of: "plan" | "question" | "result" | "reply" | null; // in review, what it holds for you
   created: string;
   created_short: string;
 }
