@@ -211,12 +211,13 @@
                      resize: none; field-sizing: content; background: transparent; font: 450 14px/21px var(--font); color: var(--text-1); }
 .composer textarea::placeholder { color: var(--text-4); }
 /* A known /name in it is blue, as in claude.ai's composer, its / at half strength. The textarea's text turns clear
-   (selected, it shows again) over a layer that draws the same text in the same box, wrapped as a textarea wraps. */
+   over a layer that draws the same text in the same box, wrapped as a textarea wraps. Selected, it shows again, in
+   the browser's own selection colours: a ::selection that sets only its text colour drew no background (19 Oct). */
 .composer-text { position: relative; }
 .composer-marks { position: absolute; inset: 0; overflow: hidden; pointer-events: none;
                   font: 450 14px/21px var(--font); color: var(--text-1); white-space: pre-wrap; overflow-wrap: break-word; }
 .composer textarea.marked { color: transparent; caret-color: var(--text-1); }
-.composer textarea.marked::selection { color: var(--text-1); }
+.composer textarea.marked::selection { color: HighlightText; background: Highlight; }
 .skill { color: var(--skill-text); }
 .skill-slash { opacity: 0.5; }
 .composer-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
