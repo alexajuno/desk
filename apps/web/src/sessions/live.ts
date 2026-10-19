@@ -1,5 +1,5 @@
 // One session as the panel draws it, kept current over its socket (the server's live.ts): the conversation's items,
-// the reply streaming now, whether a turn runs, and the questions waiting on the user. A dropped socket, such as
+// the reply streaming now, whether a turn runs, the questions waiting on the user, and what runs beside it. A dropped socket, such as
 // desk restarting, connects again each second, and the server's hello brings back whatever was missed.
 import { action, makeObservable, observable, observableRef, observableShallow } from "mobx";
 import { useEffect } from "react";
@@ -32,6 +32,23 @@ export interface Block {
   text: string;
   name?: string;
 }
+
+// Something Claude Code runs beside the conversation now (the host's task, host.ts): a subagent, a background command,
+// a watch.
+export interface Task {
+  id: string;
+  tool?: string; // the Agent or Bash call that started it
+  kind: string; // Claude Code's task type: local_agent, local_bash, …
+  description: string;
+  agent?: string; // a subagent's type
+  background: boolean;
+  since: number;
+  doing?: string; // its latest step
+  steps?: number; // a subagent's tool calls so far
+}
+
+// What holds the turn up, which the working line says.
+export type Status = { kind: "retry"; error: string; attempt: number; of: number; until: number } | { kind: "compacting" } | { kind: "limit"; resets?: number };
 
 export interface Meta {
   id: string;
@@ -73,6 +90,8 @@ export class LiveSession {
   working = false;
   since = 0; // when the turn began, for the time it has run
   asks: Ask[] = [];
+  tasks: Task[] = []; // what runs beside the conversation now
+  status: Status | null = null;
   partial: Block[] = [];
   pending: Pending[] = []; // sent, and not yet in the transcript
   startAs: "issue" | "chat" = localStorage.startAs === "chat" ? "chat" : "issue"; // a new desk chat's chip: what its first message makes it, as last picked in this browser
@@ -87,7 +106,8 @@ export class LiveSession {
   constructor(id: string) {
     this.id = id;
     makeObservable(this, {
-      items: observableShallow, meta: observableRef, working: observable, since: observable, asks: observableRef, partial: observable,
+      items: observableShallow, meta: observableRef, working: observable, since: observable, asks: observableRef, tasks: observableRef,
+      status: observableRef, partial: observable,
       pending: observable, startAs: observable, connected: observable, loaded: observable, apply: action, sending: action, sent: action, took: action, shows: action,
       lose: action,
     });
@@ -136,6 +156,8 @@ export class LiveSession {
         this.setWorking(Boolean(e.working));
         this.asks = (e.asks as Ask[]) ?? [];
         this.partial = (e.partial as Block[]) ?? [];
+        this.tasks = []; // the host's own hello brings them, when it holds the session
+        this.status = null;
         this.connected = true;
         this.loaded = true;
         break;
@@ -156,11 +178,19 @@ export class LiveSession {
       case "working":
         this.setWorking(Boolean(e.working), e.since as number | undefined);
         if (e.asks) this.asks = e.asks as Ask[];
+        if (e.tasks) this.tasks = e.tasks as Task[];
+        if ("status" in e) this.status = e.status as Status | null;
         if (e.partial) this.partial = e.partial as Block[];
         if (!e.working) this.partial = [];
         break;
       case "asks":
         this.asks = e.asks as Ask[];
+        break;
+      case "tasks":
+        this.tasks = e.tasks as Task[];
+        break;
+      case "status":
+        this.status = e.status as Status | null;
         break;
       case "meta":
         this.meta = e.meta as Meta;

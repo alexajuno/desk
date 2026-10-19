@@ -17,7 +17,7 @@ import { toggleSide as toggleSidebar } from "../frame/side";
 import { GLYPH, SIDE_ICON } from "../ui/icons";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
-import { live, renameChat, useLive, type Ask, type Block, type Image, type Item, type LiveSession } from "./live";
+import { live, renameChat, useLive, type Ask, type Block, type Image, type Item, type LiveSession, type Status, type Task } from "./live";
 import { effortName, runsMenu, warm } from "./models";
 
 // The chat whose composer takes the cursor: the one openSession opened. Its composer takes it as it comes on screen,
@@ -195,6 +195,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
           <Conversation s={s} />
         </div>
         <div className="dock-foot">
+          <Running s={s} />
           {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
           <Composer s={s} />
         </div>
@@ -265,7 +266,7 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
       {s.pending.map((p) => (
         <You key={p.key} text={p.text} images={p.images.length} queued={s.working && !p.lost} lost={p.lost} onSend={() => void s.resend(p)} />
       ))}
-      {s.working && !liveText.length && !s.asks.length && <Working since={s.since} />}
+      {s.working && !liveText.length && !s.asks.length && <Working since={s.since} status={s.status} />}
     </>
   );
 });
@@ -298,17 +299,38 @@ const Reply = function Reply({ text, streaming = false }: { text: string; stream
   return <div className={`reply body${streaming ? " streaming" : ""}`} dangerouslySetInnerHTML={{ __html: html }} />;
 };
 
-function Working({ since }: { since: number }) {
+// Draws again each second while on, for a time that runs.
+function useTick(on = true) {
   const [, tick] = useState(0);
   useEffect(() => {
+    if (!on) return;
     const t = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(t);
-  }, []);
-  const secs = Math.max(0, Math.round((Date.now() - since) / 1000));
+  }, [on]);
+}
+
+// How long since a moment: 12s, 3m 4s, 1h 5m.
+function elapsed(from: number): string {
+  const secs = Math.max(0, Math.round((Date.now() - from) / 1000));
+  return secs < 60 ? `${secs}s` : secs < 3600 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${Math.floor(secs / 3600)}h ${Math.floor(secs / 60) % 60}m`;
+}
+
+const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+
+// What holds the turn up, in the working line's words.
+function held(status: Status): string {
+  if (status.kind === "compacting") return "Compacting the conversation";
+  if (status.kind === "limit") return `Usage limit reached${status.resets ? ` · resets ${clock(status.resets * 1000)}` : ""}`; // resetsAt is in seconds
+  const wait = Math.ceil((status.until - Date.now()) / 1000);
+  return `${wait > 0 ? `Retrying in ${wait}s` : "Retrying"} · ${status.error.replace(/_/g, " ")} · attempt ${status.attempt} of ${status.of}`;
+}
+
+function Working({ since, status }: { since: number; status: Status | null }) {
+  useTick();
   return (
     <p className="working">
       <span className="spark" aria-hidden="true" />
-      Working{secs ? ` · ${secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${secs % 60}s`}` : ""}
+      {status ? held(status) : `Working${Date.now() - since >= 1000 ? ` · ${elapsed(since)}` : ""}`}
       <span className="working-key">Esc to stop</span>
     </p>
   );
@@ -354,7 +376,7 @@ const Steps = observer(function Steps({ s, items, running, live: isLive }: { s: 
       )}
       {open && (
         <div className="steps-list">
-          {items.map((i) => (i.t === "thinking" ? <Thought key={i.key} text={i.text ?? ""} /> : <Step key={i.key} item={i} result={s.results.get(i.id!)} />))}
+          {items.map((i) => (i.t === "thinking" ? <Thought key={i.key} text={i.text ?? ""} /> : <Step key={i.key} s={s} item={i} result={s.results.get(i.id!)} />))}
           {running.map((b) => <p key={`${b.msg}:${b.index}`} className="step running"><span className="step-name">{b.kind === "thinking" ? "Thinking" : b.name}</span><span className="step-what">…</span></p>)}
         </div>
       )}
@@ -366,7 +388,7 @@ function Thought({ text }: { text: string }) {
   return <div className="step thought"><span className="step-name">Thought</span><div className="thought-text">{text}</div></div>;
 }
 
-function Step({ item, result }: { item: Item; result?: Item }) {
+function Step({ s, item, result }: { s: LiveSession; item: Item; result?: Item }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={`step${result?.error ? " error" : ""}${result ? "" : " running"}`}>
@@ -377,11 +399,64 @@ function Step({ item, result }: { item: Item; result?: Item }) {
       {open && (
         <div className="step-detail">
           <pre>{item.input}</pre>
+          {(item.name === "Agent" || item.name === "Task") && <AgentSteps s={s} tool={item.id!} />}
           {result && <pre className="step-result">{result.text || "(no output)"}</pre>}
         </div>
       )}
     </div>
   );
+}
+
+// A subagent's own steps, under its Agent step: read from its transcript when the step opens, and again at each step
+// it takes while it runs.
+const AgentSteps = observer(function AgentSteps({ s, tool }: { s: LiveSession; tool: string }) {
+  const task = s.tasks.find((t) => t.tool === tool);
+  const [items, setItems] = useState<Item[] | null>(null);
+  useEffect(() => {
+    let gone = false;
+    void fetch(`/api/live/${s.id}/agent/${tool}`).then((r) => (r.ok ? r.json() : [])).then((list: Item[]) => { if (!gone) setItems(list); });
+    return () => { gone = true; };
+  }, [s.id, tool, task?.steps, Boolean(task)]);
+  if (!items) return null;
+  const results = new Map(items.filter((i) => i.t === "result").map((i) => [i.id!, i]));
+  const shown = items.filter((i) => i.t === "tool" || i.t === "thinking" || i.t === "text");
+  if (!shown.length) return <p className="agent-none">{task ? "Starting…" : "No steps recorded."}</p>;
+  return (
+    <div className="steps-list">
+      {shown.map((i) => (i.t === "tool" ? <Step key={i.key} s={s} item={i} result={results.get(i.id!)} />
+        : <div key={i.key} className="step thought"><div className="thought-text">{i.text}</div></div>))}
+    </div>
+  );
+});
+
+// --- what runs beside the conversation ---------------------------------------------------------------------------------
+
+// Each subagent, background command and watch running now, above the composer, with its latest step and how long it
+// has run. Only to look at: "i won't try to micromanage each shell or subagents" (the user, 19 Oct).
+const Running = observer(function Running({ s }: { s: LiveSession }) {
+  useTick(s.tasks.length > 0);
+  if (!s.tasks.length) return null;
+  return (
+    <div className="running" aria-label="Running now">
+      {s.tasks.map((t) => (
+        <div key={t.id} className="running-row">
+          <span className="running-dot" aria-hidden="true" />
+          <span className="running-name">{taskName(s, t)}</span>
+          <span className="running-what">{t.description}</span>
+          {t.doing && <span className="running-doing">{t.doing}</span>}
+          <span className="running-time">{t.steps ? `${t.steps} ${t.steps === 1 ? "step" : "steps"} · ` : ""}{elapsed(t.since)}</span>
+        </div>
+      ))}
+    </div>
+  );
+});
+
+// A task by what it is: a subagent by its type, a watch by the Monitor call that started it, which Claude Code runs as a
+// background command too (tried 19 Oct).
+function taskName(s: LiveSession, t: Task): string {
+  if (t.kind === "local_agent") return t.agent && t.agent !== "general-purpose" ? t.agent : "Agent";
+  if (s.items.some((i) => i.id === t.tool && i.name === "Monitor")) return "Watch";
+  return t.kind === "local_bash" ? "Shell" : t.kind.includes("workflow") ? "Workflow" : "Task";
 }
 
 // --- what waits on the user: a permission, or Claude's questions --------------------------------------------------------
@@ -741,7 +816,7 @@ const Runs = observer(function Runs({ s }: { s: LiveSession }) {
   if (!runs) return null;
   return (
     <button className="runs" type="button" title="Model and effort" onMouseEnter={warm} onFocus={warm}
-      onClick={(e) => { if (!toggled(e.currentTarget)) runsMenu(e.currentTarget, runs, (set, shown) => void s.pick(set, shown)); }}>
+      onClick={(e) => { if (!toggled(e.currentTarget)) runsMenu(e.currentTarget, s.id, runs, (set, shown) => void s.pick(set, shown)); }}>
       {runs.effort ? `${runs.name} · ${effortName(runs.effort)}` : runs.name}
       <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
     </button>

@@ -180,6 +180,18 @@
 .spark { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: dock-pulse 1.2s ease-in-out infinite; }
 .working-key { margin-left: auto; font-size: 11px; color: var(--text-4); }
 
+/* what runs beside the conversation now, in the foot above the composer: a quiet line per subagent, command or watch,
+   with no box, in the step lines' type, and a dot that pulses as a running session's does in the sidebar */
+.running { flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); max-height: 158px; overflow-y: auto; margin: 0 auto 6px;
+           padding: 0 4px; animation: dock-rise 0.18s ease; }
+.running-row { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.running-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--state-running); animation: dock-pulse 1.4s ease-in-out infinite; }
+.running-name { flex: none; font-weight: 500; color: var(--text-2); }
+.running-what { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.running-doing { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-4); }
+.running-time { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text-4); }
+.agent-none { margin: 2px 0 6px 6px; font-size: 12px; color: var(--text-4); }
+
 /* what waits on the user, in the foot above the composer: a permission, or Claude's questions as buttons */
 .ask { flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); max-height: 45vh; overflow: auto; margin: 0 auto 8px; padding: 12px;
        border: 1px solid var(--border-2); border-radius: 12px; background: var(--bg-raised); animation: dock-rise 0.18s ease; }
@@ -255,5 +267,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dock, .panel { transition: none; }
-  .session-view, .convo > *, .ask, .live-dot.working, .spark, .step.running .step-name { animation: none; }
+  .session-view, .convo > *, .ask, .running, .running-dot, .live-dot.working, .spark, .step.running .step-name { animation: none; }
 }

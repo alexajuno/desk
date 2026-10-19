@@ -42,6 +42,20 @@ async function loadUsage(): Promise<Usage | null> {
   return res.ok ? ((await res.json()) as Usage) : null;
 }
 
+interface Context {
+  tokens: number;
+  max: number;
+  percent: number;
+}
+
+// How full the session's context is; null while no process holds the session.
+async function loadContext(session: string): Promise<Context | null> {
+  const res = await fetch(`/api/live/${session}/context`);
+  return res.ok ? ((await res.json()) as Context | null) : null;
+}
+
+const tokens = (n: number) => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1000)}k`);
+
 // When a window resets, to the nearest minute (it says 05:59:59.9 for 06:00): the time today, or the day and time when
 // it is further off.
 function resets(iso: string): string {
@@ -55,12 +69,14 @@ export interface Runs {
   effort: string;
 }
 
-// The menu under the chip: the models, the efforts the current one takes, and the usage.
-export function runsMenu(anchor: Element, runs: Runs, pick: (set: { model?: string; effort?: string }, shown?: Partial<Runs>) => void) {
+// The menu under the chip: the models, the efforts the current one takes, and the usage, with how full the session's
+// context is.
+export function runsMenu(anchor: Element, session: string, runs: Runs, pick: (set: { model?: string; effort?: string }, shown?: Partial<Runs>) => void) {
   openMenu({
     anchor, className: "runs-menu",
     items: async () => {
-      const [list, usage] = await Promise.all([loadModels().catch((e) => (toast((e as Error).message), [] as Model[])), loadUsage().catch(() => null)]);
+      const [list, usage, context] = await Promise.all([loadModels().catch((e) => (toast((e as Error).message), [] as Model[])), loadUsage().catch(() => null),
+        loadContext(session).catch(() => null)]);
       const now = list.find((m) => m.value === runs.model || m.name === runs.name);
       const items: MenuItem[] = list.map((m) => ({ label: m.name, group: 1, heading: "Model", current: m === now, run: () => pick({ model: m.value }, { name: m.name, ...(m.efforts.length ? {} : { effort: "" }) }) }));
       const efforts = now ? now.efforts : EFFORTS.map(([value]) => value);
@@ -69,6 +85,7 @@ export function runsMenu(anchor: Element, runs: Runs, pick: (set: { model?: stri
       const windows: [string, Window | null | undefined][] = [["5-hour", usage?.five_hour], ["Week", usage?.seven_day]];
       for (const [label, w] of windows)
         if (w) items.push({ label: `${label} · ${w.percent}%`, hint: `resets ${resets(w.resets)}`, group: 3, heading: "Usage", info: true });
+      if (context) items.push({ label: `Context · ${Math.round(context.percent)}%`, hint: `${tokens(context.tokens)} of ${tokens(context.max)}`, group: 3, heading: "Usage", info: true });
       return items;
     },
   });
