@@ -45,12 +45,15 @@
   --btn: lch(10.149% 0.689 272);
   --btn-hover: lch(14.777% 1.075 272);
   --btn-ghost-hover: lch(14.006% 0.593 272);
+  --btn-ghost-on: lch(18.634% 1.075 272);  /* a quiet button switched on, as the Inbox's Show unreads only */
   --ring-btn: lch(100% 0 0 / 0.137);       /* the ring round a view tab or a round button, and under the mouse */
   --ring-btn-hover: lch(100% 0 0 / 0.229);
   --btn-side: lch(10.149% 0.689 272);      /* the sidebar's New issue button, and under the mouse */
   --btn-side-hover: lch(14.777% 1.075 272);
   --bg-tab-on: lch(16.706% 0.979 272);     /* the open view tab */
   --bg-chip-hover: lch(14.006% 0.593 272); /* a project's property chip under the mouse */
+  --bg-filter-box: lch(9.345% 0.85 272);   /* the box round the Inbox's filter chips, and its edge */
+  --border-filter-box: lch(13.08% 1.48 272);
   --project-icon: lch(61.803% 1.2 272 / 0.175); /* behind a project's icon, over its name */
   --btn-primary: lch(47.918% 59.303 288.421);
   --btn-primary-hover: lch(52.418% 61.103 288.421);
@@ -149,12 +152,15 @@
   --btn: lch(99.997% 0.5 282);
   --btn-hover: lch(95.883% 0.157 282);
   --btn-ghost-hover: lch(94.854% 0.5 282);
+  --btn-ghost-on: lch(94.854% 0.157 282);
   --ring-btn: lch(0% 0 0 / 0.09);
   --ring-btn-hover: lch(0% 0 0 / 0.15);
   --btn-side: lch(97.94% 0.5 282);        /* sidebar: its own palette */
   --btn-side-hover: lch(94.44% 0.5 282);
   --bg-tab-on: lch(93.483% 0.5 282);
   --bg-chip-hover: lch(92.44% 0.5 282);
+  --bg-filter-box: lch(94.44% 0.5 282);
+  --border-filter-box: lch(89.84% 0 282);
   --project-icon: lch(39.176% 1.25 282 / 0.125);
   --btn-primary: lch(53% 52.26 286.91);
   --btn-primary-hover: lch(47% 50.26 286.91);
@@ -594,7 +600,26 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 .bar:has(.inbox-head) { position: relative; }
 .bar:has(.inbox-head)::after { content: ""; position: absolute; top: 0; bottom: 0; left: calc(var(--inbox-list) - 1px); width: 1px;
                                background: var(--border-1); }
-.bar .inbox-head { flex: none; box-sizing: border-box; width: calc(var(--inbox-list) - 8px); color: var(--text-2); }
+.bar .inbox-head { flex: none; display: flex; align-items: center; gap: 6px; box-sizing: border-box; width: calc(var(--inbox-list) - 8px); }
+.bar .inbox-name { color: var(--text-2); }
+/* Linear's Inbox header (measured on linear.app on 19 Oct, dark and light): beside "Inbox" its ⋯ menu, and at the
+   list's right edge, 11px in, Show unreads only, Filter and Display options, 6px apart. Each is a quiet 28px circle:
+   no fill or ring at rest, filled under the mouse, its icon in --text-3, then --text-1; Show unreads only, while on,
+   is filled brighter, as a current control is. Their Display panel is the issue lists' (views.ts). */
+.inbox-tools { display: flex; align-items: center; gap: 6px; margin: 0 19px 0 auto; }
+button.inbox-tool { position: relative; flex: none; width: 28px; height: 28px; padding: 0; justify-content: center; border: 0;
+                    border-radius: 9999px; background: none; color: var(--text-3); }
+button.inbox-tool:hover { background: var(--btn-ghost-hover); color: var(--text-1); }
+button.inbox-tool.on { background: var(--btn-ghost-on); color: var(--text-1); }
+.bar .inbox-more { margin-left: 4px; } /* Linear's sits 8px after "Inbox" */
+/* Linear's filter chips in the Inbox sit in a box at the top of the list: 10px round them, 8px corners, a 0.5px edge,
+   the chips filled as buttons and ringed, 4px apart, with + and no Clear. */
+.inbox-filters { padding: 0 10px 8px 8px; }
+.inbox-filters .filter-bar { gap: 4px; min-height: 0; margin: 0; padding: 10px; border: 0.5px solid var(--border-filter-box);
+                             background: var(--bg-filter-box); }
+.inbox-filters .chip { border-color: var(--ring-btn); background: var(--btn); }
+.inbox-filters .chip-part + .chip-part { border-left-color: var(--ring-btn); }
+.inbox-filters .filter-clear { display: none; }
 .side-collapsed .bar .inbox-head { width: calc(var(--inbox-list) - 36px); }
 .bar:has(.inbox-head) .sep { display: none; }
 .bar .inbox-crumb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -643,7 +668,9 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
   .inbox:has(.inbox-open .issue) .inbox-list, .inbox:not(:has(.inbox-open .issue)) .inbox-open { display: none; }
   .inbox-list { border-right: 0; }
   .bar:has(.inbox-head)::after { content: none; }
-  .bar .inbox-head, .side-collapsed .bar .inbox-head { width: auto; color: var(--text-3); }
+  .bar .inbox-head, .side-collapsed .bar .inbox-head { width: auto; }
+  .bar .inbox-name { color: var(--text-3); }
+  .inbox-tools { margin: 0; }
   .bar:has(.inbox-head) .sep { display: inline; }
 }
 

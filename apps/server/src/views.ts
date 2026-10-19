@@ -14,12 +14,14 @@ export interface Page {
   filters: Record<string, string>; // property: its name, in Filter's order
   options: Record<string, Record<string, string>>; // Display choice: {value: its name}
   defaults: Record<string, string>;
-  empty: boolean; // offers Show empty groups
+  switches: Record<string, string>; // a word that is on or off: its name in Display options, or "" for one with its own button
+  reverse: boolean; // offers the direction button beside Ordering
   keep: string[]; // the URL's words that are no view's
   noun: string; // what a row is, for the counts in Filter's menus
   holds?: string[]; // the statuses its issues are in, on an Issues tab that keeps to some
 }
 
+const EMPTY = { empty: "Show empty groups" };
 const ISSUE_FILTERS = { status: "Status", priority: "Priority", project: "Project", folder: "Folder", protocol: "Protocol" };
 const ISSUE_OPTIONS = {
   // Linear's Layout: the list, or a board with a column per group (linear.app/docs/board-layout).
@@ -41,12 +43,20 @@ export const ACTIVE = ["running", "waiting", "review", "landing"];
 // their parent; a project page by status, flat, with its done issues. The Issues tabs are Linear's: All issues, Active
 // (being worked, or waiting on someone) and Backlog (parked, not started).
 export const PAGES: Record<string, Page> = {
-  issues: { filters: ISSUE_FILTERS, options: ISSUE_OPTIONS, defaults: { layout: "list", group: "priority", order: "priority", done: "none", subs: "nested" }, empty: true, keep: [], noun: "issue" },
-  active: { filters: ISSUE_FILTERS, options: OPEN_OPTIONS, defaults: { layout: "list", group: "status", order: "priority", subs: "nested" }, empty: true, keep: [], noun: "issue", holds: ACTIVE },
-  backlog: { filters: ISSUE_FILTERS, options: OPEN_OPTIONS, defaults: { layout: "list", group: "priority", order: "priority", subs: "nested" }, empty: true, keep: [], noun: "issue", holds: ["backlog"] },
+  issues: { filters: ISSUE_FILTERS, options: ISSUE_OPTIONS, defaults: { layout: "list", group: "priority", order: "priority", done: "none", subs: "nested" }, switches: EMPTY, reverse: true, keep: [], noun: "issue" },
+  active: { filters: ISSUE_FILTERS, options: OPEN_OPTIONS, defaults: { layout: "list", group: "status", order: "priority", subs: "nested" }, switches: EMPTY, reverse: true, keep: [], noun: "issue", holds: ACTIVE },
+  backlog: { filters: ISSUE_FILTERS, options: OPEN_OPTIONS, defaults: { layout: "list", group: "priority", order: "priority", subs: "nested" }, switches: EMPTY, reverse: true, keep: [], noun: "issue", holds: ["backlog"] },
   project: {
     filters: Object.fromEntries(Object.entries(ISSUE_FILTERS).filter(([k]) => k !== "project")), options: PROJECT_OPTIONS,
-    defaults: { group: "status", order: "priority", done: "all", subs: "rows" }, empty: true, keep: [], noun: "issue",
+    defaults: { group: "status", order: "priority", done: "all", subs: "rows" }, switches: EMPTY, reverse: true, keep: [], noun: "issue",
+  },
+  // Linear's Inbox (measured on linear.app on 19 Oct): Filter's Notification type, From, Team, Project, Issue priority
+  // and Issue status type, with desk's folder for Linear's team; Display's Ordering and Show unread first; and the top
+  // bar's Show unreads only. Linear's Group unreads by, Show snoozed and priority inbox have nothing to work on in desk.
+  inbox: {
+    filters: { type: "Notification type", from: "From", folder: "Folder", project: "Project", priority: "Issue priority", status: "Issue status" },
+    options: { order: { newest: "Newest", oldest: "Oldest", priority: "Priority" } }, defaults: { order: "newest" },
+    switches: { first: "Show unread first", unread: "" }, reverse: false, keep: ["i"], noun: "notification",
   },
 };
 const OPTION_NAMES: Record<string, string> = { layout: "Layout", group: "Grouping", order: "Ordering", done: "Completed issues", subs: "Sub-issues" };
@@ -64,14 +74,15 @@ export interface View {
   done: string | null;
   subs: string | null;
   reverse: boolean;
-  empty: boolean; // show empty groups
+  on: Set<string>; // the page's switches that are on, as Show empty groups
   filters: Map<string, [boolean, string[]]>; // property: (is not, values)
 }
 
 const spec = (v: View) => PAGES[v.page];
 
 export function defaultDisplay(v: View): boolean {
-  return Object.entries(spec(v).defaults).every(([k, d]) => (v as unknown as Record<string, unknown>)[k] === d) && !v.reverse && !v.empty;
+  return Object.entries(spec(v).defaults).every(([k, d]) => (v as unknown as Record<string, unknown>)[k] === d) && !v.reverse
+    && ![...v.on].some((k) => spec(v).switches[k]); // a switch with its own button, as Show unreads only, is no display
 }
 
 // Python's urllib.parse.quote(value, safe="/~,:"): what stays as is in a view's words.
@@ -93,7 +104,8 @@ export function query(v: View): string {
     const value = (v as unknown as Record<string, string>)[k];
     if (value !== d) parts.push([k, value]);
   }
-  for (const k of ["reverse", "empty"] as const) if (v[k]) parts.push([k, "1"]);
+  if (v.reverse) parts.push(["reverse", "1"]);
+  for (const k of Object.keys(spec(v).switches)) if (v.on.has(k)) parts.push([k, "1"]);
   return parts.map(([name, value]) => `${name}=${quote(value)}`).join("&");
 }
 
@@ -118,13 +130,14 @@ function pairs(q: string): [string, string][] {
 export function parse(page: string, q: string): View {
   const s = PAGES[page];
   const view: View = { page, layout: s.defaults.layout ?? null, group: s.defaults.group, order: s.defaults.order, done: s.defaults.done ?? null, subs: s.defaults.subs ?? null,
-    reverse: false, empty: false, filters: new Map() };
+    reverse: false, on: new Set(), filters: new Map() };
   for (const [name, value] of pairs(q)) {
     if (name in s.filters) {
       const values = value.replace(/^not:/, "").split(",").filter(Boolean);
       if (values.length) view.filters.set(name, [value.startsWith("not:"), values]);
     } else if (value in (s.options[name] ?? {})) (view as unknown as Record<string, string>)[name] = value;
-    else if (name === "reverse" || (name === "empty" && s.empty)) view[name] = value === "1";
+    else if (name === "reverse" && s.reverse) view.reverse = value === "1";
+    else if (name in s.switches && value === "1") view.on.add(name);
   }
   return view;
 }
@@ -154,11 +167,13 @@ export function data(l: Listing) {
   const filters: Record<string, { not: boolean; values: string[] }> = {};
   for (const [name, [negate, values]] of v.filters) filters[name] = { not: negate, values };
   const own: Record<string, unknown> = {};
-  for (const k of [...Object.keys(s.options), "reverse", "empty"]) own[k] = (v as unknown as Record<string, unknown>)[k];
+  for (const k of [...Object.keys(s.options), "reverse"]) own[k] = (v as unknown as Record<string, unknown>)[k];
+  for (const k of Object.keys(s.switches)) own[k] = v.on.has(k);
   return {
     query: query(v), defaults: s.defaults, default: defaultDisplay(v), keep: s.keep, noun: s.noun,
     display: Object.entries(s.options).map(([key, options]) => ({ key, label: OPTION_NAMES[key] ?? key, options })),
-    switches: s.empty ? ["empty"] : [], fields: l.fields, filters, ...own,
+    switches: Object.entries(s.switches).filter(([, label]) => label).map(([key, label]) => ({ key, label })), reversible: s.reverse,
+    fields: l.fields, filters, ...own,
   };
 }
 
@@ -283,7 +298,7 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
   const count = (rows: Issue[]): number => rows.reduce((n, i) => n + 1 + count(kids.get(i.slug) ?? []), 0);
 
   // A board keeps every status and priority as a column, empty or not, to drop a card on.
-  const every = view.empty || (board && (view.group === "status" || view.group === "priority"));
+  const every = view.on.has("empty") || (board && (view.group === "status" || view.group === "priority"));
   const groups: Group[] = [];
   for (const g of order) {
     const mine = roots.filter((i) => groupOf(i) === g);

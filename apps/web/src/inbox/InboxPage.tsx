@@ -1,16 +1,17 @@
 // Linear's Inbox (templates/inbox.html): the notifications on the left, newest first; the one picked (?i=<slug>) opens
 // on the right, as the issue's page shows it. Each row is one of the Inbox's rows the app holds (store/issues.ts, the
-// server's inbox.ts), the same ones the sidebar counts: a session that did something for you, listed while unread or
-// while it waits on you, and the one open now. Its issue's status sits where Linear draws who acted, since every row's
-// session would look the same (19 Oct: "there is nobody"), then a dot while unread, the issue's title, then what the
-// session did and how long ago. Opening a row reads it, for every tab: desk writes it as it answers the page. A row
-// may instead be a chat with no issue, one of the user's agents or a bare one (?i=<chat id>), whose chat opens on the
-// right, as Triage shows one. The top bar splits at the list's edge: "Inbox" over the list, the open notification's
-// title over it.
+// server's inbox.ts), the same ones the sidebar counts: a session that did something for you, read or not, until you
+// delete it, as Linear's. The view picks and orders them on the server (pages.ts, inboxListing): Filter, Display
+// options and Show unreads only, as an issue list's view, in the address (lists/view.ts). A row's issue's status sits
+// where Linear draws who acted, since every row's session would look the same (19 Oct: "there is nobody"), then a dot
+// while unread, the issue's title, then what the session did and how long ago. Opening a row reads it, for every tab:
+// desk writes it as it answers the page. A row may instead be a chat with no issue, one of the user's agents or a bare
+// one (?i=<chat id>), whose chat opens on the right, as Triage shows one. The top bar splits at the list's edge: over
+// the list, "Inbox" with its ⋯ menu, and at the list's right edge Show unreads only, Filter and Display options, as
+// Linear's (measured on linear.app on 19 Oct), their keys in actions.ts; the open notification's title over the rest.
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { usePage } from "../api/page";
 import { Go } from "../app/nav";
 import { Bar } from "../frame/Bar";
 import { IssueView, type IssuePageData } from "../issues/IssueView";
@@ -19,13 +20,24 @@ import { painted } from "../issues/painted";
 import { useLive } from "../issues/useLive";
 import { SessionView } from "../sessions/Dock";
 import { STATE_NAMES } from "../lib/desk";
+import { listView, setView } from "../lists/current";
+import { DisplayPanel, filterMenu, FilterBar, type ListData } from "../lists/parts";
+import { useList } from "../lists/useList";
+import type { ViewData } from "../lists/view";
 import { lineKey } from "../store/frame";
 import { issues, type InboxRow, type Issue } from "../store/issues";
 import { ui } from "../store/ui";
 import { StateIcon } from "../ui/icons";
 import { toggled } from "../ui/menu";
+import { DISPLAY_ICON, FILTER_ICON, inboxMenu, MORE_ICON, rowHref, UNREADS_ICON } from "./actions";
+
+// The address's own word that is no view's: the row open on the right.
+export const INBOX_KEEP = ["i"];
 
 interface InboxData {
+  ids: string[]; // the rows the view shows, in its order
+  view: ViewData;
+  chips: ListData["chips"];
   open: IssuePageData | null;
   chat: { slug: string; session: string; agent: string | null; title: string } | null; // the chat with no issue picked
 }
@@ -45,6 +57,14 @@ function dayAndTime(at: number): string {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${two(d.getHours())}:${two(d.getMinutes())}`;
 }
 
+// What the empty pane says with no notification open, as Linear's: how many are unread, else that none is open.
+function emptyLine(rows: InboxRow[], unreads: boolean, filtered: boolean) {
+  const count = rows.filter((n) => n.read === null).length;
+  if (count) return `${count} unread notification${count === 1 ? "" : "s"}`;
+  if (rows.length) return "No notification selected";
+  return unreads ? "No unread notifications" : filtered ? "No notifications match" : "No notifications";
+}
+
 function NotifyAsk() {
   const [asked, setAsked] = useState(window.Notification?.permission !== "default");
   if (asked) return null;
@@ -61,10 +81,12 @@ export const InboxPage = observer(function InboxPage() {
   const [params] = useSearchParams();
   const i = params.get("i") ?? "";
   // The open issue's files and Try button, as on its page.
-  const { data, reload } = usePage<InboxData>(`/api/page/inbox${i ? `?i=${encodeURIComponent(i)}` : ""}`, `${issues.files.get(i) ?? 0} ${lineKey()}`);
+  const { data, reload } = useList<InboxData>("/inbox", "/api/page/inbox", (d) => d.view, INBOX_KEEP, `${issues.files.get(i) ?? 0} ${lineKey()}`);
   const open = data?.open && data.open.issue.slug === i ? data.open : data?.open ?? null;
   const chat = data?.chat?.slug === i ? data.chat : null;
-  const rows = issues.listed(i || null);
+  const view = data?.view, query = view?.query ?? "";
+  const unreads = view?.unread === true;
+  const rows = (data?.ids ?? []).map((id) => issues.inbox.get(id)).filter((r): r is InboxRow => Boolean(r));
   useLive(open, reload);
   const pane = useRef<HTMLDivElement>(null);
   useEffect(() => { document.title = "Inbox · desk"; }, []);
@@ -74,7 +96,26 @@ export const InboxPage = observer(function InboxPage() {
   return (
     <>
       <Bar
-        crumb={<><Go className="inbox-head" to="/inbox">Inbox</Go>{(p || chat) && <><span className="sep">›</span><span className="inbox-crumb">{p ? p.title : chat!.agent ? `${chat!.agent}: ${chat!.title}` : chat!.title}</span></>}</>}
+        crumb={<>
+          <span className="inbox-head">
+            <Go className="inbox-name" to={rowHref(query, "")}>Inbox</Go>
+            <button className="inbox-tool inbox-more" type="button" aria-label="Notification actions" title="Notification actions"
+              onClick={(e) => { if (!toggled(e.currentTarget)) inboxMenu(e.currentTarget); }}>{MORE_ICON}</button>
+            {view && (
+              <span className="inbox-tools">
+                <button className={`inbox-tool unreads${unreads ? " on" : ""}`} type="button" aria-pressed={unreads}
+                  aria-label={unreads ? "Show read" : "Show unreads only"} title={unreads ? "Show read" : "Show unreads only"}
+                  onClick={() => setView({ unread: !unreads })}>{UNREADS_ICON}</button>
+                <button className="inbox-tool filter-open" type="button" aria-label="Add filter" title="Filter  F"
+                  onClick={(e) => { if (!toggled(e.currentTarget)) filterMenu({ anchor: e.currentTarget }); }}>{FILTER_ICON}</button>
+                <button className="inbox-tool display-open" type="button" aria-label="Display options" title="Display options  Shift V"
+                  onClick={() => listView.setDisplay(!listView.displayOpen)}>{DISPLAY_ICON}<span className="view-dot" hidden={view.default} /></button>
+                {listView.displayOpen && <DisplayPanel view={view} />}
+              </span>
+            )}
+          </span>
+          {(p || chat) && <><span className="sep">›</span><span className="inbox-crumb">{p ? p.title : chat!.agent ? `${chat!.agent}: ${chat!.title}` : chat!.title}</span></>}
+        </>}
         tools={p && (
           <button className="more" title="Actions" onClick={(e) => { if (!toggled(e.currentTarget)) actionsMenu(p, { anchor: e.currentTarget }, p.slug); }}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25" /><circle cx="8" cy="8" r="1.25" /><circle cx="12.5" cy="8" r="1.25" /></svg>
@@ -82,14 +123,15 @@ export const InboxPage = observer(function InboxPage() {
         )}
       />
       <div className="scroll">
-        {issues.seq >= 0 && (
+        {issues.seq >= 0 && data && (
           <div className="inbox">
             <div className="inbox-list" data-keep-scroll="always">
               <NotifyAsk />
+              {data.chips.length > 0 && <div className="inbox-filters"><FilterBar list={data} /></div>}
               {rows.map((n) => {
-                if (!n.issue) return <ChatRow key={n.id} n={n} open={chat?.slug === n.slug} />;
+                if (!n.issue) return <ChatRow key={n.id} n={n} open={chat?.slug === n.slug} query={query} />;
                 const issue = issues.bySlug.get(n.slug);
-                return issue && <IssueNotice key={n.id} n={n} issue={issue} open={open?.issue.slug ?? null} />;
+                return issue && <IssueNotice key={n.id} n={n} issue={issue} open={open?.issue.slug ?? null} query={query} />;
               })}
             </div>
             <div className={`inbox-open${chat ? " triage-open" : ""}`} data-keep-scroll="same" ref={pane}>
@@ -101,7 +143,7 @@ export const InboxPage = observer(function InboxPage() {
                     <path style={{ stroke: "var(--text-2)" }} strokeWidth="1.5" d="M14.3 9.03a5 5 0 0 1 4.91-4.08H58.8a5 5 0 0 1 4.91 4.08l8.07 43.22a6 6 0 0 1-5.9 7.1H52.76a5.72 5.72 0 0 0-5.24 3.41 5.72 5.72 0 0 1-5.23 3.42h-6.58a5.72 5.72 0 0 1-5.23-3.42 5.72 5.72 0 0 0-5.24-3.4h-13.1a6 6 0 0 1-5.9-7.1L14.3 9.02Z" />
                     <path style={{ stroke: "var(--text-3)" }} strokeWidth="1.5" d="m2.36 55.6 3.2 14.06A12 12 0 0 0 17.26 79h43.48a12 12 0 0 0 11.7-9.34l3.2-14.06" />
                   </svg>
-                  <span>{rows.length ? "No notification selected" : "No notifications"}</span>
+                  <span>{emptyLine(rows, unreads, data.chips.length > 0)}</span>
                 </div>
               )}
             </div>
@@ -114,10 +156,10 @@ export const InboxPage = observer(function InboxPage() {
 
 // An issue's row: its status, with a badge for what it asks of you, a dot while unread, its title as the issue has it
 // now, then what its session did and how long ago.
-const IssueNotice = observer(function IssueNotice({ n, issue, open }: { n: InboxRow; issue: Issue; open: string | null }) {
+const IssueNotice = observer(function IssueNotice({ n, issue, open, query }: { n: InboxRow; issue: Issue; open: string | null; query: string }) {
   return (
     <Go className={`item inbox-row${n.slug === open ? " selected" : ""}${n.read !== null ? " read" : ""}${ui.focused === n.slug ? " focus" : ""}`}
-      to={`/inbox?i=${n.slug}`} title={issue.title} data-slug={n.slug} data-state={issue.state} data-priority={issue.priority} data-parent={issue.parent ?? ""}
+      to={rowHref(query, n.slug)} title={issue.title} data-slug={n.slug} data-state={issue.state} data-priority={issue.priority} data-parent={issue.parent ?? ""} data-row-key={n.id}
       onMouseMove={() => { if (ui.focused !== n.slug) ui.focus(n.slug, true); }}
       onContextMenu={(e) => { e.preventDefault(); ui.focus(n.slug); actionsMenu(issue, { x: e.clientX, y: e.clientY }, open); }}>
       <span className="avatar status" aria-label={STATE_NAMES[issue.state]}><StateIcon state={issue.state} />
@@ -137,11 +179,11 @@ const IssueNotice = observer(function IssueNotice({ n, issue, open }: { n: Inbox
 
 // A chat's row, one with no issue: what it said, unread until you open it, which opens its chat on the right. It is no
 // issue, so it has no status, and the issue keys pass it by. An agent shows its initial, a bare chat a speech bubble.
-const ChatRow = observer(function ChatRow({ n, open }: { n: InboxRow; open: boolean }) {
+const ChatRow = observer(function ChatRow({ n, open, query }: { n: InboxRow; open: boolean; query: string }) {
   const agent = n.agent;
   return (
     <Go className={`item inbox-row${open ? " selected" : ""}${n.read !== null ? " read" : ""}${ui.focused === n.slug ? " focus" : ""}`}
-      to={`/inbox?i=${n.slug}`} title={n.title} data-key={n.slug} data-session={n.session ?? ""}
+      to={rowHref(query, n.slug)} title={n.title} data-key={n.slug} data-session={n.session ?? ""} data-row-key={n.id}
       onMouseMove={() => { if (ui.focused !== n.slug) ui.focus(n.slug, true); }}>
       {agent
         ? <span className="avatar agent" aria-label={agent}>{agent.slice(0, 1).toUpperCase()}</span>

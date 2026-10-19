@@ -18,7 +18,8 @@ export interface ViewData {
   keep: string[];
   noun: string;
   display: { key: string; label: string; options: Record<string, string> }[];
-  switches: string[];
+  switches: { key: string; label: string }[]; // the ones Display options shows, as Show empty groups
+  reversible: boolean; // Ordering has its direction button
   fields: Field[];
   filters: Record<string, { not: boolean; values: string[] }>;
   layout?: string;
@@ -27,8 +28,7 @@ export interface ViewData {
   done?: string;
   subs?: string;
   reverse: boolean;
-  empty: boolean;
-  [key: string]: unknown;
+  [key: string]: unknown; // each switch, on or off, by its key
 }
 
 export interface Filter {
@@ -37,7 +37,8 @@ export interface Filter {
 }
 
 // The words the server's views.ts reads; any of them in the address means it carries a view.
-const WORDS = new Set(["status", "priority", "project", "folder", "protocol", "issue", "layout", "group", "order", "done", "subs", "reverse", "empty"]);
+const WORDS = new Set(["status", "priority", "project", "folder", "protocol", "issue", "layout", "group", "order", "done", "subs", "reverse", "empty",
+  "type", "from", "first", "unread"]);
 export const hasView = (search: string) => [...new URLSearchParams(search).keys()].some((k) => WORDS.has(k));
 
 // The words views.ts writes keep their slashes, tildes, commas and colons, as in folder=genai/api.

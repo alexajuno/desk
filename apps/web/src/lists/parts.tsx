@@ -112,13 +112,13 @@ export const Tools = observer(function Tools({ view }: { view: ViewData }) {
 
 // Linear's filter bar: a chip per property, as "Priority is High ×", then + and Clear. The operator reads "is" for one
 // value, "is either of" for several, and "is not" (linear.app/docs/filters).
-export function FilterBar({ list }: { list: ListData }) {
+export function FilterBar({ list }: { list: Pick<ListData, "chips"> }) {
   if (!list.chips.length) return null;
   return (
     <div className="filter-bar">
       {list.chips.map((c) => {
         const n = c.values.length, icons = [...new Set(c.values.map((x) => x[2]))].slice(0, 3);
-        const plural = c.name === "status" ? "statuses" : c.name === "priority" ? "priorities" : `${c.name}s`;
+        const plural = ({ status: "statuses", priority: "priorities", from: "senders" } as Record<string, string>)[c.name] ?? `${c.name}s`;
         return (
           <span className="chip" data-name={c.name} key={c.name}>
             <span className="chip-part chip-prop">{c.label}</span>
@@ -220,7 +220,7 @@ const LAYOUT_ICON: Record<string, ReactNode> = {
   board: <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.6c0-.56 0-.84.109-1.054a1 1 0 0 1 .437-.437C1.76 1 2.04 1 2.6 1h2.8c.56 0 .84 0 1.054.109a1 1 0 0 1 .437.437C7 1.76 7 2.04 7 2.6v.8c0 .56 0 .84-.109 1.054a1 1 0 0 1-.437.437C6.24 5 5.96 5 5.4 5H2.6c-.56 0-.84 0-1.054-.109a1 1 0 0 1-.437-.437C1 4.24 1 3.96 1 3.4v-.8ZM9 2.6c0-.56 0-.84.109-1.054a1 1 0 0 1 .437-.437C9.76 1 10.04 1 10.6 1h2.8c.56 0 .84 0 1.054.109a1 1 0 0 1 .437.437C15 1.76 15 2.04 15 2.6v.8c0 .56 0 .84-.109 1.054a1 1 0 0 1-.437.437C14.24 5 13.96 5 13.4 5h-2.8c-.56 0-.84 0-1.054-.109a1 1 0 0 1-.437-.437C9 4.24 9 3.96 9 3.4v-.8ZM1 7.6c0-.56 0-.84.109-1.054a1 1 0 0 1 .437-.437C1.76 6 2.04 6 2.6 6h2.8c.56 0 .84 0 1.054.109a1 1 0 0 1 .437.437C7 6.76 7 7.04 7 7.6v.8c0 .56 0 .84-.109 1.054a1 1 0 0 1-.437.437C6.24 10 5.96 10 5.4 10H2.6c-.56 0-.84 0-1.054-.109a1 1 0 0 1-.437-.437C1 9.24 1 8.96 1 8.4v-.8ZM9 7.6c0-.56 0-.84.109-1.054a1 1 0 0 1 .437-.437C9.76 6 10.04 6 10.6 6h2.8c.56 0 .84 0 1.054.109a1 1 0 0 1 .437.437C15 6.76 15 7.04 15 7.6v.8c0 .56 0 .84-.109 1.054a1 1 0 0 1-.437.437C14.24 10 13.96 10 13.4 10h-2.8c-.56 0-.84 0-1.054-.109a1 1 0 0 1-.437-.437C9 9.24 9 8.96 9 8.4v-.8ZM1 12.6c0-.56 0-.84.109-1.054a1 1 0 0 1 .437-.437C1.76 11 2.04 11 2.6 11h2.8c.56 0 .84 0 1.054.109a1 1 0 0 1 .437.437C7 11.76 7 12.04 7 12.6v.8c0 .56 0 .84-.109 1.054a1 1 0 0 1-.437.437C6.24 15 5.96 15 5.4 15H2.6c-.56 0-.84 0-1.054-.109a1 1 0 0 1-.437-.437C1 14.24 1 13.96 1 13.4v-.8ZM9 12.6c0-.56 0-.84.109-1.054a1 1 0 0 1 .437-.437C9.76 11 10.04 11 10.6 11h2.8c.56 0 .84 0 1.054.109a1 1 0 0 1 .437.437C15 11.76 15 12.04 15 12.6v.8c0 .56 0 .84-.109 1.054a1 1 0 0 1-.437.437C14.24 15 13.96 15 13.4 15h-2.8c-.56 0-.84 0-1.054-.109a1 1 0 0 1-.437-.437C9 14.24 9 13.96 9 13.4v-.8Z" /></svg>,
 };
 
-const DisplayPanel = observer(function DisplayPanel({ view }: { view: ViewData }) {
+export const DisplayPanel = observer(function DisplayPanel({ view }: { view: ViewData }) {
   const el = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const anchor = document.querySelector(".display-open"), box = el.current;
@@ -239,7 +239,7 @@ const DisplayPanel = observer(function DisplayPanel({ view }: { view: ViewData }
   }, []);
   const row = (d: ViewData["display"][number]) => (
     <div className="dp-row" key={d.key}><span>{d.label}</span>
-      {d.key === "order" && (
+      {d.key === "order" && view.reversible && (
         <button className={`dp-dir${view.reverse ? " reversed" : ""}`} type="button" title={view.reverse ? "Reversed" : "Reverse the order"}
           onClick={() => setView({ reverse: !view.reverse })}>{DIRECTION}</button>
       )}
@@ -267,11 +267,11 @@ const DisplayPanel = observer(function DisplayPanel({ view }: { view: ViewData }
       {(rest.length > 0 || view.switches.length > 0) && <hr />}
       {rest.map(row)}
       {view.switches.map((s) => (
-        <label className="dp-row switch" key={s}><span>Show empty groups</span>
-          <input type="checkbox" role="switch" data-key="empty" checked={view.empty} onChange={(e) => setView({ empty: e.target.checked })} />
+        <label className="dp-row switch" key={s.key}><span>{s.label}</span>
+          <input type="checkbox" role="switch" data-key={s.key} checked={view[s.key] === true} onChange={(e) => setView({ [s.key]: e.target.checked })} />
         </label>
       ))}
-      <footer><button className="dp-reset" type="button" onClick={() => setView({ ...view.defaults, reverse: false, empty: false })}>Reset</button></footer>
+      <footer><button className="dp-reset" type="button" onClick={() => setView({ ...view.defaults, reverse: false, ...Object.fromEntries(view.switches.map((s) => [s.key, false])) })}>Reset</button></footer>
     </div>
   );
 });

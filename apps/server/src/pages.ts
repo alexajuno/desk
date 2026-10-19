@@ -506,15 +506,75 @@ export async function automationPage(slug: string) {
   return { automation: { ...(await automationJson(a, true)), body_html: toHtml(a.body) }, agents: roster.list().map(({ name, description }) => ({ name, description })) };
 }
 
-// The one picked in the Inbox (?i=<slug>), as its issue page shows it, or a chat with no issue (?i=<chat id>) as the
-// chat. Opening it reads its rows; the app lists them from the rows it holds.
-export async function inboxPage(picked: string) {
+// The Inbox's Notification type, by what a row asks of you, as Linear's are Assignments, Comments and replies, and
+// Reminders and deadlines.
+const TYPES: Record<string, string> = { plan: "Plans", result: "Results", question: "Questions", reply: "Replies", triage: "Triage", stuck: "Landing stuck" };
+function typeOf(why: string): string {
+  if (why === "plan ready") return "plan";
+  if (why === "result ready" || why === "check it") return "result";
+  if (why === "asks you" || why === "waiting for you") return "question";
+  if (why === "no chat") return "triage";
+  return why === "landing stuck" ? "stuck" : "reply";
+}
+
+// A row's value of one of the Inbox's filters, as the URL writes it. A chat with no issue has no folder, project,
+// priority or status, and comes From its agent, or from "chat".
+function rowValue(r: inbox.Row, name: string, all: Map<string, Issue>): string {
+  if (name === "type") return typeOf(r.why);
+  if (name === "from") return r.issue ? "issue" : r.agent || "chat";
+  const i = r.issue ? all.get(r.slug) : undefined;
+  return i ? views.value(i, name) : "none";
+}
+
+const rowLabel = (name: string, v: string, everyProject: Map<string, Project>) =>
+  name === "type" ? TYPES[v] ?? v : name === "from" ? (v === "issue" ? "Issue sessions" : v === "chat" ? "Chats" : v)
+    : name === "status" && v === "none" ? "No status" : views.label(name, v, everyProject);
+
+const rowIcon = (name: string, v: string | null) =>
+  v && (name === "type" || name === "from") ? null : name === "status" && v === "none" ? "glyph-none" : views.icon(name, v);
+
+// The Inbox's rows as its view shows them (query: the view's words, lists/view.ts): Filter's picks, Show unreads only
+// (the one open stays while it is), Ordering and Show unread first; and the chips and Filter's menus, with how many
+// rows have each value.
+function inboxListing(query: string, keep: string, all: Map<string, Issue>, everyProject: Map<string, Project>) {
+  const view = views.parse("inbox", query), base = inbox.shown(keep);
+  const valueOf = (r: inbox.Row, name: string) => rowValue(r, name, all);
+  let rows = base.filter((r) => views.matches(view, (name) => valueOf(r, name)));
+  const hidden = base.length - rows.length;
+  if (view.on.has("unread")) rows = rows.filter((r) => r.read === null || r.slug === keep);
+  const priority = (r: inbox.Row) => { const i = r.issue && all.get(r.slug); return i ? store.PRIORITIES.indexOf(i.priority) : store.PRIORITIES.length; };
+  if (view.order === "oldest") rows.reverse();
+  else if (view.order === "priority") rows = rows.map((r, at) => ({ r, at })).sort((a, b) => priority(a.r) - priority(b.r) || a.at - b.at).map((e) => e.r);
+  if (view.on.has("first")) rows = [...rows.filter((r) => r.read === null), ...rows.filter((r) => r.read !== null)];
+  const valuesOf = (name: string): string[] => {
+    if (name === "type") return Object.keys(TYPES);
+    if (name === "priority") return ["none", "urgent", "high", "medium", "low"];
+    if (name === "status") return [...store.STATES, "none"];
+    const found = [...new Set(base.map((r) => valueOf(r, name)))];
+    if (name === "from") return [...(found.includes("issue") ? ["issue"] : []), ...found.filter((v) => v !== "issue" && v !== "chat").sort(), ...(found.includes("chat") ? ["chat"] : [])];
+    return ["none", ...found.filter((v) => v !== "none").sort((a, b) => rowLabel(name, a, everyProject).localeCompare(rowLabel(name, b, everyProject)))];
+  };
+  const { chips, fields } = views.filtering(view, base, valueOf, (name, v) => rowLabel(name, v, everyProject), rowIcon, valuesOf);
+  return { ids: rows.map((r) => r.id), view: views.data({ view, groups: [], hidden, chips, fields }), chips };
+}
+
+// The Inbox: its rows as its view shows them, by id, which the app draws from the rows it holds; and the one picked
+// (?i=<slug>), as its issue page shows it, or a chat with no issue (?i=<chat id>) as the chat. Opening it reads its rows.
+export async function inboxPage(picked: string, query = "") {
   const all = await store.loadAll();
   if (picked) await inbox.read({ slug: picked });
   const opened = held(all).find((h) => (h.issue?.slug ?? h.chat?.id) === picked);
   const chat = !opened?.issue && opened?.chat;
-  return { open: picked && all.has(picked) ? await issuePageJson(all, picked) : null,
+  return { ...inboxListing(query, picked, all, await projects.loadAll()), open: picked && all.has(picked) ? await issuePageJson(all, picked) : null,
     chat: chat ? { slug: chat.id, session: chat.session, agent: chat.agent ?? null, title: chatTitle(chat) } : null };
+}
+
+// What the Inbox's ⋯ menu, U and Backspace do (/api/inbox/read and /api/inbox/delete): rows read or unread, or deleted,
+// by their ids. With none given, every row the Inbox may list: read marks the unread ones, and delete with onlyRead
+// only those already read, as Linear's Delete all read.
+export function markRows(act: "read" | "unread" | "delete", ids: string[] | null, onlyRead = false) {
+  const every = inbox.shown().filter((r) => (act === "read" ? r.read === null : !onlyRead || r.read !== null));
+  return inbox.mark(act, ids ?? every.map((r) => r.id));
 }
 
 // Search's hits, best match first, their matched words marked.

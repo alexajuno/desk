@@ -271,11 +271,23 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/api/page/projects", async () => pages.projectsPage());
   app.get("/api/page/automations", async () => pages.automationsPage());
   app.get("/api/page/automation/:slug", async (req: Req) => pages.automationPage(req.params.slug));
-  app.get("/api/page/inbox", async (req: Req) => pages.inboxPage(req.query.i ?? ""));
+  app.get("/api/page/inbox", async (req: Req) => pages.inboxPage(req.query.i ?? "", rawQuery(req)));
   app.get("/api/page/search", async (req: Req) => pages.searchPage(req.query.q ?? ""));
   app.get("/api/page/file/:slug/:name", async (req: Req) => pages.filePage(req.params.slug, req.params.name));
   // The Inbox's rows, newest first, for an agent or a script: the app holds them itself (inbox.ts).
   app.get("/api/inbox", async () => pages.inboxRows());
+  // The Inbox's ⋯ menu, U and Backspace (Linear's): rows read, or unread again, or deleted, by their ids; with none,
+  // every row, and with read, only the rows already read, as Linear's Delete all read. The app hears it as any write.
+  app.post("/api/inbox/read", async (req: Req) => {
+    if (!fromPage(req)) throw new HttpError(403, "Only desk’s page changes the Inbox.");
+    const { keys, unread } = (req.body ?? {}) as unknown as { keys?: string[]; unread?: boolean };
+    return { changed: await pages.markRows(unread ? "unread" : "read", Array.isArray(keys) ? keys : null) };
+  });
+  app.post("/api/inbox/delete", async (req: Req) => {
+    if (!fromPage(req)) throw new HttpError(403, "Only desk’s page changes the Inbox.");
+    const { keys, read } = (req.body ?? {}) as unknown as { keys?: string[]; read?: boolean };
+    return { changed: await pages.markRows("delete", Array.isArray(keys) ? keys : null, read === true) };
+  });
 
   // An issue's own file: Markdown and D2 open as a document, the app's file page; anything else is served as is.
   app.get("/issue/:slug/f/:name", async (req: Req, reply) => {

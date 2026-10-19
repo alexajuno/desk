@@ -64,6 +64,8 @@ export interface InboxRow {
   waits: boolean; // listed, read or not, until answered
   at: number; // when it happened, in seconds
   read: number | null; // when you read it, in seconds; null while unread
+  gone?: number | null; // when you deleted it: out of the Inbox until something newer comes
+  marked?: number | null; // when you marked it unread
 }
 
 // One change from desk's log: the row as it is now, or null once deleted. kind is its table.
@@ -132,10 +134,6 @@ export class IssueStore {
     return [...this.inbox.values()].filter((r) => r.read === null);
   }
 
-  // The rows the Inbox lists, newest first: each unread one, each that waits on you, read or not, and the one open now.
-  listed(open: string | null): InboxRow[] {
-    return [...this.inbox.values()].filter((r) => r.read === null || r.waits || r.slug === open).sort((a, b) => b.at - a.at);
-  }
 
   // The active projects, the oldest first, as the sidebar lists them.
   get activeProjects(): Project[] {

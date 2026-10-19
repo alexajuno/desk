@@ -21,6 +21,7 @@ import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openViewer, viewerOpen } from "../ui/viewer";
 import { arrange, Dock, focusComposer, newSession, openSession, SideEdge, toggleIssue } from "../sessions/Dock";
 import { triageKey } from "../triage/TriagePage";
+import { deleteReadKey, deleteRow, markAllKey, toggleRead } from "../inbox/actions";
 import { Corner } from "./Corner";
 import { CreatorHost } from "./Creator";
 import { ProjectCreatorHost } from "./ProjectCreator";
@@ -108,6 +109,8 @@ function onKeyDown(e: KeyboardEvent) {
     else if ((e.key === "Delete" || e.key === "Backspace") && target()) { remove(target()!, page()?.slug ?? null); e.preventDefault(); }
     return;
   }
+  // Linear's Alt U in the Inbox: every notification read. The key, not the letter, which Alt may change.
+  if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === "KeyU" && markAllKey()) { e.preventDefault(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
 
   if (gPressed && Date.now() - gPressed < 1500) {
@@ -147,6 +150,10 @@ function onKeyDown(e: KeyboardEvent) {
     else go(focused.getAttribute("href")!);
   }
   else if (key === "c") { ui.openCreator(); e.preventDefault(); }
+  // Linear's Inbox keys: U marks the notification read or unread, Backspace deletes it, Shift Backspace every read one.
+  else if (key === "u" && !e.shiftKey && toggleRead()) e.preventDefault();
+  else if ((e.key === "Backspace" || e.key === "Delete") && e.shiftKey && deleteReadKey()) e.preventDefault();
+  else if ((e.key === "Backspace" || e.key === "Delete") && !e.shiftKey && deleteRow()) e.preventDefault();
   else if (key === "x" && selectable(ui.focused)) { ui.toggleSelect(ui.focused!); e.preventDefault(); }
   // Linear's F and Shift+V (linear.app/docs/filters, linear.app/docs/display-options).
   else if (key === "f" && !e.shiftKey && document.querySelector(".filter-open")) { filterMenu({ anchor: document.querySelector(".filter-open") }); e.preventDefault(); }

@@ -7,8 +7,10 @@
 // A row is written when something happens: a reply, a question, a landing stuck, an issue to settle (pages.ts says what
 // each session's row says now, and take() writes what moved). Something new makes the row unread, unless you watch the
 // session as it comes, or wrote to it since. Opening the row, or the session's chat, writes that you read it, through
-// the one write path, so every tab hears it. A read row stays a day, for the row open now, and so that its session's
-// reply is not news again: the app holds every row, and a day of them was 83 on 19 Oct, a week 221.
+// the one write path, so every tab hears it. A read row stays, as Linear's does, so the Inbox can list it, until you
+// delete it (the Inbox's ⋯ menu and Backspace): it keeps its place, marked gone, until something newer brings it back,
+// or a day passes. Linear keeps 2,000 notifications; so does desk, the newest, since the app holds every row (a day of
+// them was 83 on 19 Oct, a week 221). A row the table never had that is a day old is no news, and stays out.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DATA_DIR } from "./config.ts";
@@ -28,20 +30,23 @@ export interface Row {
   waits: boolean; // listed, read or not, until answered
   at: number; // when it happened, in seconds
   read: number | null; // when you read it, in seconds
+  gone: number | null; // when you deleted it: out of the Inbox until something newer comes
+  marked: number | null; // when you marked it unread: it stays so, though you saw the session, until you read it
 }
 
 // What a row should say now, as pages.ts works it out. at is when it happened, or null for a question or a landing
 // stuck, which happened when desk first saw it. looked is when you last saw the session: now while a panel shows it,
 // else when you last wrote to it; a row that happened before it starts read. seed is the read it starts with when the
 // table first fills.
-export interface Want extends Omit<Row, "at" | "read"> {
+export interface Want extends Omit<Row, "at" | "read" | "gone" | "marked"> {
   at: number | null;
   looked: number;
   seed: number | null;
 }
 
-const DAY = 86400; // seconds a read row stays
-const COLUMNS = ["id", "slug", "issue", "session", "title", "agent", "why", "says", "kind", "waits", "at", "read"] as const;
+const DAY = 86400; // seconds a deleted row is kept, and how old a row new to the table may be
+const KEEP = 2000; // read rows kept, the newest: Linear's Inbox keeps 2,000 notifications (linear.app/docs/inbox)
+const COLUMNS = ["id", "slug", "issue", "session", "title", "agent", "why", "says", "kind", "waits", "at", "read", "gone", "marked"] as const;
 
 // The table, as desk last wrote it: desk is its one writer.
 const rows = new Map<string, Row>();
@@ -70,7 +75,12 @@ async function readBack() {
 // Whether the table has yet to fill once: until then each row's read comes from the marks kept before it (seen).
 export const filling = () => !filled;
 
-// The rows the Inbox lists, newest first: each unread one, each that waits on you, and the one open now (keep).
+// The rows the Inbox may list, newest first, read or not, but none you deleted, save the one open now (keep): its view
+// picks among them (pages.ts).
+export const shown = (keep = ""): Row[] => [...rows.values()].filter((r) => r.gone === null || r.slug === keep).sort((a, b) => b.at - a.at);
+
+// The rows that ask for you, newest first, as /api/inbox lists them: each unread one, each that waits on you, and the
+// one open now (keep).
 export function listed(keep = ""): Row[] {
   return [...rows.values()].filter((r) => r.read === null || r.waits || r.slug === keep).sort((a, b) => b.at - a.at);
 }
@@ -101,9 +111,10 @@ async function put(tx: db.Db, r: Row) {
 }
 
 // Write what each row says now, as one write: something new, a reply later than the row's, or a question or a landing
-// stuck where it said something else, makes it unread unless you saw it come; else it keeps its time and its read,
-// and says what it says now, as when its issue moved. A row no longer wanted leaves, as a read one a day old; one the
-// table never had that is older than that is no news, and starts read.
+// stuck where it said something else, makes it unread unless you saw it come, and brings back a row you deleted; else
+// it keeps its time, its read, its delete and its mark, and says what it says now, as when its issue moved. A row you
+// marked unread stays unread though you saw the session. A row no longer wanted leaves, as a deleted one a day old, and
+// the oldest read rows past KEEP; one the table never had that is a day old is no news, and stays out.
 export function take(wanted: Want[]): Promise<void> {
   return db.write(async (tx) => {
     const now = Date.now() / 1000, next = new Map<string, Row>();
@@ -112,11 +123,16 @@ export function take(wanted: Want[]): Promise<void> {
       const at = w.at ?? (had && had.why === w.why && had.waits === w.waits ? had.at : now);
       const fresh = !had || at > had.at;
       const seenIt = (when: number) => (w.looked >= when ? w.looked : null);
-      const read = !filled ? w.seed : !had && at < now - DAY ? at : fresh ? seenIt(at) : had.read ?? seenIt(had.at);
+      const read = !filled ? w.seed : !had && at < now - DAY ? at : fresh ? seenIt(at) : had.read ?? (had.marked ? null : seenIt(had.at));
       const { looked: _l, seed: _s, ...shown } = w;
-      const row: Row = { ...shown, at: fresh ? at : had.at, read };
-      if (row.read !== null && !row.waits && row.at < now - DAY) continue;
+      const row: Row = { ...shown, at: fresh ? at : had.at, read, gone: fresh ? null : had.gone, marked: fresh ? null : had.marked };
+      if (row.read !== null && !row.waits && row.at < now - DAY && (!had || row.gone !== null)) continue;
       next.set(row.id, row);
+    }
+    const old = [...next.values()].filter((r) => r.read !== null && !r.waits).sort((a, b) => b.at - a.at).slice(KEEP);
+    for (const r of old) next.delete(r.id);
+    for (const row of next.values()) {
+      const had = rows.get(row.id);
       if (!had || !same(had, row)) await put(tx, row);
     }
     const gone = [...rows.keys()].filter((id) => !next.has(id));
@@ -132,7 +148,19 @@ export function take(wanted: Want[]): Promise<void> {
 export async function read(by: { slug: string } | { session: string }) {
   const [column, value] = "slug" in by ? ["slug", by.slug] : ["id", by.session];
   if (![...rows.values()].some((r) => r[column as "slug" | "id"] === value && r.read === null)) return;
-  const done = await db.write((tx) => tx.query<Row>(`update inbox set read = $1 where ${column} = $2 and read is null returning ${COLUMNS.join(", ")}`,
-    [Date.now() / 1000, value]));
+  const done = await db.write((tx) => tx.query<Row>(`update inbox set read = $1, marked = null where ${column} = $2 and read is null
+    returning ${COLUMNS.join(", ")}`, [Date.now() / 1000, value]));
   for (const r of done.rows) rows.set(r.id, r);
+}
+
+// The Inbox's ⋯ menu, U and Backspace, Linear's: the rows read, or unread again, or deleted. A deleted row is read
+// too, so the count drops with it; a row that waits on you stays until you answer it.
+export async function mark(act: "read" | "unread" | "delete", ids: string[]) {
+  if (!ids.length) return 0;
+  const set = { read: "read = coalesce(read, $1), marked = null", unread: "read = null, marked = $1",
+    delete: "gone = $1, read = coalesce(read, $1), marked = null" }[act];
+  const done = await db.write((tx) => tx.query<Row>(`update inbox set ${set} where id = any($2)${act === "delete" ? " and not waits" : ""}
+    returning ${COLUMNS.join(", ")}`, [Date.now() / 1000, ids]));
+  for (const r of done.rows) rows.set(r.id, r);
+  return done.rows.length;
 }

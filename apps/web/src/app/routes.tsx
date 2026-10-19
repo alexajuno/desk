@@ -5,7 +5,7 @@ import { IssuePage } from "../issues/IssuePage";
 import { FilePage } from "../files/FilePage";
 import { AutomationPage } from "../lists/AutomationPage";
 import { AutomationsPage } from "../lists/AutomationsPage";
-import { InboxPage } from "../inbox/InboxPage";
+import { INBOX_KEEP, InboxPage } from "../inbox/InboxPage";
 import { IssuesPage, TABS } from "../lists/IssuesPage";
 import { ProjectPage } from "../lists/ProjectPage";
 import { ProjectsPage } from "../lists/ProjectsPage";
@@ -50,10 +50,7 @@ export const router = createBrowserRouter(
     { path: "/issue/:slug", element: <IssuePage />, loader: at(({ params }) => `/api/page/issue/${params.slug}`) },
     { path: "/issue/:slug/f/:name", element: <FilePage />,
       loader: at(({ params }) => `/api/page/file/${params.slug}/${encodeURIComponent(params.name ?? "")}`) },
-    { path: "/inbox", element: <InboxPage />, loader: at(({ request }) => {
-      const i = new URL(request.url).searchParams.get("i") ?? "";
-      return `/api/page/inbox${i ? `?i=${encodeURIComponent(i)}` : ""}`;
-    }) },
+    { path: "/inbox", element: <InboxPage />, loader: at(({ request }) => listUrl("/inbox", "/api/page/inbox", search(request), INBOX_KEEP)) },
     { path: "/search", element: <SearchPage /> },
     // Sessions left the sidebar on 17 Oct: it lists what runs, and the corner's clock finds the rest.
     { path: "/sessions", element: <Navigate to="/inbox" replace /> },
