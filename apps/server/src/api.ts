@@ -83,6 +83,12 @@ const isDir = (path: string) => existsSync(path) && statSync(path).isDirectory()
 
 async function apply(i: Issue, fields: Record<string, string | null>) {
   if (fields.state === "planning") fields.state = "running"; // the name the In progress state had before 15 Oct
+  // A Triage issue is the user's move until they settle it, so its chat's end-of-turn review leaves it in Triage: In
+  // review is for work already accepted ("keep them in triage", the user, 19 Oct).
+  if (i.state === "triage" && fields.state === "review") {
+    delete fields.state;
+    delete fields.review_of;
+  }
   for (const [name, allowed] of [["priority", store.PRIORITIES], ["state", store.STATES], ["protocol", store.PROTOCOLS], ["review_of", store.REVIEWS]] as const)
     if (name in fields && !allowed.includes(fields[name] as string)) throw new HttpError(422, `${name} must be one of: ${allowed.join(", ")}`);
   if (fields.state === "landing" && i.state !== "landing") throw new HttpError(422, "Only Approve lands an issue: the user presses it in desk.");
