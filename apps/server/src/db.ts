@@ -105,6 +105,9 @@ create table if not exists session_models ( -- the model and effort picked for a
   model text,
   effort text
 );
+-- What Claude Code last said of what the model chip's menu shows (models.ts): its models, the plan's usage, and each
+-- session's context, as "context:<session>".
+create table if not exists heard (name text primary key, value jsonb not null, at double precision not null);
 create table if not exists settings (name text primary key, value jsonb not null); -- each one set (settings.ts)
 create table if not exists slack_filed ( -- each Slack message tagged 🐧 that desk handled, "<channel>/<ts>" (slack.ts)
   message text primary key,

@@ -5,7 +5,8 @@
 //
 // The list of models and the usage come from Claude Code itself, asked by one started only for the question (as the
 // SDK's supportedModels and the call behind /usage), with no message, no settings and no transcript, so it costs
-// nothing and leaves no trace. desk asks it here rather than in the session host, which may still run older code.
+// nothing and leaves no trace. desk asks it here rather than in the session host, which may still run older code, and
+// keeps the answers, with each reply's usage and each session's context, so the menu never waits on one.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { query, type ModelInfo, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
@@ -14,8 +15,9 @@ import * as copies from "./copies.ts";
 import * as db from "./db.ts";
 import { sql } from "./db.ts";
 import * as hosted from "./hosted.ts";
-import { which } from "./proc.ts";
+import { run, which } from "./proc.ts";
 import * as settings from "./settings.ts";
+import * as turns from "./turns.ts";
 import { EFFORTS, type Effort } from "./settings.ts";
 
 export interface Pick {
@@ -66,6 +68,7 @@ export async function open() {
   }
   const rows = (await sql().query<{ session: string; model: string | null; effort: Effort | null }>("select * from session_models")).rows;
   picks = Object.fromEntries(rows.map((r) => [r.session, fit({ model: r.model ?? undefined, effort: r.effort ?? undefined })]));
+  await listen();
 }
 
 export const pickOf = (session: string): Pick => picks[session] ?? {};
@@ -128,7 +131,21 @@ export async function change(session: string, pick: Pick): Promise<void> {
   }
 }
 
-// --- asking Claude Code ----------------------------------------------------------------------------------------------
+// --- what Claude Code said -------------------------------------------------------------------------------------------
+// The chip's menu opens at once, with what desk last heard (the user, 20 Oct: "make sure they don't take seconds to
+// press that button", and "the number of usage flipping won't be much, so it needs not to be exact. we prioritize
+// speed here"). The models, the plan's usage and each session's context are kept in the heard table, and asked again
+// only in the background, never while the menu waits: on 20 Oct the usage, asked on every open a minute after the last,
+// held the menu up 2 to 4 s while a Claude Code started only for it.
+
+const heard = new Map<string, { value: any; at: number }>(); // at in ms
+
+async function hear(name: string, value: unknown) {
+  const at = Date.now();
+  heard.set(name, { value, at });
+  await db.write((tx) => tx.query("insert into heard values ($1, $2, $3) on conflict (name) do update set value = excluded.value, at = excluded.at",
+    [name, JSON.stringify(value), at / 1000]));
+}
 
 async function ask<T>(question: (q: Query) => Promise<T>): Promise<T> {
   const claude = which("claude");
@@ -147,13 +164,42 @@ async function ask<T>(question: (q: Query) => Promise<T>): Promise<T> {
   }
 }
 
-let list: ModelInfo[] | null = null; // asked once a run of desk: it changes only with Claude Code
-let asking: Promise<ModelInfo[]> | null = null;
+// --- the models ------------------------------------------------------------------------------------------------------
+// Claude Code's list changes only with Claude Code: desk keeps the one its version said, and lists again when the
+// version changes, as an update leaves it.
 
+let list: ModelInfo[] | null = null;
+let listedBy = ""; // the version of Claude Code that said the list
+let listing: Promise<ModelInfo[]> | null = null;
+let looked = 0; // ms, when desk last looked at Claude Code's version
+const LOOK = 10 * 60_000; // ms between looks, each a `claude --version`, which answers in milliseconds
+
+async function version(): Promise<string> {
+  const claude = which("claude");
+  if (!claude) return "";
+  const ran = await run([claude, "--version"], { timeout: 10 });
+  return ran.code ? "" : ran.stdout.trim();
+}
+
+function relist(): Promise<ModelInfo[]> {
+  listing ??= (async () => {
+    const by = await version();
+    if (list && by === listedBy) return list;
+    const found = await ask((q) => q.supportedModels());
+    [list, listedBy] = [found, by];
+    await hear("models", { version: by, models: found });
+    return found;
+  })().finally(() => (listing = null));
+  return listing;
+}
+
+// The list as kept, at once; only a desk that never heard one waits for it, once.
 async function all(): Promise<ModelInfo[]> {
-  if (list) return list;
-  asking ??= ask((q) => q.supportedModels()).then((found) => (list = found)).finally(() => (asking = null));
-  return asking;
+  if (Date.now() - looked > LOOK) {
+    looked = Date.now();
+    void relist().catch((error) => console.error("desk: listing Claude Code's models", error));
+  }
+  return list ?? relist();
 }
 
 const entryOf = (model: string) => list?.find((m) => m.value === model) ?? list?.find((m) => m.resolvedModel === model);
@@ -176,9 +222,13 @@ export async function menu(): Promise<Model[]> {
     .map((m) => ({ value: m.value, name: m.displayName, efforts: m.supportedEffortLevels ?? [] }));
 }
 
+// --- the usage -------------------------------------------------------------------------------------------------------
+// Every reply of a session says the plan's usage, in Claude Code's rate-limit event, which the host passes on (turns.ts,
+// heardUsage). desk asks Claude Code itself only once no session has said it for a while, as when none works.
+
 export interface Window {
   percent: number;
-  resets: string; // ISO 8601
+  resets: string | null; // ISO 8601; null once the window reset, until desk hears when it next does
 }
 
 export interface Usage {
@@ -186,18 +236,75 @@ export interface Usage {
   seven_day: Window | null;
 }
 
-const FRESH = 60_000; // ms the numbers are kept before Claude Code is asked again
-let usage: [number, Promise<Usage>] | null = null;
+const STALE = 15 * 60_000; // ms with no word of the usage, after which desk asks Claude Code in the background
+const RETRY = 60_000; // ms after an ask before the next, so a failing one is not started on every open
+let usageAsked = 0;
 
-// How much of the plan's 5-hour and weekly limits is used; none for an API key, which has no plan limits.
-export function used(): Promise<Usage> {
-  if (!usage || Date.now() - usage[0] > FRESH) {
+// How much of the plan's 5-hour and weekly limits is used, as last heard; none for an API key, which has no plan
+// limits, or before desk heard any. A window whose reset passed since is unused.
+export function used(): Usage {
+  const kept = heard.get("usage");
+  if ((!kept || Date.now() - kept.at > STALE) && Date.now() - usageAsked > RETRY) {
+    usageAsked = Date.now();
     const window = (w?: { utilization: number | null; resets_at: string | null } | null): Window | null =>
       w && w.utilization !== null && w.resets_at ? { percent: Math.round(w.utilization), resets: w.resets_at } : null;
-    const asked = ask((q) => q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }))
-      .then((u) => ({ five_hour: window(u.rate_limits?.five_hour), seven_day: window(u.rate_limits?.seven_day) }));
-    asked.catch(() => { if (usage?.[1] === asked) usage = null; });
-    usage = [Date.now(), asked];
+    void ask((q) => q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }))
+      .then((u) => hear("usage", { five_hour: window(u.rate_limits?.five_hour), seven_day: window(u.rate_limits?.seven_day) }))
+      .catch((error) => console.error("desk: asking Claude Code the usage", error));
   }
-  return usage[1];
+  const now = (w?: Window | null): Window | null => (!w ? null : w.resets && Date.parse(w.resets) > Date.now() ? w : { percent: 0, resets: null });
+  return { five_hour: now(kept?.value.five_hour), seven_day: now(kept?.value.seven_day) };
+}
+
+// A session's reply said the usage: its rate-limit event's unifiedWindows, which the SDK's types do not name yet, with
+// each window's utilization from 0 to 1. Written down only when a number moved.
+function heardUsage(windows: Record<string, { utilization?: number; resetsAt?: number } | undefined>) {
+  const window = (w?: { utilization?: number; resetsAt?: number }): Window | null =>
+    w && typeof w.utilization === "number" && w.resetsAt ? { percent: Math.round(w.utilization * 100), resets: new Date(w.resetsAt * 1000).toISOString() } : null;
+  const said: Usage = { five_hour: window(windows?.five_hour), seven_day: window(windows?.seven_day) };
+  if (!said.five_hour && !said.seven_day) return;
+  const kept = heard.get("usage"), same = (a?: Window | null, b?: Window | null) => a?.percent === b?.percent && a?.resets === b?.resets;
+  if (kept && same(kept.value.five_hour, said.five_hour) && same(kept.value.seven_day, said.seven_day)) kept.at = Date.now();
+  else void hear("usage", said).catch((error) => console.error("desk: keeping the usage", error));
+}
+
+// --- the context -----------------------------------------------------------------------------------------------------
+// How full each session's context is, as the host counts it (/context's count): asked after each turn ends, and kept,
+// so the menu shows it at once, even for a session whose process has gone.
+
+export interface Context {
+  tokens: number;
+  max: number;
+  percent: number;
+}
+
+const counting = new Set<string>();
+
+function recount(session: string) {
+  if (counting.has(session)) return;
+  counting.add(session);
+  void hosted.context(session).then((c) => hear(`context:${session}`, c))
+    .catch(() => {}) // no process holds it, so nothing changed since the last count
+    .finally(() => counting.delete(session));
+}
+
+// The session's context as last counted, or null before any count; counted again in the background when a turn ran
+// since, or runs now.
+export function context(session: string): Context | null {
+  const kept = heard.get(`context:${session}`), ended = turns.ended(session);
+  if (!kept || turns.working(session) || (ended !== null && ended * 1000 > kept.at)) recount(session);
+  return kept?.value ?? null;
+}
+
+// --- start ----------------------------------------------------------------------------------------------------------
+
+// What desk last heard, as it starts, then the host's word of each turn's end and each reply's usage.
+async function listen() {
+  const rows = (await sql().query<{ name: string; value: unknown; at: number }>("select name, value, at from heard")).rows;
+  for (const r of rows) heard.set(r.name, { value: r.value, at: r.at * 1000 });
+  const models = heard.get("models")?.value as { version: string; models: ModelInfo[] } | undefined;
+  if (models) [list, listedBy] = [models.models, models.version];
+  void all().catch(() => {}); // looks at Claude Code's version now
+  turns.onChange((_sessions, ended) => { for (const session of ended) recount(session); });
+  turns.onUsage(heardUsage);
 }

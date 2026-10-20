@@ -619,7 +619,8 @@ export async function create(): Promise<FastifyInstance> {
     sync.frameChanged();
     return { ok: true };
   });
-  // The chip's menu: the models to pick from, and the plan's 5-hour and weekly usage.
+  // The chip's menu: the models to pick from, the plan's 5-hour and weekly usage, and how full the session's context
+  // is; the last two as desk last heard them, at once.
   app.get("/api/models", async () => {
     try {
       return await models.menu();
@@ -627,24 +628,12 @@ export async function create(): Promise<FastifyInstance> {
       throw new HttpError(502, `Claude Code did not list its models: ${(error as Error).message}`);
     }
   });
-  app.get("/api/usage", async () => {
-    try {
-      return await models.used();
-    } catch (error) {
-      throw new HttpError(502, `Claude Code did not say the usage: ${(error as Error).message}`);
-    }
-  });
+  app.get("/api/usage", async () => models.used());
   app.get("/api/live/:id/files", async (req: Req) => live.files(sessionOf(req), req.query.q ?? ""));
   app.get("/api/live/:id/commands", async (req: Req) => live.commands(sessionOf(req)));
   // What one of the session's subagents did, by the Agent call that started it: its steps, for that step's fold.
   app.get("/api/live/:id/agent/:tool", async (req: Req) => transcript.subagentItems(sessionOf(req), String(req.params.tool ?? "")));
-  app.get("/api/live/:id/context", async (req: Req) => {
-    try {
-      return await live.context(sessionOf(req));
-    } catch (error) {
-      throw new HttpError(502, `Claude Code did not say how full the context is: ${(error as Error).message}`);
-    }
-  });
+  app.get("/api/live/:id/context", async (req: Req) => models.context(sessionOf(req)));
 
   // --- the app's live sync; a WebSocket is not bound by CORS, so another site could otherwise read every issue
   app.get("/api/sync", {

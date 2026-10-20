@@ -291,7 +291,13 @@ function take(s: Session, m: SDKMessage) {
     else track(s, e);
     return;
   }
-  if (m.type === "rate_limit_event" && m.rate_limit_info.status === "rejected") setStatus(s, { kind: "limit", resets: m.rate_limit_info.resetsAt });
+  if (m.type === "rate_limit_event") {
+    if (m.rate_limit_info.status === "rejected") setStatus(s, { kind: "limit", resets: m.rate_limit_info.resetsAt });
+    // Each reply says the plan's usage, which the model chip's menu shows (models.ts): its unifiedWindows, which the
+    // SDK's types do not name yet.
+    const windows = (m.rate_limit_info as { unifiedWindows?: Record<string, unknown> }).unifiedWindows;
+    if (windows && desk?.readyState === WebSocket.OPEN) desk.send(JSON.stringify({ type: "usage", windows }));
+  }
   if (m.type === "stream_event") {
     if (m.parent_tool_use_id) return; // a subagent's: the panel shows only its Agent step
     const e = m.event as { type: string; index?: number; message?: { id: string }; content_block?: { type: string; name?: string }; delta?: Record<string, string> };

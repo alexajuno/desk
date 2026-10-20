@@ -297,11 +297,6 @@ export async function interrupt(id: string) {
 
 export const answer = (id: string, ask: string, result: Record<string, unknown>) => hosted.answer(id, ask, result);
 
-// How full the session's context is, for the model chip's menu; null while no process holds it, when none is loaded.
-export async function context(id: string) {
-  return (await hosted.holds(id)) ? hosted.context(id) : null;
-}
-
 // --- what the composer completes ------------------------------------------------------------------------------------
 
 const lists = new Map<string, [number, string[]]>(); // folder: when its files were listed, and them
