@@ -150,8 +150,8 @@ function typed(text: string): string {
 // What Claude Code itself tells Claude in a user message that the user should see too, as a note: a task it ran beside
 // the conversation ended (<task-notification>, its <summary> such as `Agent "count files" finished`), a watch saw a
 // line (the same, with `Monitor event: "ticks"` and the line in <event>), or a slash command printed something
-// (<local-command-stdout>, such as "Set model to Sonnet"). A task's note keeps the id of the tool call that started it
-// (<tool-use-id>), by which the panel opens what a subagent did. Null for anything else.
+// (<local-command-stdout>, such as "Set model to `Sonnet`", drawn without its backticks). A task's note keeps the id of
+// the tool call that started it (<tool-use-id>), by which the panel opens what a subagent did. Null for anything else.
 function notice(text: string): Item | null {
   const t = text.trim();
   if (t.startsWith("<task-notification>")) {
@@ -161,7 +161,7 @@ function notice(text: string): Item | null {
   }
   const out = /^<local-command-(?:stdout|stderr)>([\s\S]*?)<\/local-command-(?:stdout|stderr)>/.exec(t);
   if (!out) return null;
-  const said = out[1].replace(/\x1b\[[0-9;]*m/g, "").trim();
+  const said = out[1].replace(/\x1b\[[0-9;]*m/g, "").replace(/`/g, "").trim();
   return { t: "note", key: "", text: said.startsWith("Compacted") ? "" : cut(said, 400) }; // /compact's "Compacted": its boundary has a note already
 }
 
@@ -181,6 +181,14 @@ function entryItems(e: Entry): Item[] {
     return note !== null ? noted(uuid, note) : [{ t: "you", key: uuid, text: e.attachment.prompt, queued: true }];
   }
   if (e.type === "system" && e.subtype === "compact_boundary") return [{ t: "note", key: uuid, text: "Compacted the conversation" }];
+  // A slash command's output, which the transcript records after the command (Claude Code 2.1.285). The host's stream
+  // sends it as a reply of its own, local_command_run on it, and no command: drawn, it came above the command, which
+  // reached the panel from the transcript a moment later (20 Oct).
+  if (e.type === "system" && e.subtype === "local_command") {
+    const note = notice(String(e.content ?? ""));
+    return note ? noted(uuid, note) : [];
+  }
+  if (e.local_command_run) return [];
   if (e.type !== "user" && e.type !== "assistant") return [];
   // What Claude Code adds itself, such as a skill's text once the Skill tool loads it: isMeta in the transcript, and
   // isSynthetic over the host's stream.
