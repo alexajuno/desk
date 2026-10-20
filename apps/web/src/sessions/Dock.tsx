@@ -252,6 +252,14 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
   const liveText = s.partial.filter((b) => b.kind === "text");
   const last = rows[rows.length - 1];
   const lastQueued = s.working ? s.pending.filter((p) => p.mid && !p.lost).at(-1) : undefined; // Send now goes under it
+  // One sent while Claude was idle started the reply streaming now, so it goes above it, with any sent before it; those
+  // queued since go below.
+  const starts = s.pending.reduce((n, p, i) => (p.mid ? n : i + 1), 0);
+  const tail = s.working && !starts; // the last fold is the reply's own, and takes its tool calls streaming now
+  const you = (p: (typeof s.pending)[number]) => (
+    <You key={p.key} text={p.text} images={p.images.length} queued={s.working && p.mid && !p.lost} lost={p.lost} onSend={() => void s.resend(p)}
+      onSendNow={p === lastQueued ? () => void s.sendNow("", []) : undefined} />
+  );
   return (
     <>
       {rows.map((r, n) => {
@@ -262,15 +270,13 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
           const agent = r.item.id ? s.items.find((i) => i.t === "tool" && i.id === r.item.id && (i.name === "Agent" || i.name === "Task")) : undefined;
           return agent ? <AgentNote key={r.item.key} s={s} note={r.item} /> : <p key={r.item.key} className="convo-note">{r.item.text}</p>;
         }
-        const running = n === rows.length - 1 && s.working ? liveSteps : [];
-        return <Steps key={r.key} s={s} items={r.items} running={running} live={n === rows.length - 1 && s.working} />;
+        const current = tail && n === rows.length - 1;
+        return <Steps key={r.key} s={s} items={r.items} running={current ? liveSteps : []} live={current} />;
       })}
-      {liveSteps.length > 0 && last?.kind !== "steps" && <Steps s={s} items={[]} running={liveSteps} live />}
+      {s.pending.slice(0, starts).map(you)}
+      {liveSteps.length > 0 && !(tail && last?.kind === "steps") && <Steps s={s} items={[]} running={liveSteps} live />}
       {liveText.map((b) => <Reply key={`${b.msg}:${b.index}`} text={b.text} streaming />)}
-      {s.pending.map((p) => (
-        <You key={p.key} text={p.text} images={p.images.length} queued={s.working && p.mid && !p.lost} lost={p.lost} onSend={() => void s.resend(p)}
-          onSendNow={p === lastQueued ? () => void s.sendNow("", []) : undefined} />
-      ))}
+      {s.pending.slice(starts).map(you)}
       {s.working && !liveText.length && !s.asks.length && <Working since={s.since} status={s.status} />}
     </>
   );

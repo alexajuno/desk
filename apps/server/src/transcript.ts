@@ -87,7 +87,7 @@ export function cwdOf(session: string): string | null {
   return cwd;
 }
 
-type Entry = Record<string, any>;
+export type Entry = Record<string, any>;
 
 // The whole lines from byte `from` on, and where the next read starts; a line Claude Code is still writing waits.
 export function read(path: string, from: number): [Entry[], number] {

@@ -13,11 +13,13 @@
 // An <item> is transcript.ts's. The app sends {"type": "visible", "visible": true} as its tab shows or hides, so desk
 // knows whether the user reads a chat's reply as it comes (the Inbox then leaves it out).
 //
-// While the host holds the session, its stream says everything as it happens. The rest a panel looks at again when
-// desk says something moved (moved): a write that changed a row, such as the chat's title or the session's model, or
-// the host's word that the session's turn started or ended, or that the host took it in. It then reads what the
-// transcript gained, which the host's stream may have missed, as across a restart. A session the host does not hold,
-// such as one in a terminal, shows what its transcript held when the panel opened and when desk last looked.
+// While the host holds the session, its stream says everything as it happens but the user's own messages, which only
+// the transcript says: before each new block or message from the stream, the panel reads what the transcript gained,
+// so a message comes before its reply (give). The rest a panel looks at again when desk says something moved (moved):
+// a write that changed a row, such as the chat's title or the session's model, or the host's word that the session's
+// turn started or ended, or that the host took it in. It then reads what the transcript gained, which the host's stream
+// may have missed, as across a restart. A session the host does not hold, such as one in a terminal, shows what its
+// transcript held when the panel opened and when desk last looked.
 import { execFile } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -118,7 +120,25 @@ export async function connect(ws: WebSocket, id: string) {
   lastMeta = JSON.stringify(m);
   say({ type: "hello", meta: m, items, working: turns.working(id), asks: [], partial: [] });
 
-  // New lines in the transcript, whoever wrote them.
+  // The transcript's new lines, whoever wrote them, until the panel is given them (give).
+  let unread: transcript.Entry[] = [];
+  let streaming = false; // a turn runs in the host's stream the panel has joined, which sends Claude's own entries
+
+  // Give the panel what the transcript gained, in its order. While a turn streams, Claude's entries come from the host's
+  // stream, after their streamed words: one the stream has not sent yet waits for it, and so does what follows it, which
+  // would otherwise come ahead of the reply's next block, drawn twice once it streams.
+  const give = () => {
+    const added: Item[] = [];
+    let n = 0;
+    for (; n < unread.length; n++) {
+      const items = transcript.itemsOf(unread[n]);
+      if (streaming && unread[n].type === "assistant" && items.some((i) => !sent.has(i.key))) break;
+      added.push(...fresh(items));
+    }
+    unread = unread.slice(n);
+    if (added.length) say({ type: "items", items: added });
+  };
+
   const readMore = () => {
     if (closed) return;
     const now = transcript.pathOf(id);
@@ -126,17 +146,18 @@ export async function connect(ws: WebSocket, id: string) {
       path = now;
       readTo = 0;
     }
-    if (!path) return;
-    const [entries, next] = transcript.read(path, readTo);
-    readTo = next;
-    const added = fresh(entries.flatMap(transcript.itemsOf));
-    if (added.length) say({ type: "items", items: added });
-    // A /model or /effort typed since the panel opened, which the chip shows as its own picks once kept. An older one,
-    // read again as a moved chat's transcript is read from its start, is left: the chip may have picked over it since.
-    for (const e of entries) {
-      const run = Date.parse(e.timestamp) >= opened && transcript.commandRun(e);
-      if (run) void models.ran(id, run).catch((error) => console.error(`desk: ${id} ran /${run.command}`, error));
+    if (path) {
+      const [entries, next] = transcript.read(path, readTo);
+      readTo = next;
+      unread.push(...entries);
+      // A /model or /effort typed since the panel opened, which the chip shows as its own picks once kept. An older one,
+      // read again as a moved chat's transcript is read from its start, is left: the chip may have picked over it since.
+      for (const e of entries) {
+        const run = Date.parse(e.timestamp) >= opened && transcript.commandRun(e);
+        if (run) void models.ran(id, run).catch((error) => console.error(`desk: ${id} ran /${run.command}`, error));
+      }
     }
+    give();
   };
   let timer: NodeJS.Timeout | null = null;
   const soon = () => {
@@ -151,23 +172,37 @@ export async function connect(ws: WebSocket, id: string) {
     host = h;
     h.on("message", (data) => {
       const e = JSON.parse(data.toString());
-      if (e.type === "hello") say({ type: "working", working: e.working, since: e.since, asks: e.asks, partial: e.partial, tasks: e.tasks ?? [], status: e.status ?? null });
-      else if (e.type === "message") {
+      // What the transcript gained goes first, such as the user's message this reply answers, which the stream never
+      // says: read only once the reply came, it was drawn below it (20 Oct). A piece of a block streaming adds nothing.
+      // The stream sends none of what finished before its hello, nor any more of a turn once it ends.
+      if (e.type === "hello") {
+        streaming = false;
+        readMore();
+        streaming = Boolean(e.working);
+        return say({ type: "working", working: e.working, since: e.since, asks: e.asks, partial: e.partial, tasks: e.tasks ?? [], status: e.status ?? null });
+      }
+      if (e.type === "working") streaming = Boolean(e.working);
+      if (e.type !== "stream" || !e.text) readMore();
+      if (e.type === "message") {
         const added = fresh(transcript.itemsOf(e.entry));
         if (added.length) say({ type: "items", items: added });
+        give(); // what the transcript holds after it
         if (e.entry.local_command_run) soon(); // a slash command ran: its record in the transcript tells a /model's pick
       } else if (e.type === "closed") {
         say({ type: "tasks", tasks: [] }); // they ended with its process
         h.close();
       } else say(e);
     });
+    const left = () => {
+      if (host !== h) return;
+      host = null;
+      streaming = false;
+    };
     h.on("close", () => {
-      if (host === h) host = null;
+      left();
       soon();
     });
-    h.on("error", () => {
-      if (host === h) host = null;
-    });
+    h.on("error", left);
   };
   if (await turns.hosting(id)) joinHost();
 
