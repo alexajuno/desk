@@ -47,8 +47,9 @@ export interface Task {
   steps?: number; // a subagent's tool calls so far
 }
 
-// What holds the turn up, which the working line says.
-export type Status = { kind: "retry"; error: string; attempt: number; of: number; until: number } | { kind: "compacting" } | { kind: "limit"; resets?: number };
+// What holds the turn up, which the working line says. A limit's window is the plan's limit that was hit, such as
+// "five_hour".
+export type Status = { kind: "retry"; error: string; attempt: number; of: number; until: number } | { kind: "compacting" } | { kind: "limit"; window?: string; resets?: number };
 
 export interface Meta {
   id: string;

@@ -78,7 +78,8 @@ interface Task {
   steps?: number; // a subagent's tool calls so far
 }
 
-type Status = { kind: "retry"; error: string; attempt: number; of: number; until: number } | { kind: "compacting" } | { kind: "limit"; resets?: number };
+// A limit's window is the plan's limit that was hit, rate_limit_info's rateLimitType, such as "five_hour".
+type Status = { kind: "retry"; error: string; attempt: number; of: number; until: number } | { kind: "compacting" } | { kind: "limit"; window?: string; resets?: number };
 
 interface Session {
   id: string;
@@ -283,7 +284,13 @@ function take(s: Session, m: SDKMessage) {
   }
   if (m.type === "system") {
     const e = m as Record<string, any>;
-    if (e.subtype === "api_retry") setStatus(s, { kind: "retry", error: e.error, attempt: e.attempt, of: e.max_retries, until: Date.now() + e.retry_delay_ms });
+    // A plan's limit comes as a rejected rate_limit_event, then a retry that waits until it resets, maybe for hours:
+    // the limit says more than the retry's countdown, so the retry leaves it. One with no event before it and a wait
+    // of a minute or more is a limit too, which the line names without its window.
+    if (e.subtype === "api_retry" && e.error === "rate_limit" && s.status?.kind === "limit") return;
+    if (e.subtype === "api_retry" && e.error === "rate_limit" && e.retry_delay_ms >= 60_000)
+      setStatus(s, { kind: "limit", resets: Math.round((Date.now() + e.retry_delay_ms) / 1000) });
+    else if (e.subtype === "api_retry") setStatus(s, { kind: "retry", error: e.error, attempt: e.attempt, of: e.max_retries, until: Date.now() + e.retry_delay_ms });
     else if (e.subtype === "status") {
       if (e.status === "compacting") setStatus(s, { kind: "compacting" });
       else if (s.status?.kind === "compacting") setStatus(s, null);
@@ -292,7 +299,8 @@ function take(s: Session, m: SDKMessage) {
     return;
   }
   if (m.type === "rate_limit_event") {
-    if (m.rate_limit_info.status === "rejected") setStatus(s, { kind: "limit", resets: m.rate_limit_info.resetsAt });
+    const info = m.rate_limit_info;
+    if (info.status === "rejected") setStatus(s, { kind: "limit", window: info.rateLimitType, resets: info.resetsAt });
     // Each reply says the plan's usage, which the model chip's menu shows (models.ts): its unifiedWindows, which the
     // SDK's types do not name yet.
     const windows = (m.rate_limit_info as { unifiedWindows?: Record<string, unknown> }).unifiedWindows;

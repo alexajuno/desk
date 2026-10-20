@@ -334,10 +334,24 @@ function elapsed(from: number): string {
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 
+// A moment as its time today, and with its weekday on another day: 18:40, Thu 04:00.
+const moment = (ms: number) =>
+  new Date(ms).toDateString() === new Date().toDateString() ? clock(ms) : `${new Date(ms).toLocaleDateString([], { weekday: "short" })} ${clock(ms)}`;
+
+// Each of the plan's limits, by rate_limit_info's rateLimitType.
+const limits: Record<string, string> = {
+  five_hour: "5-hour limit",
+  seven_day: "Weekly limit",
+  seven_day_opus: "Weekly Opus limit",
+  seven_day_sonnet: "Weekly Sonnet limit",
+  seven_day_overage_included: "Weekly limit",
+  overage: "Extra usage limit",
+};
+
 // What holds the turn up, in the working line's words.
 function held(status: Status): string {
   if (status.kind === "compacting") return "Compacting the conversation";
-  if (status.kind === "limit") return `Usage limit reached${status.resets ? ` · resets ${clock(status.resets * 1000)}` : ""}`; // resetsAt is in seconds
+  if (status.kind === "limit") return `${limits[status.window ?? ""] ?? "Usage limit"} reached${status.resets ? ` · resets ${moment(status.resets * 1000)}` : ""}`; // resetsAt is in seconds
   const wait = Math.ceil((status.until - Date.now()) / 1000);
   return `${wait > 0 ? `Retrying in ${wait}s` : "Retrying"} · ${status.error.replace(/_/g, " ")} · attempt ${status.attempt} of ${status.of}`;
 }
