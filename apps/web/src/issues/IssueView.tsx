@@ -15,7 +15,7 @@ import { toast } from "../ui/toast";
 import { reloadPages, ui } from "../store/ui";
 import { setField, setFolder } from "./actions";
 import { openSession } from "../sessions/Dock";
-import { fieldMenu, folderMenu, teamPicker, waitingMenu } from "./menus";
+import { fieldMenu, folderMenu, projectPicker, teamPicker, waitingMenu } from "./menus";
 import { painted } from "./painted";
 import { Tree } from "./Tree";
 import { Description } from "../editor/Description";
@@ -34,6 +34,7 @@ export interface IssuePageData {
   body_html: string;
   team: { slug: string; title: string } | null;
   all_teams: { slug: string; title: string; state: string }[];
+  project: { slug: string; title: string; status: string } | null;
   trail: { slug: string; title: string }[];
   kids: TreeRow[];
   progress: [number, number];
@@ -130,7 +131,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
         {...(p.session ? { "data-session": p.session.slice(0, 8) } : {})}>
         <div>
           <Title title={p.title} save={(t) => setField(p.slug, "title", t)} />
-          <Chips p={p} team={data.team} />
+          <Chips p={p} team={data.team} project={data.project} />
           {/* In review the card comes first, right under the strip whose Approve decides on it. A plan to say go to
               shows as the plan, below. */}
           {p.state === "review" && data.reviewing && (
@@ -193,7 +194,7 @@ function Pick({ className, slug, field, value, title, children }: { className: s
 
 // Linear's Inbox has no room for the Properties column in a pane under 820px, so it shows them as chips here
 // instead (desk.css); each opens the same picker as its row in the column.
-const Chips = observer(function Chips({ p, team }: { p: IssueRow; team: { slug: string; title: string } | null }) {
+const Chips = observer(function Chips({ p, team, project }: { p: IssueRow; team: { slug: string; title: string } | null; project: { slug: string; title: string } | null }) {
   return (
     <div className="chips">
       <Pick className="field-chip pick" slug={p.slug} field="state" value={p.state} title="Change status  S">
@@ -216,6 +217,11 @@ const Chips = observer(function Chips({ p, team }: { p: IssueRow; team: { slug: 
         onClick={(e) => { if (!toggled(e.currentTarget)) teamPicker(p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "team", value)); }}>
         {GLYPH.team}
         <span>{team ? team.title : p.team || "Team"}</span>
+      </button>
+      <button className={`field-chip project-chip${p.project ? "" : " unset"}`} type="button" data-slug={p.slug} data-value={p.project ?? ""} title="Set project  Shift P"
+        onClick={(e) => { if (!toggled(e.currentTarget)) projectPicker(p.project, p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "project", value)); }}>
+        {GLYPH.project}
+        <span>{project ? project.title : p.project || "Project"}</span>
       </button>
       <button className={`field-chip folder-pick${p.folder ? "" : " unset"}`} type="button" data-slug={p.slug} data-value={p.folder ?? ""} title="Pick the folder the issue's session starts in; ~ until you pick one"
         onClick={(e) => { if (!toggled(e.currentTarget)) folderMenu(p.folder ?? "", e.currentTarget, (f) => setFolder(p.slug, f)); }}>
@@ -263,6 +269,12 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
           {data.all_teams.map((t) => <option key={t.slug} value={t.slug}>{t.title}{t.state === "archived" ? " (archived)" : ""}</option>)}
         </select>
       </form>
+      <div className="label">Project</div>
+      <button className="prop project-pick-menu" type="button" data-slug={p.slug} data-value={p.project ?? ""} title="Set project  Shift P"
+        onClick={(e) => { if (!toggled(e.currentTarget)) projectPicker(p.project, p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "project", value)); }}>
+        <span className="muted-icon">{GLYPH.project}</span>
+        <span className={data.project ? undefined : "muted"}>{data.project?.title ?? "Add to project"}</span>
+      </button>
       <div className="label">Works in</div>
       <button className="prop folder-pick" type="button" data-slug={p.slug} data-value={p.folder ?? ""} title="Pick the folder the issue's session starts in; ~ until you pick one"
         onClick={(e) => { if (!toggled(e.currentTarget)) folderMenu(p.folder ?? "", e.currentTarget, (f) => setFolder(p.slug, f)); }}>

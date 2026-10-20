@@ -119,6 +119,13 @@
   --state-cross: lch(10% 0 0);
   --prio: lch(80% 1.2 272);
   --urgent: lch(66% 80 48);
+  /* a project's status icons, from linear.app's Change status menu on a project, 2026-10-20, dark */
+  --project-backlog: #f2994a;
+  --project-planned: #d7d8db;
+  --project-started: lch(80% 90 85);
+  --project-completed: lch(48% 59.31 288.43);
+  --project-canceled: #8a8f98;
+  --late: lch(65.2% 73 29);                /* a target or due date passed: Linear's red, its Off track's */
   --text-running: lch(80% 90 85);
   --text-done: #4cb782;
   --text-blocked: lch(66% 80 48);
@@ -206,6 +213,7 @@
   --border-link-bar: lch(86.5% 0 282);
   --rule-link-bar: lch(90.55% 0 282);
   --state-backlog: lch(67.969% 3.577 260.65); /* the status menu's icons */
+  --project-planned: lch(67.969% 3.577 260.65); /* not measured in light: an issue's Backlog grey stands in */
   --state-review: lch(68% 64.37 141.95);
   --state-cross: lch(100% 0 282);          /* Linear cuts the cross out of the circle; white matches that */
   --prio: lch(39.176% 1.25 282);          /* a row's priority bars */
@@ -981,3 +989,73 @@ button.set-pick svg { color: var(--text-3); }
 .triage-actions .triage-issue { margin-left: auto; font-size: 12px; color: var(--text-3); text-decoration: none; }
 .triage-actions .triage-issue:hover { color: var(--text-1); }
 .inbox-row .from { flex: none; font-size: 12px; }
+
+/* The date picker (ui/datepicker.tsx), Linear's, measured on linear.app on 2026-10-20 at 2x, dark, from a project's
+   Target date chip: a 304px popover in the Display panel's palette, 8px corners and 16px in, with three soft shadows.
+   Its name in 12px/500, then a 32px box with 8px corners and a 0.5px edge, 12px text, a 1px accent outline while typed
+   in; 16px under it the five 28px pills, 6px apart, 12px/500, the picked one brighter; then a rule, and under it a
+   month of days, Monday first with the weekend shaded, or each year's months, quarters or halves as pills. Light is not
+   measured: it takes the Display panel's light palette. */
+.menu.date-pick { width: 304px; padding: 0; border-radius: 8px; background: var(--bg-tip); border: 0.5px solid var(--border-tip); box-shadow: var(--shadow-keys); }
+.date-pick-head { padding: 16px 16px 16px; border-bottom: 0.5px solid var(--border-tip); }
+.date-pick-head label { display: block; margin-bottom: 8px; font: 500 12px var(--font); color: var(--text-tip-key); }
+.date-pick-head input { width: 100%; box-sizing: border-box; height: 32px; padding: 6px 12px; border-radius: 8px; border: 0.5px solid var(--border-link-bar);
+                        background: var(--bg-tip); color: var(--text-1); font: 400 12px var(--font); outline: none; }
+.date-pick-head input:focus { outline: 1px solid var(--accent); }
+.date-pick-head input::placeholder { color: var(--text-tip-key); }
+.date-kinds { display: flex; gap: 6px; margin-top: 16px; }
+.date-kinds button { height: 28px; padding: 0 6px; border: 0; border-radius: 9999px; background: var(--bg-dp-layout); color: var(--text-tip-key);
+                     font: 500 12px var(--font); box-shadow: none; }
+.date-kinds button:hover { background: var(--bg-dp-layout-hover); color: var(--text-tip); }
+.date-kinds button.on { background: var(--bg-dp-on); color: var(--text-dp-on); }
+.date-pick-body { max-height: 300px; overflow: auto; padding: 12px 16px 12px; }
+.cal-head { display: flex; align-items: center; gap: 4px; height: 28px; margin-bottom: 8px; font: 500 12px var(--font); color: var(--text-tip); }
+.cal-head span { flex: 1; }
+.cal-step { width: 24px; height: 24px; padding: 0; justify-content: center; border: 0; border-radius: 9999px; background: none; color: var(--text-tip-key); }
+.cal-step:hover { background: var(--bg-active); color: var(--text-1); }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); }
+.cal-week { display: grid; place-items: center; height: 32px; font: 500 12px var(--font); color: var(--text-tip-key); }
+.cal .weekend { background: var(--bg-dp-layout); }
+.cal-week.weekend { border-radius: 6px 6px 0 0; }
+.cal-day { justify-self: stretch; height: 34px; padding: 0; justify-content: center; border: 0; border-radius: 0; background: none;
+           color: var(--text-tip); font: 400 12px var(--font); box-shadow: none; }
+.cal-day span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 9999px; }
+.cal-day.out { color: var(--text-tip-key); }
+.cal-day.out span { opacity: 0.6; }
+.cal-day:hover span { box-shadow: inset 0 0 0 1px var(--border-tip); }
+.cal-day.today span { box-shadow: inset 0 0 0 1px var(--border-link-bar); }
+.cal-day.on span { background: var(--accent); color: var(--on-accent); }
+.date-year { margin-bottom: 12px; }
+.date-year > span { display: block; margin-bottom: 8px; font: 500 12px var(--font); color: var(--text-tip-key); }
+.date-grid { display: grid; gap: 6px; }
+.date-grid.two { grid-template-columns: repeat(2, 1fr); }
+.date-grid.three { grid-template-columns: repeat(3, 1fr); }
+.date-grid.four { grid-template-columns: repeat(4, 1fr); }
+.dp-cell { height: 24px; padding: 0; justify-content: center; border: 0; border-radius: 9999px; background: var(--bg-dp-layout); color: var(--text-tip);
+           font: 500 12px var(--font); box-shadow: 0 0 0 0.5px var(--ring-dp); }
+.dp-cell:hover { background: var(--bg-dp-layout-hover); color: var(--text-1); }
+.dp-cell.on { background: var(--accent); color: var(--on-accent); }
+.date-clear { display: block; margin: 4px 0 0 auto; height: 24px; padding: 0 8px; border: 0; border-radius: 9999px; background: none;
+              color: var(--text-tip-key); font: 500 12px var(--font); box-shadow: none; }
+.date-clear:hover { background: var(--bg-active); color: var(--text-1); }
+
+/* Projects (lists/ProjectsPage.tsx), Linear's list of them, read off linear.app's All projects on 2026-10-20 in dark: a
+   row of column names in --text-3, then each status's group, its header 44px with the status icon, name and count, and
+   its rows 48px: the name with the project's cube, then the columns, Status last with the icon and the percent. */
+.projects-list { --cols: minmax(0, 1fr) 160px 120px 64px 88px; padding-top: 0; }
+.projects-cols, .projects-row { display: grid; grid-template-columns: var(--cols); align-items: center; gap: 12px; }
+.projects-cols { height: 36px; padding: 0 16px 0 36px; font: 500 12px var(--font); color: var(--text-3); }
+.projects-group { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 22px; font-weight: 500; color: var(--text-1); }
+.projects-group .count { color: var(--text-3); font-weight: 450; }
+.projects-row { height: 48px; padding: 0 16px 0 22px; }
+.projects-row .name { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.projects-row .name .glyph { flex: none; color: var(--text-2); }
+.projects-row .muted, .projects-row .num { color: var(--text-2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.projects-row .late { color: var(--late); }
+.projects-row .status { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: 13px; }
+/* A project's property chips (lists/ProjectPage.tsx): Linear's start → target pair, and a target date passed in red. */
+.date-chips { display: flex; align-items: center; gap: 2px; }
+.date-arrow { color: var(--text-3); font-size: 13px; }
+.prop-chip.late, .prop-chip.late:hover { color: var(--late); }
+.create-chips { margin: 0 26px 16px; flex-wrap: wrap; }
+.prop .muted-icon { display: inline-flex; color: var(--text-3); }

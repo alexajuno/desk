@@ -16,7 +16,9 @@ import * as land from "./land.ts";
 import * as live from "./live.ts";
 import * as models from "./models.ts";
 import * as pages from "./pages.ts";
+import * as periods from "./periods.ts";
 import * as pins from "./pins.ts";
+import * as projects from "./projects.ts";
 import { HttpError } from "./pages.ts";
 import * as sessions from "./sessions.ts";
 import * as sync from "./sync.ts";
@@ -113,6 +115,9 @@ async function checked(i: store.Issue, name: string, given: string): Promise<str
   } else if (name === "team") {
     value = value || null;
     if (value && !(await teams.exists(value))) throw new HttpError(422, `No team ${value}.`);
+  } else if (name === "project") {
+    value = value || null;
+    if (value && !(await projects.exists(value))) throw new HttpError(422, `No project ${value}.`);
   } else if (name === "parent") {
     value = value || null;
     if (value === i.slug || (value && store.descendants(await store.loadAll(), i.slug).includes(value)))
@@ -133,6 +138,8 @@ async function setFields(slugs: string[], name: string, given: string): Promise<
   for (const slug of slugs) {
     const i = await store.load(slug); // as it is now: an earlier one's automations may have closed it
     (i as unknown as Record<string, string | null>)[name] = await checked(i, name, given);
+    // An issue with no team takes its project's, as a Linear issue is in one of its project's teams.
+    if (name === "project" && i.project && !i.team) i.team = (await projects.load(i.project)).team;
     for (const other of await store.save(i)) closed.add(other);
   }
   return [...closed].filter((s) => !slugs.includes(s));
@@ -233,9 +240,15 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/version", async (_req, reply) => reply.type("text/plain; charset=utf-8").send(pages.version()));
 
   // desk's pages are the app's: each address answers with it, and the app asks /api/page/... for the data.
-  for (const path of ["/issues", "/issues/:tab", "/triage", "/teams", "/team/:slug", "/team/:slug/issues", "/automations", "/automation/:slug", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
+  for (const path of ["/issues", "/issues/:tab", "/triage", "/teams", "/team/:slug", "/team/:slug/issues", "/projects", "/project/:slug/issues", "/automations", "/automation/:slug", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
     app.get(path, async (_req, reply) => web.index(reply));
   app.get("/", async (_req, reply) => reply.redirect("/issues", 307));
+  // A project's page; until 20 Oct /project/<slug> was a team's, whose links in issues and chats go on to it.
+  app.get("/project/:slug", async (req: Req, reply) => {
+    const slug = req.params.slug;
+    if (!(await projects.exists(slug)) && (await teams.exists(slug))) return reply.redirect(`/team/${slug}`, 301);
+    return web.index(reply);
+  });
   // The Backlog listed every open issue, and became All issues on 17 Oct; /park was its name before that.
   for (const path of ["/backlog", "/park"]) {
     app.get(path, async (req, reply) => {
@@ -269,6 +282,8 @@ export async function create(): Promise<FastifyInstance> {
   });
   app.get("/api/page/team/:slug", async (req: Req) => pages.teamPage(req.params.slug, rawQuery(req)));
   app.get("/api/page/teams", async () => pages.teamsPage());
+  app.get("/api/page/project/:slug", async (req: Req) => pages.projectPage(req.params.slug, rawQuery(req)));
+  app.get("/api/page/projects", async (req) => pages.projectsPage(rawQuery(req)));
   app.get("/api/page/automations", async () => pages.automationsPage());
   app.get("/api/page/automation/:slug", async (req: Req) => pages.automationPage(req.params.slug));
   app.get("/api/page/inbox", async (req: Req) => pages.inboxPage(req.query.i ?? "", rawQuery(req)));
@@ -334,6 +349,31 @@ export async function create(): Promise<FastifyInstance> {
     (p as unknown as Record<string, string>)[name] = value;
     await teams.save(p);
     return reply.redirect(`/team/${slug}`, 303);
+  });
+
+  // --- a project's field, from its page, as a team's above; agents PATCH /api/projects/<slug>.
+  app.post("/project/:slug/set", async (req: Req) => {
+    const slug = req.params.slug;
+    if (!(await projects.exists(slug))) throw new HttpError(404, "That project is gone.");
+    const p = await projects.load(slug);
+    const name = field(req, "field", null);
+    let value: string | null = field(req, "value");
+    if (name === "status") {
+      if (!projects.STATUSES.includes(value)) throw new HttpError(422, `status cannot be ${value}`);
+    } else if (name === "title") {
+      value = words(value);
+      if (!value) throw new HttpError(422, "A title cannot be empty.");
+    } else if (name === "body") value = value.replace(/\r\n/g, "\n");
+    else if (name === "team") {
+      value = value || null;
+      if (value && !(await teams.exists(value))) throw new HttpError(422, `No team ${value}.`);
+    } else if (name === "start" || name === "target") {
+      value = value ? periods.parse(value) : null;
+      if (field(req, "value") && !value) throw new HttpError(422, `“${field(req, "value")}” is no date: try May 2027, Q4 or 20/05/2027.`);
+    } else throw new HttpError(422, `No field ${name}.`);
+    (p as unknown as Record<string, string | null>)[name] = value;
+    await projects.save(p);
+    return { ok: true };
   });
 
   // --- an issue's fields: one, or the same one on every issue of a list's selection (slugs, field and value as JSON).

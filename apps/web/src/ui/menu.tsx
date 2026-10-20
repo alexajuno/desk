@@ -47,6 +47,9 @@ export interface MenuOptions {
   onTab?: (item: MenuItem | undefined, setQuery: (text: string) => void) => void;
   onArrow?: (step: number) => void;
   onClose?: () => void;
+  // A popover of its own in the menu's place, such as the date picker, instead of a list: it keeps the menu's placing,
+  // Escape and click outside, and handles its other keys itself. items is then unused.
+  render?: () => ReactNode;
 }
 
 class Menus {
@@ -245,6 +248,35 @@ function MenuView({ o }: { o: MenuOptions }) {
   );
 }
 
+// A popover in the menu's place (MenuOptions.render): under its anchor, kept inside the window, closed by Escape.
+function PopView({ o }: { o: MenuOptions }) {
+  const el = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (keyOf(e) !== "Escape" || e.isComposing) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.type === "keydown") closeMenu();
+    }
+    addEventListener("keydown", onKey, true);
+    addEventListener("keyup", onKey, true);
+    return () => {
+      removeEventListener("keydown", onKey, true);
+      removeEventListener("keyup", onKey, true);
+    };
+  }, []);
+  useLayoutEffect(() => {
+    const box = el.current, r = o.anchor?.isConnected ? o.anchor.getBoundingClientRect() : null;
+    if (!box) return;
+    const w = box.offsetWidth, h = box.offsetHeight;
+    let x = r ? r.left : o.x ?? 0, y = r ? r.bottom + 4 : o.y ?? 0;
+    if (y + h > innerHeight - 8) y = Math.max(8, (r ? r.top - 4 : innerHeight - 8) - h);
+    box.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`;
+    box.style.top = `${y}px`;
+  });
+  return <div ref={el} className={`menu ${o.className ?? ""}`} tabIndex={-1}>{o.render!()}</div>;
+}
+
 export const MenuHost = observer(function MenuHost() {
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -257,5 +289,5 @@ export const MenuHost = observer(function MenuHost() {
     return () => document.removeEventListener("mousedown", onDown, true);
   }, []);
   const o = menus.current;
-  return o ? createPortal(<MenuView key={o.id} o={o} />, document.body) : null;
+  return o ? createPortal(o.render ? <PopView key={o.id} o={o} /> : <MenuView key={o.id} o={o} />, document.body) : null;
 });

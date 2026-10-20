@@ -12,6 +12,7 @@ import * as store from "./issues.ts";
 import * as land from "./land.ts";
 import * as models from "./models.ts";
 import * as pins from "./pins.ts";
+import * as projects from "./projects.ts";
 import * as settings from "./settings.ts";
 import * as slack from "./slack.ts";
 import * as sync from "./sync.ts";
@@ -20,10 +21,11 @@ import * as turns from "./turns.ts";
 import * as web from "./web.ts";
 
 await db.open();
-// Postgres is the record. A new database, or one lost, starts from the issue.md and team.md desk wrote out.
-await teams.moveFolders();
-const issues = await store.importAll(), teamCount = await teams.importAll();
-if (issues || teamCount) console.log(`desk read ${issues} issue.md and ${teamCount} team.md into a new database`);
+// Postgres is the record. A new database, or one lost, starts from the issue.md, team.md and project.md desk wrote out.
+await teams.moveFolders(); // before projects.importAll, which reads projects/, where the teams' folders were
+const issues = await store.importAll(), teamCount = await teams.importAll(), projectCount = await projects.importAll();
+if (issues || teamCount || projectCount)
+  console.log(`desk read ${issues} issue.md, ${teamCount} team.md and ${projectCount} project.md into a new database`);
 const rewritten = await store.rewrite();
 if (rewritten) console.log(`desk wrote ${rewritten} issue.md out again, as their rows now hold them`);
 await store.readLanded();

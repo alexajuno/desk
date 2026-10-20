@@ -24,6 +24,7 @@ An issue's fields:
 - `landed`: for a done issue, where its work landed: the commit and its branch, or the pull request's link (which becomes the issue's `link`). Once the user's Approve lands the work, its session sends it with `"state": "done"`, which moves the issue from Landing to Done; desk reads it from no file
 - `parent`: the slug of the issue it belongs under, or null
 - `team`: the slug of the team it belongs to, or null. A team is ongoing work that is never done, such as desk itself; its issues finish, it does not. Until 20 Oct teams were called projects. It is a separate thing from `parent`, which is for sub-issues
+- `project`: the slug of the project it belongs to, or null: Linear's project, a piece of work with an outcome and a target date, which finishes. An issue is in one project at most, and keeps its team; one with no team takes its project's. For work too big for one issue, such as a migration in steps, file a project rather than an umbrella issue
 - `folder`: where its session works, usually a repo, such as `~/projects/desk`
 - `protocol`: how much plan it gets, and whether its session waits for the user's "go": `quick` (a three-line brief, then the work at once), `brief` (the same brief, then "go") or `design` (planned in the chat in short words and a sketch, then "go"). Pick one when you file: quick for a fix or a small feature, brief where a wrong guess costs more than a redo (a team repo, real data, anything outside), design when the user wants to discuss it. An issue with none runs design. Every protocol ends in the review card and the user's Approve
 
@@ -80,6 +81,15 @@ curl -s "http://127.0.0.1:8790/api/teams"
 curl -s "http://127.0.0.1:8790/api/teams/<slug>"
 curl -s "http://127.0.0.1:8790/api/teams" --json '{"title": "Site", "body": "Ongoing: the site, one piece at a time."}'
 curl -s "http://127.0.0.1:8790/api/teams/<slug>" -X PATCH --json '{"state": "archived"}'
+```
+
+Projects are Linear's: they finish. Each has a `title`, a `body`, a `team`, a `status` (`backlog`, `planned`, `started` (In Progress), `completed` or `canceled`, moved by hand when the user says so), and a `start` and `target` date, each a day or a vaguer period as Linear's: `2026-11-08`, `2026-11`, `2026-Q4`, `2026-H2` or `2026` (desk also reads `Nov 8`, `May 2027`, `Q4`, `20/05/2027`). List them (`?status=started`, `?team=<slug>`), each with its `progress` in percent; read one with its issues; create one; or change one. Put an issue in one with `"project": "<slug>"`, and list its issues with `/api/issues?project=<slug>&state=all`. Its page is `http://127.0.0.1:8790/project/<slug>`:
+
+```bash
+curl -s "http://127.0.0.1:8790/api/projects"
+curl -s "http://127.0.0.1:8790/api/projects/<slug>"
+curl -s "http://127.0.0.1:8790/api/projects" --json '{"title": "Retire POST /run/sync", "team": "imagenhub", "status": "started", "target": "2026-11-22", "body": "Move every caller off it, then turn it off."}'
+curl -s "http://127.0.0.1:8790/api/projects/<slug>" -X PATCH --json '{"status": "completed"}'
 ```
 
 Automations run one of the user's agents at a time, or when a check finds something, and its reply reaches the user's Inbox as a chat, as bin/jobs's daily list does. Each is a file, `automations/<slug>.md` in desk's data folder, which you change through the API, since it checks `when` and `agent`. Its page is `http://127.0.0.1:8790/automation/<slug>`. An automation's fields:

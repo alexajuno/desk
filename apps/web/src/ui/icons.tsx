@@ -1,6 +1,6 @@
 // desk's icons (templates/macros.html and desk.js's GLYPH): Linear's shapes, coloured by desk.css's variables so they
 // follow the theme. Each renders the same SVG the old pages drew.
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import type { Priority, Protocol, State } from "../lib/desk";
 
 const FILL: Record<string, number> = { backlog: 0, running: 0.5, review: 0.75, landing: 0.9 };
@@ -94,13 +94,50 @@ export function fieldIcon(field: "state" | "priority" | "protocol", value: strin
   return <ProtoIcon name={value as Protocol} />;
 }
 
+// One of Linear's icons, drawn filled rather than stroked.
+const filled = (path: ReactNode) => (
+  <svg className="glyph" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">{path}</svg>
+);
+
+// Linear's project status icon, from its Change status menu on 20 Oct: a hexagon, dashed for Backlog, with a pie of how
+// far along it is inside, which Completed fills with a tick and Canceled with a cross. Each is coloured by its status
+// (desk.css, --project-*); an In Progress one shows the project's progress, or half when none is given, as the menu's.
+const HEX = "M2.95778 3.02069L5.70777 1.36023C6.50244 0.88041 7.49756 0.88041 8.29223 1.36024L11.0422 3.02074C11.7918 3.47336 12.25 4.2852 12.25 5.16086V8.84803C12.25 9.7251 11.7904 10.5381 11.0388 10.9902L8.29114 12.6433C7.49693 13.1211 6.50355 13.1203 5.71011 12.6412L2.95775 10.9792C2.20815 10.5266 1.75 9.7148 1.75 8.83911V5.16082C1.75 4.28516 2.20816 3.47332 2.95778 3.02069Z";
+const INNER = "M8.3779 4.74233C8.14438 4.60607 7.85562 4.60607 7.6221 4.74233L5.37209 6.05513C5.14168 6.18957 5 6.4363 5 6.70311V9.34216C5 9.60897 5.14168 9.85573 5.37209 9.99016L7.6221 11.303C7.85562 11.4392 8.14438 11.4392 8.3779 11.303L10.6279 9.99016C10.8583 9.85573 11 9.60897 11 9.34216V6.70311C11 6.4363 10.8583 6.18957 10.6279 6.05513L8.3779 4.74233Z";
+const MARK: Record<string, string> = {
+  completed: "M10.7803 5.28033C11.0732 4.98744 11.0732 4.51256 10.7803 4.21967C10.4874 3.92678 10.0126 3.92678 9.7197 4.21967L5.75 8.18934L4.28033 6.71967C3.98744 6.42678 3.51256 6.42678 3.21967 6.71967C2.92678 7.01256 2.92678 7.48744 3.21967 7.78033L5.21967 9.7803C5.51256 10.0732 5.98744 10.0732 6.28033 9.7803L10.7803 5.28033Z",
+  canceled: "M3.73657 3.73657C4.05199 3.42114 4.56339 3.42114 4.87881 3.73657L5.93941 4.79716L7 5.85775L9.12117 3.73657C9.4366 3.42114 9.94801 3.42114 10.2634 3.73657C10.5789 4.05199 10.5789 4.56339 10.2634 4.87881L8.14225 7L10.2634 9.12118C10.5789 9.4366 10.5789 9.94801 10.2634 10.2634C9.94801 10.5789 9.4366 10.5789 9.12117 10.2634L7 8.14225L4.87881 10.2634C4.56339 10.5789 4.05199 10.5789 3.73657 10.2634C3.42114 9.94801 3.42114 9.4366 3.73657 9.12118L4.79716 8.06059L5.85775 7L3.73657 4.87881C3.42114 4.56339 3.42114 4.05199 3.73657 3.73657Z",
+};
+
+export function ProjectStatusIcon({ status, progress }: { status: string; progress?: number }) {
+  const id = `ps${useId().replace(/[^\w-]/g, "")}`, full = status === "completed" || status === "canceled";
+  const f = full ? 1 : status === "started" ? progress ?? 0.5 : 0;
+  return (
+    <svg className="project-status" width="16" height="16" viewBox="-1 -1 16 16" fill="none" style={{ color: `var(--project-${status})` }}>
+      <path d={HEX} stroke="currentColor" strokeWidth="1.5" strokeLinejoin="bevel" fill="none"
+        {...(status === "backlog" ? { strokeDasharray: "1.65 1.35", strokeDashoffset: "2.3" } : { strokeDasharray: "3.14 0", strokeDashoffset: "1" })} />
+      <g mask={`url(#${id})`}>
+        <circle r="4" cx="7" cy="7" stroke="currentColor" fill="none" strokeWidth="8" strokeDasharray={`${(25.12 * f).toFixed(2)} 25.12`} transform="rotate(-90) translate(-14, 0)" />
+      </g>
+      <mask id={id} maskUnits="userSpaceOnUse">
+        <path transform={full ? "translate(-7.5, -7.5) scale(1.8)" : "translate(-1, -1)"} d={INNER} fill="white" />
+        {full && <path d={MARK[status]} fill="black" />}
+      </mask>
+    </svg>
+  );
+}
+
 const glyph = (path: ReactNode) => (
   <svg className="glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">{path}</svg>
 );
 
 export const GLYPH = {
-  project: glyph(<path d="M8 2l5.5 3v6L8 14l-5.5-3V5z" />),
-  team: glyph(<><circle cx="6" cy="5.5" r="2.25" /><path d="M2 13c0-2.2 1.8-4 4-4s4 1.8 4 4" /><path d="M10.5 3.5a2.25 2.25 0 0 1 0 4.25M12 9.2c1.2.6 2 1.9 2 3.3" /></>),
+  // Linear's own, from linear.app's icon sprite on 20 Oct: Project, Team, Calendar, and the start and target date chips'.
+  project: filled(<path fillRule="evenodd" clipRule="evenodd" d="M7.331 1.07a3.2 3.2 0 0 1 1.338 0c.498.106.967.377 1.904.917l1.354.78c.937.541 1.406.812 1.747 1.19.301.334.53.728.669 1.156.157.484.157 1.025.157 2.107v1.56l-.003.718c-.007.63-.036 1.026-.154 1.389l-.057.158a3.2 3.2 0 0 1-.612.998l-.135.138c-.33.312-.792.578-1.612 1.051l-1.354.78-.623.357c-.55.309-.907.481-1.281.56l-.166.032a3.2 3.2 0 0 1-1.006 0l-.166-.031c-.374-.08-.73-.252-1.281-.561l-.623-.356-1.354-.78c-.82-.474-1.281-.74-1.612-1.052l-.135-.138a3.2 3.2 0 0 1-.612-.998l-.057-.158c-.118-.363-.147-.758-.154-1.39L1.5 8.78V7.22c0-.946 0-1.479.105-1.921l.052-.186c.122-.374.312-.723.56-1.028l.11-.128c.255-.284.583-.507 1.126-.83l.62-.36 1.354-.78c.82-.473 1.281-.739 1.718-.869zM3 7.22v1.56c0 1.183.018 1.439.084 1.643l.064.167q.11.246.292.449l.059.06c.151.143.427.318 1.323.835l1.354.78.632.36c.188.104.33.178.442.233V8.482l-4.247-1.93zm5.75 1.262v4.826c.212-.106.533-.282 1.074-.594l1.354-.78.628-.368c.499-.297.646-.407.754-.527l.113-.14q.158-.218.243-.476l.022-.081c.035-.144.051-.351.058-.835L13 8.78V7.22l-.004-.668zM7.82 2.51l-.177.027c-.159.034-.328.106-.835.39l-.632.359-1.354.78c-.896.517-1.172.692-1.323.834l-.059.06q-.046.051-.086.104l4.645 2.112 4.645-2.112-.084-.103c-.109-.12-.255-.23-.754-.528l-.628-.367-1.354-.78c-.897-.517-1.186-.668-1.386-.728l-.08-.021a1.7 1.7 0 0 0-.538-.027" />),
+  team: filled(<><path d="M12.5 13.5V15h-9v-1.5zm1-1v-9a1 1 0 0 0-1-1h-9a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1V15l-.256-.013a2.5 2.5 0 0 1-2.231-2.231L1 12.5v-9a2.5 2.5 0 0 1 2.244-2.487L3.5 1h9l.256.013A2.5 2.5 0 0 1 15 3.5v9l-.013.256a2.5 2.5 0 0 1-2.231 2.231L12.5 15v-1.5a1 1 0 0 0 1-1" /><path d="M10 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0m1.405 6h-6.81c-.407 0-.714-.336-.55-.693.362-.79 1.344-1.974 3.98-1.974 2.648 0 3.597 1.196 3.935 1.986.152.355-.153.681-.555.681" /></>),
+  calendar: filled(<path d="M11 1a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H5a4 4 0 0 1-4-4V5a4 4 0 0 1 4-4zm2.5 5h-11v5A2.5 2.5 0 0 0 5 13.5h6a2.5 2.5 0 0 0 2.5-2.5z" />),
+  start: filled(<><path d="M11 1C13.2091 1 15 2.79086 15 5V6.25C15 6.66421 14.6642 7 14.25 7C13.8358 7 13.5 6.66421 13.5 6.25V6H2.5V11C2.5 12.3807 3.61929 13.5 5 13.5H6.25C6.66421 13.5 7 13.8358 7 14.25C7 14.6642 6.66421 15 6.25 15H5C2.79086 15 1 13.2091 1 11V5C1 2.79086 2.79086 1 5 1H11Z" /><path fillRule="evenodd" clipRule="evenodd" d="M10.9118 8.16689C11.0947 7.96599 11.4153 7.94327 11.6279 8.11614L14.8823 10.7625C14.8952 10.7731 14.9073 10.7846 14.9185 10.7968C15.0402 10.931 15.0237 11.133 14.8818 11.2479L11.6272 13.8845C11.5351 13.959 11.4179 14 11.2967 14C11.0162 14 10.7889 13.7851 10.7889 13.5201L10.7903 12.1013C8.78103 11.922 6 11.3681 6 11.0389C6 10.79 6.26274 10.4027 10.7882 9.87701L10.7889 8.4799C10.7889 8.36503 10.8325 8.25396 10.9118 8.16689Z" /></>),
+  target: filled(<path fillRule="evenodd" clipRule="evenodd" d="M15 5C15 2.79086 13.2091 1 11 1H5C2.79086 1 1 2.79086 1 5V11C1 13.2091 2.79086 15 5 15H6.25C6.66421 15 7 14.6642 7 14.25C7 13.8358 6.66421 13.5 6.25 13.5H5C3.61929 13.5 2.5 12.3807 2.5 11V6H13.5V6.25C13.5 6.66421 13.8358 7 14.25 7C14.6642 7 15 6.66421 15 6.25V5ZM11.5001 8C11.9143 8 12.2501 8.33579 12.2501 8.75V10.75L14.2501 10.75C14.6643 10.75 15.0001 11.0858 15.0001 11.5C15.0001 11.9142 14.6643 12.25 14.2501 12.25L12.2501 12.25V14.25C12.2501 14.6642 11.9143 15 11.5001 15C11.0859 15 10.7501 14.6642 10.7501 14.25V12.25H8.75C8.33579 12.25 8 11.9142 8 11.5C8 11.0858 8.33579 10.75 8.75 10.75L10.7501 10.75V8.75C10.7501 8.33579 11.0859 8 11.5001 8Z" />),
   parent: glyph(<path d="M4.5 2.5v6a2 2 0 0 0 2 2h6M10 8l2.5 2.5L10 13" />),
   plus: glyph(<path d="M8 3.5v9M3.5 8h9" />),
   link: glyph(<path d="M7 9a2.5 2.5 0 0 0 3.5 0l2-2A2.5 2.5 0 0 0 9 3.5l-.5.5M9 7a2.5 2.5 0 0 0-3.5 0l-2 2A2.5 2.5 0 0 0 7 12.5l.5-.5" />),

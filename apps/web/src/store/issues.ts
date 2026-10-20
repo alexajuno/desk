@@ -1,7 +1,7 @@
 import { makeAutoObservable, observable } from "mobx";
 import type { Priority, Protocol, State } from "../lib/desk";
 
-// The rows desk syncs (the server's sync.ts and db.ts): every issue, team, chat and Inbox row, each as its table
+// The rows desk syncs (the server's sync.ts and db.ts): every issue, team, project, chat and Inbox row, each as its table
 // holds it, less what the app is not sent. The app works out what it shows from these, as a list and its count from the same rows, so the
 // two cannot disagree.
 
@@ -13,6 +13,7 @@ export interface Issue {
   state: State;
   parent: string | null;
   team: string | null;
+  project: string | null;
   folder: string | null;
   protocol: Protocol | null; // none runs design
   link: string | null;
@@ -23,6 +24,17 @@ export interface Issue {
   waiting_since: string | null;
   review_of: string | null;
   review_since: string | null;
+  created: string;
+}
+
+// A project, Linear's, which finishes (the server's projects.ts): its dates are periods (lib/periods.ts).
+export interface Project {
+  slug: string;
+  title: string;
+  team: string | null;
+  status: string; // backlog, planned, started, completed, canceled
+  start: string | null;
+  target: string | null;
   created: string;
 }
 
@@ -72,16 +84,17 @@ export interface InboxRow {
 interface Change { seq: number; kind: string; key: string; row: Record<string, unknown> | null }
 
 export type SyncMessage =
-  | { type: "snapshot"; log: string; seq: number; rows: { issues: Issue[]; teams?: Team[]; chats?: Chat[]; inbox?: InboxRow[] } }
+  | { type: "snapshot"; log: string; seq: number; rows: { issues: Issue[]; teams?: Team[]; projects?: Project[]; chats?: Chat[]; inbox?: InboxRow[] } }
   | { type: "changes"; after: number; changes: Change[] }
   | { type: "files"; slugs: string[] };
 
 const newestFirst = (a: { created: string }, b: { created: string }) => (a.created < b.created ? 1 : a.created > b.created ? -1 : 0);
 
-// Every issue, team, chat and Inbox row, in memory. The screen draws from here, and MobX redraws only what read a field that changed.
+// Every issue, team, project, chat and Inbox row, in memory. The screen draws from here, and MobX redraws only what read a field that changed.
 export class IssueStore {
   bySlug = observable.map<string, Issue>();
   teams = observable.map<string, Team>();
+  projects = observable.map<string, Project>();
   chats = observable.map<string, Chat>(); // by id
   inbox = observable.map<string, InboxRow>(); // by id
   files = observable.map<string, number>(); // slug: how many times its other files changed (a plan, a result)
@@ -103,6 +116,7 @@ export class IssueStore {
     if (message.type === "snapshot") {
       this.bySlug.replace(message.rows.issues.map((i) => [i.slug, i]));
       this.teams.replace((message.rows.teams ?? []).map((t) => [t.slug, t])); // none from a desk before teams
+      this.projects.replace((message.rows.projects ?? []).map((p) => [p.slug, p]));
       this.chats.replace((message.rows.chats ?? []).map((c) => [c.id, c])); // none from a desk before the table
       this.inbox.replace((message.rows.inbox ?? []).map((r) => [r.id, r]));
       this.log = message.log;
@@ -110,7 +124,7 @@ export class IssueStore {
       return true;
     }
     if (message.after !== this.seq) return false;
-    const tables: Record<string, Map<string, unknown>> = { issues: this.bySlug, teams: this.teams, chats: this.chats, inbox: this.inbox };
+    const tables: Record<string, Map<string, unknown>> = { issues: this.bySlug, teams: this.teams, projects: this.projects, chats: this.chats, inbox: this.inbox };
     for (const c of message.changes) {
       const table = tables[c.kind]; // a table this app does not hold yet is a newer desk's
       if (table && c.row) table.set(c.key, c.row);

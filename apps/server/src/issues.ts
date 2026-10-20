@@ -46,6 +46,7 @@ export interface Issue {
   state: string;
   parent: string | null;
   team: string | null; // slug of the team the issue belongs to (teams.ts)
+  project: string | null; // slug of the project it belongs to, at most one, as in Linear (projects.ts)
   folder: string | null;
   protocol: string | null; // one of PROTOCOLS; read it through runs(), which gives design for none
   link: string | null;
@@ -61,7 +62,7 @@ export interface Issue {
 }
 
 // The fields in issue.md, in the order issues.py's dataclass wrote them.
-const FIELDS = ["title", "priority", "state", "parent", "team", "folder", "protocol", "link", "landing", "landed",
+const FIELDS = ["title", "priority", "state", "parent", "team", "project", "folder", "protocol", "link", "landing", "landed",
   "session", "waiting_on", "waiting_since", "review_of", "review_since", "created"] as const;
 
 export const now = (d = new Date()) => {
@@ -70,7 +71,7 @@ export const now = (d = new Date()) => {
 };
 
 export function blank(slug: string, title: string): Issue {
-  return { slug, title, priority: "none", state: "backlog", parent: null, team: null, folder: null, protocol: null, link: null,
+  return { slug, title, priority: "none", state: "backlog", parent: null, team: null, project: null, folder: null, protocol: null, link: null,
     landing: null, landed: null, session: null, waiting_on: null, waiting_since: null, review_of: null, review_since: null,
     created: now(), body: "" };
 }

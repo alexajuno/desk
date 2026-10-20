@@ -3,7 +3,7 @@
 //
 //     GET    /api/issues?q=&state=      list and search issues
 //     GET    /api/issues/<slug>         one issue, with its body and files
-//     POST   /api/issues                create one: title, body, priority, state, parent, team, folder, protocol
+//     POST   /api/issues                create one: title, body, priority, state, parent, team, project, folder, protocol
 //     PATCH  /api/issues/<slug>         set any of those fields; its session also says what its turn hands you (review_of)
 //                                       and where its work landed (landed); a body sets the sections it holds
 //     GET    /api/issues/<slug>/sections/<name>   one section of the issue's document, as Markdown
@@ -16,6 +16,10 @@
 //     GET    /api/teams/<slug>          one team, with its description and issues
 //     POST   /api/teams                 create one: title, body
 //     PATCH  /api/teams/<slug>          set title, body, state (active or archived)
+//     GET    /api/projects              list projects, Linear's, which finish (status=, team=); /api/issues takes project=
+//     GET    /api/projects/<slug>       one project, with its description and issues
+//     POST   /api/projects              create one: title, body, team, status, start, target
+//     PATCH  /api/projects/<slug>       set any of those fields
 //     GET    /api/settings              desk's settings (settings.ts)
 //     PATCH  /api/settings              set any of them
 //     GET    /api/agents                the user's own agents, whom a chat can be with (roster.ts)
@@ -37,7 +41,10 @@ import { HOME } from "./config.ts";
 import * as store from "./issues.ts";
 import { byRank, type Issue } from "./issues.ts";
 import * as land from "./land.ts";
+import * as periods from "./periods.ts";
 import { HttpError } from "./pages.ts";
+import * as projects from "./projects.ts";
+import type { Project } from "./projects.ts";
 import * as roster from "./roster.ts";
 import { find } from "./search.ts";
 import * as settings from "./settings.ts";
@@ -48,7 +55,7 @@ const OPEN = store.STATES.filter((s) => s !== "done" && s !== "dropped");
 
 export function asJson(i: Issue, full = false) {
   const data: Record<string, unknown> = {
-    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, folder: i.folder,
+    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, project: i.project, folder: i.folder,
     protocol: store.runs(i), session: i.session, created: i.created, url: `/issue/${i.slug}`,
   };
   if (i.state === "waiting") Object.assign(data, { waiting_on: i.waiting_on, waiting_since: i.waiting_since });
@@ -63,7 +70,7 @@ async function loadIssue(slug: string): Promise<Issue> {
   return store.load(slug);
 }
 
-const FIELDS = ["title", "body", "priority", "state", "parent", "team", "folder", "protocol", "waiting_on", "review_of", "landed"];
+const FIELDS = ["title", "body", "priority", "state", "parent", "team", "project", "folder", "protocol", "waiting_on", "review_of", "landed"];
 const PULL = /https:\/\/github\.com\/\S+\/pull\/\d+/;
 const AUTOMATION_FIELDS = ["title", "when", "check", "agent", "body", "state"];
 
@@ -120,10 +127,18 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
     if (parent === i.slug || store.descendants(all, i.slug).includes(parent)) throw new HttpError(422, `${parent} is ${i.slug} or under it, so it cannot be its parent.`);
   }
   if (fields.team && !(await teams.exists(fields.team))) throw new HttpError(422, `No team ${fields.team}. List them with GET /api/teams.`);
+  if (fields.project) {
+    if (!(await projects.exists(fields.project)))
+      throw new HttpError(422, (await teams.exists(fields.project))
+        ? `${fields.project} is a team, not a project, since projects became teams on 20 Oct: send "team": "${fields.project}".`
+        : `No project ${fields.project}. List them with GET /api/projects.`);
+    // An issue with no team takes its project's, as a Linear issue is in one of its project's teams.
+    if (!fields.team && !i.team) fields.team = (await projects.load(fields.project)).team;
+  }
   if (fields.folder && !isDir(expand(fields.folder))) throw new HttpError(422, `No folder ${fields.folder}. Find one with GET /api/folders?q=<name>.`);
   if ("body" in fields) fields.body = store.withSections(i.body, fields.body || "");
   const target = i as unknown as Record<string, string | null>;
-  for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "team", "folder", "waiting_on", "landed"].includes(name) ? value || null : value;
+  for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "team", "project", "folder", "waiting_on", "landed"].includes(name) ? value || null : value;
 }
 
 async function teamJson(t: Team, full = false) {
@@ -144,6 +159,41 @@ function applyTeam(t: Team, fields: Record<string, string | null>) {
   if ("title" in fields && !fields.title) throw new HttpError(422, "title cannot be empty");
   const target = t as unknown as Record<string, string | null>;
   for (const [name, value] of Object.entries(fields)) target[name] = name === "body" ? value || "" : value;
+}
+
+const PROJECT_FIELDS = ["title", "body", "team", "status", "start", "target"];
+
+export async function projectJson(p: Project, full = false) {
+  const mine = projects.issuesOf(await store.loadAll(), p.slug);
+  const data: Record<string, unknown> = { slug: p.slug, title: p.title, team: p.team, status: p.status, start: p.start, target: p.target,
+    created: p.created, url: `/project/${p.slug}`, issues: mine.length, open_issues: mine.filter((i) => OPEN.includes(i.state)).length,
+    progress: Math.round(projects.progress(mine) * 100) };
+  if (full) Object.assign(data, { file: join(projects.folder(p.slug), projects.MAIN), body: p.body, issue_list: mine.map((i) => asJson(i)) });
+  return data;
+}
+
+async function loadProject(slug: string): Promise<Project> {
+  if (!(await projects.exists(slug)))
+    throw new HttpError(404, (await teams.exists(slug)) ? `${slug} is a team, not a project: GET /api/teams/${slug}.` : `No project ${slug}. List them with GET /api/projects.`);
+  return projects.load(slug);
+}
+
+// A date as Linear's date box takes it: 2026-11-08, Nov 8, May 2027, Q4, H1 2027, 2027 (periods.ts); empty for none.
+function period(name: string, typed: string | null): string | null {
+  if (!typed) return null;
+  const found = periods.parse(typed);
+  if (!found) throw new HttpError(422, `${name} must be a day, month, quarter, half-year or year, such as 2026-11-08, 2026-11, 2026-Q4, 2026-H2 or 2026; "${typed}" is none.`);
+  return found;
+}
+
+async function applyProject(p: Project, fields: Record<string, string | null>) {
+  if ("status" in fields && !projects.STATUSES.includes(fields.status as string))
+    throw new HttpError(422, `status must be one of: ${projects.STATUSES.join(", ")}`);
+  if ("title" in fields && !fields.title) throw new HttpError(422, "title cannot be empty");
+  if (fields.team && !(await teams.exists(fields.team))) throw new HttpError(422, `No team ${fields.team}. List them with GET /api/teams.`);
+  for (const name of ["start", "target"]) if (name in fields) fields[name] = period(name, fields[name]);
+  const target = p as unknown as Record<string, string | null>;
+  for (const [name, value] of Object.entries(fields)) target[name] = name === "body" ? value || "" : value || null;
 }
 
 async function loadAutomation(slug: string): Promise<Automation> {
@@ -185,11 +235,12 @@ async function filer(body: unknown, title: string): Promise<chats.Chat | null> {
 
 export function routes(app: FastifyInstance) {
   // Open issues unless state says otherwise (state=all, or a list such as state=running,review), in the backlog's
-  // order; with q, the ones desk's search finds, best match first; team= keeps one team's.
+  // order; with q, the ones desk's search finds, best match first; team= keeps one team's, project= one project's.
   app.get("/api/issues", async (req: Req) => {
-    const { q = "", state = "", team = "" } = req.query;
+    const { q = "", state = "", team = "", project = "" } = req.query;
     const states = state === "all" ? store.STATES : state ? state.split(",") : OPEN;
-    const issues = new Map([...(await store.loadAll())].filter(([, i]) => states.includes(i.state) && (!team || i.team === team)));
+    const issues = new Map([...(await store.loadAll())].filter(([, i]) => states.includes(i.state) && (!team || i.team === team)
+      && (!project || i.project === project)));
     const found = q.trim() ? find(issues, q).map((h) => h.issue) : [...issues.values()].sort(byRank);
     return found.slice(0, 50).map((i) => asJson(i));
   });
@@ -334,6 +385,34 @@ export function routes(app: FastifyInstance) {
     applyTeam(t, given(req.body, ["title", "body", "state"]));
     await teams.save(t);
     return teamJson(t, true);
+  });
+
+  // Every project, the open ones first (status=all by default; status=started, or a list, for some), each with its
+  // progress, as Linear's Projects list; team= keeps one team's.
+  app.get("/api/projects", async (req: Req) => {
+    const { status = "", team = "" } = req.query;
+    const statuses = status && status !== "all" ? status.split(",") : projects.STATUSES;
+    const found = [...(await projects.loadAll()).values()].filter((p) => statuses.includes(p.status) && (!team || p.team === team));
+    found.sort((a, b) => Number(projects.CLOSED.has(a.status)) - Number(projects.CLOSED.has(b.status)) || (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
+    return Promise.all(found.map((p) => projectJson(p)));
+  });
+
+  app.get("/api/projects/:slug", async (req: Req) => projectJson(await loadProject(req.params.slug), true));
+
+  app.post("/api/projects", async (req, reply) => {
+    const fields = given(req.body, PROJECT_FIELDS);
+    if (!(fields.title ?? "").trim()) throw new HttpError(422, "title is required");
+    const p = projects.blank(await projects.newSlug(fields.title!), fields.title!);
+    await applyProject(p, fields);
+    await projects.save(p);
+    return reply.code(201).send(await projectJson(p, true));
+  });
+
+  app.patch("/api/projects/:slug", async (req: Req) => {
+    const p = await loadProject(req.params.slug);
+    await applyProject(p, given(req.body, PROJECT_FIELDS));
+    await projects.save(p);
+    return projectJson(p, true);
   });
 
   // Write the plan into the issue, then start its session on it: the one it already has, which carries it out as if the

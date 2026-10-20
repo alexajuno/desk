@@ -6,8 +6,8 @@ import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect } from "react";
 import { Outlet, useLocation } from "react-router";
 import { deskPath, go } from "../app/nav";
-import { remove, removeMany, setField, undo, undoList } from "../issues/actions";
-import { fieldMenu } from "../issues/menus";
+import { remove, removeMany, setField, setFields, undo, undoList } from "../issues/actions";
+import { fieldMenu, projectPicker } from "../issues/menus";
 import { selectable, selectAll, selection, SelectionBar, selectionField } from "../issues/selection";
 import { listView, setView } from "../lists/current";
 import { noteAppPath, SettingsNav } from "../settings/SettingsPage";
@@ -24,6 +24,7 @@ import { triageKey } from "../triage/TriagePage";
 import { deleteReadKey, deleteRow, markAllKey, toggleRead } from "../inbox/actions";
 import { Corner } from "./Corner";
 import { CreatorHost } from "./Creator";
+import { ProjectCreatorHost } from "./ProjectCreator";
 import { TeamCreatorHost } from "./TeamCreator";
 import { KeysPanel } from "./KeysPanel";
 import { Sidebar } from "./Sidebar";
@@ -80,11 +81,11 @@ function goBack() {
   else go(page()?.parent ? `/issue/${page()!.parent}` : "/issues");
 }
 
-let gPressed = 0;
+let gPressed = 0, nPressed = 0;
 
 function onKeyDown(e: KeyboardEvent) {
   if (e.key === "Escape" && viewerOpen()) { closeViewer(); return; }
-  if (menus.current || viewerOpen() || ui.editing || ui.creator || ui.teamCreator) return;
+  if (menus.current || viewerOpen() || ui.editing || ui.creator || ui.teamCreator || ui.projectCreator !== null) return;
   // Ctrl+/ works from a text box too, and Esc closes the shortcuts from their own search box.
   if ((e.ctrlKey || e.metaKey) && e.key === "/") { ui.setKeys(!ui.keysOpen); e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyO") { newSession(); e.preventDefault(); return; }
@@ -115,12 +116,20 @@ function onKeyDown(e: KeyboardEvent) {
 
   if (gPressed && Date.now() - gPressed < 1500) {
     gPressed = 0;
-    // Linear's G E, G A and G B for its Issues tabs; desk's teams have no Triage of their own, so G T is Triage's.
-    const to = { e: "/issues", a: "/issues/active", b: "/issues/backlog", t: "/triage", i: "/inbox" }[key];
+    // Linear's G E, G A and G B for its Issues tabs, and G P for Projects; desk's teams have no Triage of their own, so
+    // G T is Triage's.
+    const to = { e: "/issues", a: "/issues/active", b: "/issues/backlog", t: "/triage", i: "/inbox", p: "/projects" }[key];
     if (to) go(to);
     return;
   }
   if (key === "g") { gPressed = Date.now(); return; }
+  // Linear's N then P: a new project, in the team whose page this is.
+  if (nPressed && Date.now() - nPressed < 1500) {
+    nPressed = 0;
+    if (key === "p") { ui.setProjectCreator(/^\/team\/([\w-]+)/.exec(location.pathname)?.[1] ?? ""); e.preventDefault(); }
+    return;
+  }
+  if (key === "n") { nPressed = Date.now(); return; }
 
   const focused = focusedRow();
   // Linear's Shift ↑ ↓: the selection grows from the row in focus, a row at a time.
@@ -169,6 +178,13 @@ function onKeyDown(e: KeyboardEvent) {
   // Linear's Triage key: 2 declines a chat's issue that came to nothing, as Dropped. The chat itself stays open.
   else if (key === "2" && (focused ?? document.querySelector<HTMLElement>(".issue"))?.dataset.state === "triage") {
     setField(target()!, "state", "dropped").then(() => toast("Declined: nothing to do."));
+    e.preventDefault();
+  }
+  // Linear's Shift P: the project of the issue in focus or open, or of every one selected.
+  else if (key === "p" && e.shiftKey && (ui.selected.size || target())) {
+    const slugs = ui.selected.size ? selection() : [target()!], one = slugs.length === 1 ? issues.bySlug.get(slugs[0]) : undefined;
+    const anchor = focused?.querySelector(".icon") ?? [...document.querySelectorAll(".project-pick-menu, .project-chip, .select-bar")].find((el) => el.checkVisibility()) ?? null;
+    projectPicker(one?.project ?? null, one?.team ?? null, { anchor }, (to) => (slugs.length === 1 ? setField(slugs[0], "project", to) : setFields(slugs, "project", to)));
     e.preventDefault();
   }
   else if ((key === "s" || key === "p") && ui.selected.size) {
@@ -261,6 +277,7 @@ export const Frame = observer(function Frame() {
       <SelectionBar />
       <CreatorHost />
       <TeamCreatorHost />
+      <ProjectCreatorHost />
       <MenuHost />
       <ToastHost />
     </>

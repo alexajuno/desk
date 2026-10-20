@@ -1,5 +1,5 @@
 // Linear's Board layout (linear.app/docs/board-layout): a column per group, each issue a card. Dragging a card to
-// another column sets what the board is grouped by, as Linear's does: its status, priority, team or folder. Landing
+// another column sets what the board is grouped by, as Linear's does: its status, priority, team, project or folder. Landing
 // takes no drop, since only Approve lands an issue, and says so while a card is dragged; a drop on Waiting asks on whom, as the S menu does. A card is a row
 // as well: hover or J and K put it in focus for S, P and right-click, and X selects it.
 import { observer } from "mobx-react-lite";
@@ -34,12 +34,13 @@ function dropOf(group: string, value: string): { run: (slug: string, at: { x: nu
   }
   if (group === "priority") return { run: (slug) => setField(slug, "priority", value) };
   if (group === "team") return { run: (slug) => setField(slug, "team", value === "none" ? "" : value) };
+  if (group === "project") return { run: (slug) => setField(slug, "project", value === "none" ? "" : value) };
   if (group === "folder") return { run: (slug) => setFolder(slug, folderPath(value)) };
   return { refuse: "Group the board to move cards between columns." };
 }
 
 const valueOf = (group: string, p: Card) =>
-  ({ status: p.state, priority: p.priority, team: p.team ?? "none" } as Record<string, string>)[group];
+  ({ status: p.state, priority: p.priority, team: p.team ?? "none", project: p.project ?? "none" } as Record<string, string>)[group];
 
 export const Board = observer(function Board({ list, empty }: { list: ListData; empty: string }) {
   const group = list.view.group;

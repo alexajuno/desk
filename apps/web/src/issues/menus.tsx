@@ -1,7 +1,8 @@
 // The issue menus (desk.js): status, priority and protocol pickers, who a wait is on, an issue's actions, parent,
-// team and folder pickers. Each opens desk's one menu (ui/menu.tsx).
+// team, project and folder pickers, and a project's status. Each opens desk's one menu (ui/menu.tsx).
 import { CLOSED, PROTOCOL_HINTS, PROTOCOLS, STATES, fold, nameOf, type Field, type State } from "../lib/desk";
-import { GLYPH, StateIcon, fieldIcon } from "../ui/icons";
+import { GLYPH, ProjectStatusIcon, StateIcon, fieldIcon } from "../ui/icons";
+import { issues } from "../store/issues";
 import { openMenu, type MenuItem, type MenuOptions } from "../ui/menu";
 import { ui } from "../store/ui";
 import { copy, remove, setField } from "./actions";
@@ -111,6 +112,38 @@ export function teamPicker(current: string | null, where: Where, choose: (slug: 
       }))];
       return all.filter((item) => words.every((w) => fold(item.label).includes(w)));
     },
+  });
+}
+
+// Linear's Set project: the projects not completed or canceled, and the one the issue is in; choose(slug, title) gets
+// "" for No project. A team's open projects come first when the issue has a team.
+export function projectPicker(current: string | null, team: string | null, where: Where, choose: (slug: string, title: string) => unknown) {
+  openMenu({
+    ...where, filter: "input", className: "wide", placeholder: "Set project…", empty: "No project matches",
+    items: (q) => {
+      const words = fold(q).trim().split(/\s+/).filter(Boolean);
+      const open = [...issues.projects.values()].filter((p) => !PROJECT_CLOSED.has(p.status) || p.slug === current)
+        .sort((a, b) => Number(b.team === team) - Number(a.team === team) || (a.created < b.created ? -1 : 1));
+      const all: MenuItem[] = [{ icon: GLYPH.none, label: "No project", current: !current, run: () => choose("", "") },
+        ...open.map((p) => ({ icon: GLYPH.project, label: p.title, current: p.slug === current, run: () => choose(p.slug, p.title) }))];
+      return all.filter((item) => words.every((w) => fold(item.label).includes(w)));
+    },
+  });
+}
+
+// A project's statuses, Linear's (the server's projects.ts), in its menu's order and with its keys.
+export const PROJECT_STATUSES = ["backlog", "planned", "started", "completed", "canceled"];
+export const PROJECT_STATUS_NAMES: Record<string, string> = { backlog: "Backlog", planned: "Planned", started: "In Progress", completed: "Completed", canceled: "Canceled" };
+export const PROJECT_CLOSED = new Set(["completed", "canceled"]);
+
+// Linear's Change status… on a project, its digits picking a status.
+export function projectStatusMenu(current: string, where: Where, choose: (status: string) => unknown) {
+  openMenu({
+    ...where, filter: "keys", placeholder: "Change status…",
+    items: (q) => PROJECT_STATUSES.filter((st) => fold(PROJECT_STATUS_NAMES[st]).includes(fold(q))).map((st) => ({
+      icon: <ProjectStatusIcon status={st} />, label: PROJECT_STATUS_NAMES[st], hint: PROJECT_STATUSES.indexOf(st) + 1,
+      num: PROJECT_STATUSES.indexOf(st) + 1, current: st === current, run: () => st !== current && choose(st),
+    })),
   });
 }
 

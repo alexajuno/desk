@@ -1,5 +1,5 @@
 // The new issue panel: Linear's create panel, measured on linear.app on 2026-10-14 (desk.js openCreator). A title, a
-// description, chips that open the same status, priority, protocol, parent and team menus as the rest of desk,
+// description, chips that open the same status, priority, protocol, parent, team and project menus as the rest of desk,
 // and a Create more switch beside the Create issue button. C, the sidebar's pencil and Add sub-issue open it. Enter in
 // the title moves to the description, Ctrl+Enter creates, Esc closes, and what you typed waits in localStorage as a
 // draft until it is created, as Linear keeps its drafts. Its keys are read on the window in the capture phase, ahead
@@ -8,7 +8,7 @@ import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { postJson, reason } from "../api/http";
 import { go } from "../app/nav";
-import { valueMenu, parentPicker, teamPicker } from "../issues/menus";
+import { valueMenu, parentPicker, projectPicker, teamPicker } from "../issues/menus";
 import { nameOf, type Field } from "../lib/desk";
 import { keyOf } from "../lib/keys";
 import { fieldIcon, GLYPH } from "../ui/icons";
@@ -16,7 +16,7 @@ import { closeMenu, menus, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { reloadPages, ui, type CreatorPreset } from "../store/ui";
 
-const BLANK = { title: "", body: "", state: "backlog", priority: "none", protocol: "design", parent: "", parentTitle: "", team: "", teamTitle: "" };
+const BLANK = { title: "", body: "", state: "backlog", priority: "none", protocol: "design", parent: "", parentTitle: "", team: "", teamTitle: "", project: "", projectTitle: "" };
 type Draft = typeof BLANK;
 
 export const CreatorHost = observer(function CreatorHost() {
@@ -48,7 +48,7 @@ function Creator({ preset }: { preset: CreatorPreset }) {
     if (s.current.sending) return;
     s.current.sending = true;
     const res = await postJson("/api/issues", {
-      title: name, body: d.body, state: d.state, priority: d.priority, protocol: d.protocol, parent: d.parent || null, team: d.team || null,
+      title: name, body: d.body, state: d.state, priority: d.priority, protocol: d.protocol, parent: d.parent || null, team: d.team || null, project: d.project || null,
     });
     s.current.sending = false;
     if (!res.ok) { toast(await reason(res)); return; }
@@ -63,10 +63,11 @@ function Creator({ preset }: { preset: CreatorPreset }) {
   }
 
   // A chip's menu is desk's own; when it closes, the caret goes back to the box it left.
-  function choose(field: Field | "parent" | "team", anchor: Element) {
+  function choose(field: Field | "parent" | "team" | "project", anchor: Element) {
     const where = { anchor, onClose: () => { if (ui.creator) (s.current.box ?? title.current)?.focus(); } };
     const set = (changes: Partial<Draft>) => setDraft((now) => ({ ...now, ...changes }));
     if (field === "team") teamPicker(draft.team, where, (slug, name) => set({ team: slug, teamTitle: name }));
+    else if (field === "project") projectPicker(draft.project, draft.team || null, where, (slug, name) => set({ project: slug, projectTitle: name }));
     else if (field === "parent") parentPicker(draft.parent, "", where, (slug, name) => set({ parent: slug, parentTitle: name }));
     else valueMenu(field, draft[field], where, (value) => set({ [field]: value }));
   }
@@ -104,8 +105,8 @@ function Creator({ preset }: { preset: CreatorPreset }) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const unset = { priority: draft.priority === "none", parent: !draft.parent, team: !draft.team };
-  const chip = (field: Field | "parent" | "team", titleText: string, content: React.ReactNode, isUnset = false) => (
+  const unset = { priority: draft.priority === "none", parent: !draft.parent, team: !draft.team, project: !draft.project };
+  const chip = (field: Field | "parent" | "team" | "project", titleText: string, content: React.ReactNode, isUnset = false) => (
     <button type="button" className={`field-chip${isUnset ? " unset" : ""}`} data-field={field} title={titleText}
       onClick={(e) => { if (!toggled(e.currentTarget)) choose(field, e.currentTarget); }}>{content}</button>
   );
@@ -127,6 +128,7 @@ function Creator({ preset }: { preset: CreatorPreset }) {
           {chip("protocol", "Change protocol: how much plan, and whether it waits for go", <>{fieldIcon("protocol", draft.protocol)}<span>{nameOf("protocol", draft.protocol)}</span></>)}
           {chip("parent", "Set parent", <>{GLYPH.parent}<span>{unset.parent ? "Parent" : draft.parentTitle || draft.parent}</span></>, unset.parent)}
           {chip("team", "Set team", <>{GLYPH.team}<span>{unset.team ? "Team" : draft.teamTitle || draft.team}</span></>, unset.team)}
+          {chip("project", "Set project", <>{GLYPH.project}<span>{unset.project ? "Project" : draft.projectTitle || draft.project}</span></>, unset.project)}
         </div>
         <footer>
           <label className="switch"><input type="checkbox" role="switch" checked={more}

@@ -3,7 +3,7 @@
 // clears it. S, P, Ctrl Delete, a selected row's right-click and the bar at the bottom then act on every selected issue.
 import { observer } from "mobx-react-lite";
 import { setFields, removeMany } from "./actions";
-import { parentPicker, teamPicker, valueMenu } from "./menus";
+import { parentPicker, projectPicker, teamPicker, valueMenu } from "./menus";
 import { ui } from "../store/ui";
 import { fieldIcon, GLYPH } from "../ui/icons";
 import { openMenu, toggled, type MenuItem, type MenuOptions } from "../ui/menu";
@@ -58,6 +58,7 @@ export function selectionMenu(where: Where) {
     { group: 0, icon: fieldIcon("priority", shared(slugs, "priority") || "none"), label: "Priority", hint: "P", key: "p", more: true, run: () => selectionField("priority", where) },
     { group: 0, icon: GLYPH.parent, label: "Set parent…", more: true, run: () => parentPicker(null, "", where, (to) => setFields(slugs, "parent", to)) },
     { group: 0, icon: GLYPH.team, label: "Set team…", more: true, run: () => teamPicker(null, where, (to) => setFields(slugs, "team", to)) },
+    { group: 0, icon: GLYPH.project, label: "Set project…", hint: "Shift P", more: true, run: () => projectPicker(null, null, where, (to) => setFields(slugs, "project", to)) },
     { group: 1, icon: GLYPH.close, label: "Clear selection", hint: "Esc", run: () => ui.clearSelection() },
     { group: 2, icon: GLYPH.trash, label: `Delete ${slugs.length} issues`, hint: "Ctrl ⌫", run: () => removeMany(slugs) },
   ];
@@ -80,6 +81,7 @@ export const SelectionBar = observer(function SelectionBar() {
       <button type="button" className="small" title="Change priority  P" onClick={open((w) => selectionField("priority", w))}>{fieldIcon("priority", "none")}Priority</button>
       <button type="button" className="small" title="Set parent" onClick={open((w) => parentPicker(null, "", w, (to) => setFields(selection(), "parent", to)))}>{GLYPH.parent}Parent</button>
       <button type="button" className="small" title="Set team" onClick={open((w) => teamPicker(null, w, (to) => setFields(selection(), "team", to)))}>{GLYPH.team}Team</button>
+      <button type="button" className="small" title="Set project  Shift P" onClick={open((w) => projectPicker(null, null, w, (to) => setFields(selection(), "project", to)))}>{GLYPH.project}Project</button>
       <button type="button" className="small" title="Delete  Ctrl ⌫" onClick={() => removeMany(selection())}>{GLYPH.trash}Delete</button>
     </div>
   );

@@ -21,11 +21,11 @@ export interface Page {
 }
 
 const EMPTY = { empty: "Show empty groups" };
-const ISSUE_FILTERS = { status: "Status", priority: "Priority", team: "Team", folder: "Folder", protocol: "Protocol" };
+const ISSUE_FILTERS = { status: "Status", priority: "Priority", team: "Team", project: "Project", folder: "Folder", protocol: "Protocol" };
 const ISSUE_OPTIONS = {
   // Linear's Layout: the list, or a board with a column per group (linear.app/docs/board-layout).
   layout: { list: "List", board: "Board" },
-  group: { none: "No grouping", status: "Status", priority: "Priority", team: "Team", folder: "Folder" },
+  group: { none: "No grouping", status: "Status", priority: "Priority", team: "Team", project: "Project", folder: "Folder" },
   order: { priority: "Priority", status: "Status", created: "Created", updated: "Updated", title: "Title" },
   // Linear's Completed issues: how far back done and dropped issues come in.
   done: { none: "None", day: "Past day", week: "Past week", month: "Past month", all: "All" },
@@ -49,11 +49,16 @@ export const PAGES: Record<string, Page> = {
     filters: Object.fromEntries(Object.entries(ISSUE_FILTERS).filter(([k]) => k !== "team")), options: TEAM_OPTIONS,
     defaults: { group: "status", order: "priority", done: "all", subs: "rows" }, switches: EMPTY, reverse: true, keep: [], noun: "issue",
   },
+  // A project's Issues tab, as a team's.
+  project: {
+    filters: Object.fromEntries(Object.entries(ISSUE_FILTERS).filter(([k]) => k !== "project")), options: TEAM_OPTIONS,
+    defaults: { group: "status", order: "priority", done: "all", subs: "rows" }, switches: EMPTY, reverse: true, keep: [], noun: "issue",
+  },
   // Linear's Inbox (measured on linear.app on 19 Oct): Filter's Notification type, From, Team, Project, Issue priority
   // and Issue status type, with desk's folder too; Display's Ordering and Show unread first; and the top
   // bar's Show unreads only. Linear's Group unreads by, Show snoozed and priority inbox have nothing to work on in desk.
   inbox: {
-    filters: { type: "Notification type", from: "From", team: "Team", folder: "Folder", priority: "Issue priority", status: "Issue status" },
+    filters: { type: "Notification type", from: "From", team: "Team", project: "Project", folder: "Folder", priority: "Issue priority", status: "Issue status" },
     options: { order: { newest: "Newest", oldest: "Oldest", priority: "Priority" } }, defaults: { order: "newest" },
     switches: { first: "Show unread first", unread: "" }, reverse: false, keep: ["i"], noun: "notification",
   },
@@ -204,17 +209,18 @@ export function folderName(path: string | null): string {
   return path.replace(/^~\/projects\//, "");
 }
 
-// The issue's value of a property, as the URL writes it; "none" for no team or no folder.
+// The issue's value of a property, as the URL writes it; "none" for no team, project or folder.
 export function value(i: Issue, name: string): string {
   if (name === "status") return i.state;
   if (name === "priority") return i.priority;
   if (name === "team") return i.team || "none";
+  if (name === "project") return i.project || "none";
   if (name === "folder") return folderName(i.folder);
   return store.runs(i);
 }
 
-// The rows a property's slugs name, by property, for their titles: the teams.
-export type Named = Partial<Record<string, Map<string, { title: string; created: string; state: string }>>>;
+// The rows a property's slugs name, by property, for their titles: the teams and the projects.
+export type Named = Partial<Record<string, Map<string, { title: string; created: string; state?: string }>>>;
 
 export function label(name: string, v: string, named: Named): string {
   if (name === "status") return store.STATE_NAMES[v] ?? v;
@@ -288,9 +294,14 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
 
   let order: string[];
   if (view.group === "team") {
-    const active = [...(named.team ?? [])].sort(([, a], [, b]) => cmp(a.created, b.created)).filter(([, t]) => t.state === "active").map(([slug]) => slug);
+    const active = [...(named.team ?? [])].sort(([, a], [, b]) => cmp(a.created, b.created))
+      .filter(([, t]) => t.state === "active").map(([slug]) => slug);
     const others = [...new Set(pageIssues.map((i) => value(i, "team")))].filter((v) => !active.includes(v) && v !== "none").sort();
     order = [...active, ...others, "none"];
+  } else if (view.group === "project") {
+    // The projects the list has, the oldest first, as Linear's groups list a project's issues.
+    const has = new Set(pageIssues.map((i) => value(i, "project")));
+    order = [...[...(named.project ?? [])].sort(([, a], [, b]) => cmp(a.created, b.created)).map(([slug]) => slug).filter((s) => has.has(s)), "none"];
   } else if (view.group === "folder") {
     order = [...[...new Set(pageIssues.map((i) => value(i, "folder")))].filter((v) => v !== "none").sort(), "none"];
   } else if (view.group === "none") order = [""];
@@ -322,7 +333,7 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
   }
 
   const valuesOf = (name: string): string[] => {
-    if (name === "team" || name === "folder") // the ones the list has, as Linear's menus list only those
+    if (name === "team" || name === "project" || name === "folder") // the ones the list has, as Linear's menus list only those
       return ["none", ...[...new Set(base.map((i) => value(i, name)))].filter((v) => v !== "none")
         .sort((a, b) => cmp(fold(label(name, a, named)), fold(label(name, b, named))))];
     return [...({ status: holds ?? store.STATES, priority: ["none", "urgent", "high", "medium", "low"], protocol: store.PROTOCOLS } as Record<string, string[]>)[name]];

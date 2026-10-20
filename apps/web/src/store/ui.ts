@@ -1,6 +1,6 @@
 // What the app's screen holds besides the data: the row in focus (hover, or J and K, as in Linear), the rows selected
-// (X, Shift-click, Shift ↑ ↓, Ctrl A, as in Linear), an open editor, the shortcuts panel, the new issue and new team
-// panels, and changes shown before the server has them.
+// (X, Shift-click, Shift ↑ ↓, Ctrl A, as in Linear), an open editor, the shortcuts panel, the new issue, new team and new
+// project panels, and changes shown before the server has them.
 import { action, makeObservable, observable, observableRef } from "mobx";
 import type { Field } from "../lib/desk";
 
@@ -12,6 +12,8 @@ export interface CreatorPreset {
   parentTitle?: string;
   team?: string;
   teamTitle?: string;
+  project?: string;
+  projectTitle?: string;
 }
 
 class UI {
@@ -23,12 +25,13 @@ class UI {
   keysOpen = false;
   creator: CreatorPreset | null = null;
   teamCreator = false;
+  projectCreator: string | null = null; // open, in a team or ""; null while closed
   overrides = observable.map<string, Partial<Record<Field, string>>>();
 
   constructor() {
     makeObservable(this, {
-      focused: observable, byMouse: observable, editing: observable, keysOpen: observable, creator: observableRef, teamCreator: observable,
-      focus: action, select: action, toggleSelect: action, unselect: action, clearSelection: action, setEditing: action, setKeys: action, openCreator: action, closeCreator: action, setTeamCreator: action, paint: action, unpaint: action,
+      focused: observable, byMouse: observable, editing: observable, keysOpen: observable, creator: observableRef, teamCreator: observable, projectCreator: observable,
+      focus: action, select: action, toggleSelect: action, unselect: action, clearSelection: action, setEditing: action, setKeys: action, openCreator: action, closeCreator: action, setTeamCreator: action, setProjectCreator: action, paint: action, unpaint: action,
     });
   }
 
@@ -75,6 +78,10 @@ class UI {
 
   setTeamCreator(open: boolean) {
     this.teamCreator = open;
+  }
+
+  setProjectCreator(team: string | null) {
+    this.projectCreator = team;
   }
 
   // A change shows at once, then is saved, then the page draws what the server holds (desk.js paint).

@@ -34,6 +34,7 @@ export interface ListData {
 
 // list.html's glyph: a property's own icon, in a chip or a group header.
 function ListGlyph({ name }: { name: string }) {
+  if (name === "project") return <span style={{ color: "var(--text-3)", display: "contents" }}>{GLYPH.project}</span>;
   return name === "team" ? <span style={{ color: "var(--text-3)", display: "contents" }}>{GLYPH.team}</span> : (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" style={{ color: "var(--text-3)" }}><path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z" /></svg>
   );

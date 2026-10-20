@@ -12,7 +12,10 @@ import { byRank, CLOSED, runs, type Issue } from "./issues.ts";
 import * as inbox from "./inbox.ts";
 import * as land from "./land.ts";
 import * as live_ from "./live.ts";
+import * as periods from "./periods.ts";
 import * as pins from "./pins.ts";
+import * as projects from "./projects.ts";
+import type { Project } from "./projects.ts";
 import { toHtml, toHtmlWithToc } from "./render.ts";
 import * as roster from "./roster.ts";
 import { find } from "./search.ts";
@@ -281,7 +284,7 @@ function chatsNow(all: Map<string, Issue>) {
 
 export function issueJson(i: Issue) {
   return {
-    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, folder: i.folder,
+    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, project: i.project, folder: i.folder,
     protocol: runs(i), link: i.link, session: i.session, waiting_on: i.waiting_on, waiting_since: i.waiting_since,
     waiting_since_short: shortDate(i.waiting_since), waited: i.state === "waiting" ? waited(i.waiting_since) : "",
     review_of: i.state === "review" ? reviewOf(i) : null,
@@ -386,8 +389,9 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
   const direct = store.children(all, slug);
   const session = await agents.liveRow(i.session);
   const result = store.result(i);
-  const everyTeam = await teams.loadAll();
+  const everyTeam = await teams.loadAll(), everyProject = await projects.loadAll();
   const team = i.team ? everyTeam.get(i.team) ?? null : null;
+  const project = i.project ? everyProject.get(i.project) ?? null : null;
   // The review shows a result only while it holds one: a plan or a question is read in the plan and the chat.
   const of = i.state === "review" ? reviewOf(i) : null;
   const reviewing = of === "result" || (of === "reply" && Boolean(result));
@@ -400,6 +404,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     issue: issueJson(i), body: i.body.trim(), body_html: toHtml(i.body, `/issue/${slug}/f/`), result_html: result && toHtml(result, `/issue/${slug}/f/`),
     team: team && { slug: team.slug, title: team.title },
     all_teams: [...everyTeam.values()].filter((x) => x.state === "active" || x.slug === i.team).map((x) => ({ slug: x.slug, title: x.title, state: x.state })),
+    project: project && { slug: project.slug, title: project.title, status: project.status },
     trail: trail.map((t) => ({ slug: t.slug, title: t.title })),
     kids: treeJson(kidsOf(slug), kidsOf),
     progress: [direct.filter((k) => k.state === "done").length, direct.filter((k) => k.state !== "dropped").length],
@@ -434,7 +439,7 @@ export async function framePage(old = false, all?: Map<string, Issue>) {
   };
 }
 
-const byCreated = (a: Team, b: Team) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0);
+const byCreated = (a: { created: string }, b: { created: string }) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0);
 
 export async function issuePage(slug: string) {
   const all = await store.loadAll();
@@ -464,6 +469,7 @@ function listingJson(listing: views.Listing, path: string, add: Record<string, u
       const own = ({
         priority: { priority: g.value }, status: g.value === "backlog" ? { state: g.value } : null,
         team: g.value !== "none" ? { team: g.value, teamTitle: g.label } : null,
+        project: g.value !== "none" ? { project: g.value, projectTitle: g.label } : null,
       } as Record<string, object | null>)[v.group] ?? null;
       preset = own && { ...own, ...add };
     }
@@ -485,8 +491,8 @@ export async function issuesPage(tab: string, query: string) {
   return listingJson(listing, tab ? `/issues/${tab}` : "/issues", {}, all);
 }
 
-// The names a list's chips and groups show for a team's slug.
-const named = async (): Promise<views.Named> => ({ team: await teams.loadAll() });
+// The names a list's chips and groups show for a team's or a project's slug.
+const named = async (): Promise<views.Named> => ({ team: await teams.loadAll(), project: await projects.loadAll() });
 
 export async function teamPage(slug: string, query: string) {
   if (!(await teams.exists(slug))) throw new HttpError(404, "That team is gone.");
@@ -500,6 +506,36 @@ export async function teamsPage() {
   const all = await store.loadAll();
   return everyone.map((t) => ({ slug: t.slug, title: t.title, state: t.state, created_short: shortDate(t.created),
     open: teams.issuesOf(all, t.slug).filter((i) => !CLOSED.has(i.state)).length }));
+}
+
+// A project as its page and its row in Projects show it (projects.ts): its dates in words, whether its target date
+// passed, which shows red as Linear's does, and its progress in whole percent.
+function projectJson(p: Project, all: Map<string, Issue>, everyTeam: Map<string, Team>) {
+  const mine = projects.issuesOf(all, p.slug);
+  return {
+    slug: p.slug, title: p.title, team: p.team, team_title: p.team ? everyTeam.get(p.team)?.title ?? p.team : null, status: p.status,
+    start: p.start, start_label: periods.label(p.start), target: p.target, target_label: periods.label(p.target),
+    late: !projects.CLOSED.has(p.status) && periods.passed(p.target), created: p.created,
+    issues: mine.length, progress: Math.round(projects.progress(mine) * 100),
+  };
+}
+
+export async function projectPage(slug: string, query: string) {
+  if (!(await projects.exists(slug))) throw new HttpError(404, "That project is gone.");
+  const p = await projects.load(slug), all = await store.loadAll();
+  const listing = views.build(views.parse("project", query), projects.issuesOf(all, slug), all, await named());
+  return {
+    project: { ...projectJson(p, all, await teams.loadAll()), body: p.body, body_html: toHtml(p.body) },
+    list: listingJson(listing, `/project/${slug}/issues`, { project: p.slug, projectTitle: p.title, ...(p.team ? { team: p.team } : {}) }),
+  };
+}
+
+// Linear's Projects list: every project, grouped by status in the order its menu lists them, the oldest first in each.
+export async function projectsPage(_query = "") {
+  const all = await store.loadAll(), everyTeam = await teams.loadAll();
+  const everyone = [...(await projects.loadAll()).values()].sort((a, b) => byCreated(a, b));
+  return projects.STATUSES.map((status) => ({ status, label: projects.STATUS_NAMES[status],
+    items: everyone.filter((p) => p.status === status).map((p) => projectJson(p, all, everyTeam)) })).filter((g) => g.items.length);
 }
 
 // An automation as its row and its page show it: when it fires next and last ran, in words.
