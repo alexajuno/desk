@@ -369,8 +369,10 @@ function summed(items: (Item | Block)[]): string {
   return text ? text[0].toUpperCase() + text.slice(1) : "";
 }
 
+// Open from the start, one line per step, as Claude Code's terminal shows them (20 Oct: "just don't collapse by
+// default"); each step's input and output stay a click away.
 const Steps = observer(function Steps({ s, items, running, live: isLive }: { s: LiveSession; items: Item[]; running: Block[]; live: boolean }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const failed = items.some((i) => i.t === "tool" && s.results.get(i.id!)?.error);
   const now = running[running.length - 1];
   const lastTool = [...items].reverse().find((i) => i.t === "tool");
@@ -395,8 +397,18 @@ const Steps = observer(function Steps({ s, items, running, live: isLive }: { s: 
   );
 });
 
+// A thought shows its first line, as a step does its summary, and the whole of it on a click.
 function Thought({ text }: { text: string }) {
-  return <div className="step thought"><span className="step-name">Thought</span><div className="thought-text">{text}</div></div>;
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="step thought">
+      <button className="step-line" type="button" onClick={() => setOpen(!open)}>
+        <span className="step-name">Thought</span>
+        <span className="step-what">{text.trim().split("\n")[0]}</span>
+      </button>
+      {open && <div className="thought-text">{text}</div>}
+    </div>
+  );
 }
 
 function Step({ s, item, result }: { s: LiveSession; item: Item; result?: Item }) {
