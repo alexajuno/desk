@@ -96,20 +96,24 @@ export async function ran(session: string, run: { command: string; args: string;
   else if (run.command === "effort" && run.said.startsWith("Effort level set to auto")) await save(session, { ...pickOf(session), effort: undefined });
 }
 
-// Claude Code's own default, as the user's settings name it.
-function claudeDefault(): Pick {
+// Claude Code's own default, as the user's settings name it: the model, and the effort it runs the given model on (the
+// settings' own when none is given). As 2.1.285 reads them, a model's effortLevel in modelSettings, keyed by the model
+// an alias resolves to, comes before the top-level one: on 20 Oct the chip said high for a session Opus 5.5 ran on xhigh.
+function claudeDefault(model?: string): Pick {
   try {
     const s = JSON.parse(readFileSync(join(HOME, ".claude", "settings.json"), "utf8"));
-    return { model: typeof s.model === "string" ? s.model : undefined, effort: EFFORTS.includes(s.effortLevel) ? s.effortLevel : undefined };
+    const named = typeof s.model === "string" ? s.model : undefined, runs = model ?? named ?? "default";
+    const own = s.modelSettings?.[entryOf(runs)?.resolvedModel ?? runs]?.effortLevel;
+    return { model: named, effort: [own, s.effortLevel].find((e) => EFFORTS.includes(e)) };
   } catch {
     return {};
   }
 }
 
 export function shown(session: string, chat: boolean): Shown {
-  const s = settings.load();
-  const base: Pick = chat ? { model: s.chat_model, effort: s.chat_effort } : claudeDefault();
-  const { model = "default", effort = "" } = { ...base, ...pickOf(session) };
+  const s = settings.load(), pick = pickOf(session);
+  const base: Pick = chat ? { model: s.chat_model, effort: s.chat_effort } : claudeDefault(pick.model);
+  const { model = "default", effort = "" } = { ...base, ...pick };
   const takes = entryOf(model)?.supportedEffortLevels; // none for a model without effort levels, such as Haiku
   return { model, name: nameOf(model), effort: list && !takes?.length ? "" : effort };
 }
