@@ -238,6 +238,19 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
       seed: marks && !waits ? readBefore(h, replied!, marks) : null,
     });
   }
+  // Linear's due date notifications: one the day before an open issue is due, and one the day after it passed, each
+  // from 09:00 (linear.app/docs/issue-property#due-date-notifications; the hour is desk's).
+  for (const i of all.values()) {
+    const due = !CLOSED.has(i.state) && periods.period(i.due);
+    if (!due) continue;
+    const at = (days: number) => new Date(due.start.getFullYear(), due.start.getMonth(), due.start.getDate() + days, 9).getTime() / 1000;
+    const late = now >= at(1), soon = !late && now >= at(-1);
+    if (!late && !soon) continue;
+    const today = new Date().toDateString() === due.start.toDateString();
+    wanted.push({ id: `due:${i.slug}`, slug: i.slug, issue: true, session: null, title: i.title, agent: null, why: late ? "overdue" : "due soon",
+      says: late ? `Overdue since ${periods.label(i.due)}` : today ? "Due today" : "Due tomorrow", kind: "needs", waits: false,
+      at: late ? at(1) : at(-1), looked: 0, seed: null });
+  }
   for (const i of all.values())
     if (i.state === "triage" && !i.session)
       wanted.push({ id: i.slug, slug: i.slug, issue: true, session: null, title: i.title, agent: null, why: "no chat", says: saysOf("no chat", i),
@@ -285,7 +298,7 @@ function chatsNow(all: Map<string, Issue>) {
 
 export function issueJson(i: Issue) {
   return {
-    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, project: i.project, milestone: i.milestone, folder: i.folder,
+    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, project: i.project, milestone: i.milestone, due: i.due, folder: i.folder,
     protocol: runs(i), link: i.link, session: i.session, waiting_on: i.waiting_on, waiting_since: i.waiting_since,
     waiting_since_short: shortDate(i.waiting_since), waited: i.state === "waiting" ? waited(i.waiting_since) : "",
     review_of: i.state === "review" ? reviewOf(i) : null,
@@ -578,12 +591,13 @@ export async function automationPage(slug: string) {
 
 // The Inbox's Notification type, by what a row asks of you, as Linear's are Assignments, Comments and replies, and
 // Reminders and deadlines.
-const TYPES: Record<string, string> = { plan: "Plans", result: "Results", question: "Questions", reply: "Replies", triage: "Triage", stuck: "Landing stuck" };
+const TYPES: Record<string, string> = { deadline: "Reminders and deadlines", plan: "Plans", result: "Results", question: "Questions", reply: "Replies", triage: "Triage", stuck: "Landing stuck" };
 function typeOf(why: string): string {
   if (why === "plan ready") return "plan";
   if (why === "result ready" || why === "check it") return "result";
   if (why === "asks you" || why === "waiting for you") return "question";
   if (why === "no chat") return "triage";
+  if (why === "due soon" || why === "overdue") return "deadline";
   return why === "landing stuck" ? "stuck" : "reply";
 }
 

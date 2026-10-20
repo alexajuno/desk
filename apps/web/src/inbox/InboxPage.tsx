@@ -27,8 +27,11 @@ import type { ViewData } from "../lists/view";
 import { lineKey } from "../store/frame";
 import { issues, type InboxRow, type Issue } from "../store/issues";
 import { ui } from "../store/ui";
-import { StateIcon } from "../ui/icons";
+import { GLYPH, StateIcon } from "../ui/icons";
 import { toggled } from "../ui/menu";
+
+// A due date's notifications (the server's pages.ts), which no session sent.
+const DEADLINE = new Set(["due soon", "overdue"]);
 import { DISPLAY_ICON, FILTER_ICON, inboxMenu, MORE_ICON, rowHref, UNREADS_ICON } from "./actions";
 
 // The address's own word that is no view's: the row open on the right.
@@ -164,14 +167,14 @@ const IssueNotice = observer(function IssueNotice({ n, issue, open, query }: { n
       onContextMenu={(e) => { e.preventDefault(); ui.focus(n.slug); actionsMenu(issue, { x: e.clientX, y: e.clientY }, open); }}>
       <span className="avatar status" aria-label={STATE_NAMES[issue.state]}><StateIcon state={issue.state} />
         <span className="badge">
-          {n.kind === "review"
+          {DEADLINE.has(n.why) ? GLYPH.calendar : n.kind === "review"
             ? <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 8.5l3 3 6-7" /></svg>
             : <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2c3.6 0 6.5 2.4 6.5 5.4S11.6 12.8 8 12.8c-.6 0-1.2-.1-1.8-.2L3 14.1c-.4.2-.8-.2-.7-.6l.6-2.4C2 10.1 1.5 8.8 1.5 7.4 1.5 4.4 4.4 2 8 2z" /></svg>}
         </span>
       </span>
       <span className="lines">
         <span className="line"><span className="dot" aria-label="Unread" /><span className="title">{issue.title}</span></span>
-        <span className="line sub"><span className="says">{`Session ${n.says}`}</span><span className="age" title={dayAndTime(n.at)}>{ago(n.at)}</span></span>
+        <span className="line sub"><span className="says">{DEADLINE.has(n.why) ? n.says : `Session ${n.says}`}</span><span className="age" title={dayAndTime(n.at)}>{ago(n.at)}</span></span>
       </span>
     </Go>
   );

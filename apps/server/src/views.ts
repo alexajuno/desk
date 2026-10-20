@@ -26,7 +26,7 @@ const ISSUE_OPTIONS = {
   // Linear's Layout: the list, or a board with a column per group (linear.app/docs/board-layout).
   layout: { list: "List", board: "Board" },
   group: { none: "No grouping", status: "Status", priority: "Priority", team: "Team", project: "Project", folder: "Folder" },
-  order: { priority: "Priority", status: "Status", created: "Created", updated: "Updated", title: "Title" },
+  order: { priority: "Priority", status: "Status", due: "Due date", created: "Created", updated: "Updated", title: "Title" },
   // Linear's Completed issues: how far back done and dropped issues come in.
   done: { none: "None", day: "Past day", week: "Past week", month: "Past month", all: "All" },
   subs: { nested: "Nested", rows: "Flat", hidden: "Hidden" },
@@ -269,6 +269,7 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
   const keyOf: Record<string, (i: Issue) => (string | number)[]> = {
     priority: (i) => store.rank(i), status: (i) => [BY_STATUS.indexOf(i.state), ...store.rank(i)],
     created: (i) => [i.created], updated: (i) => [updated(i.slug)], title: (i) => [fold(i.title)],
+    due: (i) => [i.due ?? "9999", ...store.rank(i)], // the soonest first, as Linear's; none last
   };
   const sort = (items: Issue[]) => {
     const key = keyOf[view.order];

@@ -51,6 +51,7 @@ export interface IssueRow {
   team: string | null;
   project: string | null;
   milestone: string | null;
+  due: string | null; // a day, 2026-11-08
   folder: string | null;
   protocol: Protocol;
   link: string | null;

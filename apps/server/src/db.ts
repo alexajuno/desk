@@ -48,6 +48,7 @@ create table if not exists issues (
   team text,
   project text,
   milestone text,
+  due text, -- a day, 2026-11-08: its due date, Linear's
   folder text,
   protocol text,
   link text,
@@ -252,7 +253,7 @@ export async function open(): Promise<PGlite> {
   await toTeams(opened);
   await opened.exec(SCHEMA);
   // Since 20 Oct, an issue's project is Linear's (projects.ts), as its team is what its project was before.
-  await opened.exec(["review_of", "review_since", "landed", "project", "milestone"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
+  await opened.exec(["review_of", "review_since", "landed", "project", "milestone", "due"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
   await opened.exec("alter table projects add column if not exists updates text not null default 'weekly';");
   // The Inbox's delete and its mark as unread (inbox.ts), from 19 Oct.
   await opened.exec(["gone", "marked"].map((c) => `alter table inbox add column if not exists ${c} double precision;`).join(" "));

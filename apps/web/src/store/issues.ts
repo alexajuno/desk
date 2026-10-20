@@ -15,6 +15,7 @@ export interface Issue {
   team: string | null;
   project: string | null;
   milestone: string | null;
+  due: string | null;
   folder: string | null;
   protocol: Protocol | null; // none runs design
   link: string | null;

@@ -163,8 +163,8 @@ async function brief(p: Project, entries: Entry[]): Promise<string> {
 }
 
 // Once a minute (server.ts, with the automations' clock): each project In Progress whose update fell due, with none
-// posted since, gets its draft's chat once; a day and three working days after it falls due, with still none, the chat
-// is marked unread again, Linear's two nudges.
+// posted since, gets its draft's chat once; a working day after it falls due, and two more after that, with still none,
+// the chat is marked unread again, Linear's two nudges.
 export async function tick(now = new Date()) {
   for (const p of (await projects.loadAll()).values()) {
     if (p.status !== "started") continue;

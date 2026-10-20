@@ -16,6 +16,8 @@ import { reloadPages, ui } from "../store/ui";
 import { setField, setFolder } from "./actions";
 import { openSession } from "../sessions/Dock";
 import { fieldMenu, folderMenu, milestoneMenu, projectPicker, teamPicker, waitingMenu } from "./menus";
+import { datePicker } from "../ui/datepicker";
+import { DueChip } from "./Tree";
 import { painted } from "./painted";
 import { Tree } from "./Tree";
 import { Description } from "../editor/Description";
@@ -283,6 +285,11 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
           <span className={data.milestone ? undefined : "muted"}>{data.milestone ?? "Add to milestone"}</span>
         </button>
       )}
+      <div className="label">Due date</div>
+      <button className="prop due-pick" type="button" data-slug={p.slug} title="Set due date  Shift D"
+        onClick={(e) => { if (!toggled(e.currentTarget)) datePicker({ anchor: e.currentTarget, title: "Due date", current: p.due, kinds: ["day"], set: (t) => setField(p.slug, "due", t ?? "") }); }}>
+        {p.due ? <DueChip due={p.due} closed={["done", "dropped"].includes(p.state)} /> : <><span className="muted-icon">{GLYPH.calendar}</span><span className="muted">Set due date</span></>}
+      </button>
       <div className="label">Works in</div>
       <button className="prop folder-pick" type="button" data-slug={p.slug} data-value={p.folder ?? ""} title="Pick the folder the issue's session starts in; ~ until you pick one"
         onClick={(e) => { if (!toggled(e.currentTarget)) folderMenu(p.folder ?? "", e.currentTarget, (f) => setFolder(p.slug, f)); }}>

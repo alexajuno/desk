@@ -17,6 +17,7 @@ import { keyOf, typing } from "../lib/keys";
 import { ui } from "../store/ui";
 import { unfoldTo, toggleSection } from "../ui/folds";
 import { MenuHost, menus } from "../ui/menu";
+import { datePicker } from "../ui/datepicker";
 import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openViewer, viewerOpen } from "../ui/viewer";
 import { arrange, Dock, focusComposer, newSession, openSession, SideEdge, toggleIssue } from "../sessions/Dock";
@@ -185,6 +186,13 @@ function onKeyDown(e: KeyboardEvent) {
     const slugs = ui.selected.size ? selection() : [target()!], one = slugs.length === 1 ? issues.bySlug.get(slugs[0]) : undefined;
     const anchor = focused?.querySelector(".icon") ?? [...document.querySelectorAll(".project-pick-menu, .project-chip, .select-bar")].find((el) => el.checkVisibility()) ?? null;
     projectPicker(one?.project ?? null, one?.team ?? null, { anchor }, (to) => (slugs.length === 1 ? setField(slugs[0], "project", to) : setFields(slugs, "project", to)));
+    e.preventDefault();
+  }
+  // Linear's Shift D: the due date of the issue in focus or open.
+  else if (key === "d" && e.shiftKey && target()) {
+    const slug = target()!, one = issues.bySlug.get(slug);
+    const anchor = focused?.querySelector(".icon") ?? [...document.querySelectorAll(".due-pick")].find((el) => el.checkVisibility()) ?? document.querySelector(".strip");
+    if (anchor) datePicker({ anchor, title: "Due date", current: one?.due ?? null, kinds: ["day"], set: (t) => setField(slug, "due", t ?? "") });
     e.preventDefault();
   }
   // Linear's Shift M: the milestone of the issue in focus or open, among its project's.

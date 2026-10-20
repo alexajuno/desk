@@ -3,7 +3,7 @@
 //
 //     GET    /api/issues?q=&state=      list and search issues
 //     GET    /api/issues/<slug>         one issue, with its body and files
-//     POST   /api/issues                create one: title, body, priority, state, parent, team, project, folder, protocol
+//     POST   /api/issues                create one: title, body, priority, state, parent, team, project, milestone, due, folder, protocol
 //     PATCH  /api/issues/<slug>         set any of those fields; its session also says what its turn hands you (review_of)
 //                                       and where its work landed (landed); a body sets the sections it holds
 //     GET    /api/issues/<slug>/sections/<name>   one section of the issue's document, as Markdown
@@ -61,7 +61,7 @@ const OPEN = store.STATES.filter((s) => s !== "done" && s !== "dropped");
 
 export function asJson(i: Issue, full = false) {
   const data: Record<string, unknown> = {
-    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, project: i.project, milestone: i.milestone, folder: i.folder,
+    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, project: i.project, milestone: i.milestone, due: i.due, folder: i.folder,
     protocol: store.runs(i), session: i.session, created: i.created, url: `/issue/${i.slug}`,
   };
   if (i.state === "waiting") Object.assign(data, { waiting_on: i.waiting_on, waiting_since: i.waiting_since });
@@ -76,7 +76,7 @@ async function loadIssue(slug: string): Promise<Issue> {
   return store.load(slug);
 }
 
-const FIELDS = ["title", "body", "priority", "state", "parent", "team", "project", "milestone", "folder", "protocol", "waiting_on", "review_of", "landed"];
+const FIELDS = ["title", "body", "priority", "state", "parent", "team", "project", "milestone", "due", "folder", "protocol", "waiting_on", "review_of", "landed"];
 const PULL = /https:\/\/github\.com\/\S+\/pull\/\d+/;
 const AUTOMATION_FIELDS = ["title", "when", "check", "agent", "body", "state"];
 
@@ -141,6 +141,12 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
     // An issue with no team takes its project's, as a Linear issue is in one of its project's teams.
     if (!fields.team && !i.team) fields.team = (await projects.load(fields.project)).team;
   }
+  // A due date is a day, as Linear's, in any form the date picker takes: 2026-11-08, Nov 8, 20/05/2027.
+  if (fields.due) {
+    const day = periods.parse(fields.due);
+    if (!day || periods.period(day)!.kind !== "day") throw new HttpError(422, `due must be a day, such as 2026-11-08 or Nov 8; "${fields.due}" is none.`);
+    fields.due = day;
+  }
   // A milestone of the issue's project, by its id or its title.
   if (fields.milestone) {
     const project = "project" in fields ? fields.project : i.project;
@@ -152,7 +158,7 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
   if (fields.folder && !isDir(expand(fields.folder))) throw new HttpError(422, `No folder ${fields.folder}. Find one with GET /api/folders?q=<name>.`);
   if ("body" in fields) fields.body = store.withSections(i.body, fields.body || "");
   const target = i as unknown as Record<string, string | null>;
-  for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "team", "project", "milestone", "folder", "waiting_on", "landed"].includes(name) ? value || null : value;
+  for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "team", "project", "milestone", "due", "folder", "waiting_on", "landed"].includes(name) ? value || null : value;
 }
 
 async function teamJson(t: Team, full = false) {

@@ -6,7 +6,8 @@ import { observer } from "mobx-react-lite";
 import type { ReactNode } from "react";
 import { Go } from "../app/nav";
 import { CLOSED, type IssueRow, type TreeRow } from "../lib/desk";
-import { PrioIcon, StateIcon } from "../ui/icons";
+import { GLYPH, PrioIcon, StateIcon } from "../ui/icons";
+import { label, period } from "../lib/periods";
 import { toggled } from "../ui/menu";
 import { ui } from "../store/ui";
 import { painted } from "./painted";
@@ -53,6 +54,18 @@ export const Row = observer(function Row({ issue, context = false, here = null, 
   );
 });
 
+// Linear's due date on a row: a calendar icon "red when the issue is due today or overdue, orange when due within a week,
+// and gray otherwise" (linear.app/docs/issue-property#due-dates), and on hover how many days are left or have passed.
+export function DueChip({ due, closed }: { due: string; closed: boolean }) {
+  const d = period(due)?.start;
+  if (!d) return null;
+  const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((d.getTime() - today.getTime()) / 86_400_000);
+  const tone = closed ? "" : days <= 0 ? " late" : days <= 7 ? " soon" : "";
+  const tip = days === 0 ? "Due today" : days > 0 ? `Due in ${days} day${days === 1 ? "" : "s"}` : `${-days} day${days === -1 ? "" : "s"} overdue`;
+  return <span className={`due-chip${tone}`} title={`Due ${label(due)}: ${tip}`}>{GLYPH.calendar}<span>{label(due)}</span></span>;
+}
+
 export function Tree({ items, context = [], here = null }: { items: (TreeRow & { context?: boolean })[]; context?: string[]; here?: string | null }) {
   return (
     <ul className="tree">
@@ -60,6 +73,7 @@ export function Tree({ items, context = [], here = null }: { items: (TreeRow & {
         <li key={p.slug}>
           <Row issue={p} context={p.context || context.includes(p.slug)} here={here}>
             {p.open > 0 && <span className="pill">{`${p.open} open`}</span>}
+            {p.due && <DueChip due={p.due} closed={CLOSED.includes(p.state)} />}
             <span className="spacer" /><span className="date">{p.created_short}</span>
           </Row>
           {p.kids.length > 0 && <Tree items={p.kids} context={context} here={here} />}

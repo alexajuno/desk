@@ -25,6 +25,8 @@ An issue's fields:
 - `parent`: the slug of the issue it belongs under, or null
 - `team`: the slug of the team it belongs to, or null. A team is ongoing work that is never done, such as desk itself; its issues finish, it does not. Until 20 Oct teams were called projects. It is a separate thing from `parent`, which is for sub-issues
 - `project`: the slug of the project it belongs to, or null: Linear's project, a piece of work with an outcome and a target date, which finishes. An issue is in one project at most, and keeps its team; one with no team takes its project's. For work too big for one issue, such as a migration in steps, file a project rather than an umbrella issue
+- `milestone`: one of its project's milestones, by id or title, or null
+- `due`: its due date, a day, such as `2026-11-08` (desk also reads `Nov 8` or `20/05/2027`), or null. The Inbox tells the user the day before, and the day after it passes
 - `folder`: where its session works, usually a repo, such as `~/projects/desk`
 - `protocol`: how much plan it gets, and whether its session waits for the user's "go": `quick` (a three-line brief, then the work at once), `brief` (the same brief, then "go") or `design` (planned in the chat in short words and a sketch, then "go"). Pick one when you file: quick for a fix or a small feature, brief where a wrong guess costs more than a redo (a team repo, real data, anything outside), design when the user wants to discuss it. An issue with none runs design. Every protocol ends in the review card and the user's Approve
 
@@ -99,6 +101,13 @@ curl -s "http://127.0.0.1:8790/api/projects/<slug>/milestones" --json '{"title":
 curl -s "http://127.0.0.1:8790/api/projects/<slug>/milestones/<id>" -X PATCH --json '{"position": 0}'
 curl -s "http://127.0.0.1:8790/api/projects/<slug>/milestones/<id>" -X DELETE
 curl -s "http://127.0.0.1:8790/api/issues/<issue>" -X PATCH --json '{"milestone": "Warn callers"}'
+```
+
+A project's updates are Linear's: a `health`, `on_track`, `at_risk` or `off_track`, and a few lines on what moved, what is next and any risk. Each project In Progress is due one weekly (its `updates`: `weekly`, `biweekly` or `never`), on the day and time in Settings (`project_update_day`, `project_update_time`); then desk starts a chat that drafts it, and the user posts it from the project's Activity. When such a chat asks you to draft one, post it with `"draft": true`; post one without it only when the user tells you to. Reading a project gives its `health`; its activity lists its updates, its draft and the changes to it:
+
+```bash
+curl -s "http://127.0.0.1:8790/api/projects/<slug>/updates"
+curl -s "http://127.0.0.1:8790/api/projects/<slug>/updates" --json '{"health": "at_risk", "body": "Warn callers is done. Teeinblue waits on genai-api #687 before it moves.", "draft": true}'
 ```
 
 Automations run one of the user's agents at a time, or when a check finds something, and its reply reaches the user's Inbox as a chat, as bin/jobs's daily list does. Each is a file, `automations/<slug>.md` in desk's data folder, which you change through the API, since it checks `when` and `agent`. Its page is `http://127.0.0.1:8790/automation/<slug>`. An automation's fields:

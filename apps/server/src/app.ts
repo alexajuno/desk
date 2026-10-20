@@ -119,6 +119,9 @@ async function checked(i: store.Issue, name: string, given: string): Promise<str
   } else if (name === "project") {
     value = value || null;
     if (value && !(await projects.exists(value))) throw new HttpError(422, `No project ${value}.`);
+  } else if (name === "due") {
+    value = value ? periods.parse(value) : null;
+    if (given && (!value || periods.period(value)!.kind !== "day")) throw new HttpError(422, `“${given}” is no day: try 20/05/2027 or Nov 8.`);
   } else if (name === "milestone") {
     value = value || null;
     const m = value ? await projects.milestone(value) : null;
