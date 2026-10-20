@@ -1,7 +1,7 @@
-// An issue, as its page shows it (templates/issue_view.html); the Inbox's right pane shows the same. The strip: where
-// the issue stands, and its one button, the next step, pinned at the top while the issue scrolls. Open chat opens the
-// issue as its chat, in the middle, with the issue beside it; whenever it is not the step, a quiet Open chat sits
-// beside it, and it hides once the chat is open. Ctrl+Enter presses the step and O opens the chat, as the buttons' tooltips say.
+// An issue, as its page shows it (templates/issue_view.html); the Inbox's right pane shows the same. Its actions sit in
+// a row over its Properties (Actions), and its status shows once, in Properties, where a click changes it. Open chat
+// opens the issue as its chat, in the middle, with the issue beside it, and hides once the chat is open. Ctrl+Enter
+// presses the step and O opens the chat, as the buttons' tooltips say.
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { post, said } from "../api/http";
@@ -13,7 +13,7 @@ import { toggled } from "../ui/menu";
 import { showFolded } from "../ui/folds";
 import { toast } from "../ui/toast";
 import { reloadPages, ui } from "../store/ui";
-import { setField, setFolder } from "./actions";
+import { copy, setField, setFolder } from "./actions";
 import { openSession } from "../sessions/Dock";
 import { fieldMenu, folderMenu, milestoneMenu, projectPicker, teamPicker, waitingMenu } from "./menus";
 import { datePicker } from "../ui/datepicker";
@@ -22,7 +22,7 @@ import { painted } from "./painted";
 import { Tree } from "./Tree";
 import { Description } from "../editor/Description";
 
-export interface StripButton {
+export interface StepButton {
   label: string;
   action?: string;
   chat?: boolean;
@@ -49,8 +49,9 @@ export interface IssuePageData {
   reviewing: boolean; // in review, holding a result to approve rather than a plan or a question
   session_kind: string | null;
   live: string;
-  strip: { text: string; button: StripButton | null };
-  trial: StripButton | null;
+  step: { text: string; button: StepButton | null };
+  trial: StepButton | null;
+  landed: string | null; // in done, where its session said the work landed
 }
 
 const Html = ({ className, html }: { className: string; html: string }) => (
@@ -61,34 +62,28 @@ const Fold = () => (
   <button className="sec-toggle" type="button" aria-label="Collapse section" aria-expanded="true">{TRIANGLE}</button>
 );
 
-function OpenChat({ slug, session, primary }: { slug: string; session: string; primary: boolean }) {
-  return (
-    <button className={`${primary ? "primary strip-go" : "ghost"} large open-chat`} type="button" data-slug={slug}
-      title={`Open the issue's chat  ${primary ? "Ctrl Enter or O" : "O"}`}
-      onClick={() => openSession(session, slug)}>Open chat</button>
-  );
-}
+// The step's tooltip: its label and key, then where the issue stands when that says more than its status does.
+const stepTip = (head: string, text: string, state: State) => (text === STATE_NAMES[state] ? head : `${head}\n${text}`);
 
-// The strip of an issue landing (pages.ts, strip), drawn at once on Approve.
-const LANDING: IssuePageData["strip"] = { text: "Landing", button: { label: "Landing…", disabled: true } };
+// The step of an issue landing (pages.ts, step), drawn at once on Approve.
+const LANDING: IssuePageData["step"] = { text: "Landing", button: { label: "Landing…", disabled: true } };
 
 export const IssueView = observer(function IssueView({ data, inInbox = false }: { data: IssuePageData; inInbox?: boolean }) {
   const p = painted(data.issue);
-  const [note, setNote] = useState<{ slug: string; msg: string | null; trust: boolean }>({ slug: p.slug, msg: null, trust: false });
-  const msg = note.slug === p.slug ? note.msg : null, trust = note.slug === p.slug && note.trust;
+  // Trust folder takes the step's place once starting the issue's session found its folder untrusted.
+  const [trustFor, setTrustFor] = useState<string | null>(null);
   // Approve shows Landing while the server is still handing the work to the session, which takes a second or more.
   const landing = p.state === "landing" && data.issue.state !== "landing";
-  const strip = landing ? LANDING : data.strip;
-  const b = strip.button, t = landing ? null : data.trial;
+  const step = landing ? LANDING : data.step;
 
-  // A form route of the old pages: Plan, Start, Approve, Try, Trust folder. Its redirect may say something for the
-  // strip. From the Inbox, Approve moves on as Linear does: the next notification opens, and a toast says what
-  // happened (app.ts, onward).
+  // A form route of the old pages: Plan, Start, Approve, Try, Trust folder. What its redirect says shows as a toast.
+  // From the Inbox, Approve moves on as Linear does: the next notification opens, and a toast says what happened
+  // (app.ts, onward).
   async function act(action: string) {
     const slug = p.slug;
     if (action === "approve" || action === "go") {
       ui.paint(slug, "state", action === "go" ? "running" : "landing");
-      setNote({ slug, msg: null, trust: false });
+      setTrustFor(null);
     }
     try {
       const res = await post(`/issue/${slug}/${action}`, inInbox ? { src: "inbox" } : {});
@@ -98,8 +93,9 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
         const next = to.searchParams.get("i");
         go(next ? `/inbox?i=${encodeURIComponent(next)}` : "/inbox", { replace: true });
       } else {
-        const { msg: m, trust: tr } = said(res);
-        setNote({ slug, msg: m, trust: tr });
+        const { msg, trust } = said(res);
+        if (msg) toast(msg);
+        setTrustFor(trust ? slug : null);
       }
       await reloadPages();
     } finally {
@@ -109,34 +105,15 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
 
   useLayoutEffect(() => showFolded());
 
-  const live = p.session && !["done", "dropped"].includes(p.state);
   return (
     <>
-      <div className="strip" data-slug={p.slug} {...(live ? { "data-live": data.live } : {})}>
-        <div className="strip-in">
-          <span className="strip-state"><StateIcon state={p.state} /></span>
-          <span className={`strip-what${msg ? " strip-msg" : ""}`}>{msg || strip.text}</span>
-          {p.session && !(b && b.chat) && <OpenChat slug={p.slug} session={p.session} primary={false} />}
-          {/* Try, in review: runs the issue's branch in the desk you use (app.try_button). Quiet: Approve stays the step. */}
-          {t && (t.disabled
-            ? <button className="ghost large" type="button" disabled title={t.title}>{t.label}</button>
-            : <button className="ghost large" type="button" title={t.title} onClick={() => act(t.action!)}>{t.label}</button>)}
-          {trust ? (
-            <button className="primary large strip-go" type="button" title="Tells Claude Code to trust this folder, as accepting its prompt does"
-              onClick={() => act("trust")}>Trust folder</button>
-          ) : b?.chat && p.session ? <OpenChat slug={p.slug} session={p.session} primary />
-            : b?.disabled ? <button className="primary large strip-go" type="button" disabled>{b.label}</button>
-            : b ? <button className="primary large strip-go" type="button" title={`${b.label}  Ctrl Enter`} onClick={() => act(b.action!)}>{b.label}</button>
-            : null}
-        </div>
-      </div>
       <div className="issue" data-slug={p.slug} data-state={p.state} data-priority={p.priority} data-parent={p.parent ?? ""}
         {...(p.session ? { "data-session": p.session.slice(0, 8) } : {})}>
         <div>
           <Title title={p.title} save={(t) => setField(p.slug, "title", t)} />
           <Chips p={p} team={data.team} project={data.project} />
-          {/* In review the card comes first, right under the strip whose Approve decides on it. A plan to say go to
-              shows as the plan, below. */}
+          {/* In review the card comes first, right under the title, beside the Approve that decides on it. A plan to
+              say go to shows as the plan, below. */}
           {p.state === "review" && data.reviewing && (
             <div className="review">
               <div className="section-label" style={{ marginTop: 0 }}>Review</div>
@@ -169,11 +146,41 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
             </section>
           )}
         </div>
-        <Properties data={data} p={p} />
+        <div className="issue-side">
+          <Actions p={p} step={step} trial={landing ? null : data.trial} trust={trustFor === p.slug} act={act} />
+          <Properties data={data} p={p} />
+        </div>
       </div>
     </>
   );
 });
+
+// The issue's actions, in a row over its Properties, as Linear's issue has Copy issue URL and its kin: Copy link, a quiet
+// Open chat whenever the chat is not the step, Try in review, and last the step, the one primary button.
+function Actions({ p, step, trial: t, trust, act }: {
+  p: IssueRow; step: IssuePageData["step"]; trial: StepButton | null; trust: boolean; act: (action: string) => void;
+}) {
+  const b = step.button;
+  const session = p.session, chat = session ? () => openSession(session, p.slug) : null;
+  return (
+    <div className="issue-acts">
+      <button className="act" type="button" title="Copy link" onClick={() => copy(`${location.origin}/issue/${p.slug}`, "Link copied")}>{GLYPH.link}</button>
+      {chat && !b?.chat && <button className="act open-chat" type="button" title="Open the issue's chat  O" onClick={chat}>{GLYPH.chat}</button>}
+      {/* Try, in review: runs the issue's branch in the desk you use (pages.ts, tryButton). Not the step: Approve is. */}
+      {t && <button type="button" title={t.title} disabled={t.disabled} onClick={() => act(t.action!)}>{t.label}</button>}
+      {trust ? (
+        <button className="primary step" type="button" title="Tells Claude Code to trust this folder, as accepting its prompt does"
+          onClick={() => act("trust")}>Trust folder</button>
+      ) : b?.chat ? chat && (
+        <button className="primary step open-chat" type="button" title={stepTip("Open the issue's chat  Ctrl Enter or O", step.text, p.state)}
+          onClick={chat}>Open chat</button>
+      ) : b && (
+        <button className="primary step" type="button" disabled={b.disabled} title={b.disabled ? undefined : stepTip(`${b.label}  Ctrl Enter`, step.text, p.state)}
+          onClick={() => act(b.action!)}>{b.label}</button>
+      )}
+    </div>
+  );
+}
 
 // The result.md an older issue's session wrote, under its own head.
 function Result({ html }: { html: string }) {
@@ -297,9 +304,13 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
         <span>{p.folder || "~"}</span>
       </button>
       {p.link && (<><div className="label">Link</div><div className="prop static"><a href={p.link}>{fromSlack(p.link) ? "🐧 Slack" : p.link.split("/").pop()}</a></div></>)}
+      {/* Where its session said the work landed, unless that is the pull request the Link above already is. */}
+      {data.landed && !(p.link && data.landed.includes(p.link)) && (
+        <><div className="label">Landed</div><div className="prop static landed">{data.landed.replace(/`/g, "")}</div></>
+      )}
       {p.session && (
         <>
-          {/* What the strip's button acts on. Opening it in kitty instead is in the … menu. */}
+          {/* What Open chat opens. Opening it in kitty instead is in the … menu. */}
           <div className="label">Session</div>
           <div className="prop static"><code>{p.session.slice(0, 8)}</code> <span className={`live ${live}`}>{liveWord}</span></div>
         </>

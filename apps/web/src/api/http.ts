@@ -1,5 +1,5 @@
 // Calls to desk's server. The old pages' forms post form-encoded fields; their routes answer with a redirect that
-// may carry ?msg= and ?trust=1 for the strip (app.ts, back), which a fetch follows and the app reads off the final URL.
+// may carry ?msg= and ?trust=1 for the issue's page (app.ts, back), which a fetch follows and the app reads off the final URL.
 export const post = (url: string, fields: Record<string, string> = {}) =>
   fetch(url, { method: "POST", body: new URLSearchParams(fields) });
 
@@ -14,7 +14,7 @@ export async function reason(res: Response): Promise<string> {
   }
 }
 
-// What a form route said after its redirect: a message for the strip, and whether to offer Trust folder.
+// What a form route said after its redirect: a message for a toast, and whether to offer Trust folder.
 export function said(res: Response): { msg: string | null; trust: boolean } {
   const url = new URL(res.url);
   return { msg: url.searchParams.get("msg") ?? url.searchParams.get("note"), trust: url.searchParams.get("trust") === "1" };

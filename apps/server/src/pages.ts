@@ -1,5 +1,5 @@
 // What each of desk's pages shows, as data for the app (apps/web), from the same rules the Python's app.py kept: the
-// Inbox and what moves an issue on its own, the sidebar, the strip pinned at the top of an issue, and every page's JSON.
+// Inbox and what moves an issue on its own, the sidebar, an issue's next step, and every page's JSON.
 // Dates come formatted as the old pages formatted them.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
@@ -71,7 +71,7 @@ const iso = (t: string) => parseLocal(t).getTime() / 1000;
 // never started, is not working, and its next message resumes it.
 const working = (i: Issue) => Boolean(i.session && turns.working(i.session));
 
-// Where the issue's chat stands, for the strip, the sidebar and Triage: working, idle (your move), or none, with no chat.
+// Where the issue's chat stands, for its Properties, the sidebar and Triage: working, idle (your move), or none, with no chat.
 const talkOf = (i: Issue) => (!i.session ? "none" : working(i) ? "working" : "idle");
 
 // The sessions asking you to allow a tool now. Only a running session can ask, and the host is the one that knows.
@@ -331,9 +331,9 @@ export function splitResult(text: string): [string, string] | null {
 
 type Button = { label: string; action?: string; chat?: boolean; disabled?: boolean; title?: string } | null;
 
-// The strip pinned at the top of an issue: where it stands, and its one button, the next step. Only Plan and Approve
-// are clicks; everything else is said in the issue's chat, which Open chat brings up in a window over desk.
-export function strip(i: Issue, asks: Set<string>, hasPlan: boolean, hasResult: boolean): { text: string; button: Button } {
+// An issue's next step: its one button, in the row over its Properties, and what the step's tooltip says of where it
+// stands. Only Plan and Approve are clicks; everything else is said in the issue's chat, which Open chat brings up.
+export function step(i: Issue, asks: Set<string>, hasPlan: boolean, hasResult: boolean): { text: string; button: Button } {
   const chat = { label: "Open chat", chat: true };
   if (i.state === "backlog") {
     if (i.session) return { text: "Backlog", button: chat };
@@ -425,14 +425,14 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     progress: [direct.filter((k) => k.state === "done").length, direct.filter((k) => k.state !== "dropped").length],
     agent_files: agentFiles, plan: store.section(i, "Plan") || readOr(join(store.folder(slug), store.PLAN)), result, card, reviewing,
     session_kind: session.kind ?? null, live: talkOf(i),
-    strip: strip(i, await asking(), store.hasPlan(i), Boolean(result)), trial: await tryButton(i),
+    step: step(i, await asking(), store.hasPlan(i), Boolean(result)), landed: i.landed, trial: await tryButton(i),
   };
 }
 
 // --- the pages ---------------------------------------------------------------------------------------------------------
 
 // The sidebar's parts that no table the app holds says, and where each open issue's session stands (live, which its
-// strip says): sync.ts sends it to the app whenever it changed. The app works out the rest from the rows it holds, the
+// Properties say): sync.ts sends it to the app whenever it changed. The app works out the rest from the rows it holds, the
 // Inbox's count and its dots from the Inbox's rows (inbox.ts); old, for a tab still on the app from before 19 Oct,
 // adds what that app read here: the count, Triage and the teams, which it calls projects.
 export async function framePage(old = false, all?: Map<string, Issue>) {

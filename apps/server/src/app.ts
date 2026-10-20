@@ -1,6 +1,6 @@
 // desk's server: every address desk answers (ported from desk/app.py and its routers). The pages are the app's (apps/web), which
 // asks /api/page/... for their data (pages.ts); the forms the pages post answer with a redirect that may carry ?msg=
-// for the strip; the agents' JSON API is api.ts; the app's live sync is sync.ts.
+// for the issue's page; the agents' JSON API is api.ts; the app's live sync is sync.ts.
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import formbody from "@fastify/formbody";
@@ -586,7 +586,7 @@ export async function create(): Promise<FastifyInstance> {
       } else return stay((error as Error).message, error instanceof agents.TrustError);
     }
     await store.save(i);
-    // On the issue's page the strip says what happens next, Landing or Done.
+    // On the issue's page its status says what happens next, Landing or Done.
     return fromInbox ? onward(reply, before, slug, message) : back(reply, slug);
   });
 

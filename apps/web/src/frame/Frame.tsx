@@ -98,8 +98,8 @@ function onKeyDown(e: KeyboardEvent) {
   const key = e.key.toLowerCase();
 
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
-    // The issue's next step, its strip's one button.
-    const step = keyOf(e) === "Enter" && document.querySelector<HTMLButtonElement>(".strip .strip-go:not(:disabled)");
+    // The issue's next step, the primary button in the row over its Properties.
+    const step = keyOf(e) === "Enter" && document.querySelector<HTMLButtonElement>(".issue-acts .step:not(:disabled)");
     if (step) { step.click(); e.preventDefault(); }
     else if (key === "z" && undoList().length) { undo(); e.preventDefault(); }
     // Linear's Ctrl A: the whole list on screen, filtered as it is.
@@ -196,7 +196,7 @@ function onKeyDown(e: KeyboardEvent) {
   // Linear's Shift D: the due date of the issue in focus or open.
   else if (key === "d" && e.shiftKey && target()) {
     const slug = target()!, one = issues.bySlug.get(slug);
-    const anchor = focused?.querySelector(".icon") ?? [...document.querySelectorAll(".due-pick")].find((el) => el.checkVisibility()) ?? document.querySelector(".strip");
+    const anchor = focused?.querySelector(".icon") ?? [...document.querySelectorAll(".due-pick")].find((el) => el.checkVisibility()) ?? document.querySelector(".issue-acts");
     if (anchor) datePicker({ anchor, title: "Due date", current: one?.due ?? null, kinds: ["day"], set: (t) => setField(slug, "due", t ?? "") });
     e.preventDefault();
   }

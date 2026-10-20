@@ -96,8 +96,8 @@ function serial(name: string, work: () => Promise<void>): () => Promise<void> {
 }
 
 // --- the frame ---------------------------------------------------------------------------------------------------------
-// A session that starts or stops working, or asks you something, changes no row the app holds, yet the Inbox and the
-// strips say it. So the frame goes again after every write that changed a row of any table (db.onCommit), such as the
+// A session that starts or stops working, or asks you something, changes no row the app holds, yet the Inbox and an
+// issue's page say it. So the frame goes again after every write that changed a row of any table (db.onCommit), such as the
 // line's, and on each word from the session host: a turn started or ended, a question waits, a process ended (turns.ts).
 // What a session wrote beside its issue, such as a screenshot, is read again once its turn ends. Only time moves the
 // frame on its own, when a landing has been stuck for a minute: one timer, set for that moment. (While a host of older
