@@ -103,6 +103,7 @@ export async function connect(ws: WebSocket, id: string) {
   ws.on("close", () => { if (visible.delete(ws)) void inbox.read({ session: id }); });
   const sent = new Set<string>(); // the items' keys the panel has, so each comes once from whichever source is first
   let path: string | null = null, readTo = 0, host: WebSocket | null = null, closed = false;
+  const opened = Date.now();
   let lastMeta = "";
   const say = (event: Record<string, unknown>) => {
     if (!closed && ws.readyState === ws.OPEN) ws.send(JSON.stringify(event));
@@ -130,6 +131,12 @@ export async function connect(ws: WebSocket, id: string) {
     readTo = next;
     const added = fresh(entries.flatMap(transcript.itemsOf));
     if (added.length) say({ type: "items", items: added });
+    // A /model or /effort typed since the panel opened, which the chip shows as its own picks once kept. An older one,
+    // read again as a moved chat's transcript is read from its start, is left: the chip may have picked over it since.
+    for (const e of entries) {
+      const run = Date.parse(e.timestamp) >= opened && transcript.commandRun(e);
+      if (run) void models.ran(id, run).catch((error) => console.error(`desk: ${id} ran /${run.command}`, error));
+    }
   };
   let timer: NodeJS.Timeout | null = null;
   const soon = () => {
@@ -148,6 +155,7 @@ export async function connect(ws: WebSocket, id: string) {
       else if (e.type === "message") {
         const added = fresh(transcript.itemsOf(e.entry));
         if (added.length) say({ type: "items", items: added });
+        if (e.entry.local_command_run) soon(); // a slash command ran: its record in the transcript tells a /model's pick
       } else if (e.type === "closed") {
         say({ type: "tasks", tasks: [] }); // they ended with its process
         h.close();

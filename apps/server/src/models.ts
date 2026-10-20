@@ -70,12 +70,27 @@ export async function open() {
 
 export const pickOf = (session: string): Pick => picks[session] ?? {};
 
-export async function keep(session: string, pick: Pick) {
-  const { model = null, effort = null } = { ...picks[session], ...fit(pick) };
+export const keep = (session: string, pick: Pick) => save(session, { ...picks[session], ...fit(pick) });
+
+// Kept here before the table, so that a pick made while this one is written, such as /effort right after /model, adds
+// to it rather than to the one before.
+async function save(session: string, pick: Pick) {
+  const { model = null, effort = null } = pick;
+  picks = { ...picks, [session]: fit(pick) };
   await db.write((tx) => tx.query(`insert into session_models values ($1, $2, $3)
     on conflict (session) do update set model = excluded.model, effort = excluded.effort`, [session, model, effort]));
-  picks = { ...picks, [session]: fit({ model: model ?? undefined, effort: effort ?? undefined }) };
   await copies.out(FILE, `${JSON.stringify(picks, null, 2)}\n`);
+}
+
+// A /model or /effort typed in the session itself, as Claude Code ran it (transcript.ts, commandRun): kept as the
+// chip's picks are, so the chip shows it and the host starts the session again on it. Only what Claude Code says it set
+// counts, as 2.1.285 words it: "Set model to `Sonnet 5.5`", "Set effort level to low", and "Effort level set to auto",
+// the model's own, which drops the effort picked. "Model 'x' not found" leaves the pick as it was.
+export async function ran(session: string, run: { command: string; args: string; said: string }) {
+  const arg = run.args.toLowerCase(); // Claude Code takes /model Sonnet and /effort HIGH
+  if (run.command === "model" && arg && run.said.startsWith("Set model to")) await keep(session, { model: arg });
+  else if (run.command === "effort" && run.said.startsWith("Set effort level to")) await keep(session, { effort: arg as Effort });
+  else if (run.command === "effort" && run.said.startsWith("Effort level set to auto")) await save(session, { ...pickOf(session), effort: undefined });
 }
 
 // Claude Code's own default, as the user's settings name it.

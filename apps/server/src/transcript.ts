@@ -167,6 +167,14 @@ function notice(text: string): Item | null {
 
 const noted = (key: string, note: Item): Item[] => (note.text ? [{ ...note, key }] : []);
 
+// A slash command Claude Code ran itself, such as /model sonnet, with what it printed, from the transcript's
+// system/local_command (Claude Code 2.1.285); null for any other event.
+export function commandRun(e: Entry): { command: string; args: string; said: string } | null {
+  if (e.type !== "system" || e.subtype !== "local_command" || !e.commandRun) return null;
+  const said = /<local-command-(?:stdout|stderr)>([\s\S]*?)<\/local-command-/.exec(String(e.content ?? ""))?.[1] ?? "";
+  return { command: String(e.commandRun.command), args: String(e.commandRun.args ?? "").trim(), said: said.replace(/\x1b\[[0-9;]*m/g, "").trim() };
+}
+
 // The items one transcript event stands for.
 export function itemsOf(e: Entry): Item[] {
   if (e.isSidechain || e.parent_tool_use_id) return []; // a subagent's: its Agent step stands for it
