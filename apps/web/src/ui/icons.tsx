@@ -127,6 +127,28 @@ export function ProjectStatusIcon({ status, progress }: { status: string; progre
   );
 }
 
+// Linear's health icons, from a project update's health menu on linear.app, 20 Oct: a tinted disc with a line going up
+// (On track), a zigzag (At risk) or a line going down (Off track); with no update, a dashed ring. Update missing shows the
+// last one's, ringed, or the ring, as Linear's dashed outline over its icon; grey once a week overdue (stale).
+const HEALTH_PATH: Record<string, string> = {
+  on_track: "M12.6807 5.7029C12.9925 5.97566 13.0241 6.44948 12.7513 6.76121L9.71942 10.2263C9.56569 10.402 9.33892 10.4961 9.10596 10.4808C8.873 10.4656 8.66044 10.3427 8.53094 10.1485L6.76432 7.49855L4.37742 10.2263C4.10466 10.5381 3.63083 10.5696 3.31911 10.2969C3.00739 10.0241 2.97581 9.55028 3.24857 9.23856L6.28056 5.77356C6.43429 5.59788 6.66106 5.50379 6.89401 5.51905C7.12696 5.53432 7.33952 5.65718 7.46902 5.85142L9.23562 8.50133L11.6224 5.77347C11.8952 5.46174 12.369 5.43015 12.6807 5.7029Z",
+  at_risk: "M9.62562 3.8314C9.85957 3.7977 10.0957 3.87627 10.2628 4.04341L12.5728 6.35341C12.8657 6.6463 12.8657 7.12117 12.5728 7.41407C12.28 7.70696 11.8051 7.70696 11.5122 7.41407L9.91096 5.81284L6.92594 11.2854C6.81276 11.4929 6.60838 11.6349 6.37442 11.6686C6.14047 11.7023 5.90433 11.6237 5.73719 11.4566L3.42719 9.14657C3.1343 8.85367 3.1343 8.3788 3.42719 8.08591C3.72008 7.79301 4.19496 7.79301 4.48785 8.08591L6.08908 9.68714L9.0741 4.2146C9.18728 4.00709 9.39166 3.86509 9.62562 3.8314Z",
+  off_track: "M12.6807 10.297C12.9925 10.0242 13.0241 9.5504 12.7513 9.23866L9.71942 5.77356C9.56569 5.59786 9.33892 5.50377 9.10596 5.51903C8.873 5.53429 8.66044 5.65716 8.53094 5.8514L6.76432 8.50133L4.37742 5.77354C4.10466 5.46182 3.63083 5.43024 3.31911 5.703C3.00739 5.97577 2.97581 6.44959 3.24857 6.76132L6.28056 10.2263C6.43429 10.402 6.66106 10.4961 6.89401 10.4808C7.12696 10.4656 7.33952 10.3427 7.46902 10.1485L9.23562 7.49855L11.6224 10.2264C11.8952 10.5381 12.369 10.5697 12.6807 10.297Z",
+};
+
+export function HealthIcon({ health, state }: { health: string | null; state?: string }) {
+  const color = state === "stale" ? "var(--text-5)" : health ? `var(--health-${health})` : "var(--text-5)";
+  const missing = state === "missing" || state === "stale";
+  return (
+    <svg className="health-icon" width="16" height="16" viewBox="0 0 16 16" style={{ color }}>
+      {health && HEALTH_PATH[health] ? (
+        <><circle r="8" cx="8" cy="8" fill="currentColor" opacity="0.25" /><path fillRule="evenodd" clipRule="evenodd" d={HEALTH_PATH[health]} fill="currentColor" /></>
+      ) : null}
+      {(!health || missing) && <circle r="7.5" cx="8" cy="8" fill="none" strokeWidth="1" strokeDasharray="2.36 2.36" strokeLinecap="round" stroke={missing ? "var(--health-missing)" : "currentColor"} />}
+    </svg>
+  );
+}
+
 // Linear's milestone diamonds, from its icon sprite on 20 Oct: an outline for one not started, a quarter filled while
 // its issues are under way, full once done. The current one, which its project works towards, is yellow, as Linear's.
 export function MilestoneIcon({ progress, current }: { progress: number; current?: boolean }) {

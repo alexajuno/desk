@@ -1,8 +1,9 @@
 // Settings, as Linear's (linear.app/<workspace>/settings, measured 17 Oct): its own sidebar in place of the app's, with
 // Back to app and a list of pages, and each page a 640px column of cards, one row per setting. desk keeps what it
 // has a setting for: Preferences (the theme, and the model and effort a new chat starts with) and Workflows &
-// automations (the two auto-close toggles). Both pages' server settings are settings.ts. Linear keeps the second
-// under each team; desk has no teams.
+// automations (the two auto-close toggles), and Projects (when a project's update is due, Linear's Settings > Projects >
+// Updates reminders). The server's settings are settings.ts. Linear keeps the auto-close toggles under each team; desk's
+// teams have no settings of their own, so they are desk's.
 import { observer } from "mobx-react-lite";
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation, useParams } from "react-router";
@@ -21,11 +22,14 @@ interface Settings {
   parent_auto_close: boolean;
   chat_model: string;
   chat_effort: string;
+  project_update_day: string;
+  project_update_time: string;
 }
 
 const PAGES: { group: string; pages: { slug: string; title: string; icon: ReactNode }[] }[] = [
   { group: "Personal", pages: [{ slug: "preferences", title: "Preferences", icon: GLYPH.sliders }] },
   { group: "Issues", pages: [{ slug: "workflow", title: "Workflows & automations", icon: GLYPH.parent }] },
+  { group: "Projects", pages: [{ slug: "projects", title: "Projects", icon: GLYPH.project }] },
 ];
 const TITLES = Object.fromEntries(PAGES.flatMap((g) => g.pages).map((p) => [p.slug, p.title]));
 
@@ -177,6 +181,35 @@ function Workflow() {
   );
 }
 
+const DAYS: [string, string][] = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]];
+
+// When a project In Progress is due its update: desk's agent drafts it then, into the Inbox (the server's updates.ts).
+function ProjectUpdates() {
+  const [shown, set] = useSettings();
+  if (!shown) return null;
+  const hours = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, "0")}:00`);
+  const pick = (id: string, list: [string, string][], current: string, choose: (v: string) => unknown) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (toggled(e.currentTarget)) return;
+    openMenu({ anchor: e.currentTarget, items: () => list.map(([value, label]) => ({ label, current: value === current, run: () => choose(value) })) });
+  };
+  return (
+    <Section title="Update reminders" about="Each project In Progress is due an update weekly, unless its Activity says otherwise. desk's agent drafts it then, from what changed, and the draft waits in the Inbox for you to post.">
+      <Row id="project_update_day" title="Day" about="The day an update falls due">
+        <button id="project_update_day" type="button" className="set-pick" onClick={pick("project_update_day", DAYS, shown.project_update_day, (v) => set({ project_update_day: v }))}>
+          {DAYS.find(([d]) => d === shown.project_update_day)?.[1]}
+          {CHEVRON_DOWN}
+        </button>
+      </Row>
+      <Row id="project_update_time" title="Time" about="And the time, in your timezone">
+        <button id="project_update_time" type="button" className="set-pick" onClick={pick("project_update_time", hours.map((h) => [h, h]), shown.project_update_time, (v) => set({ project_update_time: v }))}>
+          {shown.project_update_time}
+          {CHEVRON_DOWN}
+        </button>
+      </Row>
+    </Section>
+  );
+}
+
 export function SettingsPage() {
   const { section = "" } = useParams();
   useEffect(() => { document.title = `${TITLES[section] ?? "Settings"} · desk`; }, [section]);
@@ -188,7 +221,7 @@ export function SettingsPage() {
         <div className="settings">
           <h1>{TITLES[section]}</h1>
           {section === "workflow" && <p className="set-lead">Manage issue automations and other workflows.</p>}
-          {section === "preferences" ? <><Preferences /><Chats /></> : <Workflow />}
+          {section === "preferences" ? <><Preferences /><Chats /></> : section === "projects" ? <ProjectUpdates /> : <Workflow />}
         </div>
       </div>
     </>

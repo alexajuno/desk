@@ -4,6 +4,7 @@
 // period (periods.ts). It sits in a team, and an issue belongs to one project at most, as in Linear. Postgres is the
 // record; each keeps its folder in PROJECTS_DIR, where project.md is written out on every save, through db.write, as
 // an issue is, and read back only into a new database.
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PROJECTS_DIR } from "./config.ts";
@@ -27,16 +28,17 @@ export interface Project {
   status: string; // one of STATUSES
   start: string | null; // a period (periods.ts)
   target: string | null;
+  updates: string; // how often it is due an update: weekly, biweekly or never (updates.ts)
   created: string;
   body: string;
 }
 
-const FIELDS = ["title", "team", "status", "start", "target", "created"] as const;
+const FIELDS = ["title", "team", "status", "start", "target", "updates", "created"] as const;
 
 export const folder = (slug: string) => join(PROJECTS_DIR, slug);
 
 export function blank(slug: string, title: string): Project {
-  return { slug, title, team: null, status: "backlog", start: null, target: null, created: now(), body: "" };
+  return { slug, title, team: null, status: "backlog", start: null, target: null, updates: "weekly", created: now(), body: "" };
 }
 
 export function parse(slug: string, text: string): Project {
@@ -84,7 +86,15 @@ async function upsert(tx: Db, p: Project, written: string) {
   );
 }
 
+// A change to a project, in its Activity (updates.ts), logged inside the write that makes it.
+export const logChange = (tx: Db, project: string, field: string, was: string | null, to: string | null) =>
+  tx.query("insert into activity (id, project, kind, field, was, now, at) values ($1, $2, 'change', $3, $4, $5, $6)",
+    [randomUUID(), project, field, was, to, now()]);
+
 export async function saveIn(tx: Db, p: Project) {
+  const was = (await tx.query<Row>("select * from projects where slug = $1", [p.slug])).rows[0];
+  if (!was) await logChange(tx, p.slug, "created", null, p.title);
+  else for (const field of ["status", "start", "target", "team"] as const) if (was[field] !== p[field]) await logChange(tx, p.slug, field, was[field], p[field]);
   const text = render(p);
   mkdirSync(folder(p.slug), { recursive: true });
   writeFileSync(join(folder(p.slug), MAIN), text, "utf8");
@@ -160,6 +170,7 @@ export function addMilestone(project: string, title: string, target: string | nu
     const last = (await tx.query<{ sort: number | null }>("select max(sort) as sort from milestones where project = $1", [project])).rows[0].sort;
     const m: Milestone = { id, project, title, body, target, sort: (last ?? 0) + 1, created: now() };
     await putMilestone(tx, m);
+    await logChange(tx, project, "milestone", null, title);
     return m;
   });
 }
@@ -179,6 +190,7 @@ export function moveMilestone(m: Milestone, place: number): Promise<void> {
 export function deleteMilestone(m: Milestone): Promise<void> {
   return db.write(async (tx) => {
     await tx.query("delete from milestones where id = $1", [m.id]);
+    await logChange(tx, m.project, "milestone", m.title, null);
     for (const i of (await loadIssues(tx)).values()) if (i.milestone === m.id) await saveIssue(tx, { ...i, milestone: null });
   });
 }

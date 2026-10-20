@@ -5,6 +5,8 @@
 //     parent_auto_close      the last open sub-issue closed closes its parent
 //     chat_model             the model a new desk chat starts with, a Claude Code alias or model id such as opus
 //     chat_effort            the effort it starts with: low, medium, high, xhigh or max
+//     project_update_day     the day a project In Progress is due its update, as Linear's reminders: mon to sun
+//     project_update_time    and the time, 24-hour, such as 09:00 (updates.ts)
 //
 // Linear keeps the first two in Settings > Team > Workflow (linear.app/docs/parent-and-sub-issues#status-automation);
 // desk has no teams, so they are Settings > Workflow. The chat's two are Settings > Preferences.
@@ -22,11 +24,17 @@ export interface Settings {
   parent_auto_close: boolean;
   chat_model: string;
   chat_effort: Effort;
+  project_update_day: string;
+  project_update_time: string;
 }
 
 // Sub-issue auto-close is on from the start, as the user asked for it (17 Oct); Parent auto-close is off, Linear's default.
 // A chat starts on Opus at extra high effort, as every chat ran before the setting.
-export const DEFAULTS: Settings = { sub_issue_auto_close: true, parent_auto_close: false, chat_model: "opus", chat_effort: "xhigh" };
+// A project's update falls due Wednesdays at 09:00, Linear's example: "post an update weekly on Wednesdays"
+// (linear.app/docs/initiative-and-project-updates).
+export const DEFAULTS: Settings = { sub_issue_auto_close: true, parent_auto_close: false, chat_model: "opus", chat_effort: "xhigh",
+  project_update_day: "wed", project_update_time: "09:00" };
+export const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 const FILE = join(DATA_DIR, "settings.json"); // where they were until 19 Oct, written out still (copies.ts)
 const MODEL = /^[a-z0-9][a-z0-9.\-[\]]{0,79}$/; // an alias or a model id, such as sonnet or claude-opus-5-5[1m]
@@ -35,6 +43,8 @@ const MODEL = /^[a-z0-9][a-z0-9.\-[\]]{0,79}$/; // an alias or a model id, such 
 function wrong(name: keyof Settings, value: unknown): string {
   if (typeof DEFAULTS[name] === "boolean") return typeof value === "boolean" ? "" : `${name} must be true or false.`;
   if (name === "chat_effort") return EFFORTS.includes(value as Effort) ? "" : `chat_effort must be one of ${EFFORTS.join(", ")}.`;
+  if (name === "project_update_day") return DAYS.includes(value as string) ? "" : `project_update_day must be one of ${DAYS.join(", ")}.`;
+  if (name === "project_update_time") return typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? "" : "project_update_time must be a time such as 09:00.";
   return typeof value === "string" && MODEL.test(value) ? "" : `${name} must be a model's alias or id, such as opus or sonnet.`;
 }
 

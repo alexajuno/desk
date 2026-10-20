@@ -45,6 +45,7 @@ export const router = createBrowserRouter(
     { path: "/triage", element: <TriagePage /> },
     { path: "/projects", element: <ProjectsPage />, loader: at(() => "/api/page/projects") },
     { path: "/project/:slug", element: <ProjectPage tab="" />, loader: at(({ params }) => `/api/page/project/${params.slug}`) },
+    { path: "/project/:slug/activity", element: <ProjectPage tab="activity" />, loader: at(({ params }) => `/api/page/project/${params.slug}`) },
     { path: "/project/:slug/issues", element: <ProjectPage tab="issues" />,
       loader: at(({ params, request }) => listUrl(`/project/${params.slug}/issues`, `/api/page/project/${params.slug}`, search(request))) },
     { path: "/teams", element: <TeamsPage />, loader: at(() => "/api/page/teams") },

@@ -10,7 +10,7 @@ import { Go } from "../app/nav";
 import { Bar } from "../frame/Bar";
 import { PROJECT_STATUS_NAMES } from "../issues/menus";
 import { ui } from "../store/ui";
-import { GLYPH, ProjectStatusIcon } from "../ui/icons";
+import { GLYPH, HealthIcon, ProjectStatusIcon } from "../ui/icons";
 import type { ProjectRowData } from "./ProjectPage";
 
 interface Group { status: string; label: string; items: ProjectRowData[] }
@@ -27,7 +27,7 @@ export const ProjectsPage = observer(function ProjectsPage() {
         {data && (
           <div className="page projects-list">
             {data.length > 0 && (
-              <div className="projects-cols"><span>Name</span><span>Team</span><span>Target date</span><span>Issues</span><span>Status</span></div>
+              <div className="projects-cols"><span>Name</span><span>Health</span><span>Team</span><span>Target date</span><span>Issues</span><span>Status</span></div>
             )}
             {data.map((g) => (
               <section key={g.status}>
@@ -36,6 +36,9 @@ export const ProjectsPage = observer(function ProjectsPage() {
                   <Go key={p.slug} className={`item projects-row${ui.focused === `project/${p.slug}` ? " focus" : ""}`} to={`/project/${p.slug}`}
                     data-key={`project/${p.slug}`} onMouseMove={() => { if (ui.focused !== `project/${p.slug}`) ui.focus(`project/${p.slug}`, true); }}>
                     <span className="name">{GLYPH.project}<span className="title">{p.title}</span></span>
+                    <span className={`health health-${p.health.state}`} title={p.health.posted ? `Last update ${p.health.posted}` : undefined}>
+                      <HealthIcon health={p.health.state === "none" ? null : (["missing", "stale"].includes(p.health.state) ? null : p.health.state)} state={p.health.state} />{p.health.label}
+                    </span>
                     <span className="muted">{p.team_title ?? ""}</span>
                     <span className={p.late ? "late" : "muted"}>{p.target_label}</span>
                     <span className="num">{p.issues}</span>

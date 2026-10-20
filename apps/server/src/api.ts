@@ -23,6 +23,8 @@
 //     POST   /api/projects/<slug>/milestones        add one, last: title, target, body
 //     PATCH  /api/projects/<slug>/milestones/<id>   set title, target, body, or its place in the order (position, from 0)
 //     DELETE /api/projects/<slug>/milestones/<id>   delete it; its issues stay in the project
+//     GET    /api/projects/<slug>/updates           its activity, newest first: updates, its draft, and changes
+//     POST   /api/projects/<slug>/updates           post an update: health, body; with "draft": true, its draft
 //     GET    /api/settings              desk's settings (settings.ts)
 //     PATCH  /api/settings              set any of them
 //     GET    /api/agents                the user's own agents, whom a chat can be with (roster.ts)
@@ -46,6 +48,7 @@ import { byRank, type Issue } from "./issues.ts";
 import * as land from "./land.ts";
 import * as periods from "./periods.ts";
 import { HttpError } from "./pages.ts";
+import * as updates from "./updates.ts";
 import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
 import * as roster from "./roster.ts";
@@ -172,13 +175,15 @@ function applyTeam(t: Team, fields: Record<string, string | null>) {
   for (const [name, value] of Object.entries(fields)) target[name] = name === "body" ? value || "" : value;
 }
 
-const PROJECT_FIELDS = ["title", "body", "team", "status", "start", "target"];
+const PROJECT_FIELDS = ["title", "body", "team", "status", "start", "target", "updates"];
 
 export async function projectJson(p: Project, full = false) {
   const mine = projects.issuesOf(await store.loadAll(), p.slug);
   const data: Record<string, unknown> = { slug: p.slug, title: p.title, team: p.team, status: p.status, start: p.start, target: p.target,
     created: p.created, url: `/project/${p.slug}`, issues: mine.length, open_issues: mine.filter((i) => OPEN.includes(i.state)).length,
-    progress: Math.round(projects.progress(mine) * 100) };
+    progress: Math.round(projects.progress(mine) * 100), updates: p.updates };
+  const h = updates.healthOf(p, await updates.activityOf(p.slug));
+  data.health = { state: h.state, label: h.label, posted: h.at };
   if (full) Object.assign(data, { file: join(projects.folder(p.slug), projects.MAIN), body: p.body,
     milestones: projects.milestoneProgress(await projects.milestonesOf(p.slug), mine).map(({ sort: _, created: __, project: ___, ...m }) => m),
     issue_list: mine.map((i) => asJson(i)) });
@@ -209,6 +214,8 @@ async function applyProject(p: Project, fields: Record<string, string | null>) {
   if ("status" in fields && !projects.STATUSES.includes(fields.status as string))
     throw new HttpError(422, `status must be one of: ${projects.STATUSES.join(", ")}`);
   if ("title" in fields && !fields.title) throw new HttpError(422, "title cannot be empty");
+  if ("updates" in fields && !updates.CADENCES.includes(fields.updates as string))
+    throw new HttpError(422, `updates must be one of: ${updates.CADENCES.join(", ")}, how often the project is due an update`);
   if (fields.team && !(await teams.exists(fields.team))) throw new HttpError(422, `No team ${fields.team}. List them with GET /api/teams.`);
   for (const name of ["start", "target"]) if (name in fields) fields[name] = period(name, fields[name]);
   const target = p as unknown as Record<string, string | null>;
@@ -458,6 +465,16 @@ export function routes(app: FastifyInstance) {
       await projects.moveMilestone(m, position);
     }
     return (await projects.milestone(m.id))!;
+  });
+
+  app.get("/api/projects/:slug/updates", async (req: Req) => updates.activityOf((await loadProject(req.params.slug)).slug));
+
+  app.post("/api/projects/:slug/updates", async (req: Req, reply) => {
+    const p = await loadProject(req.params.slug);
+    const fields = given(req.body, ["health", "body"]), draft = ((req.body ?? {}) as Record<string, unknown>).draft === true;
+    if (!updates.HEALTHS.includes(fields.health as string)) throw new HttpError(422, `health must be one of: ${updates.HEALTHS.join(", ")}`);
+    if (!fields.body) throw new HttpError(422, "body is required: a few lines on what moved, what is next, and any risk");
+    return reply.code(201).send(await updates.post(p.slug, fields.health!, fields.body, draft));
   });
 
   app.delete("/api/projects/:slug/milestones/:id", async (req: MilestoneReq) => {

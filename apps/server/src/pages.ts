@@ -23,6 +23,7 @@ import * as sessions from "./sessions.ts";
 import * as teams from "./teams.ts";
 import type { Team } from "./teams.ts";
 import * as turns from "./turns.ts";
+import * as updates from "./updates.ts";
 import * as views from "./views.ts";
 import { nearDay, parseLocal, shortDate, waited } from "./when.ts";
 
@@ -512,9 +513,10 @@ export async function teamsPage() {
 
 // A project as its page and its row in Projects show it (projects.ts): its dates in words, whether its target date
 // passed, which shows red as Linear's does, and its progress in whole percent.
-function projectJson(p: Project, all: Map<string, Issue>, everyTeam: Map<string, Team>) {
-  const mine = projects.issuesOf(all, p.slug);
+function projectJson(p: Project, all: Map<string, Issue>, everyTeam: Map<string, Team>, activity: updates.Entry[]) {
+  const mine = projects.issuesOf(all, p.slug), h = updates.healthOf(p, activity);
   return {
+    health: { state: h.state, label: h.label, posted: h.at && shortDate(h.at) }, updates: p.updates,
     slug: p.slug, title: p.title, team: p.team, team_title: p.team ? everyTeam.get(p.team)?.title ?? p.team : null, status: p.status,
     start: p.start, start_label: periods.label(p.start), target: p.target, target_label: periods.label(p.target),
     late: !projects.CLOSED.has(p.status) && periods.passed(p.target), created: p.created,
@@ -525,9 +527,13 @@ function projectJson(p: Project, all: Map<string, Issue>, everyTeam: Map<string,
 export async function projectPage(slug: string, query: string) {
   if (!(await projects.exists(slug))) throw new HttpError(404, "That project is gone.");
   const p = await projects.load(slug), all = await store.loadAll(), milestones = await projects.milestonesOf(slug);
+  const activity = await updates.activityOf(slug);
   const listing = views.build(views.parse("project", query), projects.issuesOf(all, slug), all, await named(milestones));
   return {
-    project: { ...projectJson(p, all, await teams.loadAll()), body: p.body, body_html: toHtml(p.body) },
+    project: { ...projectJson(p, all, await teams.loadAll(), activity), body: p.body, body_html: toHtml(p.body) },
+    activity: activity.map((e) => ({ ...e, at_short: shortDate(e.at), month: monthOf(e.at), body_html: e.body ? toHtml(e.body) : "",
+      was_label: dateField(e.field) ? periods.label(e.was) : e.was, now_label: dateField(e.field) ? periods.label(e.now) : e.now })),
+    since: sinceLast(activity, Math.round(projects.progress(projects.issuesOf(all, slug)) * 100)),
     milestones: projects.milestoneProgress(milestones, projects.issuesOf(all, slug)).map((m) => ({ id: m.id, title: m.title, body: m.body,
       target: m.target, target_label: periods.label(m.target), late: m.progress < 100 && periods.passed(m.target), issues: m.issues,
       progress: m.progress, current: m.current })),
@@ -539,8 +545,19 @@ export async function projectPage(slug: string, query: string) {
 export async function projectsPage(_query = "") {
   const all = await store.loadAll(), everyTeam = await teams.loadAll();
   const everyone = [...(await projects.loadAll()).values()].sort((a, b) => byCreated(a, b));
-  return projects.STATUSES.map((status) => ({ status, label: projects.STATUS_NAMES[status],
-    items: everyone.filter((p) => p.status === status).map((p) => projectJson(p, all, everyTeam)) })).filter((g) => g.items.length);
+  return Promise.all(projects.STATUSES.map(async (status) => ({ status, label: projects.STATUS_NAMES[status],
+    items: await Promise.all(everyone.filter((p) => p.status === status).map(async (p) => projectJson(p, all, everyTeam, await updates.activityOf(p.slug)))) })))
+    .then((groups) => groups.filter((g) => g.items.length));
+}
+
+const dateField = (field: string | null) => field === "start" || field === "target";
+const monthOf = (iso: string) => new Date(iso.replace(" ", "T")).toLocaleString("en-US", { month: "long", year: "numeric" });
+
+// What the composer shows under a new update, as Linear's progress report: the project's progress since its last update,
+// and when that was.
+function sinceLast(activity: updates.Entry[], progress: number) {
+  const last = activity.find((e) => e.kind === "update");
+  return { from: last?.progress ?? 0, to: progress, since: last ? shortDate(last.at) : null };
 }
 
 // An automation as its row and its page show it: when it fires next and last ran, in words.

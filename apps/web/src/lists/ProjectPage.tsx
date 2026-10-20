@@ -1,10 +1,13 @@
 // A project's page, Linear's (measured on linear.app on 20 Oct, its muse and imagenhub projects): its name in the top
-// bar, and under it tabs, each a page of its own address. Overview (/project/<slug>) holds the name and the description,
+// bar, and under it tabs, each a page of its own address: Overview, Activity and Issues. Overview (/project/<slug>) holds the name and the description,
 // both edited where they are, and its Properties as a row of chips: its status, its team, and its start and target
 // dates, Linear's "Apr 21st → Target date", each opening Linear's date picker. A target date passed shows red. Issues
 // (/project/<slug>/issues) holds its issues by status, with the same Filter and Display as the Issues tabs, and a
 // group's + files a new issue in the project. Under the description, its milestones, Linear's: in their order, which
 // you drag, each with its diamond, name, description, target date and how far along it is, the current one yellow.
+// Over the description, as Linear's, its latest update, or a box to write the first; Activity (/project/<slug>/activity)
+// holds Linear's composer, prefilled with the draft desk's agent wrote when the update fell due (the server's
+// updates.ts), and every update and change, newest first, by month.
 import { observer } from "mobx-react-lite";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams } from "react-router";
@@ -17,7 +20,7 @@ import { projectStatusMenu, PROJECT_STATUS_NAMES, teamPicker } from "../issues/m
 import { Title } from "../issues/IssueView";
 import { reloadPages } from "../store/ui";
 import { datePicker } from "../ui/datepicker";
-import { GLYPH, MilestoneIcon, ProjectStatusIcon } from "../ui/icons";
+import { GLYPH, HealthIcon, MilestoneIcon, ProjectStatusIcon } from "../ui/icons";
 import { openMenu, toggled } from "../ui/menu";
 import { keyOf } from "../lib/keys";
 import { toast } from "../ui/toast";
@@ -35,6 +38,8 @@ export interface ProjectRowData {
   target: string | null;
   target_label: string;
   late: boolean; // its target date passed and it is not completed or canceled
+  health: { state: string; label: string; posted: string | null };
+  updates: string; // how often it is due an update: weekly, biweekly, never
   created: string;
   issues: number;
   progress: number; // whole percent
@@ -52,13 +57,32 @@ interface MilestoneData {
   current: boolean;
 }
 
+interface Entry {
+  id: string;
+  kind: "update" | "draft" | "change";
+  health: string | null;
+  body: string;
+  body_html: string;
+  field: string | null;
+  was_label: string | null;
+  now_label: string | null;
+  at: string;
+  at_short: string;
+  month: string;
+}
+
 interface ProjectData {
   project: ProjectRowData & { body: string; body_html: string };
   milestones: MilestoneData[];
+  activity: Entry[];
+  since: { from: number; to: number; since: string | null };
   list: ListData;
 }
 
-const TABS = [["", "Overview"], ["issues", "Issues"]];
+const HEALTHS: [string, string][] = [["on_track", "On track"], ["at_risk", "At risk"], ["off_track", "Off track"]];
+const CADENCES: [string, string][] = [["weekly", "Weekly"], ["biweekly", "Every 2 weeks"], ["never", "Never"]];
+
+const TABS = [["", "Overview"], ["activity", "Activity"], ["issues", "Issues"]];
 
 export async function setProject(slug: string, field: string, value: string) {
   const res = await post(`/project/${slug}/set`, { field, value });
@@ -68,11 +92,11 @@ export async function setProject(slug: string, field: string, value: string) {
 
 export function ProjectPage({ tab }: { tab: string }) {
   const { slug = "" } = useParams();
-  return tab ? <ProjectIssues key={slug} slug={slug} /> : <ProjectOverview key={slug} slug={slug} />;
+  return tab === "issues" ? <ProjectIssues key={slug} slug={slug} /> : tab === "activity" ? <ProjectActivity key={slug} slug={slug} /> : <ProjectOverview key={slug} slug={slug} />;
 }
 
 function Head({ slug, title, tab, tools }: { slug: string; title?: string; tab: string; tools?: ReactNode }) {
-  useEffect(() => { if (title) document.title = `${title} › ${tab ? "Issues" : "Overview"} · desk`; }, [title, tab]);
+  useEffect(() => { if (title) document.title = `${title} › ${TABS.find(([t]) => t === tab)?.[1] ?? "Overview"} · desk`; }, [title, tab]);
   return (
     <>
       <Bar crumb={title && <span className="bar-title project-crumb">{GLYPH.project}{title}</span>} />
@@ -133,9 +157,130 @@ const ProjectOverview = observer(function ProjectOverview({ slug }: { slug: stri
               <h3>Properties</h3>
               <ProjectChips p={pr} set={(field, value) => setProject(slug, field, value)} />
             </div>
+            <LatestUpdate slug={slug} activity={data!.activity} />
             <h3>Description</h3>
             <Description body={pr.body} html={pr.body_html} save={(t) => setProject(slug, "body", t)} />
             <Milestones slug={slug} list={data!.milestones} />
+          </div>
+        )}
+      </div>
+    </>
+  );
+});
+
+// Over the description: the latest update, or the draft waiting, or Linear's box to write the first; each opens Activity.
+function LatestUpdate({ slug, activity }: { slug: string; activity: Entry[] }) {
+  const latest = activity.find((e) => e.kind === "update"), draft = activity.find((e) => e.kind === "draft");
+  if (!latest)
+    return (
+      <Go className="update-box first" to={`/project/${slug}/activity`}>
+        {GLYPH.pencil}{draft ? "A draft update waits: read it and post it" : "Write first project update"}
+      </Go>
+    );
+  return (
+    <Go className="update-box" to={`/project/${slug}/activity`}>
+      <UpdateHead e={latest} />
+      <div className="update-body" dangerouslySetInnerHTML={{ __html: latest.body_html }} />
+      {draft && <div className="update-draft-note">{GLYPH.pencil}A draft of the next update waits</div>}
+    </Go>
+  );
+}
+
+const UpdateHead = ({ e }: { e: Entry }) => (
+  <div className="update-head">
+    <span className={`health-chip health-${e.health}`}><HealthIcon health={e.health} />{HEALTHS.find(([h]) => h === e.health)?.[1]}</span>
+    <span className="muted">{e.kind === "draft" ? `Draft, ${e.at_short}` : e.at_short}</span>
+  </div>
+);
+
+// What a change in Activity says, as Linear's: "set the target date to Nov 22nd".
+function changeText(e: Entry): string {
+  const name = ({ status: "status", start: "start date", target: "target date", team: "team" } as Record<string, string>)[e.field ?? ""];
+  if (e.field === "created") return "created the project";
+  if (e.field === "milestone") return e.now_label ? `added the milestone ${e.now_label}` : `removed the milestone ${e.was_label}`;
+  const value = (v: string | null) => (e.field === "status" ? PROJECT_STATUS_NAMES[v ?? ""] ?? v : v);
+  if (!e.now_label) return `removed the ${name}`;
+  return `${e.was_label ? "changed" : "set"} the ${name} ${e.was_label ? `from ${value(e.was_label)} ` : ""}to ${value(e.now_label)}`;
+}
+
+// Linear's composer on Activity: the health chip, the text, the progress since the last update, and Post update. A draft
+// desk's agent wrote fills it.
+function Composer({ slug, data }: { slug: string; data: ProjectData }) {
+  const draft = data.activity.find((e) => e.kind === "draft");
+  const [health, setHealth] = useState(draft?.health ?? "on_track");
+  const [body, setBody] = useState(draft?.body ?? "");
+  const [sending, setSending] = useState(false);
+  useEffect(() => { if (draft) { setHealth(draft.health ?? "on_track"); setBody(draft.body); } }, [draft?.id, draft?.at]); // eslint-disable-line react-hooks/exhaustive-deps
+  const send = async () => {
+    if (!body.trim() || sending) return;
+    setSending(true);
+    const res = await post(`/project/${slug}/update`, { health, body });
+    setSending(false);
+    if (!res.ok) { toast(await reason(res)); return; }
+    setBody("");
+    await reloadPages();
+  };
+  const s = data.since;
+  return (
+    <div className="composer-box">
+      <div className="composer-top">
+        <span className="update-kind">Update</span>
+        <button type="button" className={`health-chip health-${health}`} title="Health"
+          onClick={(e) => { if (!toggled(e.currentTarget)) openMenu({ anchor: e.currentTarget, items: () => HEALTHS.map(([h, label]) => ({ icon: <HealthIcon health={h} />, label, current: h === health, run: () => setHealth(h) })) }); }}>
+          <HealthIcon health={health} />{HEALTHS.find(([h]) => h === health)?.[1]}
+        </button>
+        {draft && <span className="muted draft-tag">Draft by desk's agent, {draft.at_short}</span>}
+      </div>
+      <textarea className="update-text" placeholder="Write a project update…" value={body} rows={4}
+        onChange={(e) => setBody(e.target.value)}
+        onKeyDown={(e) => { if (keyOf(e) === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } }} />
+      <div className="update-progress"><span>{s.since ? `Progress since ${s.since}` : "Progress"}</span><span>{`${s.from}% → ${s.to}%`}</span></div>
+      <div className="composer-foot">
+        {draft && <button type="button" className="ghost small" onClick={async () => { await post(`/project/${slug}/draft/discard`); setBody(""); await reloadPages(); }}>Discard draft</button>}
+        <span className="spacer" />
+        <button type="button" className="small" disabled={!body.trim() || sending} title="Post update  Ctrl Enter" onClick={send}>Post update</button>
+      </div>
+    </div>
+  );
+}
+
+const ProjectActivity = observer(function ProjectActivity({ slug }: { slug: string }) {
+  const { data, error } = usePage<ProjectData>(`/api/page/project/${slug}`);
+  const pr = data?.project;
+  const cadence = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (toggled(e.currentTarget) || !pr) return;
+    openMenu({ anchor: e.currentTarget, items: () => CADENCES.map(([c, label]) => ({ label, current: c === pr.updates, run: () => setProject(slug, "updates", c) })) });
+  };
+  const shown = data?.activity.filter((e) => e.kind !== "draft") ?? [];
+  const months = [...new Set(shown.map((e) => e.month))];
+  return (
+    <>
+      <Head slug={slug} title={pr?.title} tab="activity" tools={pr && (
+        <button type="button" className="ghost small" title="How often the project is due an update, while In Progress" onClick={cadence}>
+          {GLYPH.clock}{`Updates: ${CADENCES.find(([c]) => c === pr.updates)?.[1] ?? "Weekly"}`}
+        </button>
+      )} />
+      <div className="scroll">
+        {error && !data && <p className="muted" style={{ padding: 24 }}>{error.replace("issue", "project")}</p>}
+        {data && (
+          <div className="project-activity">
+            <Composer slug={slug} data={data} />
+            {months.map((m) => (
+              <section key={m}>
+                <h2>{m}</h2>
+                {shown.filter((e) => e.month === m).map((e) => e.kind === "update" ? (
+                  <div key={e.id} className="update-card">
+                    <UpdateHead e={e} />
+                    <div className="update-body" dangerouslySetInnerHTML={{ __html: e.body_html }} />
+                  </div>
+                ) : (
+                  <div key={e.id} className="activity-line">
+                    {e.field === "milestone" ? GLYPH.milestone : e.field === "created" ? GLYPH.project : GLYPH.calendar}
+                    <span>{`${changeText(e)} · ${e.at_short}`}</span>
+                  </div>
+                ))}
+              </section>
+            ))}
           </div>
         )}
       </div>

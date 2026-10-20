@@ -24,6 +24,7 @@ import * as sessions from "./sessions.ts";
 import * as sync from "./sync.ts";
 import * as teams from "./teams.ts";
 import * as transcript from "./transcript.ts";
+import * as updates from "./updates.ts";
 import * as turns from "./turns.ts";
 import * as web from "./web.ts";
 import * as window from "./window.ts";
@@ -244,7 +245,7 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/version", async (_req, reply) => reply.type("text/plain; charset=utf-8").send(pages.version()));
 
   // desk's pages are the app's: each address answers with it, and the app asks /api/page/... for the data.
-  for (const path of ["/issues", "/issues/:tab", "/triage", "/teams", "/team/:slug", "/team/:slug/issues", "/projects", "/project/:slug/issues", "/automations", "/automation/:slug", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
+  for (const path of ["/issues", "/issues/:tab", "/triage", "/teams", "/team/:slug", "/team/:slug/issues", "/projects", "/project/:slug/issues", "/project/:slug/activity", "/automations", "/automation/:slug", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
     app.get(path, async (_req, reply) => web.index(reply));
   app.get("/", async (_req, reply) => reply.redirect("/issues", 307));
   // A project's page; until 20 Oct /project/<slug> was a team's, whose links in issues and chats go on to it.
@@ -371,12 +372,28 @@ export async function create(): Promise<FastifyInstance> {
     else if (name === "team") {
       value = value || null;
       if (value && !(await teams.exists(value))) throw new HttpError(422, `No team ${value}.`);
+    } else if (name === "updates") {
+      if (!updates.CADENCES.includes(value)) throw new HttpError(422, `updates cannot be ${value}`);
     } else if (name === "start" || name === "target") {
       value = value ? periods.parse(value) : null;
       if (field(req, "value") && !value) throw new HttpError(422, `“${field(req, "value")}” is no date: try May 2027, Q4 or 20/05/2027.`);
     } else throw new HttpError(422, `No field ${name}.`);
     (p as unknown as Record<string, string | null>)[name] = value;
     await projects.save(p);
+    return { ok: true };
+  });
+
+  // A project's update, posted from its Activity's composer, which takes the place of its draft; and the draft thrown away.
+  app.post("/project/:slug/update", async (req: Req) => {
+    if (!(await projects.exists(req.params.slug))) throw new HttpError(404, "That project is gone.");
+    const health = field(req, "health"), body = field(req, "body").replace(/\r\n/g, "\n").trim();
+    if (!updates.HEALTHS.includes(health)) throw new HttpError(422, `health cannot be ${health}`);
+    if (!body) throw new HttpError(422, "Write the update first.");
+    return updates.post(req.params.slug, health, body);
+  });
+
+  app.post("/project/:slug/draft/discard", async (req: Req) => {
+    await updates.discard(req.params.slug);
     return { ok: true };
   });
 

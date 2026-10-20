@@ -127,6 +127,11 @@
   --project-completed: lch(48% 59.31 288.43);
   --project-canceled: #8a8f98;
   --late: lch(65.2% 73 29);                /* a target or due date passed: Linear's red, its Off track's */
+  /* a project update's health, from linear.app's health menu on 2026-10-20, dark; Update missing's ring is desk's */
+  --health-on_track: lch(67.2% 64.37 141.95);
+  --health-at_risk: lch(87.2% 90 85);
+  --health-off_track: lch(65.2% 73 29);
+  --health-missing: lch(87.2% 90 85);
   --text-running: lch(80% 90 85);
   --text-done: #4cb782;
   --text-blocked: lch(66% 80 48);
@@ -1044,7 +1049,7 @@ button.set-pick svg { color: var(--text-3); }
 /* Projects (lists/ProjectsPage.tsx), Linear's list of them, read off linear.app's All projects on 2026-10-20 in dark: a
    row of column names in --text-3, then each status's group, its header 44px with the status icon, name and count, and
    its rows 48px: the name with the project's cube, then the columns, Status last with the icon and the percent. */
-.projects-list { --cols: minmax(0, 1fr) 160px 120px 64px 88px; padding-top: 0; }
+.projects-list { --cols: minmax(0, 1fr) 150px 150px 110px 56px 80px; padding-top: 0; }
 .projects-cols, .projects-row { display: grid; grid-template-columns: var(--cols); align-items: center; gap: 12px; }
 .projects-cols { height: 36px; padding: 0 16px 0 36px; font: 500 12px var(--font); color: var(--text-3); }
 .projects-group { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 22px; font-weight: 500; color: var(--text-1); }
@@ -1083,3 +1088,41 @@ button.set-pick svg { color: var(--text-3); }
 .add-milestone { display: flex; align-items: center; gap: 6px; height: 28px; margin-top: 8px; padding: 0; border: 0; background: none; box-shadow: none;
                  font: 500 13px var(--font); color: var(--text-5); }
 .add-milestone:hover { color: var(--text-3); }
+.projects-row .health { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; }
+.projects-row .health-none { color: var(--text-3); }
+.projects-row .health-stale { color: var(--text-3); }
+/* A project's updates (lists/ProjectPage.tsx), Linear's, read off linear.app on 2026-10-20, dark: on Overview the latest
+   update, or a box to write the first, a 1px-ringed card the column's width; on Activity the composer, Comment and
+   Update and the health chip (24px pills, 12px/500, the health in its colour), the text, the progress since the last
+   update under a rule at its left, and Post update; then each month's updates and changes. */
+.update-box { display: block; margin: 24px -24px 8px; padding: 16px 24px; border: 0.5px solid var(--border-2); border-radius: 8px;
+              color: var(--text-1); text-decoration: none; transition: background-color 0.1s; }
+.update-box:hover { background: var(--bg-raised); }
+.update-box.first { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 24px; color: var(--text-2); font-weight: 500; }
+.update-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; }
+.health-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px 0 4px; border: 0; border-radius: 9999px;
+               background: var(--bg-raised); font: 500 12px var(--font); box-shadow: none; }
+.health-chip.health-on_track { color: var(--health-on_track); }
+.health-chip.health-at_risk { color: var(--health-at_risk); }
+.health-chip.health-off_track { color: var(--health-off_track); }
+.update-body { font-size: 14px; line-height: 22px; }
+.update-body > :first-child { margin-top: 0; } .update-body > :last-child { margin-bottom: 0; }
+.update-draft-note { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 12px; color: var(--text-3); }
+.project-activity { max-width: 805px; margin: 48px auto 24px; padding: 0 48px 40px; }
+.composer-box { padding: 12px 16px; border: 0.5px solid var(--border-2); border-radius: 8px; background: var(--bg-raised); }
+.composer-box:focus-within { border-color: var(--accent); }
+.composer-top { display: flex; align-items: center; gap: 8px; }
+.update-kind { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 9999px; background: var(--bg-active);
+               font: 500 12px var(--font); color: var(--text-1); }
+.draft-tag { font-size: 12px; }
+.update-text { display: block; width: 100%; box-sizing: border-box; margin: 12px 0 8px; padding: 0; border: 0; background: none; resize: vertical;
+               font: 450 15px/24px var(--font); color: var(--text-1); outline: none; }
+.update-text::placeholder { color: var(--text-3); }
+.update-progress { display: flex; gap: 16px; margin: 8px 0 12px; padding-left: 12px; border-left: 2px solid var(--border-2); font-size: 13px; color: var(--text-2); }
+.update-progress span:first-child { color: var(--text-3); }
+.composer-foot { display: flex; align-items: center; gap: 8px; }
+.composer-foot .spacer { flex: 1; }
+.project-activity h2 { margin: 40px 0 16px; font: 600 18px var(--font); }
+.update-card { margin-bottom: 16px; padding: 16px; border: 0.5px solid var(--border-2); border-radius: 8px; }
+.activity-line { display: flex; align-items: center; gap: 10px; min-height: 30px; font-size: 13px; color: var(--text-2); }
+.activity-line .glyph { color: var(--text-3); }

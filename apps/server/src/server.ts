@@ -18,6 +18,7 @@ import * as slack from "./slack.ts";
 import * as sync from "./sync.ts";
 import * as teams from "./teams.ts";
 import * as turns from "./turns.ts";
+import * as updates from "./updates.ts";
 import * as web from "./web.ts";
 
 await db.open();
@@ -47,6 +48,7 @@ if (process.env.DESK_CLOCK !== "0") {
   land.start(); // the line for desk's own checkout moves on its own
   slack.connect(); // Slack pushes each 🐧 the user adds, and its message comes into Triage
   automations.startClock(); // each automation whose time came fires
+  updates.startClock(); // each project In Progress whose update fell due gets its draft, then its nudges
 }
 
 let stopping = false;
