@@ -1054,8 +1054,10 @@ button.set-pick svg { color: var(--text-3); }
 
 /* Projects (lists/ProjectsPage.tsx), Linear's list of them, read off linear.app's All projects on 2026-10-20 in dark: a
    row of column names in --text-3, then each status's group, its header 44px with the status icon, name and count, and
-   its rows 48px: the name with the project's cube, then the columns, Status last with the icon and the percent. */
+   its rows 48px: the name with the project's cube, then the columns, Status last with the icon and the percent. A
+   team's list has no Team column. */
 .projects-list { --cols: minmax(0, 1fr) 150px 150px 110px 56px 80px; padding-top: 0; }
+.projects-list.in-team { --cols: minmax(0, 1fr) 150px 110px 56px 80px; }
 .projects-cols, .projects-row { display: grid; grid-template-columns: var(--cols); align-items: center; gap: 12px; }
 .projects-cols { height: 36px; padding: 0 16px 0 36px; font: 500 12px var(--font); color: var(--text-3); }
 .projects-group { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 22px; font-weight: 500; color: var(--text-1); }

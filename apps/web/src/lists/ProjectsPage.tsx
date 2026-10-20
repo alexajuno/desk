@@ -1,8 +1,9 @@
 // Projects, Linear's list of them (linear.app/alexajuno/projects/all, read on 20 Oct): a header row naming the columns,
 // then the projects grouped by status, each group's header its status icon, name and count over a hairline, and each
-// row 48px tall: the project's cube and name, its team, its target date (red once passed), how many issues it has, and
-// its status icon with how far along it is. Linear's New project button at the top bar's end opens the new project
-// panel, as N then P does. At /projects every project; at /team/<slug>/projects a team's, as Linear's team Projects.
+// row 48px tall: the project's cube and name, its health, its team, its target date (red once passed), how many issues
+// it has, and its status icon with how far along it is. Linear's New project button at the top bar's end opens the new
+// project panel, as N then P does. At /projects every project; at /team/<slug>/projects a team's, as Linear's team
+// Projects, with no Team column, since every row is that team's. Linear's own list has none on either (measured 20 Oct).
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
 import { usePage } from "../api/page";
@@ -27,9 +28,9 @@ export const ProjectsPage = observer(function ProjectsPage({ team = "" }: { team
       } />
       <div className="scroll">
         {data && (
-          <div className="page projects-list">
+          <div className={`page projects-list${team ? " in-team" : ""}`}>
             {data.length > 0 && (
-              <div className="projects-cols"><span>Name</span><span>Health</span><span>Team</span><span>Target date</span><span>Issues</span><span>Status</span></div>
+              <div className="projects-cols"><span>Name</span><span>Health</span>{!team && <span>Team</span>}<span>Target date</span><span>Issues</span><span>Status</span></div>
             )}
             {data.map((g) => (
               <section key={g.status}>
@@ -41,7 +42,7 @@ export const ProjectsPage = observer(function ProjectsPage({ team = "" }: { team
                     <span className={`health health-${p.health.state}`} title={p.health.posted ? `Last update ${p.health.posted}` : undefined}>
                       <HealthIcon health={p.health.state === "none" ? null : (["missing", "stale"].includes(p.health.state) ? null : p.health.state)} state={p.health.state} />{p.health.label}
                     </span>
-                    <span className="muted">{p.team_title ?? ""}</span>
+                    {!team && <span className="muted">{p.team_title ?? ""}</span>}
                     <span className={p.late ? "late" : "muted"}>{p.target_label}</span>
                     <span className="num">{p.issues}</span>
                     <span className="status" title={PROJECT_STATUS_NAMES[p.status]}><ProjectStatusIcon status={p.status} progress={p.progress / 100} />{`${p.progress}%`}</span>

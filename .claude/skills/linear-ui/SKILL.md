@@ -71,6 +71,7 @@ Each one cost a redo. Check your work against them.
 - **A form over the list** (18 Oct). The Projects page opened with an input and a Create project button above its rows; the user asked for "linear flow": a New project button in the top bar and a modal, as Linear has.
 - **Responsive by guess** (15 Oct). The Inbox's open notification kept its properties column on a narrow window. Resize Linear and find where it changes: it was between an 817 and an 827px pane.
 - **Copied a part that means nothing in desk** (15 Oct, found 19 Oct). Linear's Inbox row starts with the avatar of the person who acted; desk drew the same session avatar on every row, and the user: "it's all chats right? and claude sessions. there is nobody". Copy what a part says as well as how it looks; where desk has no such thing, put there something that differs from row to row (the Inbox now draws the status in that spot).
+- **A column Linear doesn't have** (20 Oct). The Projects list got a Team column, which Linear's list lacks, and it showed on a team's own Projects too, the same team on every row; the user: "redundant team column... the ai model made this up". Build a list's columns from the measured ones, and drop any column that is the same on every row of a page.
 
 - **A sidebar section named after desk, not Linear** (20 Oct). desk's projects were ongoing work, Linear's teams; Linear's projects finish. They became "Your teams", and Projects is Linear's again. Name a part by what Linear's part of the same use is called.
 
