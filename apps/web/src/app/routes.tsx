@@ -1,4 +1,4 @@
-import { createBrowserRouter, type LoaderFunctionArgs, Navigate, useLocation } from "react-router";
+import { createBrowserRouter, type LoaderFunctionArgs, Navigate, useLocation, useParams } from "react-router";
 import { prime } from "../api/page";
 import { Frame } from "../frame/Frame";
 import { IssuePage } from "../issues/IssuePage";
@@ -6,7 +6,7 @@ import { FilePage } from "../files/FilePage";
 import { AutomationPage } from "../lists/AutomationPage";
 import { AutomationsPage } from "../lists/AutomationsPage";
 import { INBOX_KEEP, InboxPage } from "../inbox/InboxPage";
-import { IssuesPage, TABS } from "../lists/IssuesPage";
+import { IssuesPage, issuesApi, issuesPath, TABS } from "../lists/IssuesPage";
 import { ProjectPage } from "../lists/ProjectPage";
 import { ProjectsPage } from "../lists/ProjectsPage";
 import { TeamPage } from "../lists/TeamPage";
@@ -36,6 +36,24 @@ const tabRoute = (tab: string) => ({
   loader: at(({ request }) => listUrl(tab ? `/issues/${tab}` : "/issues", tab ? `/api/page/issues/${tab}` : "/api/page/issues", search(request))),
 });
 
+// A team's Issues tabs, Triage and Projects, Linear's team pages: the same pages as desk's own, on the team alone.
+function TeamIssues({ tab }: { tab: string }) {
+  const { slug = "" } = useParams();
+  return <IssuesPage key={`${slug} ${tab}`} tab={tab} team={slug} />;
+}
+function TeamTriage() {
+  const { slug = "" } = useParams();
+  return <TriagePage key={slug} team={slug} />;
+}
+function TeamProjects() {
+  const { slug = "" } = useParams();
+  return <ProjectsPage key={slug} team={slug} />;
+}
+function ToTeamIssues() {
+  const { slug = "" } = useParams();
+  return <Navigate to={`/team/${slug}/all${useLocation().search}`} replace />;
+}
+
 // desk's pages, at the addresses they always had.
 export const router = createBrowserRouter(
   [{ element: <Frame />, errorElement: <Crashed />, children: [
@@ -49,9 +67,12 @@ export const router = createBrowserRouter(
     { path: "/project/:slug/issues", element: <ProjectPage tab="issues" />,
       loader: at(({ params, request }) => listUrl(`/project/${params.slug}/issues`, `/api/page/project/${params.slug}`, search(request))) },
     { path: "/teams", element: <TeamsPage />, loader: at(() => "/api/page/teams") },
-    { path: "/team/:slug", element: <TeamPage tab="" />, loader: at(({ params }) => `/api/page/team/${params.slug}`) },
-    { path: "/team/:slug/issues", element: <TeamPage tab="issues" />,
-      loader: at(({ params, request }) => listUrl(`/team/${params.slug}/issues`, `/api/page/team/${params.slug}`, search(request))) },
+    { path: "/team/:slug", element: <TeamPage />, loader: at(({ params }) => `/api/page/team/${params.slug}`) },
+    ...["", ...TABS].map((tab) => ({ path: `/team/:slug/${tab || "all"}`, element: <TeamIssues tab={tab} />,
+      loader: at(({ params, request }) => listUrl(issuesPath(tab, params.slug), issuesApi(tab, params.slug), search(request))) })),
+    { path: "/team/:slug/issues", element: <ToTeamIssues /> },
+    { path: "/team/:slug/triage", element: <TeamTriage /> },
+    { path: "/team/:slug/projects", element: <TeamProjects />, loader: at(({ params }) => `/api/page/team/${params.slug}/projects`) },
     { path: "/automations", element: <AutomationsPage />, loader: at(() => "/api/page/automations") },
     { path: "/automation/:slug", element: <AutomationPage />, loader: at(({ params }) => `/api/page/automation/${params.slug}`) },
     { path: "/issue/:slug", element: <IssuePage />, loader: at(({ params }) => `/api/page/issue/${params.slug}`) },

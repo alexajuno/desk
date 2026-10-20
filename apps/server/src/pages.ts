@@ -500,21 +500,30 @@ function listingJson(listing: views.Listing, path: string, add: Record<string, u
 
 // The Issues tabs: All issues at /issues, Active and Backlog under it.
 export const TABS = ["active", "backlog"];
-export async function issuesPage(tab: string, query: string) {
+// My issues and its tabs at /issues, or a team's Issues and the same tabs at /team/<slug>/all, active and backlog, as
+// Linear's team Issues (team): only its issues, and a group's + files a new one in it.
+export async function issuesPage(tab: string, query: string, team = "") {
   const all = await store.loadAll();
-  const listing = views.build(views.parse(tab || "issues", query), [...all.values()], all, await named());
-  return listingJson(listing, tab ? `/issues/${tab}` : "/issues", {}, all);
+  const t = team ? await loadTeam(team) : null;
+  const listing = views.build(views.parse(tab || "issues", query), [...all.values()].filter((i) => !t || i.team === t.slug), all, await named());
+  const path = t ? `/team/${t.slug}/${tab || "all"}` : tab ? `/issues/${tab}` : "/issues";
+  return { ...listingJson(listing, path, t ? { team: t.slug, teamTitle: t.title } : {}, all), team: t && { slug: t.slug, title: t.title } };
+}
+
+async function loadTeam(slug: string) {
+  if (!(await teams.exists(slug))) throw new HttpError(404, "That team is gone.");
+  return teams.load(slug);
 }
 
 // The names a list's chips and groups show for a team's or a project's slug.
 const named = async (milestones: projects.Milestone[] = []): Promise<views.Named> =>
   ({ team: await teams.loadAll(), project: await projects.loadAll(), milestone: new Map(milestones.map((m) => [m.id, m])) });
 
-export async function teamPage(slug: string, query: string) {
-  if (!(await teams.exists(slug))) throw new HttpError(404, "That team is gone.");
-  const t = await teams.load(slug), all = await store.loadAll();
-  const listing = views.build(views.parse("team", query), teams.issuesOf(all, slug), all, await named());
-  return { team: { slug: t.slug, title: t.title, state: t.state, body: t.body, body_html: toHtml(t.body) }, list: listingJson(listing, `/team/${slug}`, { team: t.slug, teamTitle: t.title }) };
+// A team's own page, its settings as Linear keeps them: its name, its description and whether it is archived. Its issues,
+// its Triage and its projects have pages of their own under it, as Linear's team has.
+export async function teamPage(slug: string) {
+  const t = await loadTeam(slug);
+  return { team: { slug: t.slug, title: t.title, state: t.state, body: t.body, body_html: toHtml(t.body) } };
 }
 
 export async function teamsPage() {
@@ -554,10 +563,12 @@ export async function projectPage(slug: string, query: string) {
   };
 }
 
-// Linear's Projects list: every project, grouped by status in the order its menu lists them, the oldest first in each.
-export async function projectsPage(_query = "") {
+// Linear's Projects list: every project, or a team's (team), grouped by status in the order its menu lists them, the oldest
+// first in each.
+export async function projectsPage(team = "") {
   const all = await store.loadAll(), everyTeam = await teams.loadAll();
-  const everyone = [...(await projects.loadAll()).values()].sort((a, b) => byCreated(a, b));
+  if (team) await loadTeam(team);
+  const everyone = [...(await projects.loadAll()).values()].filter((p) => !team || p.team === team).sort((a, b) => byCreated(a, b));
   return Promise.all(projects.STATUSES.map(async (status) => ({ status, label: projects.STATUS_NAMES[status],
     items: await Promise.all(everyone.filter((p) => p.status === status).map(async (p) => projectJson(p, all, everyTeam, await updates.activityOf(p.slug)))) })))
     .then((groups) => groups.filter((g) => g.items.length));

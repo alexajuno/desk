@@ -1,11 +1,13 @@
-// The sidebar on every page (templates/base.html's aside.side): Inbox, Triage, Issues, Projects, Automations and the teams,
-// the sessions you pinned and those still in hand, as claude.ai's Starred and Recents, then what desk's checkout runs.
+// The sidebar on every page (templates/base.html's aside.side), Linear's (measured on linear.app on 20 Oct): Inbox, My
+// issues and Triage; Workspace's Projects and Automations; Your teams, each team folding open to its own Triage, Issues
+// and Projects, as Linear's team does; then the sessions you pinned and those still in hand, as claude.ai's Starred and
+// Recents, then what desk's checkout runs.
 // An issue in progress or landing shows in Chats, by its session ("now that the chats section display all issues, feel like we don't need the in progress
 // section anymore", the user, 19 Oct); the rest stay in Issues.
 import { observer } from "mobx-react-lite";
 import { useState, type ReactNode } from "react";
 import { useLocation } from "react-router";
-import { deskPath, Go } from "../app/nav";
+import { deskPath, go, Go } from "../app/nav";
 import type { State } from "../lib/desk";
 import { frame, talkOf, type ChatRow } from "../store/frame";
 import { issues } from "../store/issues";
@@ -23,6 +25,16 @@ function triageTip(triage: { slug: string; session: string | null }[]) {
   return `${triage.length ? `${triage.length} not settled yet${waits ? `, ${waits} waiting for you` : ""}` : "Nothing to settle"}  G then T`;
 }
 const ISSUES_TIP = "All issues  G then E\nActive  G then A\nBacklog  G then B";
+const ISSUES_ICON = <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"><rect x="2.25" y="4.75" width="9" height="9" rx="2" /><path d="M4.75 2.25h7c1.1 0 2 .9 2 2v7" strokeLinecap="round" /></svg>;
+const TRIAGE_ICON = <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9.5h3.25l1 1.75h3.5l1-1.75H14" /><path d="M2 9.5l1.6-5.1c.13-.42.52-.65.95-.65h6.9c.43 0 .82.23.95.65L14 9.5v2.75c0 .55-.45 1-1 1H3c-.55 0-1-.45-1-1z" /><path d="M8 4.5v3.25M6.6 6.4 8 7.75 9.4 6.4" /></svg>;
+
+// A team's right-click: its settings page, and every team.
+function teamMenu(slug: string, at: { x: number; y: number }) {
+  openMenu({ ...at, className: "actions", items: () => [
+    { icon: GLYPH.sliders, label: "Team settings", run: () => go(`/team/${slug}`) },
+    { icon: GLYPH.team, label: "All teams", run: () => go("/teams") },
+  ] });
+}
 const WHY = "desk runs this branch instead of main: a session's test, or your Try";
 
 // A row's right-click menu: Pin or Unpin, and for a chat with no issue, Rename, typed over its title. An empty one
@@ -102,31 +114,55 @@ export const Sidebar = observer(function Sidebar() {
         <svg viewBox="0 0 16 16"><path d="M2 9h3l1 2h4l1-2h3M3 3h10l1 6v4H2V9z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
         Inbox{issues.unread.length > 0 && <span className="count">{issues.unread.length}</span>}
       </Go>
-      {/* Linear's team section: Triage, the chats not settled yet, with how many; then Issues and its tabs. */}
+      {/* Linear's My issues: every issue, of any team, with its All issues, Active and Backlog tabs. */}
+      <Go className={`nav-item${here === "/issues" || here.startsWith("/issues/") ? " here" : ""}`} to="/issues" title={ISSUES_TIP}>
+        {ISSUES_ICON}
+        My issues
+      </Go>
+      {/* Every chat's issue not settled yet, with how many. A chat files its issue with no team, so desk's Triage stays
+          here, beside each team's own below. */}
       <Go className={`nav-item${at("/triage")}`} to="/triage" title={triageTip(triage)}>
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9.5h3.25l1 1.75h3.5l1-1.75H14" /><path d="M2 9.5l1.6-5.1c.13-.42.52-.65.95-.65h6.9c.43 0 .82.23.95.65L14 9.5v2.75c0 .55-.45 1-1 1H3c-.55 0-1-.45-1-1z" /><path d="M8 4.5v3.25M6.6 6.4 8 7.75 9.4 6.4" /></svg>
+        {TRIAGE_ICON}
         Triage{triage.length > 0 && <span className="count">{triage.length}</span>}
       </Go>
-      <Go className={`nav-item${here === "/issues" || here.startsWith("/issues/") ? " here" : ""}`} to="/issues" title={ISSUES_TIP}>
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"><rect x="2.25" y="4.75" width="9" height="9" rx="2" /><path d="M4.75 2.25h7c1.1 0 2 .9 2 2v7" strokeLinecap="round" /></svg>
-        Issues
-      </Go>
-      {/* Linear's Workspace › Projects: every project, of any team. */}
-      <Go className={`nav-item${here === "/projects" || here.startsWith("/project/") ? " here" : ""}`} to="/projects" title="Go to projects  G then P">
-        {GLYPH.project}
-        Projects
-      </Go>
-      <Go className={`nav-item${here === "/automations" || here.startsWith("/automation/") ? " here" : ""}`} to="/automations" title="Agents that run on a time or a condition">
-        {GLYPH.clock}
-        Automations
-      </Go>
-      <Go className={`nav-label${at("/teams")}`} to="/teams" title="Go to teams">Your teams</Go>
-      {issues.activeTeams.map((t) => (
-        <Go key={t.slug} className={`nav-item${here === `/team/${t.slug}` || here.startsWith(`/team/${t.slug}/`) ? " here" : ""}`} to={`/team/${t.slug}`}>
-          {GLYPH.team}
-          <span className="nav-title">{t.title}</span>
+      <Fold name="Workspace" folded={folded} toggle={toggle}>
+        <Go className={`nav-item${here === "/projects" || here.startsWith("/project/") ? " here" : ""}`} to="/projects" title="Go to projects  G then P">
+          {GLYPH.project}
+          Projects
         </Go>
-      ))}
+        <Go className={`nav-item${here === "/automations" || here.startsWith("/automation/") ? " here" : ""}`} to="/automations" title="Agents that run on a time or a condition">
+          {GLYPH.clock}
+          Automations
+        </Go>
+      </Fold>
+      <Fold name="Your teams" folded={folded} toggle={toggle}>
+        {issues.activeTeams.map((t) => {
+          const open = !folded.has(`team:${t.slug}`), mine = triage.filter((i) => i.team === t.slug).length;
+          const under = (page: string) => (here === `/team/${t.slug}/${page}` ? " here" : "");
+          return (
+            <div key={t.slug} className="nav-team-group">
+              {/* Linear's team row: its icon and name, and a triangle that folds its pages; right-click for its settings. */}
+              <button className="nav-team" type="button" aria-expanded={open} onClick={() => toggle(`team:${t.slug}`)}
+                onContextMenu={(e) => { e.preventDefault(); teamMenu(t.slug, { x: e.clientX, y: e.clientY }); }}>
+                {GLYPH.team}<span className="nav-title">{t.title}</span>{TRIANGLE}
+              </button>
+              {open && (
+                <>
+                  <Go className={`nav-item nav-sub${under("triage")}`} to={`/team/${t.slug}/triage`} title={`${t.title}'s issues not settled yet`}>
+                    {TRIAGE_ICON}Triage{mine > 0 && <span className="count">{mine}</span>}
+                  </Go>
+                  <Go className={`nav-item nav-sub${["all", "active", "backlog"].some((p) => under(p)) ? " here" : ""}`} to={`/team/${t.slug}/all`} title={`${t.title}'s issues`}>
+                    {ISSUES_ICON}Issues
+                  </Go>
+                  <Go className={`nav-item nav-sub${under("projects")}`} to={`/team/${t.slug}/projects`} title={`${t.title}'s projects`}>
+                    {GLYPH.project}Projects
+                  </Go>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </Fold>
       {/* The sessions you pinned, then every other one still in hand, the newest first, with no cap (pages.ts's
           chatsNow). Older ones are in the corner's history. */}
       {d && d.pinned.length > 0 && <Fold name="Pinned" folded={folded} toggle={toggle}>{d.pinned.map((c) => chatRow(c, true))}</Fold>}

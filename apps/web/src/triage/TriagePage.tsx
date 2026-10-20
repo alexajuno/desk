@@ -1,4 +1,5 @@
-// Linear's Triage (linear.app/docs/triage): the chats whose issue is not settled yet, newest first, on the left; the one
+// Linear's Triage (linear.app/docs/triage): the chats whose issue is not settled yet, newest first, on the left, at
+// /triage every one, and at /team/<slug>/triage a team's, as Linear's Triage is each team's; the one
 // picked (?i=<slug>) opens on the right as its chat, to talk on, under Linear's bar of triage actions. Accept 1,
 // Decline 2 and Duplicate 3 are Linear's keys; Park 4 is desk's own, for work to keep for later.
 //
@@ -23,7 +24,7 @@ import { live } from "../sessions/live";
 import { frame, talkOf } from "../store/frame";
 import { issues, type Issue } from "../store/issues";
 import { ui } from "../store/ui";
-import { StateIcon } from "../ui/icons";
+import { GLYPH, StateIcon } from "../ui/icons";
 import { openMenu, toggled, type MenuOptions } from "../ui/menu";
 import { toast } from "../ui/toast";
 
@@ -32,13 +33,15 @@ type Where = Pick<MenuOptions, "anchor" | "x" | "y">;
 
 const NOW: Record<string, string> = { working: "Its chat is working", idle: "Its chat waits for you", none: "It has no chat" };
 
-// Newest first, as chats come in.
-const rows = (): Row[] => issues.triage.map((i) => ({ ...i, now: talkOf(i) }));
+// Newest first, as chats come in; a team's alone on its page.
+const teamHere = () => /^\/team\/([\w-]+)\/triage/.exec(location.pathname)?.[1] ?? "";
+const rows = (team = teamHere()): Row[] => issues.triage.filter((i) => !team || i.team === team).map((i) => ({ ...i, now: talkOf(i) }));
+const base = (team = teamHere()) => (team ? `/team/${team}/triage` : "/triage");
 
 // After a row leaves Triage, the next one opens, or the one above when it was the last.
 function next(slug: string) {
   const all = rows(), at = all.findIndex((r) => r.slug === slug), then = all[at + 1] ?? all[at - 1];
-  go(then && then.slug !== slug ? `/triage?i=${then.slug}` : "/triage", { replace: true });
+  go(then && then.slug !== slug ? `${base()}?i=${then.slug}` : base(), { replace: true });
 }
 
 function tell(p: Row, text: string, done: string) {
@@ -85,14 +88,15 @@ export function triageKey(key: string): boolean {
   return true;
 }
 
-export const TriagePage = observer(function TriagePage() {
+export const TriagePage = observer(function TriagePage({ team = "" }: { team?: string }) {
   const [params] = useSearchParams();
-  const all = rows(), picked = all.find((r) => r.slug === params.get("i")) ?? null;
-  useEffect(() => { document.title = "Triage · desk"; }, []);
+  const all = rows(team), picked = all.find((r) => r.slug === params.get("i")) ?? null;
+  const teamTitle = team ? issues.teams.get(team)?.title ?? team : "";
+  useEffect(() => { document.title = `${teamTitle ? `${teamTitle} › ` : ""}Triage · desk`; }, [teamTitle]);
   return (
     <>
       <Bar
-        crumb={<><Go className="inbox-head" to="/triage">Triage</Go>{picked && <><span className="sep">›</span><span className="inbox-crumb">{picked.title}</span></>}</>}
+        crumb={<>{team && <><span className="bar-title project-crumb">{GLYPH.team}{teamTitle}</span><span className="sep">›</span></>}<Go className="inbox-head" to={base(team)}>Triage</Go>{picked && <><span className="sep">›</span><span className="inbox-crumb">{picked.title}</span></>}</>}
         tools={picked && (
           <button className="more" title="Actions" onClick={(e) => { if (!toggled(e.currentTarget)) actionsMenu(picked, { anchor: e.currentTarget }, picked.slug); }}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25" /><circle cx="8" cy="8" r="1.25" /><circle cx="12.5" cy="8" r="1.25" /></svg>
@@ -105,7 +109,7 @@ export const TriagePage = observer(function TriagePage() {
             <div className="inbox-list" data-keep-scroll="always">
               {all.map((p) => (
                 <Go key={p.slug} className={`item inbox-row read${p.slug === picked?.slug ? " selected" : ""}${ui.focused === p.slug ? " focus" : ""}`}
-                  to={`/triage?i=${p.slug}`} title={p.title} data-slug={p.slug} data-state={p.state} data-priority={p.priority} data-parent={p.parent ?? ""}
+                  to={`${base(team)}?i=${p.slug}`} title={p.title} data-slug={p.slug} data-state={p.state} data-priority={p.priority} data-parent={p.parent ?? ""}
                   onMouseMove={() => { if (ui.focused !== p.slug) ui.focus(p.slug, true); }}
                   onContextMenu={(e) => { e.preventDefault(); ui.focus(p.slug); actionsMenu(p, { x: e.clientX, y: e.clientY }, picked?.slug ?? null); }}>
                   <span className={`triage-now ${p.now}`} title={NOW[p.now]}><StateIcon state="triage" /></span>
@@ -119,7 +123,7 @@ export const TriagePage = observer(function TriagePage() {
             <div className="inbox-open triage-open" data-slug={picked?.slug} data-state={picked?.state}>
               {picked ? <Picked p={picked} /> : (
                 <div className="inbox-empty">
-                  <span>{all.length ? "Pick a chat to settle it" : "Nothing in Triage: every chat is settled"}</span>
+                  <span>{all.length ? "Pick a chat to settle it" : team ? `Nothing in ${teamTitle}'s Triage` : "Nothing in Triage: every chat is settled"}</span>
                 </div>
               )}
             </div>

@@ -1140,3 +1140,14 @@ button.set-pick svg { color: var(--text-3); }
 .due-chip.soon .glyph { color: var(--state-waiting); }
 .due-chip.late .glyph, .due-chip.late { color: var(--late); }
 .prop.due-pick .due-chip { box-shadow: none; padding: 0; height: auto; font-size: 13px; }
+/* The sidebar's teams (frame/Sidebar.tsx), Linear's Your teams, measured on linear.app on 2026-10-20 at 2x, dark: a team's
+   row is 28px with 9px in, its 14px icon then its name in the sidebar's quiet grey, and a dim 16px triangle right after
+   the name that turns as it folds; its pages are the sidebar's rows, 19px further in. */
+.nav-team-group { display: flex; flex-direction: column; }
+button.nav-team { display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 9px; border: 0; border-radius: 8px; background: none;
+                  box-shadow: none; font: 500 13px var(--font); color: var(--text-3); cursor: default; }
+button.nav-team:hover { background: var(--bg-side-hover); color: var(--text-2); }
+button.nav-team .glyph { flex: none; width: 14px; height: 14px; color: var(--text-2); }
+button.nav-team > svg:last-child { flex: none; margin-left: -5px; fill: var(--text-5); transform: rotate(90deg); transition: transform 0.15s; }
+button.nav-team[aria-expanded="false"] > svg:last-child { transform: none; }
+.nav-item.nav-sub { margin-left: 19px; }

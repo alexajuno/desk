@@ -32,27 +32,25 @@ const ISSUE_OPTIONS = {
   subs: { nested: "Nested", rows: "Flat", hidden: "Hidden" },
 };
 
-// Active and Backlog keep to their own statuses, so done issues never come back there. A team's page keeps to the list,
-// beside its properties.
+// Active and Backlog keep to their own statuses, so done issues never come back there. A project's Issues keeps to the
+// list, beside its properties.
 const { done: _done, ...OPEN_OPTIONS } = ISSUE_OPTIONS;
-const { layout: _layout, ...TEAM_OPTIONS } = ISSUE_OPTIONS;
+const { layout: _layout, ...PROJECT_OPTIONS } = ISSUE_OPTIONS;
 export const ACTIVE = ["running", "waiting", "review", "landing"];
 
 // Each page opens as it looked before views: All issues (the Backlog until 17 Oct) by priority with sub-issues under
-// their parent; a team's page by status, flat, with its done issues. The Issues tabs are Linear's: All issues, Active
+// their parent; a project's Issues by status, flat, with its done issues. A team's Issues are these same tabs, on its
+// issues alone (pages.ts, issuesPage). The Issues tabs are Linear's: All issues, Active
 // (being worked, or waiting on someone) and Backlog (parked, not started).
 export const PAGES: Record<string, Page> = {
   issues: { filters: ISSUE_FILTERS, options: ISSUE_OPTIONS, defaults: { layout: "list", group: "priority", order: "priority", done: "none", subs: "nested" }, switches: EMPTY, reverse: true, keep: [], noun: "issue" },
   active: { filters: ISSUE_FILTERS, options: OPEN_OPTIONS, defaults: { layout: "list", group: "status", order: "priority", subs: "nested" }, switches: EMPTY, reverse: true, keep: [], noun: "issue", holds: ACTIVE },
   backlog: { filters: ISSUE_FILTERS, options: OPEN_OPTIONS, defaults: { layout: "list", group: "priority", order: "priority", subs: "nested" }, switches: EMPTY, reverse: true, keep: [], noun: "issue", holds: ["backlog"] },
-  team: {
-    filters: Object.fromEntries(Object.entries(ISSUE_FILTERS).filter(([k]) => k !== "team")), options: TEAM_OPTIONS,
-    defaults: { group: "status", order: "priority", done: "all", subs: "rows" }, switches: EMPTY, reverse: true, keep: [], noun: "issue",
-  },
-  // A project's Issues tab, as a team's, which can also group by milestone, as Linear's (linear.app/docs/project-milestones).
+  // A project's Issues tab, by status, flat, with its done issues, which can also group by milestone, as Linear's
+  // (linear.app/docs/project-milestones).
   project: {
     filters: Object.fromEntries(Object.entries(ISSUE_FILTERS).filter(([k]) => k !== "project")),
-    options: { ...TEAM_OPTIONS, group: { ...TEAM_OPTIONS.group, milestone: "Milestone" } },
+    options: { ...PROJECT_OPTIONS, group: { ...PROJECT_OPTIONS.group, milestone: "Milestone" } },
     defaults: { group: "status", order: "priority", done: "all", subs: "rows" }, switches: EMPTY, reverse: true, keep: [], noun: "issue",
   },
   // Linear's Inbox (measured on linear.app on 19 Oct): Filter's Notification type, From, Team, Project, Issue priority

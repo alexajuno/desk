@@ -2,26 +2,28 @@
 // then the projects grouped by status, each group's header its status icon, name and count over a hairline, and each
 // row 48px tall: the project's cube and name, its team, its target date (red once passed), how many issues it has, and
 // its status icon with how far along it is. Linear's New project button at the top bar's end opens the new project
-// panel, as N then P does.
+// panel, as N then P does. At /projects every project; at /team/<slug>/projects a team's, as Linear's team Projects.
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
 import { usePage } from "../api/page";
 import { Go } from "../app/nav";
 import { Bar } from "../frame/Bar";
 import { PROJECT_STATUS_NAMES } from "../issues/menus";
+import { issues } from "../store/issues";
 import { ui } from "../store/ui";
 import { GLYPH, HealthIcon, ProjectStatusIcon } from "../ui/icons";
 import type { ProjectRowData } from "./ProjectPage";
 
 interface Group { status: string; label: string; items: ProjectRowData[] }
 
-export const ProjectsPage = observer(function ProjectsPage() {
-  const { data } = usePage<Group[]>("/api/page/projects");
-  useEffect(() => { document.title = "Projects · desk"; }, []);
+export const ProjectsPage = observer(function ProjectsPage({ team = "" }: { team?: string }) {
+  const { data } = usePage<Group[]>(team ? `/api/page/team/${team}/projects` : "/api/page/projects");
+  const teamTitle = team ? issues.teams.get(team)?.title ?? team : "";
+  useEffect(() => { document.title = `${teamTitle ? `${teamTitle} › ` : ""}Projects · desk`; }, [teamTitle]);
   return (
     <>
-      <Bar crumb={<span>Projects</span>} tools={
-        <button type="button" className="ghost new-project" title="Create new project  N then P" onClick={() => ui.setProjectCreator("")}>{GLYPH.plus}New project</button>
+      <Bar crumb={team ? <><span className="bar-title project-crumb">{GLYPH.team}{teamTitle}</span><span className="sep">›</span><span>Projects</span></> : <span>Projects</span>} tools={
+        <button type="button" className="ghost new-project" title="Create new project  N then P" onClick={() => ui.setProjectCreator(team)}>{GLYPH.plus}New project</button>
       } />
       <div className="scroll">
         {data && (

@@ -248,9 +248,11 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/version", async (_req, reply) => reply.type("text/plain; charset=utf-8").send(pages.version()));
 
   // desk's pages are the app's: each address answers with it, and the app asks /api/page/... for the data.
-  for (const path of ["/issues", "/issues/:tab", "/triage", "/teams", "/team/:slug", "/team/:slug/issues", "/projects", "/project/:slug/issues", "/project/:slug/activity", "/automations", "/automation/:slug", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
+  for (const path of ["/issues", "/issues/:tab", "/triage", "/teams", "/team/:slug", "/team/:slug/all", "/team/:slug/active", "/team/:slug/backlog", "/team/:slug/triage", "/team/:slug/projects", "/projects", "/project/:slug/issues", "/project/:slug/activity", "/automations", "/automation/:slug", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
     app.get(path, async (_req, reply) => web.index(reply));
   app.get("/", async (_req, reply) => reply.redirect("/issues", 307));
+  // A team's Issues is Linear's /team/<slug>/all now, with its Active and Backlog beside it.
+  app.get("/team/:slug/issues", async (req: Req, reply) => reply.redirect(`/team/${req.params.slug}/all`, 301));
   // A project's page; until 20 Oct /project/<slug> was a team's, whose links in issues and chats go on to it.
   app.get("/project/:slug", async (req: Req, reply) => {
     const slug = req.params.slug;
@@ -288,10 +290,16 @@ export async function create(): Promise<FastifyInstance> {
     if (!pages.TABS.includes(req.params.tab)) throw new HttpError(404, "No such tab.");
     return pages.issuesPage(req.params.tab, rawQuery(req));
   });
-  app.get("/api/page/team/:slug", async (req: Req) => pages.teamPage(req.params.slug, rawQuery(req)));
+  app.get("/api/page/team/:slug", async (req: Req) => pages.teamPage(req.params.slug));
+  app.get("/api/page/team/:slug/issues", async (req: Req) => pages.issuesPage("", rawQuery(req), req.params.slug));
+  app.get("/api/page/team/:slug/issues/:tab", async (req: Req) => {
+    if (!pages.TABS.includes(req.params.tab)) throw new HttpError(404, "No such tab.");
+    return pages.issuesPage(req.params.tab, rawQuery(req), req.params.slug);
+  });
+  app.get("/api/page/team/:slug/projects", async (req: Req) => pages.projectsPage(req.params.slug));
   app.get("/api/page/teams", async () => pages.teamsPage());
   app.get("/api/page/project/:slug", async (req: Req) => pages.projectPage(req.params.slug, rawQuery(req)));
-  app.get("/api/page/projects", async (req) => pages.projectsPage(rawQuery(req)));
+  app.get("/api/page/projects", async () => pages.projectsPage());
   app.get("/api/page/automations", async () => pages.automationsPage());
   app.get("/api/page/automation/:slug", async (req: Req) => pages.automationPage(req.params.slug));
   app.get("/api/page/inbox", async (req: Req) => pages.inboxPage(req.query.i ?? "", rawQuery(req)));

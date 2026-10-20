@@ -1,8 +1,7 @@
-// A team's page, as a Linear project's was until desk's projects became teams on 20 Oct: its name in the top bar, and
-// under it two tabs, each a page of its own address. Overview (/team/<slug>) holds the name and the description, both
-// edited where they are, as an issue's, and its Properties: its status, active or archived. Issues (/team/<slug>/issues)
-// holds its issues by status, with the same Filter and Display as the Issues tabs, and a group's + files a new issue in
-// the team.
+// A team's own page, its settings as Linear keeps them: its name and description, both edited where they are, and its
+// status, active or archived. Its issues, its Triage and its projects are pages of their own under it
+// (/team/<slug>/all, triage and projects), as Linear's team has them in the sidebar. Until 20 Oct this was a desk
+// project's page, with its issues on a tab.
 import { observer } from "mobx-react-lite";
 import { useEffect, type ReactNode } from "react";
 import { useParams } from "react-router";
@@ -16,16 +15,14 @@ import { reloadPages } from "../store/ui";
 import { GLYPH, StateIcon } from "../ui/icons";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
-import { Listing, Tools, type ListData } from "./parts";
-import { useList } from "./useList";
 
 type TeamState = "active" | "archived";
 interface TeamData {
   team: { slug: string; title: string; state: TeamState; body: string; body_html: string };
-  list: ListData;
 }
 
-const TABS = [["", "Overview"], ["issues", "Issues"]];
+// Its sidebar's pages, as links under the name.
+const PAGES: [string, string][] = [["triage", "Triage"], ["all", "Issues"], ["projects", "Projects"]];
 const STATUS: Record<TeamState, { label: string; icon: ReactNode }> = {
   active: { label: "Active", icon: <StateIcon state="running" /> },
   archived: { label: "Archived", icon: GLYPH.archive },
@@ -48,23 +45,20 @@ function statusMenu(slug: string, current: TeamState, anchor: Element) {
   });
 }
 
-export function TeamPage({ tab }: { tab: string }) {
+export function TeamPage() {
   const { slug = "" } = useParams();
-  return tab ? <TeamIssues key={slug} slug={slug} /> : <TeamOverview key={slug} slug={slug} />;
+  return <TeamOverview key={slug} slug={slug} />;
 }
 
-function Head({ slug, title, tab, tools }: { slug: string; title?: string; tab: string; tools?: ReactNode }) {
-  useEffect(() => { if (title) document.title = `${title} › ${tab ? "Issues" : "Overview"} · desk`; }, [title, tab]);
+function Head({ slug, title }: { slug: string; title?: string }) {
+  useEffect(() => { if (title) document.title = `${title} › Settings · desk`; }, [title]);
   return (
     <>
       <Bar crumb={title && <span className="bar-title project-crumb">{GLYPH.team}{title}</span>} />
       <div className="view-bar">
-        <nav className="tabs" aria-label="Views">
-          {TABS.map(([t, name]) => (
-            <Go key={t} className={`tab${t === tab ? " here" : ""}`} to={`/team/${slug}${t && `/${t}`}`} aria-current={t === tab ? "page" : undefined}>{name}</Go>
-          ))}
+        <nav className="tabs" aria-label="Pages">
+          {PAGES.map(([t, name]) => <Go key={t} className="tab" to={`/team/${slug}/${t}`}>{name}</Go>)}
         </nav>
-        <span className="right">{tools}</span>
       </div>
     </>
   );
@@ -75,7 +69,7 @@ const TeamOverview = observer(function TeamOverview({ slug }: { slug: string }) 
   const pr = data?.team;
   return (
     <>
-      <Head slug={slug} title={pr?.title} tab="" />
+      <Head slug={slug} title={pr?.title} />
       <div className="scroll">
         {error && !data && <p className="muted" style={{ padding: 24 }}>{error}</p>}
         {pr && (
@@ -93,19 +87,6 @@ const TeamOverview = observer(function TeamOverview({ slug }: { slug: string }) 
             <Description body={pr.body} html={pr.body_html} save={(t) => setTeam(slug, "body", t)} />
           </div>
         )}
-      </div>
-    </>
-  );
-});
-
-const TeamIssues = observer(function TeamIssues({ slug }: { slug: string }) {
-  const { data, error } = useList<TeamData>(`/team/${slug}/issues`, `/api/page/team/${slug}`, (d) => d.list.view);
-  return (
-    <>
-      <Head slug={slug} title={data?.team.title} tab="issues" tools={data && <Tools view={data.list.view} />} />
-      <div className="scroll">
-        {error && !data && <p className="muted" style={{ padding: 24 }}>{error}</p>}
-        {data && <Listing list={data.list} empty="No issues yet. A team never ends; its issues do." />}
       </div>
     </>
   );

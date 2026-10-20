@@ -152,7 +152,12 @@ function onKeyDown(e: KeyboardEvent) {
     else if (focused.matches(".inbox-row.selected[data-slug]")) openIssueSession(focused.dataset.slug!);
     else go(focused.getAttribute("href")!);
   }
-  else if (key === "c") { ui.openCreator(); e.preventDefault(); }
+  // C files a new issue, in the team whose pages these are, as Linear's C does in a team's views.
+  else if (key === "c") {
+    const team = /^\/team\/([\w-]+)/.exec(location.pathname)?.[1];
+    ui.openCreator(team ? { team, teamTitle: issues.teams.get(team)?.title ?? team } : {});
+    e.preventDefault();
+  }
   // Linear's Inbox keys: U marks the notification read or unread, Backspace deletes it, Shift Backspace every read one.
   else if (key === "u" && !e.shiftKey && toggleRead()) e.preventDefault();
   else if ((e.key === "Backspace" || e.key === "Delete") && e.shiftKey && deleteReadKey()) e.preventDefault();

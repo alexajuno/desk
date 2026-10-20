@@ -43,6 +43,7 @@ desk.css holds the numbers, and its comments say where and when each was measure
 - A list page's way to make one of its things (Projects' New project) is a quiet 28px pill with a plus at the right end of the top bar, its keys in its tooltip (N then P). It opens a modal; nothing to type sits open over the list.
 - Help, the shortcuts and the theme live in the ? at the sidebar's foot. No control stands alone in a corner.
 - Linear lays a pane out by the pane's width, not the window's: the Inbox's open notification drops its Properties column below about 820px.
+- Under Your teams each team is a row of its own (measured 20 Oct: 28px, 9px in, a 14px icon, its name in the quiet grey, a dim triangle right after it) that folds its pages, each 19px further in: Linear's are Home, Issues, Projects and Views; desk's are Triage, Issues (All issues, Active, Backlog) and Projects. The workspace's own pages, Projects and Views, sit in Workspace above it, and My issues at the top.
 - A sidebar section (Workspace, Your teams, Favorites) has its label as a full-width button that folds it, with the group's triangle right after the label, always shown. Its row has no fill, under the mouse too; only the text brightens. Favorites is Linear's pinning, Alt F in a row's right-click menu. desk's Pinned and Chats fold this way (`.nav-fold`, 19 Oct).
 - The sidebar scrolls whole, with a thin scrollbar whose room is always kept (`scrollbar-gutter: stable`), so a long list never narrows the rows. Don't put a scroll area inside one section.
 
