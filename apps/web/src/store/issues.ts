@@ -14,6 +14,7 @@ export interface Issue {
   parent: string | null;
   team: string | null;
   project: string | null;
+  milestone: string | null;
   folder: string | null;
   protocol: Protocol | null; // none runs design
   link: string | null;
@@ -35,6 +36,17 @@ export interface Project {
   status: string; // backlog, planned, started, completed, canceled
   start: string | null;
   target: string | null;
+  created: string;
+}
+
+// A project's milestone (the server's projects.ts), in its project's order of sort.
+export interface Milestone {
+  id: string;
+  project: string;
+  title: string;
+  body: string;
+  target: string | null;
+  sort: number;
   created: string;
 }
 
@@ -84,7 +96,7 @@ export interface InboxRow {
 interface Change { seq: number; kind: string; key: string; row: Record<string, unknown> | null }
 
 export type SyncMessage =
-  | { type: "snapshot"; log: string; seq: number; rows: { issues: Issue[]; teams?: Team[]; projects?: Project[]; chats?: Chat[]; inbox?: InboxRow[] } }
+  | { type: "snapshot"; log: string; seq: number; rows: { issues: Issue[]; teams?: Team[]; projects?: Project[]; milestones?: Milestone[]; chats?: Chat[]; inbox?: InboxRow[] } }
   | { type: "changes"; after: number; changes: Change[] }
   | { type: "files"; slugs: string[] };
 
@@ -95,6 +107,7 @@ export class IssueStore {
   bySlug = observable.map<string, Issue>();
   teams = observable.map<string, Team>();
   projects = observable.map<string, Project>();
+  milestones = observable.map<string, Milestone>();
   chats = observable.map<string, Chat>(); // by id
   inbox = observable.map<string, InboxRow>(); // by id
   files = observable.map<string, number>(); // slug: how many times its other files changed (a plan, a result)
@@ -117,6 +130,7 @@ export class IssueStore {
       this.bySlug.replace(message.rows.issues.map((i) => [i.slug, i]));
       this.teams.replace((message.rows.teams ?? []).map((t) => [t.slug, t])); // none from a desk before teams
       this.projects.replace((message.rows.projects ?? []).map((p) => [p.slug, p]));
+      this.milestones.replace((message.rows.milestones ?? []).map((m) => [m.id, m]));
       this.chats.replace((message.rows.chats ?? []).map((c) => [c.id, c])); // none from a desk before the table
       this.inbox.replace((message.rows.inbox ?? []).map((r) => [r.id, r]));
       this.log = message.log;
@@ -124,7 +138,7 @@ export class IssueStore {
       return true;
     }
     if (message.after !== this.seq) return false;
-    const tables: Record<string, Map<string, unknown>> = { issues: this.bySlug, teams: this.teams, projects: this.projects, chats: this.chats, inbox: this.inbox };
+    const tables: Record<string, Map<string, unknown>> = { issues: this.bySlug, teams: this.teams, projects: this.projects, milestones: this.milestones, chats: this.chats, inbox: this.inbox };
     for (const c of message.changes) {
       const table = tables[c.kind]; // a table this app does not hold yet is a newer desk's
       if (table && c.row) table.set(c.key, c.row);

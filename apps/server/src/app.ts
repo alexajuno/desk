@@ -118,6 +118,10 @@ async function checked(i: store.Issue, name: string, given: string): Promise<str
   } else if (name === "project") {
     value = value || null;
     if (value && !(await projects.exists(value))) throw new HttpError(422, `No project ${value}.`);
+  } else if (name === "milestone") {
+    value = value || null;
+    const m = value ? await projects.milestone(value) : null;
+    if (value && (!m || m.project !== i.project)) throw new HttpError(422, "That milestone is not one of the issue's project's.");
   } else if (name === "parent") {
     value = value || null;
     if (value === i.slug || (value && store.descendants(await store.loadAll(), i.slug).includes(value)))
@@ -373,6 +377,40 @@ export async function create(): Promise<FastifyInstance> {
     } else throw new HttpError(422, `No field ${name}.`);
     (p as unknown as Record<string, string | null>)[name] = value;
     await projects.save(p);
+    return { ok: true };
+  });
+
+  // A project's milestones, from its page: a new one, a field of one or its place (position), and a delete.
+  app.post("/project/:slug/milestones", async (req: Req) => {
+    if (!(await projects.exists(req.params.slug))) throw new HttpError(404, "That project is gone.");
+    const title = words(field(req, "title"));
+    if (!title) throw new HttpError(422, "A milestone needs a name.");
+    return projects.addMilestone(req.params.slug, title, null);
+  });
+
+  app.post("/project/:slug/milestone/:id/set", async (req: FastifyRequest<{ Params: { slug: string; id: string } }>) => {
+    const m = await projects.milestone(req.params.id);
+    if (!m || m.project !== req.params.slug) throw new HttpError(404, "That milestone is gone.");
+    const name = field(req as Req, "field", null), value = field(req as Req, "value");
+    if (name === "title") {
+      if (!words(value)) throw new HttpError(422, "A name cannot be empty.");
+      m.title = words(value);
+    } else if (name === "body") m.body = value.replace(/\r\n/g, "\n");
+    else if (name === "target") {
+      m.target = value ? periods.parse(value) : null;
+      if (value && !m.target) throw new HttpError(422, `“${value}” is no date: try May 2027, Q4 or 20/05/2027.`);
+    } else if (name === "position") {
+      await projects.moveMilestone(m, Number(value));
+      return { ok: true };
+    } else throw new HttpError(422, `No field ${name}.`);
+    await projects.saveMilestone(m);
+    return { ok: true };
+  });
+
+  app.post("/project/:slug/milestone/:id/delete", async (req: FastifyRequest<{ Params: { slug: string; id: string } }>) => {
+    const m = await projects.milestone(req.params.id);
+    if (!m || m.project !== req.params.slug) throw new HttpError(404, "That milestone is gone.");
+    await projects.deleteMilestone(m);
     return { ok: true };
   });
 

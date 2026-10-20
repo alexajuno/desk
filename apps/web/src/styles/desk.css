@@ -32,6 +32,7 @@
   --text-2: lch(90.451% 1.2 272);
   --text-3: lch(61.803% 1.2 272);
   --text-4: lch(45% 1.2 272);
+  --text-5: lch(36.975% 1.2 272); /* Linear's dimmest: + Milestone and No updates, on a project, 2026-10-20 */
   --accent: #5e69d1;
   --accent-hover: #6e78db;
   --on-accent: #fff;
@@ -149,6 +150,7 @@
   --text-2: lch(19.588% 1.25 282);
   --text-3: lch(39.176% 1.25 282);
   --text-4: lch(64.64% 1.25 282);
+  --text-5: lch(64.64% 1.25 282); /* not measured in light: --text-4's */
   --accent: lch(53% 52.26 286.91);        /* controlPrimary, and its hover */
   --accent-hover: lch(47% 50.26 286.91);
   --link: lch(44.073% 70 286.91);         /* labelLink */
@@ -1059,3 +1061,25 @@ button.set-pick svg { color: var(--text-3); }
 .prop-chip.late, .prop-chip.late:hover { color: var(--late); }
 .create-chips { margin: 0 26px 16px; flex-wrap: wrap; }
 .prop .muted-icon { display: inline-flex; color: var(--text-3); }
+/* A project's milestones, under its description (lists/ProjectPage.tsx). Linear's "+ Milestone" is measured (linear.app,
+   2026-10-20, dark: 13px/500 in --text-5, 28px); a list of them was not, as no project of the user's had one: each
+   is a 40px row of the diamond, the name over its description, the target date chip and the percent, a drag handle and
+   a ⋯ showing under the mouse. */
+.milestones { margin-top: 24px; }
+.milestone { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 8px 4px 0; margin-left: -20px; border-radius: 8px; }
+.milestone:hover { background: var(--bg-raised); }
+.milestone .handle { flex: none; width: 12px; color: var(--text-3); font-size: 11px; letter-spacing: -2px; cursor: grab; visibility: hidden; }
+.milestone:hover .handle { visibility: visible; }
+.milestone-text { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.milestone-title { font: 500 13px var(--font); color: var(--text-1); cursor: text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.milestone-body { font: 450 12px var(--font); color: var(--text-3); cursor: text; }
+.milestone-body.empty { display: none; }
+.milestone:hover .milestone-body.empty { display: block; }
+.milestone .inline-edit { border: 0; padding: 0; background: none; outline: none; }
+.milestone.adding .inline-edit { flex: 1; }
+.milestone-progress { width: 40px; text-align: right; font-size: 12px; color: var(--text-2); }
+.milestone-more { visibility: hidden; width: 24px; padding: 0; justify-content: center; }
+.milestone:hover .milestone-more { visibility: visible; }
+.add-milestone { display: flex; align-items: center; gap: 6px; height: 28px; margin-top: 8px; padding: 0; border: 0; background: none; box-shadow: none;
+                 font: 500 13px var(--font); color: var(--text-5); }
+.add-milestone:hover { color: var(--text-3); }

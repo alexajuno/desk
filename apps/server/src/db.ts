@@ -29,6 +29,7 @@ const HELD: Record<string, { key: string; hidden: string[] }> = {
   issues: { key: "slug", hidden: ["body", "written"] },
   teams: { key: "slug", hidden: ["body", "written"] },
   projects: { key: "slug", hidden: ["body", "written"] },
+  milestones: { key: "id", hidden: [] },
   chats: { key: "id", hidden: ["folder", "cwd", "seen", "extra"] },
   inbox: { key: "id", hidden: [] },
 };
@@ -45,6 +46,7 @@ create table if not exists issues (
   parent text,
   team text,
   project text,
+  milestone text,
   folder text,
   protocol text,
   link text,
@@ -77,6 +79,15 @@ create table if not exists projects ( -- projects.ts: Linear's, which finish, si
   created text not null,
   body text not null default '',
   written text
+);
+create table if not exists milestones ( -- projects.ts: a project's stages, Linear's, in the order of sort
+  id text primary key,
+  project text not null,
+  title text not null,
+  body text not null default '',
+  target text, -- a period (periods.ts)
+  sort double precision not null,
+  created text not null
 );
 create table if not exists chats ( -- desk's chats (chats.ts): each a session, and the issue it works, if any
   id text primary key,
@@ -220,7 +231,7 @@ export async function open(): Promise<PGlite> {
   await toTeams(opened);
   await opened.exec(SCHEMA);
   // Since 20 Oct, an issue's project is Linear's (projects.ts), as its team is what its project was before.
-  await opened.exec(["review_of", "review_since", "landed", "project"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
+  await opened.exec(["review_of", "review_since", "landed", "project", "milestone"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
   // The Inbox's delete and its mark as unread (inbox.ts), from 19 Oct.
   await opened.exec(["gone", "marked"].map((c) => `alter table inbox add column if not exists ${c} double precision;`).join(" "));
   await opened.exec("alter table slack_threads add column if not exists read text;");

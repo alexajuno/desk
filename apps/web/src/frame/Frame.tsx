@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect } from "react";
 import { Outlet, useLocation } from "react-router";
 import { deskPath, go } from "../app/nav";
 import { remove, removeMany, setField, setFields, undo, undoList } from "../issues/actions";
-import { fieldMenu, projectPicker } from "../issues/menus";
+import { fieldMenu, milestoneMenu, projectPicker } from "../issues/menus";
 import { selectable, selectAll, selection, SelectionBar, selectionField } from "../issues/selection";
 import { listView, setView } from "../lists/current";
 import { noteAppPath, SettingsNav } from "../settings/SettingsPage";
@@ -185,6 +185,13 @@ function onKeyDown(e: KeyboardEvent) {
     const slugs = ui.selected.size ? selection() : [target()!], one = slugs.length === 1 ? issues.bySlug.get(slugs[0]) : undefined;
     const anchor = focused?.querySelector(".icon") ?? [...document.querySelectorAll(".project-pick-menu, .project-chip, .select-bar")].find((el) => el.checkVisibility()) ?? null;
     projectPicker(one?.project ?? null, one?.team ?? null, { anchor }, (to) => (slugs.length === 1 ? setField(slugs[0], "project", to) : setFields(slugs, "project", to)));
+    e.preventDefault();
+  }
+  // Linear's Shift M: the milestone of the issue in focus or open, among its project's.
+  else if (key === "m" && e.shiftKey && target()) {
+    const slug = target()!, one = issues.bySlug.get(slug);
+    const anchor = focused?.querySelector(".icon") ?? [...document.querySelectorAll(".milestone-pick, .project-pick-menu")].find((el) => el.checkVisibility()) ?? null;
+    milestoneMenu(one?.project ?? null, one?.milestone ?? null, { anchor }, (id) => setField(slug, "milestone", id));
     e.preventDefault();
   }
   else if ((key === "s" || key === "p") && ui.selected.size) {

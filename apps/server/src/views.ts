@@ -49,9 +49,10 @@ export const PAGES: Record<string, Page> = {
     filters: Object.fromEntries(Object.entries(ISSUE_FILTERS).filter(([k]) => k !== "team")), options: TEAM_OPTIONS,
     defaults: { group: "status", order: "priority", done: "all", subs: "rows" }, switches: EMPTY, reverse: true, keep: [], noun: "issue",
   },
-  // A project's Issues tab, as a team's.
+  // A project's Issues tab, as a team's, which can also group by milestone, as Linear's (linear.app/docs/project-milestones).
   project: {
-    filters: Object.fromEntries(Object.entries(ISSUE_FILTERS).filter(([k]) => k !== "project")), options: TEAM_OPTIONS,
+    filters: Object.fromEntries(Object.entries(ISSUE_FILTERS).filter(([k]) => k !== "project")),
+    options: { ...TEAM_OPTIONS, group: { ...TEAM_OPTIONS.group, milestone: "Milestone" } },
     defaults: { group: "status", order: "priority", done: "all", subs: "rows" }, switches: EMPTY, reverse: true, keep: [], noun: "issue",
   },
   // Linear's Inbox (measured on linear.app on 19 Oct): Filter's Notification type, From, Team, Project, Issue priority
@@ -215,12 +216,13 @@ export function value(i: Issue, name: string): string {
   if (name === "priority") return i.priority;
   if (name === "team") return i.team || "none";
   if (name === "project") return i.project || "none";
+  if (name === "milestone") return i.milestone || "none";
   if (name === "folder") return folderName(i.folder);
   return store.runs(i);
 }
 
 // The rows a property's slugs name, by property, for their titles: the teams and the projects.
-export type Named = Partial<Record<string, Map<string, { title: string; created: string; state?: string }>>>;
+export type Named = Partial<Record<string, Map<string, { title: string; created: string; state?: string; sort?: number }>>>;
 
 export function label(name: string, v: string, named: Named): string {
   if (name === "status") return store.STATE_NAMES[v] ?? v;
@@ -298,6 +300,8 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
       .filter(([, t]) => t.state === "active").map(([slug]) => slug);
     const others = [...new Set(pageIssues.map((i) => value(i, "team")))].filter((v) => !active.includes(v) && v !== "none").sort();
     order = [...active, ...others, "none"];
+  } else if (view.group === "milestone") {
+    order = [...[...(named.milestone ?? [])].sort(([, a], [, b]) => cmp(a.sort ?? 0, b.sort ?? 0)).map(([id]) => id), "none"];
   } else if (view.group === "project") {
     // The projects the list has, the oldest first, as Linear's groups list a project's issues.
     const has = new Set(pageIssues.map((i) => value(i, "project")));

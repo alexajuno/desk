@@ -20,6 +20,9 @@
 //     GET    /api/projects/<slug>       one project, with its description and issues
 //     POST   /api/projects              create one: title, body, team, status, start, target
 //     PATCH  /api/projects/<slug>       set any of those fields
+//     POST   /api/projects/<slug>/milestones        add one, last: title, target, body
+//     PATCH  /api/projects/<slug>/milestones/<id>   set title, target, body, or its place in the order (position, from 0)
+//     DELETE /api/projects/<slug>/milestones/<id>   delete it; its issues stay in the project
 //     GET    /api/settings              desk's settings (settings.ts)
 //     PATCH  /api/settings              set any of them
 //     GET    /api/agents                the user's own agents, whom a chat can be with (roster.ts)
@@ -55,7 +58,7 @@ const OPEN = store.STATES.filter((s) => s !== "done" && s !== "dropped");
 
 export function asJson(i: Issue, full = false) {
   const data: Record<string, unknown> = {
-    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, project: i.project, folder: i.folder,
+    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, project: i.project, milestone: i.milestone, folder: i.folder,
     protocol: store.runs(i), session: i.session, created: i.created, url: `/issue/${i.slug}`,
   };
   if (i.state === "waiting") Object.assign(data, { waiting_on: i.waiting_on, waiting_since: i.waiting_since });
@@ -70,7 +73,7 @@ async function loadIssue(slug: string): Promise<Issue> {
   return store.load(slug);
 }
 
-const FIELDS = ["title", "body", "priority", "state", "parent", "team", "project", "folder", "protocol", "waiting_on", "review_of", "landed"];
+const FIELDS = ["title", "body", "priority", "state", "parent", "team", "project", "milestone", "folder", "protocol", "waiting_on", "review_of", "landed"];
 const PULL = /https:\/\/github\.com\/\S+\/pull\/\d+/;
 const AUTOMATION_FIELDS = ["title", "when", "check", "agent", "body", "state"];
 
@@ -135,10 +138,18 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
     // An issue with no team takes its project's, as a Linear issue is in one of its project's teams.
     if (!fields.team && !i.team) fields.team = (await projects.load(fields.project)).team;
   }
+  // A milestone of the issue's project, by its id or its title.
+  if (fields.milestone) {
+    const project = "project" in fields ? fields.project : i.project;
+    if (!project) throw new HttpError(422, "milestone is for an issue in a project: send \"project\" with it.");
+    const m = await projects.findMilestone(project, fields.milestone);
+    if (!m) throw new HttpError(422, `${project} has no milestone ${fields.milestone}. Its milestones: ${(await projects.milestonesOf(project)).map((x) => x.id).join(", ") || "none yet"}.`);
+    fields.milestone = m.id;
+  }
   if (fields.folder && !isDir(expand(fields.folder))) throw new HttpError(422, `No folder ${fields.folder}. Find one with GET /api/folders?q=<name>.`);
   if ("body" in fields) fields.body = store.withSections(i.body, fields.body || "");
   const target = i as unknown as Record<string, string | null>;
-  for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "team", "project", "folder", "waiting_on", "landed"].includes(name) ? value || null : value;
+  for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "team", "project", "milestone", "folder", "waiting_on", "landed"].includes(name) ? value || null : value;
 }
 
 async function teamJson(t: Team, full = false) {
@@ -168,8 +179,16 @@ export async function projectJson(p: Project, full = false) {
   const data: Record<string, unknown> = { slug: p.slug, title: p.title, team: p.team, status: p.status, start: p.start, target: p.target,
     created: p.created, url: `/project/${p.slug}`, issues: mine.length, open_issues: mine.filter((i) => OPEN.includes(i.state)).length,
     progress: Math.round(projects.progress(mine) * 100) };
-  if (full) Object.assign(data, { file: join(projects.folder(p.slug), projects.MAIN), body: p.body, issue_list: mine.map((i) => asJson(i)) });
+  if (full) Object.assign(data, { file: join(projects.folder(p.slug), projects.MAIN), body: p.body,
+    milestones: projects.milestoneProgress(await projects.milestonesOf(p.slug), mine).map(({ sort: _, created: __, project: ___, ...m }) => m),
+    issue_list: mine.map((i) => asJson(i)) });
   return data;
+}
+
+async function loadMilestone(req: FastifyRequest<{ Params: { slug: string; id: string } }>): Promise<projects.Milestone> {
+  const m = await projects.milestone(req.params.id);
+  if (!m || m.project !== req.params.slug) throw new HttpError(404, `${req.params.slug} has no milestone ${req.params.id}. Read the project for its milestones.`);
+  return m;
 }
 
 async function loadProject(slug: string): Promise<Project> {
@@ -413,6 +432,37 @@ export function routes(app: FastifyInstance) {
     await applyProject(p, given(req.body, PROJECT_FIELDS));
     await projects.save(p);
     return projectJson(p, true);
+  });
+
+  type MilestoneReq = FastifyRequest<{ Params: { slug: string; id: string } }>;
+
+  app.post("/api/projects/:slug/milestones", async (req: Req, reply) => {
+    const p = await loadProject(req.params.slug);
+    const fields = given(req.body, ["title", "target", "body"]);
+    if (!fields.title) throw new HttpError(422, "title is required");
+    const m = await projects.addMilestone(p.slug, fields.title, period("target", fields.target ?? null), fields.body ?? "");
+    return reply.code(201).send(m);
+  });
+
+  app.patch("/api/projects/:slug/milestones/:id", async (req: MilestoneReq) => {
+    const m = await loadMilestone(req);
+    const fields = given(req.body, ["title", "target", "body"]);
+    if ("title" in fields && !fields.title) throw new HttpError(422, "title cannot be empty");
+    if ("title" in fields) m.title = fields.title!;
+    if ("body" in fields) m.body = fields.body ?? "";
+    if ("target" in fields) m.target = period("target", fields.target);
+    await projects.saveMilestone(m);
+    const position = ((req.body ?? {}) as Record<string, unknown>).position;
+    if (position !== undefined) {
+      if (typeof position !== "number" || !Number.isInteger(position) || position < 0) throw new HttpError(422, "position must be a whole number from 0, its place in the order");
+      await projects.moveMilestone(m, position);
+    }
+    return (await projects.milestone(m.id))!;
+  });
+
+  app.delete("/api/projects/:slug/milestones/:id", async (req: MilestoneReq) => {
+    await projects.deleteMilestone(await loadMilestone(req));
+    return { deleted: req.params.id };
   });
 
   // Write the plan into the issue, then start its session on it: the one it already has, which carries it out as if the

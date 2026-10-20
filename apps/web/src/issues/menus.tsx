@@ -136,6 +136,19 @@ export const PROJECT_STATUSES = ["backlog", "planned", "started", "completed", "
 export const PROJECT_STATUS_NAMES: Record<string, string> = { backlog: "Backlog", planned: "Planned", started: "In Progress", completed: "Completed", canceled: "Canceled" };
 export const PROJECT_CLOSED = new Set(["completed", "canceled"]);
 
+// Linear's Shift M: the milestones of the issue's project, in its order, or No milestone.
+export function milestoneMenu(project: string | null, current: string | null, where: Where, choose: (id: string) => unknown) {
+  openMenu({
+    ...where, filter: "keys", placeholder: "Set milestone…", empty: project ? "This project has no milestones" : "Put the issue in a project first",
+    items: (q) => {
+      const mine = [...issues.milestones.values()].filter((m) => m.project === project).sort((a, b) => a.sort - b.sort);
+      const all: MenuItem[] = project ? [{ icon: GLYPH.none, label: "No milestone", current: !current, run: () => choose("") },
+        ...mine.map((m, n) => ({ icon: GLYPH.milestone, label: m.title, num: n + 1, hint: n + 1, current: m.id === current, run: () => choose(m.id) }))] : [];
+      return all.filter((item) => fold(item.label).includes(fold(q)));
+    },
+  });
+}
+
 // Linear's Change status… on a project, its digits picking a status.
 export function projectStatusMenu(current: string, where: Where, choose: (status: string) => unknown) {
   openMenu({

@@ -284,7 +284,7 @@ function chatsNow(all: Map<string, Issue>) {
 
 export function issueJson(i: Issue) {
   return {
-    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, project: i.project, folder: i.folder,
+    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, project: i.project, milestone: i.milestone, folder: i.folder,
     protocol: runs(i), link: i.link, session: i.session, waiting_on: i.waiting_on, waiting_since: i.waiting_since,
     waiting_since_short: shortDate(i.waiting_since), waited: i.state === "waiting" ? waited(i.waiting_since) : "",
     review_of: i.state === "review" ? reviewOf(i) : null,
@@ -405,6 +405,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     team: team && { slug: team.slug, title: team.title },
     all_teams: [...everyTeam.values()].filter((x) => x.state === "active" || x.slug === i.team).map((x) => ({ slug: x.slug, title: x.title, state: x.state })),
     project: project && { slug: project.slug, title: project.title, status: project.status },
+    milestone: i.milestone ? (await projects.milestone(i.milestone))?.title ?? null : null,
     trail: trail.map((t) => ({ slug: t.slug, title: t.title })),
     kids: treeJson(kidsOf(slug), kidsOf),
     progress: [direct.filter((k) => k.state === "done").length, direct.filter((k) => k.state !== "dropped").length],
@@ -492,7 +493,8 @@ export async function issuesPage(tab: string, query: string) {
 }
 
 // The names a list's chips and groups show for a team's or a project's slug.
-const named = async (): Promise<views.Named> => ({ team: await teams.loadAll(), project: await projects.loadAll() });
+const named = async (milestones: projects.Milestone[] = []): Promise<views.Named> =>
+  ({ team: await teams.loadAll(), project: await projects.loadAll(), milestone: new Map(milestones.map((m) => [m.id, m])) });
 
 export async function teamPage(slug: string, query: string) {
   if (!(await teams.exists(slug))) throw new HttpError(404, "That team is gone.");
@@ -522,10 +524,13 @@ function projectJson(p: Project, all: Map<string, Issue>, everyTeam: Map<string,
 
 export async function projectPage(slug: string, query: string) {
   if (!(await projects.exists(slug))) throw new HttpError(404, "That project is gone.");
-  const p = await projects.load(slug), all = await store.loadAll();
-  const listing = views.build(views.parse("project", query), projects.issuesOf(all, slug), all, await named());
+  const p = await projects.load(slug), all = await store.loadAll(), milestones = await projects.milestonesOf(slug);
+  const listing = views.build(views.parse("project", query), projects.issuesOf(all, slug), all, await named(milestones));
   return {
     project: { ...projectJson(p, all, await teams.loadAll()), body: p.body, body_html: toHtml(p.body) },
+    milestones: projects.milestoneProgress(milestones, projects.issuesOf(all, slug)).map((m) => ({ id: m.id, title: m.title, body: m.body,
+      target: m.target, target_label: periods.label(m.target), late: m.progress < 100 && periods.passed(m.target), issues: m.issues,
+      progress: m.progress, current: m.current })),
     list: listingJson(listing, `/project/${slug}/issues`, { project: p.slug, projectTitle: p.title, ...(p.team ? { team: p.team } : {}) }),
   };
 }

@@ -10,7 +10,7 @@ import { PROJECTS_DIR } from "./config.ts";
 import * as db from "./db.ts";
 import { sql, type Db } from "./db.ts";
 import { asText, dump, split } from "./frontmatter.ts";
-import { byRank, listingOrder, now, type Issue } from "./issues.ts";
+import { byRank, listingOrder, loadAll as loadIssues, now, saveIn as saveIssue, type Issue } from "./issues.ts";
 
 export const MAIN = "project.md";
 // Linear's project statuses, by their category in its API (ProjectStatusType), in the order its menu lists them; the
@@ -114,6 +114,85 @@ export function progress(issues: Issue[]): number {
   const counted = issues.filter((i) => i.state !== "dropped");
   if (!counted.length) return 0;
   return counted.reduce((sum, i) => sum + (i.state === "done" ? 1 : STARTED.has(i.state) ? 0.25 : 0), 0) / counted.length;
+}
+
+// --- milestones -------------------------------------------------------------------------------------------------------
+// Linear's: "different stages in a project's lifecycle" (linear.app/docs/project-milestones), each with a name, a
+// description, an optional target date and a place in the project's order, which the page changes by dragging. An issue
+// of the project belongs to one at most (its milestone).
+
+export interface Milestone {
+  id: string;
+  project: string;
+  title: string;
+  body: string;
+  target: string | null; // a period (periods.ts)
+  sort: number;
+  created: string;
+}
+
+export async function milestonesOf(project: string, q: Db = sql()): Promise<Milestone[]> {
+  return (await q.query<Milestone>("select * from milestones where project = $1 order by sort, created", [project])).rows;
+}
+
+export async function milestone(id: string, q: Db = sql()): Promise<Milestone | null> {
+  return (await q.query<Milestone>("select * from milestones where id = $1", [id])).rows[0] ?? null;
+}
+
+// The milestone of the project an agent names, by its id or its title.
+export async function findMilestone(project: string, named: string): Promise<Milestone | null> {
+  const all = await milestonesOf(project);
+  return all.find((m) => m.id === named) ?? all.find((m) => m.title.toLowerCase() === named.trim().toLowerCase()) ?? null;
+}
+
+async function putMilestone(tx: Db, m: Milestone) {
+  await tx.query(`insert into milestones (id, project, title, body, target, sort, created) values ($1, $2, $3, $4, $5, $6, $7)
+    on conflict (id) do update set title = excluded.title, body = excluded.body, target = excluded.target, sort = excluded.sort`,
+  [m.id, m.project, m.title, m.body, m.target, m.sort, m.created]);
+}
+
+// A new milestone, last in the project's order.
+export function addMilestone(project: string, title: string, target: string | null, body = ""): Promise<Milestone> {
+  return db.write(async (tx) => {
+    const base = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "milestone";
+    let id = base, n = 2;
+    while ((await tx.query("select 1 from milestones where id = $1", [id])).rows.length) id = `${base}-${n++}`;
+    const last = (await tx.query<{ sort: number | null }>("select max(sort) as sort from milestones where project = $1", [project])).rows[0].sort;
+    const m: Milestone = { id, project, title, body, target, sort: (last ?? 0) + 1, created: now() };
+    await putMilestone(tx, m);
+    return m;
+  });
+}
+
+export const saveMilestone = (m: Milestone) => db.write((tx) => putMilestone(tx, m));
+
+// Move a milestone to a place in its project's order, counted from 0.
+export function moveMilestone(m: Milestone, place: number): Promise<void> {
+  return db.write(async (tx) => {
+    const others = (await milestonesOf(m.project, tx)).filter((o) => o.id !== m.id);
+    others.splice(Math.max(0, Math.min(place, others.length)), 0, m);
+    for (const [n, o] of others.entries()) if (o.sort !== n + 1 || o.id === m.id) await putMilestone(tx, { ...o, sort: n + 1 });
+  });
+}
+
+// Delete a milestone; its issues stay in the project, with no milestone.
+export function deleteMilestone(m: Milestone): Promise<void> {
+  return db.write(async (tx) => {
+    await tx.query("delete from milestones where id = $1", [m.id]);
+    for (const i of (await loadIssues(tx)).values()) if (i.milestone === m.id) await saveIssue(tx, { ...i, milestone: null });
+  });
+}
+
+// Each milestone with its progress, and which is current: the first in the order not yet at 100%, which Linear shows
+// yellow, "the milestone currently being worked towards".
+export function milestoneProgress(milestones: Milestone[], issues: Issue[]) {
+  let current: string | null = null;
+  return milestones.map((m) => {
+    const mine = issues.filter((i) => i.milestone === m.id);
+    const done = progress(mine);
+    if (!current && done < 1) current = m.id;
+    return { ...m, issues: mine.length, progress: Math.round(done * 100), current: current === m.id };
+  });
 }
 
 // Read every project.md in, as Postgres held none: a new database, or one lost (issues.importAll). Before 20 Oct

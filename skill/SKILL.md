@@ -92,6 +92,15 @@ curl -s "http://127.0.0.1:8790/api/projects" --json '{"title": "Retire POST /run
 curl -s "http://127.0.0.1:8790/api/projects/<slug>" -X PATCH --json '{"status": "completed"}'
 ```
 
+A project's milestones are its stages, Linear's, in an order: each has a `title`, a `body` and an optional `target` date, and shows how far along its issues are. Reading a project lists them with their `id`, `progress` and which is `current`. Add one (it goes last), change one or move it (`position`, from 0), or delete one; put an issue in one with `"milestone": "<id or title>"`, which must be its project's:
+
+```bash
+curl -s "http://127.0.0.1:8790/api/projects/<slug>/milestones" --json '{"title": "Warn callers", "target": "2026-10-24"}'
+curl -s "http://127.0.0.1:8790/api/projects/<slug>/milestones/<id>" -X PATCH --json '{"position": 0}'
+curl -s "http://127.0.0.1:8790/api/projects/<slug>/milestones/<id>" -X DELETE
+curl -s "http://127.0.0.1:8790/api/issues/<issue>" -X PATCH --json '{"milestone": "Warn callers"}'
+```
+
 Automations run one of the user's agents at a time, or when a check finds something, and its reply reaches the user's Inbox as a chat, as bin/jobs's daily list does. Each is a file, `automations/<slug>.md` in desk's data folder, which you change through the API, since it checks `when` and `agent`. Its page is `http://127.0.0.1:8790/automation/<slug>`. An automation's fields:
 
 - `title`

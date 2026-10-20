@@ -15,7 +15,7 @@ import { toast } from "../ui/toast";
 import { reloadPages, ui } from "../store/ui";
 import { setField, setFolder } from "./actions";
 import { openSession } from "../sessions/Dock";
-import { fieldMenu, folderMenu, projectPicker, teamPicker, waitingMenu } from "./menus";
+import { fieldMenu, folderMenu, milestoneMenu, projectPicker, teamPicker, waitingMenu } from "./menus";
 import { painted } from "./painted";
 import { Tree } from "./Tree";
 import { Description } from "../editor/Description";
@@ -35,6 +35,7 @@ export interface IssuePageData {
   team: { slug: string; title: string } | null;
   all_teams: { slug: string; title: string; state: string }[];
   project: { slug: string; title: string; status: string } | null;
+  milestone: string | null; // its title
   trail: { slug: string; title: string }[];
   kids: TreeRow[];
   progress: [number, number];
@@ -275,6 +276,13 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
         <span className="muted-icon">{GLYPH.project}</span>
         <span className={data.project ? undefined : "muted"}>{data.project?.title ?? "Add to project"}</span>
       </button>
+      {p.project && (
+        <button className="prop milestone-pick" type="button" data-slug={p.slug} title="Set milestone  Shift M"
+          onClick={(e) => { if (!toggled(e.currentTarget)) milestoneMenu(p.project, p.milestone, { anchor: e.currentTarget }, (id) => setField(p.slug, "milestone", id)); }}>
+          <span className="muted-icon">{GLYPH.milestone}</span>
+          <span className={data.milestone ? undefined : "muted"}>{data.milestone ?? "Add to milestone"}</span>
+        </button>
+      )}
       <div className="label">Works in</div>
       <button className="prop folder-pick" type="button" data-slug={p.slug} data-value={p.folder ?? ""} title="Pick the folder the issue's session starts in; ~ until you pick one"
         onClick={(e) => { if (!toggled(e.currentTarget)) folderMenu(p.folder ?? "", e.currentTarget, (f) => setFolder(p.slug, f)); }}>

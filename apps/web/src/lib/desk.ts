@@ -50,6 +50,7 @@ export interface IssueRow {
   parent: string | null;
   team: string | null;
   project: string | null;
+  milestone: string | null;
   folder: string | null;
   protocol: Protocol;
   link: string | null;

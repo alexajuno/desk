@@ -5,7 +5,7 @@ import type { Field } from "../lib/desk";
 import { toast } from "../ui/toast";
 import { reloadPages, ui } from "../store/ui";
 
-type Settable = Field | "title" | "body" | "waiting_on" | "team" | "project" | "parent";
+type Settable = Field | "title" | "body" | "waiting_on" | "team" | "project" | "milestone" | "parent";
 
 // base: for the body, the document the edit started from, so the server keeps what a session wrote meanwhile.
 export async function setField(slug: string, field: Settable, value: string, base?: string) {
