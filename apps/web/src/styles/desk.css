@@ -263,7 +263,7 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
 .nav-fold svg { flex: none; fill: currentColor; transform: rotate(90deg); transition: transform 0.15s; }
 .nav-fold[aria-expanded="false"] svg { transform: none; }
 .nav-item .from { margin-left: auto; font-size: 12px; }
-/* a session in Chats: the dock's pulse while it works (dock.css's .live-dot), the Inbox row's dot while it is unread */
+/* a session in Chats: the dock's breathing dot while it works (dock.css's .live-dot), the Inbox row's dot while it is unread */
 .nav-item .live-dot { margin-left: auto; }
 .nav-item .unread { flex: none; width: 8px; height: 8px; margin-left: auto; border-radius: 50%; background: var(--accent); }
 /* desk running a branch for a review, a row that is no link when no issue is known to have switched it */

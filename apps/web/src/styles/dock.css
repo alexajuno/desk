@@ -75,7 +75,10 @@
 .session-view { display: flex; flex-direction: column; height: 100%; min-height: 0; animation: dock-fade 0.18s ease; }
 @keyframes dock-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes dock-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-@keyframes dock-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.8); } }
+/* a dot that works breathes at its own size; a word that works keeps still while a brighter band sweeps across it, as
+   Claude Code's spinner word does. Both replace a pulse that shrank, which the user disliked on text and dots alike (20 Oct) */
+@keyframes dock-breathe { 50% { opacity: 0.4; } }
+@keyframes dock-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
 @keyframes dock-blink { 50% { opacity: 0; } }
 
 /* its head: the live dot, the issue's title and folder, then hide, whole page and close */
@@ -103,7 +106,7 @@
 .dock-btn:hover { background: var(--bg-icon-hover); color: var(--text-1); }
 .live-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--text-4); transition: background-color 0.2s; }
 .live-dot.idle { background: var(--state-review); }
-.live-dot.working { background: var(--state-running); animation: dock-pulse 1.4s ease-in-out infinite; }
+.live-dot.working { background: var(--state-running); animation: dock-breathe 2s ease-in-out infinite; }
 .live-dot.asks { background: var(--state-waiting); }
 
 /* the conversation, and its foot lying over its end, as claude.ai lays a chat out. The view keeps its height whatever
@@ -159,7 +162,7 @@
 .steps-caret { flex: none; transition: transform 0.15s ease; }
 .steps.open .steps-caret { transform: rotate(90deg); }
 .steps-failed { color: var(--state-waiting); }
-.steps-now { margin: 0 0 0 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-4);
+.steps-now { width: fit-content; max-width: calc(100% - 20px); margin: 0 0 0 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-4);
              animation: dock-fade 0.2s ease; }
 .steps-list { display: flex; flex-direction: column; gap: 1px; margin: 4px 0 0 7px; padding-left: 10px; border-left: 1px solid var(--border-2);
               animation: dock-fade 0.15s ease; }
@@ -169,22 +172,27 @@
 .step-name { flex: none; font-weight: 500; color: var(--text-2); }
 .step-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .step.error .step-name { color: var(--state-waiting); }
-.step.running .step-name { animation: dock-pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: no-preference) {
+  .steps-now { --shimmer: var(--text-4); --shimmer-band: var(--text-2); animation: dock-fade 0.2s ease, dock-shimmer 2s linear infinite; }
+  .step.running .step-name { --shimmer: var(--text-2); --shimmer-band: var(--text-1); animation: dock-shimmer 2s linear infinite; }
+  .steps-now, .step.running .step-name { background: linear-gradient(90deg, var(--shimmer) 40%, var(--shimmer-band) 50%, var(--shimmer) 60%) 0 0 / 200% 100%;
+                                         -webkit-background-clip: text; background-clip: text; color: transparent; }
+}
 .step-detail pre { max-height: 240px; margin: 2px 0 6px 6px; padding: 8px 10px; overflow: auto; border-radius: 6px; background: var(--bg-raised);
                    font: 11.5px/1.5 var(--mono); color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .step-result { color: var(--text-3); }
 .thought-text { margin: 2px 0 4px; padding: 0 6px; white-space: pre-wrap; font-size: 12px; line-height: 1.5; color: var(--text-3); }
 
 .working { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; color: var(--text-3); }
-.spark { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: dock-pulse 1.2s ease-in-out infinite; }
+.spark { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: dock-breathe 2s ease-in-out infinite; }
 .working-key { margin-left: auto; font-size: 11px; color: var(--text-4); }
 
 /* what runs beside the conversation now, in the foot above the composer: a quiet line per subagent, command or watch,
-   with no box, in the step lines' type, and a dot that pulses as a running session's does in the sidebar */
+   with no box, in the step lines' type, and a dot that breathes as a running session's does in the sidebar */
 .running { flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); max-height: 158px; overflow-y: auto; margin: 0 auto 6px;
            padding: 0 4px; animation: dock-rise 0.18s ease; }
 .running-row { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
-.running-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--state-running); animation: dock-pulse 1.4s ease-in-out infinite; }
+.running-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--state-running); animation: dock-breathe 2s ease-in-out infinite; }
 .running-name { flex: none; font-weight: 500; color: var(--text-2); }
 .running-what { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .running-doing { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-4); }
@@ -273,5 +281,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dock, .panel { transition: none; }
-  .session-view, .convo > *, .ask, .running, .running-dot, .live-dot.working, .spark, .step.running .step-name { animation: none; }
+  .session-view, .convo > *, .ask, .running, .running-dot, .live-dot.working, .spark { animation: none; }
 }
