@@ -10,7 +10,8 @@ export const HOME = homedir();
 export const DATA_DIR = resolve(expand(process.env.DESK_DATA ?? "~/.local/share/desk"));
 export const ISSUES_DIR = join(DATA_DIR, "issues");
 export const TRASH_DIR = join(DATA_DIR, "trash");
-export const PROJECTS_DIR = join(DATA_DIR, "projects");
+export const TEAMS_DIR = join(DATA_DIR, "teams");
+export const PROJECTS_DIR = join(DATA_DIR, "projects"); // Linear's projects, which finish (projects.ts), since 20 Oct
 export const AUTOMATIONS_DIR = join(DATA_DIR, "automations");
 export const CHATS_DIR = join(DATA_DIR, "chats");
 // The database, beside the data it holds, in DATA_DIR/.db, which git leaves alone (db.ts writes its .gitignore).

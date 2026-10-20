@@ -45,7 +45,7 @@ export interface Issue {
   priority: string;
   state: string;
   parent: string | null;
-  project: string | null; // slug of the project the issue belongs to
+  team: string | null; // slug of the team the issue belongs to (teams.ts)
   folder: string | null;
   protocol: string | null; // one of PROTOCOLS; read it through runs(), which gives design for none
   link: string | null;
@@ -61,7 +61,7 @@ export interface Issue {
 }
 
 // The fields in issue.md, in the order issues.py's dataclass wrote them.
-const FIELDS = ["title", "priority", "state", "parent", "project", "folder", "protocol", "link", "landing", "landed",
+const FIELDS = ["title", "priority", "state", "parent", "team", "folder", "protocol", "link", "landing", "landed",
   "session", "waiting_on", "waiting_since", "review_of", "review_since", "created"] as const;
 
 export const now = (d = new Date()) => {
@@ -70,7 +70,7 @@ export const now = (d = new Date()) => {
 };
 
 export function blank(slug: string, title: string): Issue {
-  return { slug, title, priority: "none", state: "backlog", parent: null, project: null, folder: null, protocol: null, link: null,
+  return { slug, title, priority: "none", state: "backlog", parent: null, team: null, folder: null, protocol: null, link: null,
     landing: null, landed: null, session: null, waiting_on: null, waiting_since: null, review_of: null, review_since: null,
     created: now(), body: "" };
 }
@@ -469,6 +469,23 @@ async function back(tx: Db, slug: string) {
     const text = readFileSync(path, "utf8");
     await upsert(tx, parse(slug, text), text);
   }
+}
+
+// Each issue.md desk wrote before what it holds changed, such as on 20 Oct, when each issue's project became its team,
+// written out again from its row, so the files say what the table does. Returns how many.
+export function rewrite(): Promise<number> {
+  return db.write(async (tx) => {
+    let wrote = 0;
+    for (const row of (await tx.query<Row>("select * from issues")).rows) {
+      const text = render(fromRow(row));
+      if (text === row.written) continue;
+      mkdirSync(folder(row.slug), { recursive: true });
+      writeFileSync(join(folder(row.slug), MAIN), text, "utf8");
+      await tx.query("update issues set written = $1 where slug = $2", [text, row.slug]);
+      wrote++;
+    }
+    return wrote;
+  });
 }
 
 // Read every issue.md in, as Postgres held none: a new database, or one lost. desk reads issue.md at no other time.

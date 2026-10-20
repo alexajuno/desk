@@ -18,9 +18,9 @@ import * as models from "./models.ts";
 import * as pages from "./pages.ts";
 import * as pins from "./pins.ts";
 import { HttpError } from "./pages.ts";
-import * as projects from "./projects.ts";
 import * as sessions from "./sessions.ts";
 import * as sync from "./sync.ts";
+import * as teams from "./teams.ts";
 import * as transcript from "./transcript.ts";
 import * as turns from "./turns.ts";
 import * as web from "./web.ts";
@@ -110,9 +110,9 @@ async function checked(i: store.Issue, name: string, given: string): Promise<str
   else if (name === "waiting_on") {
     value = words(value) || null;
     if (i.state !== "waiting") throw new HttpError(422, "Only a waiting issue says who it waits on.");
-  } else if (name === "project") {
+  } else if (name === "team") {
     value = value || null;
-    if (value && !(await projects.exists(value))) throw new HttpError(422, `No project ${value}.`);
+    if (value && !(await teams.exists(value))) throw new HttpError(422, `No team ${value}.`);
   } else if (name === "parent") {
     value = value || null;
     if (value === i.slug || (value && store.descendants(await store.loadAll(), i.slug).includes(value)))
@@ -233,7 +233,7 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/version", async (_req, reply) => reply.type("text/plain; charset=utf-8").send(pages.version()));
 
   // desk's pages are the app's: each address answers with it, and the app asks /api/page/... for the data.
-  for (const path of ["/issues", "/issues/:tab", "/triage", "/projects", "/project/:slug", "/project/:slug/issues", "/automations", "/automation/:slug", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
+  for (const path of ["/issues", "/issues/:tab", "/triage", "/teams", "/team/:slug", "/team/:slug/issues", "/automations", "/automation/:slug", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
     app.get(path, async (_req, reply) => web.index(reply));
   app.get("/", async (_req, reply) => reply.redirect("/issues", 307));
   // The Backlog listed every open issue, and became All issues on 17 Oct; /park was its name before that.
@@ -267,8 +267,8 @@ export async function create(): Promise<FastifyInstance> {
     if (!pages.TABS.includes(req.params.tab)) throw new HttpError(404, "No such tab.");
     return pages.issuesPage(req.params.tab, rawQuery(req));
   });
-  app.get("/api/page/project/:slug", async (req: Req) => pages.projectPage(req.params.slug, rawQuery(req)));
-  app.get("/api/page/projects", async () => pages.projectsPage());
+  app.get("/api/page/team/:slug", async (req: Req) => pages.teamPage(req.params.slug, rawQuery(req)));
+  app.get("/api/page/teams", async () => pages.teamsPage());
   app.get("/api/page/automations", async () => pages.automationsPage());
   app.get("/api/page/automation/:slug", async (req: Req) => pages.automationPage(req.params.slug));
   app.get("/api/page/inbox", async (req: Req) => pages.inboxPage(req.query.i ?? "", rawQuery(req)));
@@ -309,31 +309,31 @@ export async function create(): Promise<FastifyInstance> {
     return { ok: true };
   });
 
-  // --- projects
-  app.post("/projects", async (req: Req, reply) => {
+  // --- teams
+  app.post("/teams", async (req: Req, reply) => {
     const title = words(field(req, "title"));
-    if (!title) throw new HttpError(422, "A project needs a title.");
-    const p = { slug: projects.newSlug(title), title, state: "active", created: store.now(), body: "" };
-    await projects.save(p);
-    return reply.redirect(`/project/${p.slug}`, 303);
+    if (!title) throw new HttpError(422, "A team needs a title.");
+    const t = { slug: teams.newSlug(title), title, state: "active", created: store.now(), body: "" };
+    await teams.save(t);
+    return reply.redirect(`/team/${t.slug}`, 303);
   });
 
-  app.post("/project/:slug/set", async (req: Req, reply) => {
+  app.post("/team/:slug/set", async (req: Req, reply) => {
     const slug = req.params.slug;
-    if (!(await projects.exists(slug))) throw new HttpError(404, "That project is gone.");
-    const p = await projects.load(slug);
+    if (!(await teams.exists(slug))) throw new HttpError(404, "That team is gone.");
+    const p = await teams.load(slug);
     const name = field(req, "field", null);
     let value = field(req, "value");
     if (name === "state") {
-      if (!projects.STATES.includes(value)) throw new HttpError(422, `state cannot be ${value}`);
+      if (!teams.STATES.includes(value)) throw new HttpError(422, `state cannot be ${value}`);
     } else if (name === "title") {
       value = words(value);
       if (!value) throw new HttpError(422, "A title cannot be empty.");
     } else if (name === "body") value = value.replace(/\r\n/g, "\n");
     else throw new HttpError(422, `No field ${name}.`);
     (p as unknown as Record<string, string>)[name] = value;
-    await projects.save(p);
-    return reply.redirect(`/project/${slug}`, 303);
+    await teams.save(p);
+    return reply.redirect(`/team/${slug}`, 303);
   });
 
   // --- an issue's fields: one, or the same one on every issue of a list's selection (slugs, field and value as JSON).

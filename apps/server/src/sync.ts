@@ -1,4 +1,4 @@
-// Sync for the app (ported from desk/sync.py): a WebSocket that gives the app every row it holds, issues, projects,
+// Sync for the app (ported from desk/sync.py): a WebSocket that gives the app every row it holds, issues, teams,
 // chats and the Inbox's, then each change the moment it is written, numbered as the log numbers it (db.ts), whoever made it: a page, an
 // agent's curl, or desk itself. The app's own changes go through the JSON API and come back this way, like everyone
 // else's. An app that lost desk, as when desk restarts, connects again with the last change it
@@ -6,7 +6,7 @@
 //
 //     /api/sync?log=<log>&since=<seq>     the log and the last change the app applied; a new tab sends both empty
 //
-//     {"type": "snapshot", "log": "<log>", "seq": 812, "rows": {"issues": [<issue>, ...], "projects": [<project>, ...], "chats": [<chat>, ...], "inbox": [<row>, ...]}}
+//     {"type": "snapshot", "log": "<log>", "seq": 812, "rows": {"issues": [<issue>, ...], "teams": [<team>, ...], "chats": [<chat>, ...], "inbox": [<row>, ...]}}
 //     {"type": "changes", "after": 811, "changes": [{"seq": 812, "kind": "issues", "key": "<slug>", "row": <issue>}, ...]}
 //     {"type": "frame", "frame": <frame>}                         on connect, then when it changed
 //     {"type": "files", "slugs": [<slug>, ...]}                   its other files changed
@@ -14,7 +14,7 @@
 // The first answer is the snapshot, or the changes the app missed, maybe none. Each "changes" goes on from the one
 // before it, whose last change is its "after": an app that holds another seq missed some, and connects again to get
 // them. A row is the table's, less what the app is not sent (db.ts, HELD): an <issue> is every field of issue.md but
-// its description, a <project> its slug, title, state and created, a <chat> its id, session, issue, title and who it is
+// its description, a <team> its slug, title, state and created, a <chat> its id, session, issue, title and who it is
 // with, an Inbox <row> every column (inbox.ts); a deleted row comes as null. A description is part of its issue's row, so a new one comes as a change: the page
 // showing it asks again. A <frame> is the sidebar's sessions and desk's checkout, with each open issue's session state
 // (pages.ts, framePage), which no table holds yet. "files" names the issues whose files beside issue.md may have changed
@@ -23,7 +23,7 @@
 //
 // desk watches no file and asks nothing again on a timer: "when agent changes sth, it calls api, not edit file and desk
 // fetches from file later" (the user, 19 Oct). Each change comes from a write, through the one write path, or from the
-// session host's word (turns.ts). issue.md and project.md are only written out: one changed by hand is not read, and
+// session host's word (turns.ts). issue.md and team.md are only written out: one changed by hand is not read, and
 // tells the apps nothing (db.ts).
 import type { WebSocket } from "ws";
 import * as agents from "./agents.ts";
@@ -51,7 +51,7 @@ function told(changes: db.Change[], after: number) {
 }
 
 // --- a tab still on the app from before the log (19 Oct), which reads issues as GET /api/issues lists them, and the
-// Inbox's count, Triage and the projects from the frame (pages.ts, framePage): until it reloads.
+// Inbox's count, Triage and the teams, as it calls them projects, from the frame (pages.ts, framePage): until it reloads.
 
 const legacy = new Set<WebSocket>();
 
@@ -60,7 +60,7 @@ export const oldTabs = () => legacy.size > 0;
 
 async function oldSnapshot(): Promise<string> {
   const { seq, rows } = await db.snapshot();
-  const listed = rows.projects.sort((a, b) => String(a.created).localeCompare(String(b.created)));
+  const listed = rows.teams.sort((a, b) => String(a.created).localeCompare(String(b.created)));
   return JSON.stringify({ type: "snapshot", seq, issues: rows.issues.map((i) => asJson(i as unknown as Issue)),
     projects: listed.map((p) => ({ slug: p.slug, title: p.title, state: p.state })) });
 }

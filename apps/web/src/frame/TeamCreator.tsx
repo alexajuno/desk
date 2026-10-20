@@ -1,7 +1,7 @@
-// The new project panel: Linear's Create project modal, measured on linear.app on 2026-10-18. Its icon, a name and a
-// description; desk's projects have no summary, properties or milestones, so the panel has none. N then P and the
-// Projects page's New project button open it. Enter in the name moves to the description, Ctrl+Enter creates and opens
-// the new project, Esc closes, and what you typed waits in localStorage as a draft, as the new issue panel keeps its own.
+// The new team panel: Linear's Create project modal, measured on linear.app on 2026-10-18, as desk's projects had it
+// until they became teams on 20 Oct. Its icon, a name and a description. The Teams page's New team button opens it.
+// Enter in the name moves to the description, Ctrl+Enter creates and opens the new team, Esc closes, and what you
+// typed waits in localStorage as a draft, as the new issue panel keeps its own.
 // Its keys are read on the window in the capture phase, ahead of the page's Esc and its shortcuts.
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -15,12 +15,12 @@ import { ui } from "../store/ui";
 const BLANK = { title: "", body: "" };
 type Draft = typeof BLANK;
 
-export const ProjectCreatorHost = observer(function ProjectCreatorHost() {
-  return ui.projectCreator ? <ProjectCreator /> : null;
+export const TeamCreatorHost = observer(function TeamCreatorHost() {
+  return ui.teamCreator ? <TeamCreator /> : null;
 });
 
-function ProjectCreator() {
-  const [draft, setDraft] = useState<Draft>(() => ({ ...BLANK, ...JSON.parse(localStorage.newProjectDraft ?? "{}") }));
+function TeamCreator() {
+  const [draft, setDraft] = useState<Draft>(() => ({ ...BLANK, ...JSON.parse(localStorage.newTeamDraft ?? "{}") }));
   const title = useRef<HTMLTextAreaElement>(null), body = useRef<HTMLTextAreaElement>(null), form = useRef<HTMLFormElement>(null);
   const s = useRef({ composing: false, escDown: false, sending: false, draft });
   s.current.draft = draft;
@@ -32,17 +32,17 @@ function ProjectCreator() {
 
   function close(keep = true) {
     const d = s.current.draft;
-    if (keep && (d.title.trim() || d.body.trim())) localStorage.newProjectDraft = JSON.stringify(d);
-    else localStorage.removeItem("newProjectDraft");
-    ui.setProjectCreator(false);
+    if (keep && (d.title.trim() || d.body.trim())) localStorage.newTeamDraft = JSON.stringify(d);
+    else localStorage.removeItem("newTeamDraft");
+    ui.setTeamCreator(false);
   }
 
   async function submit() {
     const d = s.current.draft, name = d.title.trim().replace(/\s+/g, " ");
-    if (!name) { toast("Give the project a name first"); title.current?.focus(); return; }
+    if (!name) { toast("Give the team a name first"); title.current?.focus(); return; }
     if (s.current.sending) return;
     s.current.sending = true;
-    const res = await postJson("/api/projects", { title: name, body: d.body });
+    const res = await postJson("/api/teams", { title: name, body: d.body });
     s.current.sending = false;
     if (!res.ok) { toast(await reason(res)); return; }
     close(false);
@@ -84,18 +84,18 @@ function ProjectCreator() {
 
   return (
     <div className="creator" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <form ref={form} className="create-panel project-panel" role="dialog" aria-modal="true" aria-label="New project"
+      <form ref={form} className="create-panel project-panel" role="dialog" aria-modal="true" aria-label="New team"
         onSubmit={(e) => { e.preventDefault(); submit(); }}
         onCompositionStart={() => { s.current.composing = true; }} onCompositionEnd={() => { s.current.composing = false; }}>
-        <header><span>New project</span><button type="button" className="close" title="Close  Esc" onClick={() => close()}>{GLYPH.close}</button></header>
-        <div className="project-icon">{GLYPH.project}</div>
+        <header><span>New team</span><button type="button" className="close" title="Close  Esc" onClick={() => close()}>{GLYPH.close}</button></header>
+        <div className="project-icon">{GLYPH.team}</div>
         {/* A name is one line: a pasted line break becomes a space. */}
-        <textarea ref={title} className="create-title" rows={1} placeholder="Project name" aria-label="Project name" value={draft.title}
+        <textarea ref={title} className="create-title" rows={1} placeholder="Team name" aria-label="Team name" value={draft.title}
           onChange={(e) => setDraft({ ...draft, title: e.target.value.replace(/\s*\n\s*/g, " ") })} />
-        <textarea ref={body} className="create-body" placeholder="Write a description, a project brief, or collect ideas…" aria-label="Project description"
+        <textarea ref={body} className="create-body" placeholder="Write what the team works on…" aria-label="Team description"
           value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
         <footer>
-          <button className="primary" title="Create project  Ctrl Enter">Create project</button>
+          <button className="primary" title="Create team  Ctrl Enter">Create team</button>
         </footer>
       </form>
     </div>

@@ -12,17 +12,20 @@ import * as store from "./issues.ts";
 import * as land from "./land.ts";
 import * as models from "./models.ts";
 import * as pins from "./pins.ts";
-import * as projects from "./projects.ts";
 import * as settings from "./settings.ts";
 import * as slack from "./slack.ts";
 import * as sync from "./sync.ts";
+import * as teams from "./teams.ts";
 import * as turns from "./turns.ts";
 import * as web from "./web.ts";
 
 await db.open();
-// Postgres is the record. A new database, or one lost, starts from the issue.md and project.md desk wrote out.
-const issues = await store.importAll(), projectCount = await projects.importAll();
-if (issues || projectCount) console.log(`desk read ${issues} issue.md and ${projectCount} project.md into a new database`);
+// Postgres is the record. A new database, or one lost, starts from the issue.md and team.md desk wrote out.
+await teams.moveFolders();
+const issues = await store.importAll(), teamCount = await teams.importAll();
+if (issues || teamCount) console.log(`desk read ${issues} issue.md and ${teamCount} team.md into a new database`);
+const rewritten = await store.rewrite();
+if (rewritten) console.log(`desk wrote ${rewritten} issue.md out again, as their rows now hold them`);
 await store.readLanded();
 await chats.readIn();
 // What a desk of an older branch changed in the files desk kept its state in before Postgres, while it ran (copies.ts).

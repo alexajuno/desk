@@ -7,8 +7,8 @@ import { AutomationPage } from "../lists/AutomationPage";
 import { AutomationsPage } from "../lists/AutomationsPage";
 import { INBOX_KEEP, InboxPage } from "../inbox/InboxPage";
 import { IssuesPage, TABS } from "../lists/IssuesPage";
-import { ProjectPage } from "../lists/ProjectPage";
-import { ProjectsPage } from "../lists/ProjectsPage";
+import { TeamPage } from "../lists/TeamPage";
+import { TeamsPage } from "../lists/TeamsPage";
 import { listUrl } from "../lists/useList";
 import { SearchPage } from "../search/SearchPage";
 import { SettingsPage } from "../settings/SettingsPage";
@@ -41,10 +41,10 @@ export const router = createBrowserRouter(
     ...["", ...TABS].map(tabRoute),
     { path: "/backlog", element: <ToIssues /> },
     { path: "/triage", element: <TriagePage /> },
-    { path: "/projects", element: <ProjectsPage />, loader: at(() => "/api/page/projects") },
-    { path: "/project/:slug", element: <ProjectPage tab="" />, loader: at(({ params }) => `/api/page/project/${params.slug}`) },
-    { path: "/project/:slug/issues", element: <ProjectPage tab="issues" />,
-      loader: at(({ params, request }) => listUrl(`/project/${params.slug}/issues`, `/api/page/project/${params.slug}`, search(request))) },
+    { path: "/teams", element: <TeamsPage />, loader: at(() => "/api/page/teams") },
+    { path: "/team/:slug", element: <TeamPage tab="" />, loader: at(({ params }) => `/api/page/team/${params.slug}`) },
+    { path: "/team/:slug/issues", element: <TeamPage tab="issues" />,
+      loader: at(({ params, request }) => listUrl(`/team/${params.slug}/issues`, `/api/page/team/${params.slug}`, search(request))) },
     { path: "/automations", element: <AutomationsPage />, loader: at(() => "/api/page/automations") },
     { path: "/automation/:slug", element: <AutomationPage />, loader: at(({ params }) => `/api/page/automation/${params.slug}`) },
     { path: "/issue/:slug", element: <IssuePage />, loader: at(({ params }) => `/api/page/issue/${params.slug}`) },

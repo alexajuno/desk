@@ -1,7 +1,8 @@
-// A project's page, as Linear's: its name in the top bar, and under it two tabs, each a page of its own address.
-// Overview (/project/<slug>) holds the name and the description, both edited where they are, as an issue's, and its
-// Properties: its status, active or archived. Issues (/project/<slug>/issues) holds its issues by status, with the same
-// Filter and Display as the Issues tabs, and a group's + files a new issue in the project.
+// A team's page, as a Linear project's was until desk's projects became teams on 20 Oct: its name in the top bar, and
+// under it two tabs, each a page of its own address. Overview (/team/<slug>) holds the name and the description, both
+// edited where they are, as an issue's, and its Properties: its status, active or archived. Issues (/team/<slug>/issues)
+// holds its issues by status, with the same Filter and Display as the Issues tabs, and a group's + files a new issue in
+// the team.
 import { observer } from "mobx-react-lite";
 import { useEffect, type ReactNode } from "react";
 import { useParams } from "react-router";
@@ -18,49 +19,49 @@ import { toast } from "../ui/toast";
 import { Listing, Tools, type ListData } from "./parts";
 import { useList } from "./useList";
 
-type ProjectState = "active" | "archived";
-interface ProjectData {
-  project: { slug: string; title: string; state: ProjectState; body: string; body_html: string };
+type TeamState = "active" | "archived";
+interface TeamData {
+  team: { slug: string; title: string; state: TeamState; body: string; body_html: string };
   list: ListData;
 }
 
 const TABS = [["", "Overview"], ["issues", "Issues"]];
-const STATUS: Record<ProjectState, { label: string; icon: ReactNode }> = {
+const STATUS: Record<TeamState, { label: string; icon: ReactNode }> = {
   active: { label: "Active", icon: <StateIcon state="running" /> },
   archived: { label: "Archived", icon: GLYPH.archive },
 };
 
-async function setProject(slug: string, field: string, value: string) {
-  const res = await post(`/project/${slug}/set`, { field, value });
+async function setTeam(slug: string, field: string, value: string) {
+  const res = await post(`/team/${slug}/set`, { field, value });
   if (!res.ok) toast(await reason(res));
   await reloadPages();
 }
 
-function statusMenu(slug: string, current: ProjectState, anchor: Element) {
-  const states = Object.keys(STATUS) as ProjectState[];
+function statusMenu(slug: string, current: TeamState, anchor: Element) {
+  const states = Object.keys(STATUS) as TeamState[];
   openMenu({
     anchor, filter: "keys", placeholder: "Change status…",
     items: (q) => states.filter((s) => STATUS[s].label.toLowerCase().includes(q.toLowerCase())).map((s) => ({
       icon: STATUS[s].icon, label: STATUS[s].label, hint: states.indexOf(s) + 1, num: states.indexOf(s) + 1, current: s === current,
-      run: () => s !== current && setProject(slug, "state", s),
+      run: () => s !== current && setTeam(slug, "state", s),
     })),
   });
 }
 
-export function ProjectPage({ tab }: { tab: string }) {
+export function TeamPage({ tab }: { tab: string }) {
   const { slug = "" } = useParams();
-  return tab ? <ProjectIssues key={slug} slug={slug} /> : <ProjectOverview key={slug} slug={slug} />;
+  return tab ? <TeamIssues key={slug} slug={slug} /> : <TeamOverview key={slug} slug={slug} />;
 }
 
 function Head({ slug, title, tab, tools }: { slug: string; title?: string; tab: string; tools?: ReactNode }) {
   useEffect(() => { if (title) document.title = `${title} › ${tab ? "Issues" : "Overview"} · desk`; }, [title, tab]);
   return (
     <>
-      <Bar crumb={title && <span className="bar-title project-crumb">{GLYPH.project}{title}</span>} />
+      <Bar crumb={title && <span className="bar-title project-crumb">{GLYPH.team}{title}</span>} />
       <div className="view-bar">
         <nav className="tabs" aria-label="Views">
           {TABS.map(([t, name]) => (
-            <Go key={t} className={`tab${t === tab ? " here" : ""}`} to={`/project/${slug}${t && `/${t}`}`} aria-current={t === tab ? "page" : undefined}>{name}</Go>
+            <Go key={t} className={`tab${t === tab ? " here" : ""}`} to={`/team/${slug}${t && `/${t}`}`} aria-current={t === tab ? "page" : undefined}>{name}</Go>
           ))}
         </nav>
         <span className="right">{tools}</span>
@@ -69,9 +70,9 @@ function Head({ slug, title, tab, tools }: { slug: string; title?: string; tab: 
   );
 }
 
-const ProjectOverview = observer(function ProjectOverview({ slug }: { slug: string }) {
-  const { data, error } = usePage<ProjectData>(`/api/page/project/${slug}`);
-  const pr = data?.project;
+const TeamOverview = observer(function TeamOverview({ slug }: { slug: string }) {
+  const { data, error } = usePage<TeamData>(`/api/page/team/${slug}`);
+  const pr = data?.team;
   return (
     <>
       <Head slug={slug} title={pr?.title} tab="" />
@@ -79,8 +80,8 @@ const ProjectOverview = observer(function ProjectOverview({ slug }: { slug: stri
         {error && !data && <p className="muted" style={{ padding: 24 }}>{error}</p>}
         {pr && (
           <div className="project-overview">
-            <div className="project-icon">{GLYPH.project}</div>
-            <Title title={pr.title} save={(t) => setProject(slug, "title", t)} />
+            <div className="project-icon">{GLYPH.team}</div>
+            <Title title={pr.title} save={(t) => setTeam(slug, "title", t)} />
             <div className="project-props">
               <h3>Properties</h3>
               <button className="prop-chip" type="button" title="Change status"
@@ -89,7 +90,7 @@ const ProjectOverview = observer(function ProjectOverview({ slug }: { slug: stri
               </button>
             </div>
             <h3>Description</h3>
-            <Description body={pr.body} html={pr.body_html} save={(t) => setProject(slug, "body", t)} />
+            <Description body={pr.body} html={pr.body_html} save={(t) => setTeam(slug, "body", t)} />
           </div>
         )}
       </div>
@@ -97,14 +98,14 @@ const ProjectOverview = observer(function ProjectOverview({ slug }: { slug: stri
   );
 });
 
-const ProjectIssues = observer(function ProjectIssues({ slug }: { slug: string }) {
-  const { data, error } = useList<ProjectData>(`/project/${slug}/issues`, `/api/page/project/${slug}`, (d) => d.list.view);
+const TeamIssues = observer(function TeamIssues({ slug }: { slug: string }) {
+  const { data, error } = useList<TeamData>(`/team/${slug}/issues`, `/api/page/team/${slug}`, (d) => d.list.view);
   return (
     <>
-      <Head slug={slug} title={data?.project.title} tab="issues" tools={data && <Tools view={data.list.view} />} />
+      <Head slug={slug} title={data?.team.title} tab="issues" tools={data && <Tools view={data.list.view} />} />
       <div className="scroll">
         {error && !data && <p className="muted" style={{ padding: 24 }}>{error}</p>}
-        {data && <Listing list={data.list} empty="No issues yet. A project never ends; its issues do." />}
+        {data && <Listing list={data.list} empty="No issues yet. A team never ends; its issues do." />}
       </div>
     </>
   );

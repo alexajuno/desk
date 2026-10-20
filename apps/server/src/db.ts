@@ -10,8 +10,8 @@
 // (since). Reads go through sql().
 //
 // The tables are the record of desk's state ("you should find whatever represent state, should be in db", the user, 19
-// Oct): issues and projects, the Inbox, the trash, pins, each session's model, settings, Slack's tags and the line. issue.md and
-// project.md are only written out, for agents, git and an editor to read; desk reads them in only into a database
+// Oct): issues, teams and projects, the Inbox, the trash, pins, each session's model, settings, Slack's tags and the line.
+// issue.md, team.md and project.md are only written out, for agents, git and an editor to read; desk reads them in only into a database
 // with no issues yet, as a new one (issues.importAll).
 import { PGlite, type Transaction } from "@electric-sql/pglite";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -27,7 +27,7 @@ export type Db = Pick<Transaction, "query">;
 // wrote, stay on the server.
 const HELD: Record<string, { key: string; hidden: string[] }> = {
   issues: { key: "slug", hidden: ["body", "written"] },
-  projects: { key: "slug", hidden: ["body", "written"] },
+  teams: { key: "slug", hidden: ["body", "written"] },
   chats: { key: "id", hidden: ["folder", "cwd", "seen", "extra"] },
   inbox: { key: "id", hidden: [] },
 };
@@ -42,7 +42,7 @@ create table if not exists issues (
   priority text not null default 'none',
   state text not null default 'backlog',
   parent text,
-  project text,
+  team text,
   folder text,
   protocol text,
   link text,
@@ -57,7 +57,7 @@ create table if not exists issues (
   body text not null default '',
   written text -- issue.md as desk last wrote it, which tells an editor's change from desk's own
 );
-create table if not exists projects (
+create table if not exists teams ( -- teams.ts: desk's projects until 20 Oct
   slug text primary key,
   title text not null,
   state text not null default 'active',
@@ -204,6 +204,7 @@ export async function open(): Promise<PGlite> {
   const ignore = join(dirname(DB_DIR), ".gitignore");
   if (!process.env.DESK_DB && !existsSync(ignore)) writeFileSync(ignore, "*\n");
   const opened = await PGlite.create(DB_DIR);
+  await toTeams(opened);
   await opened.exec(SCHEMA);
   await opened.exec(["review_of", "review_since", "landed"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
   // The Inbox's delete and its mark as unread (inbox.ts), from 19 Oct.
@@ -217,6 +218,22 @@ export async function open(): Promise<PGlite> {
   pushed = await last(opened);
   await prune();
   return opened;
+}
+
+// desk's projects became teams on 20 Oct (teams.ts), so that a project can be Linear's, one that finishes: their table,
+// each issue's project and each trashed issue's, move over once, before the schema makes the tables it lacks. Every
+// app then takes its rows afresh, as from another database's log, since the log's rows of before say project.
+async function toTeams(pg: PGlite) {
+  const has = async (table: string) => (await pg.query("select 1 from information_schema.tables where table_name = $1", [table])).rows.length > 0;
+  if (!(await has("projects")) || (await has("teams"))) return;
+  await pg.transaction(async (tx) => {
+    await tx.exec(`drop trigger if exists projects_logged on projects;
+      drop trigger if exists projects_updated on projects;
+      alter table projects rename to teams;
+      alter table issues rename column project to team;
+      update trashed set row = (row - 'project') || jsonb_build_object('team', row -> 'project') where row ? 'project';
+      update meta set value = gen_random_uuid()::text where name = 'log';`);
+  });
 }
 
 export function sql(): PGlite {

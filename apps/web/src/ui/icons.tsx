@@ -100,6 +100,7 @@ const glyph = (path: ReactNode) => (
 
 export const GLYPH = {
   project: glyph(<path d="M8 2l5.5 3v6L8 14l-5.5-3V5z" />),
+  team: glyph(<><circle cx="6" cy="5.5" r="2.25" /><path d="M2 13c0-2.2 1.8-4 4-4s4 1.8 4 4" /><path d="M10.5 3.5a2.25 2.25 0 0 1 0 4.25M12 9.2c1.2.6 2 1.9 2 3.3" /></>),
   parent: glyph(<path d="M4.5 2.5v6a2 2 0 0 0 2 2h6M10 8l2.5 2.5L10 13" />),
   plus: glyph(<path d="M8 3.5v9M3.5 8h9" />),
   link: glyph(<path d="M7 9a2.5 2.5 0 0 0 3.5 0l2-2A2.5 2.5 0 0 0 9 3.5l-.5.5M9 7a2.5 2.5 0 0 0-3.5 0l-2 2A2.5 2.5 0 0 0 7 12.5l.5-.5" />),

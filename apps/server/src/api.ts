@@ -3,7 +3,7 @@
 //
 //     GET    /api/issues?q=&state=      list and search issues
 //     GET    /api/issues/<slug>         one issue, with its body and files
-//     POST   /api/issues                create one: title, body, priority, state, parent, project, folder, protocol
+//     POST   /api/issues                create one: title, body, priority, state, parent, team, folder, protocol
 //     PATCH  /api/issues/<slug>         set any of those fields; its session also says what its turn hands you (review_of)
 //                                       and where its work landed (landed); a body sets the sections it holds
 //     GET    /api/issues/<slug>/sections/<name>   one section of the issue's document, as Markdown
@@ -12,10 +12,10 @@
 //     POST   /api/issues/<slug>/work    the agent chat works it itself: the chat becomes the issue's session
 //     POST   /api/issues/<slug>/try     run the issue's branch in its folder's checkout, to test it (land.ts)
 //     POST   /api/issues/<slug>/back-to-main   and back, handing desk's checkout to the next in line
-//     GET    /api/projects              list projects (state=active|archived|all); /api/issues takes project=<slug>
-//     GET    /api/projects/<slug>       one project, with its description and issues
-//     POST   /api/projects              create one: title, body
-//     PATCH  /api/projects/<slug>       set title, body, state (active or archived)
+//     GET    /api/teams                 list teams (state=active|archived|all); /api/issues takes team=<slug>
+//     GET    /api/teams/<slug>          one team, with its description and issues
+//     POST   /api/teams                 create one: title, body
+//     PATCH  /api/teams/<slug>          set title, body, state (active or archived)
 //     GET    /api/settings              desk's settings (settings.ts)
 //     PATCH  /api/settings              set any of them
 //     GET    /api/agents                the user's own agents, whom a chat can be with (roster.ts)
@@ -38,17 +38,17 @@ import * as store from "./issues.ts";
 import { byRank, type Issue } from "./issues.ts";
 import * as land from "./land.ts";
 import { HttpError } from "./pages.ts";
-import * as projects from "./projects.ts";
-import type { Project } from "./projects.ts";
 import * as roster from "./roster.ts";
 import { find } from "./search.ts";
 import * as settings from "./settings.ts";
+import * as teams from "./teams.ts";
+import type { Team } from "./teams.ts";
 
 const OPEN = store.STATES.filter((s) => s !== "done" && s !== "dropped");
 
 export function asJson(i: Issue, full = false) {
   const data: Record<string, unknown> = {
-    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, project: i.project, folder: i.folder,
+    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, folder: i.folder,
     protocol: store.runs(i), session: i.session, created: i.created, url: `/issue/${i.slug}`,
   };
   if (i.state === "waiting") Object.assign(data, { waiting_on: i.waiting_on, waiting_since: i.waiting_since });
@@ -63,7 +63,7 @@ async function loadIssue(slug: string): Promise<Issue> {
   return store.load(slug);
 }
 
-const FIELDS = ["title", "body", "priority", "state", "parent", "project", "folder", "protocol", "waiting_on", "review_of", "landed"];
+const FIELDS = ["title", "body", "priority", "state", "parent", "team", "folder", "protocol", "waiting_on", "review_of", "landed"];
 const PULL = /https:\/\/github\.com\/\S+\/pull\/\d+/;
 const AUTOMATION_FIELDS = ["title", "when", "check", "agent", "body", "state"];
 
@@ -119,30 +119,30 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
     if (!all.has(parent)) throw new HttpError(422, `No issue ${parent} to be the parent.`);
     if (parent === i.slug || store.descendants(all, i.slug).includes(parent)) throw new HttpError(422, `${parent} is ${i.slug} or under it, so it cannot be its parent.`);
   }
-  if (fields.project && !(await projects.exists(fields.project))) throw new HttpError(422, `No project ${fields.project}. List them with GET /api/projects.`);
+  if (fields.team && !(await teams.exists(fields.team))) throw new HttpError(422, `No team ${fields.team}. List them with GET /api/teams.`);
   if (fields.folder && !isDir(expand(fields.folder))) throw new HttpError(422, `No folder ${fields.folder}. Find one with GET /api/folders?q=<name>.`);
   if ("body" in fields) fields.body = store.withSections(i.body, fields.body || "");
   const target = i as unknown as Record<string, string | null>;
-  for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "project", "folder", "waiting_on", "landed"].includes(name) ? value || null : value;
+  for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "team", "folder", "waiting_on", "landed"].includes(name) ? value || null : value;
 }
 
-async function projectJson(p: Project, full = false) {
-  const mine = projects.issuesOf(await store.loadAll(), p.slug);
-  const data: Record<string, unknown> = { slug: p.slug, title: p.title, state: p.state, created: p.created, url: `/project/${p.slug}`,
+async function teamJson(t: Team, full = false) {
+  const mine = teams.issuesOf(await store.loadAll(), t.slug);
+  const data: Record<string, unknown> = { slug: t.slug, title: t.title, state: t.state, created: t.created, url: `/team/${t.slug}`,
     issues: mine.length, open_issues: mine.filter((i) => OPEN.includes(i.state)).length };
-  if (full) Object.assign(data, { file: join(projects.folder(p.slug), projects.MAIN), body: p.body, issue_list: mine.map((i) => asJson(i)) });
+  if (full) Object.assign(data, { file: join(teams.folder(t.slug), teams.MAIN), body: t.body, issue_list: mine.map((i) => asJson(i)) });
   return data;
 }
 
-async function loadProject(slug: string): Promise<Project> {
-  if (!(await projects.exists(slug))) throw new HttpError(404, `No project ${slug}. List them with GET /api/projects.`);
-  return projects.load(slug);
+async function loadTeam(slug: string): Promise<Team> {
+  if (!(await teams.exists(slug))) throw new HttpError(404, `No team ${slug}. List them with GET /api/teams.`);
+  return teams.load(slug);
 }
 
-function applyProject(p: Project, fields: Record<string, string | null>) {
-  if ("state" in fields && !projects.STATES.includes(fields.state as string)) throw new HttpError(422, `state must be one of: ${projects.STATES.join(", ")}`);
+function applyTeam(t: Team, fields: Record<string, string | null>) {
+  if ("state" in fields && !teams.STATES.includes(fields.state as string)) throw new HttpError(422, `state must be one of: ${teams.STATES.join(", ")}`);
   if ("title" in fields && !fields.title) throw new HttpError(422, "title cannot be empty");
-  const target = p as unknown as Record<string, string | null>;
+  const target = t as unknown as Record<string, string | null>;
   for (const [name, value] of Object.entries(fields)) target[name] = name === "body" ? value || "" : value;
 }
 
@@ -185,11 +185,11 @@ async function filer(body: unknown, title: string): Promise<chats.Chat | null> {
 
 export function routes(app: FastifyInstance) {
   // Open issues unless state says otherwise (state=all, or a list such as state=running,review), in the backlog's
-  // order; with q, the ones desk's search finds, best match first; project= keeps one project's.
+  // order; with q, the ones desk's search finds, best match first; team= keeps one team's.
   app.get("/api/issues", async (req: Req) => {
-    const { q = "", state = "", project = "" } = req.query;
+    const { q = "", state = "", team = "" } = req.query;
     const states = state === "all" ? store.STATES : state ? state.split(",") : OPEN;
-    const issues = new Map([...(await store.loadAll())].filter(([, i]) => states.includes(i.state) && (!project || i.project === project)));
+    const issues = new Map([...(await store.loadAll())].filter(([, i]) => states.includes(i.state) && (!team || i.team === team)));
     const found = q.trim() ? find(issues, q).map((h) => h.issue) : [...issues.values()].sort(byRank);
     return found.slice(0, 50).map((i) => asJson(i));
   });
@@ -310,30 +310,30 @@ export function routes(app: FastifyInstance) {
     }
   });
 
-  // Active projects unless state=archived or state=all.
-  app.get("/api/projects", async (req: Req) => {
+  // Active teams unless state=archived or state=all.
+  app.get("/api/teams", async (req: Req) => {
     const state = req.query.state ?? "active";
-    const found = [...(await projects.loadAll()).values()].filter((p) => state === "all" || p.state === state);
+    const found = [...(await teams.loadAll()).values()].filter((t) => state === "all" || t.state === state);
     found.sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
-    return Promise.all(found.map((p) => projectJson(p)));
+    return Promise.all(found.map((t) => teamJson(t)));
   });
 
-  app.get("/api/projects/:slug", async (req: Req) => projectJson(await loadProject(req.params.slug), true));
+  app.get("/api/teams/:slug", async (req: Req) => teamJson(await loadTeam(req.params.slug), true));
 
-  app.post("/api/projects", async (req, reply) => {
+  app.post("/api/teams", async (req, reply) => {
     const fields = given(req.body, ["title", "body", "state"]);
     if (!(fields.title ?? "").trim()) throw new HttpError(422, "title is required");
-    const p: Project = { slug: projects.newSlug(fields.title!), title: fields.title!, state: "active", created: store.now(), body: "" };
-    applyProject(p, fields);
-    await projects.save(p);
-    return reply.code(201).send(await projectJson(p, true));
+    const t: Team = { slug: teams.newSlug(fields.title!), title: fields.title!, state: "active", created: store.now(), body: "" };
+    applyTeam(t, fields);
+    await teams.save(t);
+    return reply.code(201).send(await teamJson(t, true));
   });
 
-  app.patch("/api/projects/:slug", async (req: Req) => {
-    const p = await loadProject(req.params.slug);
-    applyProject(p, given(req.body, ["title", "body", "state"]));
-    await projects.save(p);
-    return projectJson(p, true);
+  app.patch("/api/teams/:slug", async (req: Req) => {
+    const t = await loadTeam(req.params.slug);
+    applyTeam(t, given(req.body, ["title", "body", "state"]));
+    await teams.save(t);
+    return teamJson(t, true);
   });
 
   // Write the plan into the issue, then start its session on it: the one it already has, which carries it out as if the

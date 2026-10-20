@@ -1,4 +1,4 @@
-// The sidebar on every page (templates/base.html's aside.side): Inbox, Triage, Issues, Automations and the projects,
+// The sidebar on every page (templates/base.html's aside.side): Inbox, Triage, Issues, Automations and the teams,
 // the sessions you pinned and those still in hand, as claude.ai's Starred and Recents, then what desk's checkout runs.
 // An issue in progress or landing shows in Chats, by its session ("now that the chats section display all issues, feel like we don't need the in progress
 // section anymore", the user, 19 Oct); the rest stay in Issues.
@@ -115,11 +115,11 @@ export const Sidebar = observer(function Sidebar() {
         {GLYPH.clock}
         Automations
       </Go>
-      <Go className={`nav-label${at("/projects")}`} to="/projects" title="Go to projects  G then P">Projects</Go>
-      {issues.activeProjects.map((pr) => (
-        <Go key={pr.slug} className={`nav-item${here === `/project/${pr.slug}` || here.startsWith(`/project/${pr.slug}/`) ? " here" : ""}`} to={`/project/${pr.slug}`}>
-          <svg viewBox="0 0 16 16"><path d="M8 2l5.5 3v6L8 14l-5.5-3V5z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg>
-          <span className="nav-title">{pr.title}</span>
+      <Go className={`nav-label${at("/teams")}`} to="/teams" title="Go to teams">Your teams</Go>
+      {issues.activeTeams.map((t) => (
+        <Go key={t.slug} className={`nav-item${here === `/team/${t.slug}` || here.startsWith(`/team/${t.slug}/`) ? " here" : ""}`} to={`/team/${t.slug}`}>
+          {GLYPH.team}
+          <span className="nav-title">{t.title}</span>
         </Go>
       ))}
       {/* The sessions you pinned, then every other one still in hand, the newest first, with no cap (pages.ts's

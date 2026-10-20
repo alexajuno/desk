@@ -37,7 +37,7 @@ export interface Filter {
 }
 
 // The words the server's views.ts reads; any of them in the address means it carries a view.
-const WORDS = new Set(["status", "priority", "project", "folder", "protocol", "issue", "layout", "group", "order", "done", "subs", "reverse", "empty",
+const WORDS = new Set(["status", "priority", "team", "folder", "protocol", "issue", "layout", "group", "order", "done", "subs", "reverse", "empty",
   "type", "from", "first", "unread"]);
 export const hasView = (search: string) => [...new URLSearchParams(search).keys()].some((k) => WORDS.has(k));
 

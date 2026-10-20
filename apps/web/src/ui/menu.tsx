@@ -1,4 +1,4 @@
-// One menu for every menu, as desk.js's openMenu: the status, priority and protocol pickers, the parent, project and
+// One menu for every menu, as desk.js's openMenu: the status, priority and protocol pickers, the parent, team and
 // folder pickers, an issue's actions, the Help menu. Linear's shape, copied from linear.app: a filter on top,
 // numbered rows, a tick on the current one.
 //

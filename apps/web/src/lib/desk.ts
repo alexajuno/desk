@@ -48,7 +48,7 @@ export interface IssueRow {
   state: State;
   priority: Priority;
   parent: string | null;
-  project: string | null;
+  team: string | null;
   folder: string | null;
   protocol: Protocol;
   link: string | null;

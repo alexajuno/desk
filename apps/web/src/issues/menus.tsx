@@ -1,5 +1,5 @@
 // The issue menus (desk.js): status, priority and protocol pickers, who a wait is on, an issue's actions, parent,
-// project and folder pickers. Each opens desk's one menu (ui/menu.tsx).
+// team and folder pickers. Each opens desk's one menu (ui/menu.tsx).
 import { CLOSED, PROTOCOL_HINTS, PROTOCOLS, STATES, fold, nameOf, type Field, type State } from "../lib/desk";
 import { GLYPH, StateIcon, fieldIcon } from "../ui/icons";
 import { openMenu, type MenuItem, type MenuOptions } from "../ui/menu";
@@ -98,16 +98,16 @@ export function parentPicker(current: string | null, exclude: string, where: Whe
   });
 }
 
-// Active projects to put an issue in; choose(slug, title) gets "" for No project.
-export function projectPicker(current: string | null, where: Where, choose: (slug: string, title: string) => unknown) {
-  const choices: Promise<{ slug: string; title: string }[]> = fetch("/api/projects").then((res) => res.json());
+// Active teams to put an issue in; choose(slug, title) gets "" for No team.
+export function teamPicker(current: string | null, where: Where, choose: (slug: string, title: string) => unknown) {
+  const choices: Promise<{ slug: string; title: string }[]> = fetch("/api/teams").then((res) => res.json());
   openMenu({
-    ...where, filter: "input", className: "wide", placeholder: "Set project…", empty: "No project matches",
+    ...where, filter: "input", className: "wide", placeholder: "Set team…", empty: "No team matches",
     items: async (q) => {
       const words = fold(q).trim().split(/\s+/).filter(Boolean);
-      const none: MenuItem = { icon: GLYPH.none, label: "No project", current: !current, run: () => choose("", "") };
-      const all: MenuItem[] = [none, ...(await choices).map((p) => ({
-        icon: GLYPH.project, label: p.title, current: p.slug === current, run: () => choose(p.slug, p.title),
+      const none: MenuItem = { icon: GLYPH.none, label: "No team", current: !current, run: () => choose("", "") };
+      const all: MenuItem[] = [none, ...(await choices).map((t) => ({
+        icon: GLYPH.team, label: t.title, current: t.slug === current, run: () => choose(t.slug, t.title),
       }))];
       return all.filter((item) => words.every((w) => fold(item.label).includes(w)));
     },

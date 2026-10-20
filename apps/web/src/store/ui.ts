@@ -1,5 +1,5 @@
 // What the app's screen holds besides the data: the row in focus (hover, or J and K, as in Linear), the rows selected
-// (X, Shift-click, Shift ↑ ↓, Ctrl A, as in Linear), an open editor, the shortcuts panel, the new issue and new project
+// (X, Shift-click, Shift ↑ ↓, Ctrl A, as in Linear), an open editor, the shortcuts panel, the new issue and new team
 // panels, and changes shown before the server has them.
 import { action, makeObservable, observable, observableRef } from "mobx";
 import type { Field } from "../lib/desk";
@@ -10,8 +10,8 @@ export interface CreatorPreset {
   protocol?: string;
   parent?: string;
   parentTitle?: string;
-  project?: string;
-  projectTitle?: string;
+  team?: string;
+  teamTitle?: string;
 }
 
 class UI {
@@ -22,13 +22,13 @@ class UI {
   editing = false;
   keysOpen = false;
   creator: CreatorPreset | null = null;
-  projectCreator = false;
+  teamCreator = false;
   overrides = observable.map<string, Partial<Record<Field, string>>>();
 
   constructor() {
     makeObservable(this, {
-      focused: observable, byMouse: observable, editing: observable, keysOpen: observable, creator: observableRef, projectCreator: observable,
-      focus: action, select: action, toggleSelect: action, unselect: action, clearSelection: action, setEditing: action, setKeys: action, openCreator: action, closeCreator: action, setProjectCreator: action, paint: action, unpaint: action,
+      focused: observable, byMouse: observable, editing: observable, keysOpen: observable, creator: observableRef, teamCreator: observable,
+      focus: action, select: action, toggleSelect: action, unselect: action, clearSelection: action, setEditing: action, setKeys: action, openCreator: action, closeCreator: action, setTeamCreator: action, paint: action, unpaint: action,
     });
   }
 
@@ -73,8 +73,8 @@ class UI {
     this.creator = null;
   }
 
-  setProjectCreator(open: boolean) {
-    this.projectCreator = open;
+  setTeamCreator(open: boolean) {
+    this.teamCreator = open;
   }
 
   // A change shows at once, then is saved, then the page draws what the server holds (desk.js paint).

@@ -1,4 +1,4 @@
-// A list's view (ported from desk/views.py): Linear's Filter and Display options on desk's lists, the Issues tabs, a project
+// A list's view (ported from desk/views.py): Linear's Filter and Display options on desk's lists, the Issues tabs, a team's
 // page and Sessions (linear.app/docs/filters and linear.app/docs/display-options). It says which rows the list keeps and how it
 // groups and orders them; on an issue list also which done issues come back and how sub-issues show.
 //
@@ -8,7 +8,6 @@
 import { HOME } from "./config.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
-import type { Project } from "./projects.ts";
 
 export interface Page {
   filters: Record<string, string>; // property: its name, in Filter's order
@@ -22,39 +21,39 @@ export interface Page {
 }
 
 const EMPTY = { empty: "Show empty groups" };
-const ISSUE_FILTERS = { status: "Status", priority: "Priority", project: "Project", folder: "Folder", protocol: "Protocol" };
+const ISSUE_FILTERS = { status: "Status", priority: "Priority", team: "Team", folder: "Folder", protocol: "Protocol" };
 const ISSUE_OPTIONS = {
   // Linear's Layout: the list, or a board with a column per group (linear.app/docs/board-layout).
   layout: { list: "List", board: "Board" },
-  group: { none: "No grouping", status: "Status", priority: "Priority", project: "Project", folder: "Folder" },
+  group: { none: "No grouping", status: "Status", priority: "Priority", team: "Team", folder: "Folder" },
   order: { priority: "Priority", status: "Status", created: "Created", updated: "Updated", title: "Title" },
   // Linear's Completed issues: how far back done and dropped issues come in.
   done: { none: "None", day: "Past day", week: "Past week", month: "Past month", all: "All" },
   subs: { nested: "Nested", rows: "Flat", hidden: "Hidden" },
 };
 
-// Active and Backlog keep to their own statuses, so done issues never come back there. A project page keeps to the list,
+// Active and Backlog keep to their own statuses, so done issues never come back there. A team's page keeps to the list,
 // beside its properties.
 const { done: _done, ...OPEN_OPTIONS } = ISSUE_OPTIONS;
-const { layout: _layout, ...PROJECT_OPTIONS } = ISSUE_OPTIONS;
+const { layout: _layout, ...TEAM_OPTIONS } = ISSUE_OPTIONS;
 export const ACTIVE = ["running", "waiting", "review", "landing"];
 
 // Each page opens as it looked before views: All issues (the Backlog until 17 Oct) by priority with sub-issues under
-// their parent; a project page by status, flat, with its done issues. The Issues tabs are Linear's: All issues, Active
+// their parent; a team's page by status, flat, with its done issues. The Issues tabs are Linear's: All issues, Active
 // (being worked, or waiting on someone) and Backlog (parked, not started).
 export const PAGES: Record<string, Page> = {
   issues: { filters: ISSUE_FILTERS, options: ISSUE_OPTIONS, defaults: { layout: "list", group: "priority", order: "priority", done: "none", subs: "nested" }, switches: EMPTY, reverse: true, keep: [], noun: "issue" },
   active: { filters: ISSUE_FILTERS, options: OPEN_OPTIONS, defaults: { layout: "list", group: "status", order: "priority", subs: "nested" }, switches: EMPTY, reverse: true, keep: [], noun: "issue", holds: ACTIVE },
   backlog: { filters: ISSUE_FILTERS, options: OPEN_OPTIONS, defaults: { layout: "list", group: "priority", order: "priority", subs: "nested" }, switches: EMPTY, reverse: true, keep: [], noun: "issue", holds: ["backlog"] },
-  project: {
-    filters: Object.fromEntries(Object.entries(ISSUE_FILTERS).filter(([k]) => k !== "project")), options: PROJECT_OPTIONS,
+  team: {
+    filters: Object.fromEntries(Object.entries(ISSUE_FILTERS).filter(([k]) => k !== "team")), options: TEAM_OPTIONS,
     defaults: { group: "status", order: "priority", done: "all", subs: "rows" }, switches: EMPTY, reverse: true, keep: [], noun: "issue",
   },
   // Linear's Inbox (measured on linear.app on 19 Oct): Filter's Notification type, From, Team, Project, Issue priority
-  // and Issue status type, with desk's folder for Linear's team; Display's Ordering and Show unread first; and the top
+  // and Issue status type, with desk's folder too; Display's Ordering and Show unread first; and the top
   // bar's Show unreads only. Linear's Group unreads by, Show snoozed and priority inbox have nothing to work on in desk.
   inbox: {
-    filters: { type: "Notification type", from: "From", folder: "Folder", project: "Project", priority: "Issue priority", status: "Issue status" },
+    filters: { type: "Notification type", from: "From", team: "Team", folder: "Folder", priority: "Issue priority", status: "Issue status" },
     options: { order: { newest: "Newest", oldest: "Oldest", priority: "Priority" } }, defaults: { order: "newest" },
     switches: { first: "Show unread first", unread: "" }, reverse: false, keep: ["i"], noun: "notification",
   },
@@ -205,21 +204,24 @@ export function folderName(path: string | null): string {
   return path.replace(/^~\/projects\//, "");
 }
 
-// The issue's value of a property, as the URL writes it; "none" for no project or no folder.
+// The issue's value of a property, as the URL writes it; "none" for no team or no folder.
 export function value(i: Issue, name: string): string {
   if (name === "status") return i.state;
   if (name === "priority") return i.priority;
-  if (name === "project") return i.project || "none";
+  if (name === "team") return i.team || "none";
   if (name === "folder") return folderName(i.folder);
   return store.runs(i);
 }
 
-export function label(name: string, v: string, projects: Map<string, Project>): string {
+// The rows a property's slugs name, by property, for their titles: the teams.
+export type Named = Partial<Record<string, Map<string, { title: string; created: string; state: string }>>>;
+
+export function label(name: string, v: string, named: Named): string {
   if (name === "status") return store.STATE_NAMES[v] ?? v;
   if (name === "priority") return store.PRIORITY_NAMES[v] ?? v;
   if (name === "protocol") return store.PROTOCOL_NAMES[v] ?? v;
   if (v === "none") return `No ${name}`;
-  return name === "project" && projects.has(v) ? projects.get(v)!.title : v;
+  return named[name]?.get(v)?.title ?? v;
 }
 
 // An issue value's icon, or a property's own when v is null.
@@ -235,7 +237,7 @@ const cmp = (a: string | number, b: string | number) => (a < b ? -1 : a > b ? 1 
 const fold = (s: string) => s.toLowerCase();
 
 // The page's issues as the view shows them (views.py, build).
-export function build(view: View, pageIssues: Issue[], everyone: Map<string, Issue>, projects: Map<string, Project>): Listing {
+export function build(view: View, pageIssues: Issue[], everyone: Map<string, Issue>, named: Named): Listing {
   const holds = spec(view).holds;
   if (holds) pageIssues = pageIssues.filter((i) => holds.includes(i.state));
   const updatedCache = new Map<string, number>();
@@ -285,9 +287,9 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
   const groupOf = (i: Issue) => (view.group === "none" ? "" : value(i, view.group));
 
   let order: string[];
-  if (view.group === "project") {
-    const active = [...projects.values()].sort((a, b) => cmp(a.created, b.created)).filter((p) => p.state === "active").map((p) => p.slug);
-    const others = [...new Set(pageIssues.map((i) => value(i, "project")))].filter((v) => !active.includes(v) && v !== "none").sort();
+  if (view.group === "team") {
+    const active = [...(named.team ?? [])].sort(([, a], [, b]) => cmp(a.created, b.created)).filter(([, t]) => t.state === "active").map(([slug]) => slug);
+    const others = [...new Set(pageIssues.map((i) => value(i, "team")))].filter((v) => !active.includes(v) && v !== "none").sort();
     order = [...active, ...others, "none"];
   } else if (view.group === "folder") {
     order = [...[...new Set(pageIssues.map((i) => value(i, "folder")))].filter((v) => v !== "none").sort(), "none"];
@@ -315,18 +317,18 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
     }
     const groupKids = new Map<string, Issue[]>();
     for (const [slug, rows] of [...kids, ...under]) groupKids.set(slug, sort(rows));
-    groups.push({ value: g, label: g ? label(view.group, g, projects) : "", icon: g ? icon(view.group, g) : null,
+    groups.push({ value: g, label: g ? label(view.group, g, named) : "", icon: g ? icon(view.group, g) : null,
       items: sort(top), kids: groupKids, context, count: count(mine) });
   }
 
   const valuesOf = (name: string): string[] => {
-    if (name === "project" || name === "folder") // the ones the list has, as Linear's menus list only those
+    if (name === "team" || name === "folder") // the ones the list has, as Linear's menus list only those
       return ["none", ...[...new Set(base.map((i) => value(i, name)))].filter((v) => v !== "none")
-        .sort((a, b) => cmp(fold(label(name, a, projects)), fold(label(name, b, projects))))];
+        .sort((a, b) => cmp(fold(label(name, a, named)), fold(label(name, b, named))))];
     return [...({ status: holds ?? store.STATES, priority: ["none", "urgent", "high", "medium", "low"], protocol: store.PROTOCOLS } as Record<string, string[]>)[name]];
   };
   // Done and Dropped count all of them, since picking one brings them all back.
-  const { chips, fields } = filtering(view, base, value, (name, v) => label(name, v, projects), icon, valuesOf,
+  const { chips, fields } = filtering(view, base, value, (name, v) => label(name, v, named), icon, valuesOf,
     (name, v) => (name === "status" && store.CLOSED.has(v) ? pageIssues : base));
   return { view, groups, hidden, chips, fields };
 }

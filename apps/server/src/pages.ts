@@ -6,19 +6,19 @@ import { extname, join, resolve, sep } from "node:path";
 import * as agents from "./agents.ts";
 import * as automations from "./automations.ts";
 import * as chats from "./chats.ts";
-import { ISSUES_DIR, PROJECTS_DIR } from "./config.ts";
+import { ISSUES_DIR, TEAMS_DIR } from "./config.ts";
 import * as store from "./issues.ts";
 import { byRank, CLOSED, runs, type Issue } from "./issues.ts";
 import * as inbox from "./inbox.ts";
 import * as land from "./land.ts";
 import * as live_ from "./live.ts";
 import * as pins from "./pins.ts";
-import * as projects from "./projects.ts";
-import type { Project } from "./projects.ts";
 import { toHtml, toHtmlWithToc } from "./render.ts";
 import * as roster from "./roster.ts";
 import { find } from "./search.ts";
 import * as sessions from "./sessions.ts";
+import * as teams from "./teams.ts";
+import type { Team } from "./teams.ts";
 import * as turns from "./turns.ts";
 import * as views from "./views.ts";
 import { nearDay, parseLocal, shortDate, waited } from "./when.ts";
@@ -33,7 +33,7 @@ export class HttpError extends Error {
   }
 }
 
-// Changes whenever an issue's or a project's file is added, removed or edited: "<files>:<newest mtime in ns>".
+// Changes whenever an issue's or a team's file is added, removed or edited: "<files>:<newest mtime in ns>".
 export function version(): string {
   let count = 0, newest = 0n;
   const walk = (dir: string) => {
@@ -54,7 +54,7 @@ export function version(): string {
     }
   };
   walk(ISSUES_DIR);
-  walk(PROJECTS_DIR);
+  walk(TEAMS_DIR);
   return `${count}:${newest}`;
 }
 
@@ -281,7 +281,7 @@ function chatsNow(all: Map<string, Issue>) {
 
 export function issueJson(i: Issue) {
   return {
-    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, project: i.project, folder: i.folder,
+    slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, folder: i.folder,
     protocol: runs(i), link: i.link, session: i.session, waiting_on: i.waiting_on, waiting_since: i.waiting_since,
     waiting_since_short: shortDate(i.waiting_since), waited: i.state === "waiting" ? waited(i.waiting_since) : "",
     review_of: i.state === "review" ? reviewOf(i) : null,
@@ -386,8 +386,8 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
   const direct = store.children(all, slug);
   const session = await agents.liveRow(i.session);
   const result = store.result(i);
-  const everyProject = await projects.loadAll();
-  const project = i.project ? everyProject.get(i.project) ?? null : null;
+  const everyTeam = await teams.loadAll();
+  const team = i.team ? everyTeam.get(i.team) ?? null : null;
   // The review shows a result only while it holds one: a plan or a question is read in the plan and the chat.
   const of = i.state === "review" ? reviewOf(i) : null;
   const reviewing = of === "result" || (of === "reply" && Boolean(result));
@@ -398,8 +398,8 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
   }
   return {
     issue: issueJson(i), body: i.body.trim(), body_html: toHtml(i.body, `/issue/${slug}/f/`), result_html: result && toHtml(result, `/issue/${slug}/f/`),
-    project: project && { slug: project.slug, title: project.title },
-    all_projects: [...everyProject.values()].filter((x) => x.state === "active" || x.slug === i.project).map((x) => ({ slug: x.slug, title: x.title, state: x.state })),
+    team: team && { slug: team.slug, title: team.title },
+    all_teams: [...everyTeam.values()].filter((x) => x.state === "active" || x.slug === i.team).map((x) => ({ slug: x.slug, title: x.title, state: x.state })),
     trail: trail.map((t) => ({ slug: t.slug, title: t.title })),
     kids: treeJson(kidsOf(slug), kidsOf),
     progress: [direct.filter((k) => k.state === "done").length, direct.filter((k) => k.state !== "dropped").length],
@@ -414,7 +414,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
 // The sidebar's parts that no table the app holds says, and where each open issue's session stands (live, which its
 // strip says): sync.ts sends it to the app whenever it changed. The app works out the rest from the rows it holds, the
 // Inbox's count and its dots from the Inbox's rows (inbox.ts); old, for a tab still on the app from before 19 Oct,
-// adds what that app read here: the count, Triage and the projects.
+// adds what that app read here: the count, Triage and the teams, which it calls projects.
 export async function framePage(old = false, all?: Map<string, Issue>) {
   all ??= await store.loadAll();
   await notifications(all); // moves the issues on first, and writes what the Inbox's rows say now
@@ -429,12 +429,12 @@ export async function framePage(old = false, all?: Map<string, Issue>) {
     ...(old ? {
       inbox: inbox.unreadCount(),
       triage: [...all.values()].filter((i) => i.state === "triage").sort(byRank).map((i) => ({ ...issueJson(i), now: talkOf(i) })),
-      projects: [...(await projects.loadAll()).values()].filter((p) => p.state === "active").sort(byCreated).map((p) => ({ slug: p.slug, title: p.title })),
+      projects: [...(await teams.loadAll()).values()].filter((t) => t.state === "active").sort(byCreated).map((t) => ({ slug: t.slug, title: t.title })),
     } : {}),
   };
 }
 
-const byCreated = (a: Project, b: Project) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0);
+const byCreated = (a: Team, b: Team) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0);
 
 export async function issuePage(slug: string) {
   const all = await store.loadAll();
@@ -444,8 +444,8 @@ export async function issuePage(slug: string) {
 }
 
 // A list's groups, chips and view. A group's + opens the new issue panel with what the group says, where the panel can
-// take it: its priority, its project, or Backlog, and with what the page adds (add), such as a project's page its
-// project. No add, no +.
+// take it: its priority, its team, or Backlog, and with what the page adds (add), such as a team's page its team. No
+// add, no +.
 // On a board, a card's sub-issues read as done of all, as Linear's do.
 function listingJson(listing: views.Listing, path: string, add: Record<string, unknown> | null, all?: Map<string, Issue>) {
   const v = listing.view, data = views.data(listing);
@@ -463,7 +463,7 @@ function listingJson(listing: views.Listing, path: string, add: Record<string, u
     if (add && v.group !== "none") {
       const own = ({
         priority: { priority: g.value }, status: g.value === "backlog" ? { state: g.value } : null,
-        project: g.value !== "none" ? { project: g.value, projectTitle: g.label } : null,
+        team: g.value !== "none" ? { team: g.value, teamTitle: g.label } : null,
       } as Record<string, object | null>)[v.group] ?? null;
       preset = own && { ...own, ...add };
     }
@@ -481,22 +481,25 @@ function listingJson(listing: views.Listing, path: string, add: Record<string, u
 export const TABS = ["active", "backlog"];
 export async function issuesPage(tab: string, query: string) {
   const all = await store.loadAll();
-  const listing = views.build(views.parse(tab || "issues", query), [...all.values()], all, await projects.loadAll());
+  const listing = views.build(views.parse(tab || "issues", query), [...all.values()], all, await named());
   return listingJson(listing, tab ? `/issues/${tab}` : "/issues", {}, all);
 }
 
-export async function projectPage(slug: string, query: string) {
-  if (!(await projects.exists(slug))) throw new HttpError(404, "That project is gone.");
-  const p = await projects.load(slug), all = await store.loadAll();
-  const listing = views.build(views.parse("project", query), projects.issuesOf(all, slug), all, await projects.loadAll());
-  return { project: { slug: p.slug, title: p.title, state: p.state, body: p.body, body_html: toHtml(p.body) }, list: listingJson(listing, `/project/${slug}`, { project: p.slug, projectTitle: p.title }) };
+// The names a list's chips and groups show for a team's slug.
+const named = async (): Promise<views.Named> => ({ team: await teams.loadAll() });
+
+export async function teamPage(slug: string, query: string) {
+  if (!(await teams.exists(slug))) throw new HttpError(404, "That team is gone.");
+  const t = await teams.load(slug), all = await store.loadAll();
+  const listing = views.build(views.parse("team", query), teams.issuesOf(all, slug), all, await named());
+  return { team: { slug: t.slug, title: t.title, state: t.state, body: t.body, body_html: toHtml(t.body) }, list: listingJson(listing, `/team/${slug}`, { team: t.slug, teamTitle: t.title }) };
 }
 
-export async function projectsPage() {
-  const everyone = [...(await projects.loadAll()).values()].sort((a, b) => Number(a.state !== "active") - Number(b.state !== "active") || byCreated(a, b));
+export async function teamsPage() {
+  const everyone = [...(await teams.loadAll()).values()].sort((a, b) => Number(a.state !== "active") - Number(b.state !== "active") || byCreated(a, b));
   const all = await store.loadAll();
-  return everyone.map((p) => ({ slug: p.slug, title: p.title, state: p.state, created_short: shortDate(p.created),
-    open: projects.issuesOf(all, p.slug).filter((i) => !CLOSED.has(i.state)).length }));
+  return everyone.map((t) => ({ slug: t.slug, title: t.title, state: t.state, created_short: shortDate(t.created),
+    open: teams.issuesOf(all, t.slug).filter((i) => !CLOSED.has(i.state)).length }));
 }
 
 // An automation as its row and its page show it: when it fires next and last ran, in words.
@@ -526,7 +529,7 @@ function typeOf(why: string): string {
   return why === "landing stuck" ? "stuck" : "reply";
 }
 
-// A row's value of one of the Inbox's filters, as the URL writes it. A chat with no issue has no folder, project,
+// A row's value of one of the Inbox's filters, as the URL writes it. A chat with no issue has no folder, team,
 // priority or status, and comes From its agent, or from "chat".
 function rowValue(r: inbox.Row, name: string, all: Map<string, Issue>): string {
   if (name === "type") return typeOf(r.why);
@@ -535,9 +538,9 @@ function rowValue(r: inbox.Row, name: string, all: Map<string, Issue>): string {
   return i ? views.value(i, name) : "none";
 }
 
-const rowLabel = (name: string, v: string, everyProject: Map<string, Project>) =>
+const rowLabel = (name: string, v: string, names: views.Named) =>
   name === "type" ? TYPES[v] ?? v : name === "from" ? (v === "issue" ? "Issue sessions" : v === "chat" ? "Chats" : v)
-    : name === "status" && v === "none" ? "No status" : views.label(name, v, everyProject);
+    : name === "status" && v === "none" ? "No status" : views.label(name, v, names);
 
 const rowIcon = (name: string, v: string | null) =>
   v && (name === "type" || name === "from") ? null : name === "status" && v === "none" ? "glyph-none" : views.icon(name, v);
@@ -545,7 +548,7 @@ const rowIcon = (name: string, v: string | null) =>
 // The Inbox's rows as its view shows them (query: the view's words, lists/view.ts): Filter's picks, Show unreads only
 // (the one open stays while it is), Ordering and Show unread first; and the chips and Filter's menus, with how many
 // rows have each value.
-function inboxListing(query: string, keep: string, all: Map<string, Issue>, everyProject: Map<string, Project>) {
+function inboxListing(query: string, keep: string, all: Map<string, Issue>, names: views.Named) {
   const view = views.parse("inbox", query), base = inbox.shown(keep);
   const valueOf = (r: inbox.Row, name: string) => rowValue(r, name, all);
   let rows = base.filter((r) => views.matches(view, (name) => valueOf(r, name)));
@@ -561,9 +564,9 @@ function inboxListing(query: string, keep: string, all: Map<string, Issue>, ever
     if (name === "status") return [...store.STATES, "none"];
     const found = [...new Set(base.map((r) => valueOf(r, name)))];
     if (name === "from") return [...(found.includes("issue") ? ["issue"] : []), ...found.filter((v) => v !== "issue" && v !== "chat").sort(), ...(found.includes("chat") ? ["chat"] : [])];
-    return ["none", ...found.filter((v) => v !== "none").sort((a, b) => rowLabel(name, a, everyProject).localeCompare(rowLabel(name, b, everyProject)))];
+    return ["none", ...found.filter((v) => v !== "none").sort((a, b) => rowLabel(name, a, names).localeCompare(rowLabel(name, b, names)))];
   };
-  const { chips, fields } = views.filtering(view, base, valueOf, (name, v) => rowLabel(name, v, everyProject), rowIcon, valuesOf);
+  const { chips, fields } = views.filtering(view, base, valueOf, (name, v) => rowLabel(name, v, names), rowIcon, valuesOf);
   return { ids: rows.map((r) => r.id), view: views.data({ view, groups: [], hidden, chips, fields }), chips };
 }
 
@@ -574,7 +577,7 @@ export async function inboxPage(picked: string, query = "") {
   if (picked) await inbox.read({ slug: picked });
   const opened = held(all).find((h) => (h.issue?.slug ?? h.chat?.id) === picked);
   const chat = !opened?.issue && opened?.chat;
-  return { ...inboxListing(query, picked, all, await projects.loadAll()), open: picked && all.has(picked) ? await issuePageJson(all, picked) : null,
+  return { ...inboxListing(query, picked, all, await named()), open: picked && all.has(picked) ? await issuePageJson(all, picked) : null,
     chat: chat ? { slug: chat.id, session: chat.session, agent: chat.agent ?? null, title: chatTitle(chat) } : null };
 }
 
