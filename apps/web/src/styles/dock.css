@@ -173,8 +173,8 @@
 .step-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .step.error .step-name { color: var(--state-waiting); }
 @media (prefers-reduced-motion: no-preference) {
-  .steps-now { --shimmer: var(--text-4); --shimmer-band: var(--text-2); animation: dock-fade 0.2s ease, dock-shimmer 2s linear infinite; }
-  .step.running .step-name { --shimmer: var(--text-2); --shimmer-band: var(--text-1); animation: dock-shimmer 2s linear infinite; }
+  .steps-now { --shimmer: var(--text-4); --shimmer-band: var(--text-1); animation: dock-fade 0.2s ease, dock-shimmer 2s linear infinite; }
+  .step.running .step-name { --shimmer: var(--text-4); --shimmer-band: var(--text-1); animation: dock-shimmer 2s linear infinite; }
   .steps-now, .step.running .step-name { background: linear-gradient(90deg, var(--shimmer) 40%, var(--shimmer-band) 50%, var(--shimmer) 60%) 0 0 / 200% 100%;
                                          -webkit-background-clip: text; background-clip: text; color: transparent; }
 }
