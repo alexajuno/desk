@@ -342,7 +342,7 @@ function Working({ since, status }: { since: number; status: Status | null }) {
     <p className="working">
       <span className="spark" aria-hidden="true" />
       {status ? held(status) : `Working${Date.now() - since >= 1000 ? ` · ${elapsed(since)}` : ""}`}
-      <span className="working-key">Esc to stop</span>
+      <span className="working-key">Ctrl C to stop</span>
     </p>
   );
 }
