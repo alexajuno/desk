@@ -583,7 +583,7 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
    13px text at 36px, the icon of what it opens at 12px, and no rule under it. 6px down, groups headed in 12px/500 (30px,
    12px in), rows of 46px, 12px in, whose focus is a 42px fill with 8px corners: a 16px icon, the name 8px after it in
    13px/450, any keys as 21px caps 3px apart at the right. The list scrolls past 369px; under it a 35px foot on a 0.5px rule,
-   4px in, whose ↵ Open is a 24px pill. Its fill under the mouse is not measured: the focus's. */
+   4px in, whose ↵ Open is a 24px pill. Its fill under the mouse is not measured: the focus's; its scrollbar is the sidebar's. */
 .menu.command { position: fixed; left: 50%; top: 13vh; transform: translateX(-50%); z-index: 30; width: 720px; max-width: calc(100vw - 32px);
                 box-sizing: border-box; padding: 0; overflow: hidden; border-radius: 12px; background: var(--bg-tip); border: 0.5px solid var(--border-tip);
                 box-shadow: var(--shadow-modal); color: var(--text-tip); }
@@ -592,7 +592,7 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .menu.command .menu-filter { width: 100%; height: 40px !important; padding: 11px 12px 11px 36px !important; font: 400 13px var(--font) !important;
                              color: var(--text-tip); border-radius: 12px; }
 .menu.command .menu-filter::placeholder { color: var(--text-cmd-hint); }
-.menu.command ul { box-sizing: border-box; max-height: 369px; overflow: auto; padding: 6px 9px 5px 6px; }
+.menu.command ul { box-sizing: border-box; max-height: 369px; overflow: auto; padding: 6px 9px 5px 6px; scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
 .menu.command li { position: relative; isolation: isolate; height: 46px; padding: 0 12px; gap: 8px; border-radius: 0; background: none;
                    color: var(--text-tip); font-weight: 450; line-height: 1.2; }
 .menu.command li.on { background: none; color: var(--text-cmd-on); }
