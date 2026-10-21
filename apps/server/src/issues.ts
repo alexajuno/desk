@@ -283,14 +283,14 @@ async function upsert(tx: Db, i: Issue, written: string) {
 
 async function put(tx: Db, i: Issue) {
   // The wait's note belongs to the wait: one that ends drops it, so a later wait starts afresh. So do the review's,
-  // Landing's, and Done's word on where the work landed.
+  // Landing's, and Done's word on where the work landed, which a parent waiting on its sub-issues keeps (landedState).
   if (i.state !== "waiting") i.waiting_on = i.waiting_since = null;
   else if (!i.waiting_since) i.waiting_since = now();
   if (i.state !== "review") i.review_of = i.review_since = null;
   else if (!i.review_since) i.review_since = now();
   if (i.state !== "landing") i.landing = null;
   else if (!i.landing) i.landing = now();
-  if (i.state !== "done") i.landed = null;
+  if (i.state !== "done" && i.state !== "waiting") i.landed = null;
   // A milestone is one of the issue's project's: moving the issue to another project, or out of one, drops it.
   if (i.milestone && (await tx.query<{ project: string }>("select project from milestones where id = $1", [i.milestone])).rows[0]?.project !== i.project)
     i.milestone = null;
@@ -341,6 +341,17 @@ export async function saveIn(tx: Db, i: Issue): Promise<string[]> {
 
 // Save the issue, and what the Workflow automations close with it, as one write; returns the slugs they closed.
 export const save = (i: Issue): Promise<string[]> => db.write((tx) => saveIn(tx, i));
+
+// What an approved issue's work landing leaves it in: Done, or Waiting on its sub-issues while one is still open, so
+// that Approve never closes them by the automations above. Approve says the issue's own work is right, such as a split
+// into sub-issues, not that they are done ("the issue displays approve but it also says i shouldn't hit approve", the
+// user, 21 Oct); the last one to close closes it, by parent_auto_close.
+export const SUB_ISSUES = "its sub-issues";
+export async function landedState(i: Issue): Promise<Pick<Issue, "state" | "waiting_on">> {
+  const all = await loadAll();
+  const open = descendants(all, i.slug).some((slug) => !CLOSED.has(all.get(slug)!.state));
+  return open ? { state: "waiting", waiting_on: SUB_ISSUES } : { state: "done", waiting_on: null };
+}
 
 // Set fields on the issue as it is now, if its state and landing are still those of `i`, a copy read a moment ago;
 // false, and nothing written, when another request changed them since (issues.py, move: 15 Oct, an issue approved

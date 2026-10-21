@@ -555,8 +555,10 @@ export async function create(): Promise<FastifyInstance> {
   });
 
   // Approve, the gate: the issue's session lands the work by its repo's rules, and the issue shows Landing until the
-  // session says, through the API, that it landed. With nothing to land, no repo or no session, it is done at once. A session in a worktree desk
-  // made cannot merge, so desk merges for it. From the Inbox you stay in the Inbox: the next notification opens.
+  // session says, through the API, that it landed. With nothing to land, no repo or no session, it is done at once. A
+  // session in a worktree desk made cannot merge, so desk merges for it. Either way, an issue with a sub-issue still
+  // open waits on it instead of Done (issues.ts, landedState). From the Inbox you stay in the Inbox: the next
+  // notification opens.
   app.post("/issue/:slug/approve", async (req: Req, reply) => {
     const slug = req.params.slug, i = await store.load(slug);
     const fromInbox = field(req, "src") === "inbox";
@@ -567,13 +569,13 @@ export async function create(): Promise<FastifyInstance> {
     try {
       if (i.session && (await land.worktree(i))) {
         message = await land.merge(i);
-        i.state = "done";
+        Object.assign(i, await store.landedState(i));
       } else if (i.session && (await land.repo(i))) {
         await agents.land(i, store.folder(slug));
         i.state = "landing";
         i.landing = store.now();
         message = `Landing: ${i.title}`;
-      } else i.state = "done";
+      } else Object.assign(i, await store.landedState(i));
     } catch (error) {
       if (error instanceof land.MainMoved) {
         try {

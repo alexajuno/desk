@@ -125,6 +125,9 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
   // issue's link.
   const pr = fields.landed?.match(PULL);
   if (pr && !i.link) i.link = pr[0];
+  // Landed, an issue with a sub-issue still open waits on it instead of Done, so Approve closes none (issues.ts,
+  // landedState).
+  if (i.state === "landing" && fields.state === "done") Object.assign(fields, await store.landedState(i));
   if ("title" in fields && !fields.title) throw new HttpError(422, "title cannot be empty");
   const parent = fields.parent;
   if (parent) {

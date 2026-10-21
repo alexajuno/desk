@@ -21,7 +21,7 @@ An issue's fields:
 - `state`: triage (a desk chat's own issue, filed in its first reply, until the talk settles it; only desk's agent chat files one), backlog, running (shown as In progress: its session works on it, planning or carrying it out), waiting (someone else's move, such as QA's), review (shown as In review: the user's move, once its session's turn ends on a plan, a question or a result; the user's reply, or Go, moves it back to In progress), landing (approved: its session lands the work; only the user's Approve sets it), done or dropped
 - `waiting_on`: for a waiting issue, who or what it waits on, such as `QA on #570`, sent with `"state": "waiting"` or on its own after; desk notes since when, and drops both when the issue leaves waiting
 - `review_of`: for an issue in review, what its session hands the user: `plan` (waits for go: the user's Go button says it), `question` (only the user can answer), `result` (the Result, for Approve) or `reply`. An issue's session sends it with `"state": "review"` as it ends each turn; sent without it, or when a turn ends with no call, the issue shows In review on a `reply`: desk reads nothing from the files the turn wrote
-- `landed`: for a done issue, where its work landed: the commit and its branch, or the pull request's link (which becomes the issue's `link`). Once the user's Approve lands the work, its session sends it with `"state": "done"`, which moves the issue from Landing to Done; desk reads it from no file
+- `landed`: for a done issue, where its work landed: the commit and its branch, or the pull request's link (which becomes the issue's `link`). Once the user's Approve lands the work, its session sends it with `"state": "done"`, which moves the issue from Landing to Done, or to Waiting on its sub-issues while one is still open; desk reads it from no file
 - `parent`: the slug of the issue it belongs under, or null
 - `team`: the slug of the team it belongs to, or null. A team is ongoing work that is never done, such as desk itself; its issues finish, it does not. Until 20 Oct teams were called projects. It is a separate thing from `parent`, which is for sub-issues
 - `project`: the slug of the project it belongs to, or null: Linear's project, a piece of work with an outcome and a target date, which finishes. An issue is in one project at most, and keeps its team; one with no team takes its project's. For work too big for one issue, such as a migration in steps, file a project rather than an umbrella issue
@@ -67,7 +67,7 @@ curl -s "http://127.0.0.1:8790/api/issues/<slug>/sections/Plan" -X PUT --data-bi
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/sections/Plan"
 ```
 
-Closing an issue (done or dropped) can close others with it, by the user's Settings › Workflows & automations, as Linear's do: `sub_issue_auto_close` (on unless the user turned it off) closes its open sub-issues the same way, and `parent_auto_close` closes its parent once its last sub-issue is closed. The reply then lists them as `closed`. Read the settings, or change one only when the user asks:
+Closing an issue (done or dropped) can close others with it, by the user's Settings › Workflows & automations, as Linear's do: `sub_issue_auto_close` (on unless the user turned it off) closes its open sub-issues the same way, and `parent_auto_close` closes its parent once its last sub-issue is closed. The reply then lists them as `closed`. Approve closes none: an approved issue with a sub-issue still open moves to Waiting on its sub-issues instead of Done, and its last sub-issue to close closes it. So an issue whose work was to split itself into sub-issues ends on its Result, as any other, and Approve is safe on it. Read the settings, or change one only when the user asks:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/settings"
@@ -150,7 +150,7 @@ Then work it by its protocol, in the chat: send its Plan section, a three-line b
 curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"state": "review", "review_of": "result"}'
 ```
 
-Once it has landed, say where, which moves the issue to Done. If it cannot land, say why in the chat and end your turn on `"review_of": "question"` instead:
+Once it has landed, say where, which moves the issue to Done, or to Waiting on its sub-issues while one is still open. If it cannot land, say why in the chat and end your turn on `"review_of": "question"` instead:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"state": "done", "landed": "fe1aca7 on main"}'
