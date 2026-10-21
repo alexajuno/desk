@@ -28,6 +28,8 @@ import { CreatorHost } from "./Creator";
 import { ProjectCreatorHost } from "./ProjectCreator";
 import { TeamCreatorHost } from "./TeamCreator";
 import { KeysPanel } from "./KeysPanel";
+import { noteVisit, openIssue, openProject, openTeam, teamPath } from "./open";
+import { noteWalk, placeOf, stepFrom } from "../issues/walk";
 import { Sidebar } from "./Sidebar";
 import { closeSide, sideOpen, toggleSide } from "./side";
 import { issues } from "../store/issues";
@@ -54,6 +56,8 @@ function chatOf(pathname: string): { session: string | null; slug: string | null
 
 // The issue this page shows, on an issue page.
 const page = () => (document.querySelector(".issue") as HTMLElement | null)?.dataset;
+// The issue whose page this address is, which J and K step on from.
+const issueHere = () => { const m = /^\/issue\/([^/]+)$/.exec(location.pathname); return m ? decodeURIComponent(m[1]) : null; };
 // A row's key in ui.focused: an issue row's slug, or another row's own key (a team's, a session's).
 const keyOfRow = (row: HTMLElement) => row.dataset.slug ?? row.dataset.key ?? null;
 const focusedRow = () => ui.focused
@@ -82,7 +86,7 @@ function goBack() {
   else go(page()?.parent ? `/issue/${page()!.parent}` : "/issues");
 }
 
-let gPressed = 0, nPressed = 0;
+let gPressed = 0, nPressed = 0, oPressed = 0;
 
 function onKeyDown(e: KeyboardEvent) {
   if (e.key === "Escape" && viewerOpen()) { closeViewer(); return; }
@@ -90,6 +94,14 @@ function onKeyDown(e: KeyboardEvent) {
   // Ctrl+/ works from a text box too, and Esc closes the shortcuts from their own search box.
   if ((e.ctrlKey || e.metaKey) && e.key === "/") { ui.setKeys(!ui.keysOpen); e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyO") { newSession(); e.preventDefault(); return; }
+  // Linear's Ctrl ⇧ 1-9: the team in that place under Your teams. The key, not the character, which Shift makes "!".
+  const digit = (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && /^Digit([1-9])$/.exec(e.code);
+  if (digit) {
+    const team = issues.activeTeams[+digit[1] - 1];
+    if (team) go(teamPath(team.slug));
+    e.preventDefault();
+    return;
+  }
   if (e.key === "Escape" && ui.keysOpen) { ui.setKeys(false); return; }
   if (e.key === "Escape" && sideOpen()) { closeSide(); return; } // before an issue's Esc goes back
   if (e.key === "Escape" && listView.displayOpen) { listView.setDisplay(false); return; }
@@ -97,6 +109,8 @@ function onKeyDown(e: KeyboardEvent) {
   if (typing(e.target)) { if (e.key === "Escape") (e.target as HTMLElement).blur(); return; }
   const key = e.key.toLowerCase();
 
+  // Linear's Ctrl ⇧ ↑: the open issue's parent.
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key === "ArrowUp" && page()?.parent) { go(`/issue/${page()!.parent}`); e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
     // The issue's next step, the primary button in the row over its Properties.
     const step = keyOf(e) === "Enter" && document.querySelector<HTMLButtonElement>(".issue-acts .step:not(:disabled)");
@@ -131,6 +145,14 @@ function onKeyDown(e: KeyboardEvent) {
     return;
   }
   if (key === "n") { nPressed = Date.now(); return; }
+  // Linear's O then T, P and I: a team, a project or an issue, from its command menu.
+  if (oPressed && Date.now() - oPressed < 1500) {
+    oPressed = 0;
+    const open = ({ t: openTeam, p: openProject, i: openIssue } as Record<string, () => void>)[key];
+    if (open) { open(); e.preventDefault(); }
+    return;
+  }
+  if (key === "o" && !e.shiftKey) { oPressed = Date.now(); return; }
 
   const focused = focusedRow();
   // Linear's Shift ↑ ↓: the selection grows from the row in focus, a row at a time.
@@ -138,6 +160,12 @@ function onKeyDown(e: KeyboardEvent) {
     ui.select([ui.focused!]);
     moveFocus(e.key === "ArrowDown" ? 1 : -1);
     if (selectable(ui.focused)) ui.select([ui.focused!]);
+    e.preventDefault();
+  }
+  // On an issue opened from a list, J and K open the next and the previous issue in it, as Linear's issue view does.
+  else if ((key === "j" || key === "k") && !e.shiftKey && issueHere() && placeOf(issueHere()!) && !document.querySelector(".inbox")) {
+    const to = stepFrom(issueHere()!, key === "j" ? 1 : -1);
+    if (to) go(`/issue/${to}`);
     e.preventDefault();
   }
   else if (key === "j" || e.key === "ArrowDown" || key === "k" || e.key === "ArrowUp") {
@@ -150,7 +178,10 @@ function onKeyDown(e: KeyboardEvent) {
     if (focused.dataset.session) openSession(focused.dataset.session);
     // In the Inbox, Enter on the issue already open beside the list opens its chat, as O does: Enter Enter goes in.
     else if (focused.matches(".inbox-row.selected[data-slug]")) openIssueSession(focused.dataset.slug!);
-    else go(focused.getAttribute("href")!);
+    else {
+      if (focused.dataset.slug && !focused.matches(".inbox-row")) noteWalk(focused);
+      go(focused.getAttribute("href")!);
+    }
   }
   // C files a new issue, in the team whose pages these are, as Linear's C does in a team's views.
   else if (key === "c") {
@@ -172,9 +203,8 @@ function onKeyDown(e: KeyboardEvent) {
     const group = document.querySelector<HTMLElement>(".group[data-group]:hover") ?? (focused && groups.find((g) => g.nextElementSibling?.contains(focused)));
     group?.querySelector<HTMLElement>(".group-toggle")?.click();
   }
-  // O opens the issue's chat, as its Open chat button does; an issue with no session says so.
-  else if (key === "o" && target()) { openIssueSession(target()!); e.preventDefault(); }
-  // I, as vim's insert: back into the chat's composer, or, where no chat is open, into the issue's as O opens it.
+  // I, as vim's insert: back into the chat's composer, or, where no chat is open, into the issue's, as its Open chat
+  // button opens it; an issue with no session says so. O is Linear's, the first key of O then T, P and I.
   else if (key === "i") {
     if (!focusComposer() && target()) openIssueSession(target()!);
     e.preventDefault(); // so the i is not typed into the composer it lands in
@@ -241,6 +271,13 @@ function onKeyDown(e: KeyboardEvent) {
   }
 }
 
+// A click on a row that opens its issue notes the list it is in, before the page leaves it (React draws the issue's
+// page within the click, so this listens in the capture phase). The Inbox's and Triage's rows step with J and K.
+function onClickFirst(e: MouseEvent) {
+  const row = (e.target as Element).closest?.<HTMLElement>(".item[data-slug]");
+  if (row && !row.matches(".inbox-row") && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) noteWalk(row);
+}
+
 function onClick(e: MouseEvent) {
   const t = e.target as Element;
   if (e.defaultPrevented || t.closest(".menu")) return;
@@ -273,15 +310,18 @@ function onMouseMove(e: MouseEvent) {
 export const Frame = observer(function Frame() {
   const { pathname, search } = useLocation();
   useEffect(() => noteAppPath(pathname + search), [pathname, search]);
+  useEffect(() => noteVisit(pathname), [pathname]); // Recent, in O then P and O then I
   useEffect(() => ui.clearSelection(), [pathname]); // a selection belongs to its page's list
   const chat = chatOf(pathname);
   useLayoutEffect(() => arrange(chat.session, chat.slug), [chat.session, chat.slug]);
   useEffect(() => {
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("click", onClickFirst, true);
     document.addEventListener("click", onClick);
     document.addEventListener("mousemove", onMouseMove);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("click", onClickFirst, true);
       document.removeEventListener("click", onClick);
       document.removeEventListener("mousemove", onMouseMove);
     };

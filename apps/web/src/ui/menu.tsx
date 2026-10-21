@@ -30,6 +30,7 @@ export interface MenuItem {
   toggle?: () => unknown; // Linear's checkbox at the row's left: ticks it and leaves the menu open
   run?: () => unknown;
   info?: boolean; // a line to read, not to pick, such as the usage under the chip's models
+  keys?: string[]; // its shortcut as key caps at the row's right, as Linear's command menu shows a team's Ctrl ⇧ 1
 }
 
 export interface MenuOptions {
@@ -50,6 +51,11 @@ export interface MenuOptions {
   // A popover of its own in the menu's place, such as the date picker, instead of a list: it keeps the menu's placing,
   // Escape and click outside, and handles its other keys itself. items is then unused.
   render?: () => ReactNode;
+  // Linear's command menu (className "command"): centred near the window's top rather than at an anchor, the icon of
+  // what it opens before its filter, and a foot whose button, named here, picks the row in focus as Enter does.
+  center?: boolean;
+  icon?: ReactNode;
+  foot?: string;
 }
 
 class Menus {
@@ -173,7 +179,7 @@ function MenuView({ o }: { o: MenuOptions }) {
   // Placed under its anchor, or above it when the window has no room below, and kept 8px inside the window.
   useLayoutEffect(() => {
     const box = el.current;
-    if (!box) return;
+    if (!box || o.center) return; // the command menu's CSS places it
     const w = box.offsetWidth, h = box.offsetHeight;
     let x = o.x ?? 0, y = o.y ?? 0;
     if (o.anchor?.isConnected) {
@@ -206,6 +212,7 @@ function MenuView({ o }: { o: MenuOptions }) {
         <span className="name">{item.label}{item.sub && <small>{item.sub}</small>}</span>
         {item.current && TICK}
         {item.hint !== undefined && <span className="shortcut">{item.hint}</span>}
+        {item.keys && <span className="keys">{item.keys.map((k, i) => <kbd key={i}>{k}</kbd>)}</span>}
         {item.more && CHEVRON}
       </li>,
     );
@@ -214,6 +221,7 @@ function MenuView({ o }: { o: MenuOptions }) {
 
   const head = o.filter && (
     <div className="menu-head">
+      {o.icon && <span className="menu-icon">{o.icon}</span>}
       {o.filter === "input" ? (
         <input ref={input} className="menu-filter" type="text" placeholder={o.placeholder} autoComplete="off" value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -244,6 +252,11 @@ function MenuView({ o }: { o: MenuOptions }) {
       >
         {rows}
       </ul>
+      {o.foot && (
+        <div className="menu-foot">
+          <button type="button" onMouseDown={(e) => { e.preventDefault(); pick(state.current.at); }}><kbd>↵</kbd>{o.foot}</button>
+        </div>
+      )}
     </div>
   );
 }

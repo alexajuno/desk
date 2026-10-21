@@ -1,7 +1,7 @@
 // An issue, as its page shows it (templates/issue_view.html); the Inbox's right pane shows the same. Its actions sit in
 // a row over its Properties (Actions), and its status shows once, in Properties, where a click changes it. Open chat
 // opens the issue as its chat, in the middle, with the issue beside it, and hides once the chat is open. Ctrl+Enter
-// presses the step and O opens the chat, as the buttons' tooltips say.
+// presses the step and I opens the chat, as the buttons' tooltips say.
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { post, said } from "../api/http";
@@ -165,7 +165,7 @@ function Actions({ p, step, trial: t, trust, act }: {
   return (
     <div className="issue-acts">
       <button className="act" type="button" title="Copy link" onClick={() => copy(`${location.origin}/issue/${p.slug}`, "Link copied")}>{GLYPH.link}</button>
-      {chat && !b?.chat && <button className="act open-chat" type="button" title="Open the issue's chat  O" onClick={chat}>{GLYPH.chat}</button>}
+      {chat && !b?.chat && <button className="act open-chat" type="button" title="Open the issue's chat  I" onClick={chat}>{GLYPH.chat}</button>}
       {/* Try, in review: runs the issue's branch in the desk you use (pages.ts, tryButton). Not the step: Approve is. */}
       {t && <button type="button" title={t.title} disabled={t.disabled} onClick={() => act(t.action!)}>{t.label}</button>}
       {trust ? (

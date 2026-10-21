@@ -3,7 +3,7 @@ import { observer } from "mobx-react-lite";
 import { Fragment, useEffect, useRef } from "react";
 import { useParams } from "react-router";
 import { usePage } from "../api/page";
-import { Go } from "../app/nav";
+import { go, Go } from "../app/nav";
 import { Bar } from "../frame/Bar";
 import { lineKey } from "../store/frame";
 import { issues } from "../store/issues";
@@ -15,6 +15,27 @@ import { painted } from "./painted";
 import { IssueView, type IssuePageData } from "./IssueView";
 import { actionsMenu } from "./menus";
 import { useLive } from "./useLive";
+import { placeOf, stepFrom } from "./walk";
+
+// Linear's arrow, from its issue view's Navigate down; turned over for Navigate up.
+const ARROW = <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.48 10.326a.75.75 0 0 0-.96-1.152l-1.77 1.475V3.75a.75.75 0 0 0-1.5 0v6.899L5.48 9.174a.75.75 0 0 0-.96 1.152l3 2.5a.75.75 0 0 0 .96 0l3-2.5Z" /></svg>;
+
+// Where the issue stands in the list it was opened from, and the next and previous issue in it, as J and K open them:
+// Linear's "7 / 187" and its ↓ ↑ at the top bar's right end. An issue opened from no list has none.
+const Walk = observer(function Walk({ slug }: { slug: string }) {
+  const place = placeOf(slug);
+  if (!place) return null;
+  const step = (by: number) => { const to = stepFrom(slug, by); if (to) go(`/issue/${to}`); };
+  return (
+    <span className="walk">
+      <span className="walk-at">{place.at}<span> / {place.of}</span></span>
+      <span className="walk-steps">
+        <button type="button" title="Navigate down  J" disabled={place.at === place.of} onClick={() => step(1)}>{ARROW}</button>
+        <button type="button" title="Navigate up  K" disabled={place.at === 1} onClick={() => step(-1)}>{ARROW}</button>
+      </span>
+    </span>
+  );
+});
 
 export const IssuePage = observer(function IssuePage() {
   const { slug = "" } = useParams();
@@ -53,6 +74,7 @@ export const IssuePage = observer(function IssuePage() {
             </button>
             {/* Beside its chat, × leaves the chat alone; the issue's title in the chat's head brings it back. */}
             {dock.sideShown && <button className="more" type="button" title="Hide the issue  ]" onClick={toggleIssue}>{GLYPH.close}</button>}
+            <Walk slug={slug} />
           </>
         }
       />

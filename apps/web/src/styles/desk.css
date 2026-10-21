@@ -94,6 +94,12 @@
   --text-tip-raised: lch(91.554% 1.65 272);
   --border-tip-key-raised: lch(23.992% 2.38 272);
   --text-tip-key-raised: lch(66.215% 1.65 272);
+  /* Linear's command menu (O then T, P, I) is in the tooltip's palette, with these: the row in focus, its text, the
+     placeholder; and the fill under the mouse of an issue's ↓ ↑ (the .command and .walk blocks below) */
+  --bg-cmd-on: lch(20.82% 1.3 272);
+  --text-cmd-on: lch(100% 0 272);
+  --text-cmd-hint: lch(41.778% 1.425 272);
+  --bg-walk-hover: lch(20.418% 1.429 272);
   /* Display options' controls (.dp-layout and .dp-select below): the layout picked, the other one and the selects, at
      rest and under the mouse. A strong ring rounds the layout picked, and any of them under the mouse. */
   --bg-dp-on: lch(23.906% 1.429 272);
@@ -153,7 +159,7 @@
   --text-2: lch(19.588% 1.25 282);
   --text-3: lch(39.176% 1.25 282);
   --text-4: lch(64.64% 1.25 282);
-  --text-5: lch(64.64% 1.25 282); /* not measured in light: --text-4's */
+  --text-5: lch(64.64% 1.25 282); /* --text-4's; measured on 21 Oct, on an issue's "/ 187" */
   --accent: lch(53% 52.26 286.91);        /* controlPrimary, and its hover */
   --accent-hover: lch(47% 50.26 286.91);
   --link: lch(44.073% 70 286.91);         /* labelLink */
@@ -206,6 +212,10 @@
   --text-tip-raised: var(--text-tip);
   --border-tip-key-raised: var(--border-tip-key);
   --text-tip-key-raised: var(--text-tip-key);
+  --bg-cmd-on: lch(95% 0 282);
+  --text-cmd-on: lch(10% 0 282);
+  --text-cmd-hint: lch(66% 1 282);
+  --bg-walk-hover: lch(92.44% 0.5 282);
   --bg-dp-on: lch(95.543% 0 282);
   --text-dp-on: lch(10% 0 282);
   --bg-dp-layout: lch(100% 0 282);
@@ -566,6 +576,51 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .menu.actions { width: 224px; } .menu.actions ul { padding-top: 4px; }
 .menu.help { width: 248px; }
 .menu.wide { width: 340px; } .menu.wide ul { max-height: 300px; overflow: auto; }
+
+/* Linear's command menu, as O then T, P and I open it, measured on linear.app on 2026-10-21 (an issue page, dark and light,
+   at 2x): 720px wide, centred, 106px down an 815px window (taken as 13vh: not checked at another height), with no
+   overlay; the tooltip's palette, the modal's shadow, 12px corners and a 0.5px edge. A 40px box 6px in from the edges,
+   13px text at 36px, the icon of what it opens at 12px, and no rule under it. 6px down, groups headed in 12px/500 (30px,
+   12px in), rows of 46px, 12px in, whose focus is a 42px fill with 8px corners: a 16px icon, the name 8px after it in
+   13px/450, any keys as 21px caps 3px apart at the right. The list scrolls past 369px; under it a 35px foot on a 0.5px rule,
+   4px in, whose ↵ Open is a 24px pill. Its fill under the mouse is not measured: the focus's. */
+.menu.command { position: fixed; left: 50%; top: 13vh; transform: translateX(-50%); z-index: 30; width: 720px; max-width: calc(100vw - 32px);
+                box-sizing: border-box; padding: 0; overflow: hidden; border-radius: 12px; background: var(--bg-tip); border: 0.5px solid var(--border-tip);
+                box-shadow: var(--shadow-modal); color: var(--text-tip); }
+.menu.command .menu-head { position: relative; display: block; padding: 6px 6px 0; margin: 0; border: 0; }
+.menu.command .menu-icon { position: absolute; left: 18px; top: 18px; display: flex; color: var(--text-tip); pointer-events: none; }
+.menu.command .menu-filter { width: 100%; height: 40px !important; padding: 11px 12px 11px 36px !important; font: 400 13px var(--font) !important;
+                             color: var(--text-tip); border-radius: 12px; }
+.menu.command .menu-filter::placeholder { color: var(--text-cmd-hint); }
+.menu.command ul { box-sizing: border-box; max-height: 369px; overflow: auto; padding: 6px 10px 5px 6px; }
+.menu.command li { position: relative; isolation: isolate; height: 46px; padding: 0 12px; gap: 8px; border-radius: 0; background: none;
+                   color: var(--text-tip); font-weight: 450; }
+.menu.command li.on { background: none; color: var(--text-cmd-on); }
+.menu.command li.on::before { content: ""; position: absolute; inset: 2px 0; z-index: -1; border-radius: 8px; background: var(--bg-cmd-on); }
+.menu.command li .glyph { color: inherit; }
+.menu.command li.heading { height: 30px; padding: 8px 12px; box-sizing: border-box; font: 500 12px var(--font); color: var(--text-tip-key); }
+.menu.command li.empty { color: var(--text-cmd-hint); }
+.menu.command li .keys { display: flex; gap: 3px; }
+.menu.command kbd { box-sizing: border-box; min-width: 20px; height: 21px; padding: 4px; border: 0.5px solid var(--border-tip-key); border-radius: 3px;
+                    font: 450 11px/12.1px var(--font); color: var(--text-tip-key); text-align: center; }
+.menu-foot { display: flex; align-items: center; height: 35px; box-sizing: border-box; padding: 0 4px; border-top: 0.5px solid var(--border-tip); }
+.menu-foot button { height: 24px; padding: 0 8px; gap: 6px; background: none; color: var(--text-tip); }
+.menu-foot button:hover { background: var(--bg-cmd-on); }
+.menu-foot kbd { height: auto; min-width: 17px; padding: 2px; border-radius: 4px; font-weight: 500; }
+
+/* Where an issue stands in the list it was opened from, and its ↓ ↑, at the top bar's right end, measured on linear.app
+   on 2026-10-21 (an issue page opened from Issues, dark and light): "7" in --text-3 and "/ 187" in --text-5, 13px/450 in
+   tabular figures, 8px before two 28px buttons 1px apart, each half a pill, a 14px arrow in --text-3, filled under the
+   mouse. At either end, the button that has nowhere to go is not measured: dimmed. */
+.walk { display: flex; align-items: center; gap: 8px; }
+.walk-at { font: 450 13px var(--font); font-variant-numeric: tabular-nums; color: var(--text-3); }
+.walk-at span { color: var(--text-5); }
+.walk-steps { display: flex; gap: 1px; }
+.bar .walk-steps button { justify-content: center; width: 28px; padding: 0 2px; border: 0; border-radius: 9999px 0 0 9999px; background: none; color: var(--text-3); }
+.bar .walk-steps button + button { border-radius: 0 9999px 9999px 0; }
+.bar .walk-steps button + button svg { transform: rotate(180deg); }
+.bar .walk-steps button:hover:not(:disabled) { background: var(--bg-walk-hover); }
+.bar .walk-steps button:disabled { color: var(--text-5); cursor: default; }
 /* the S and P menus filter from keys read on the window, so their box is text, with a drawn caret */
 div.menu-filter { flex: 1; line-height: 38px; color: var(--text-1); white-space: nowrap; overflow: hidden; }
 div.menu-filter:empty::before, div.menu-filter:not(:empty)::after { content: ""; display: inline-block; width: 1px; height: 15px;
