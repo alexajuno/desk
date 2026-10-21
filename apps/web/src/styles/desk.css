@@ -592,9 +592,9 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .menu.command .menu-filter { width: 100%; height: 40px !important; padding: 11px 12px 11px 36px !important; font: 400 13px var(--font) !important;
                              color: var(--text-tip); border-radius: 12px; }
 .menu.command .menu-filter::placeholder { color: var(--text-cmd-hint); }
-.menu.command ul { box-sizing: border-box; max-height: 369px; overflow: auto; padding: 6px 10px 5px 6px; }
+.menu.command ul { box-sizing: border-box; max-height: 369px; overflow: auto; padding: 6px 9px 5px 6px; }
 .menu.command li { position: relative; isolation: isolate; height: 46px; padding: 0 12px; gap: 8px; border-radius: 0; background: none;
-                   color: var(--text-tip); font-weight: 450; }
+                   color: var(--text-tip); font-weight: 450; line-height: 1.2; }
 .menu.command li.on { background: none; color: var(--text-cmd-on); }
 .menu.command li.on::before { content: ""; position: absolute; inset: 2px 0; z-index: -1; border-radius: 8px; background: var(--bg-cmd-on); }
 .menu.command li .glyph { color: inherit; }
@@ -606,7 +606,7 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .menu-foot { display: flex; align-items: center; height: 35px; box-sizing: border-box; padding: 0 4px; border-top: 0.5px solid var(--border-tip); }
 .menu-foot button { height: 24px; padding: 0 8px; gap: 6px; background: none; color: var(--text-tip); }
 .menu-foot button:hover { background: var(--bg-cmd-on); }
-.menu-foot kbd { height: auto; min-width: 17px; padding: 2px; border-radius: 4px; font-weight: 500; }
+.menu.command .menu-foot kbd { height: auto; min-width: 0; padding: 2px; border-radius: 4px; font-weight: 500; }
 
 /* Where an issue stands in the list it was opened from, and its ↓ ↑, at the top bar's right end, measured on linear.app
    on 2026-10-21 (an issue page opened from Issues, dark and light): "7" in --text-3 and "/ 187" in --text-5, 13px/450 in
