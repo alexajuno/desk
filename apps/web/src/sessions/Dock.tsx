@@ -1,7 +1,8 @@
 // A session's chat, in the middle of the screen, drawn as claude.ai draws a chat: replies stream in as Markdown, tool
 // steps fold under one line, questions come as buttons, and the composer queues a message while Claude works (Enter)
-// or stops it (Ctrl C); Esc leaves it for desk's keys and I comes back, as vim's modes. Its issue sits beside it on
-// the right, in the frame's panel (store/dock.ts says where each stands).
+// or stops it (Ctrl C). A chat opens to read, with desk's keys, unless nothing is said in it yet; I or Enter goes into
+// the composer and Esc leaves it, as vim's modes. Its issue sits beside it on the right, in the frame's panel
+// (store/dock.ts says where each stands).
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -22,11 +23,13 @@ import { toast } from "../ui/toast";
 import { live, renameChat, useLive, type Ask, type Block, type Image, type Item, type LiveSession, type Status, type Task } from "./live";
 import { effortName, runsMenu, warm } from "./models";
 
-// The chat whose composer takes the cursor: the one openSession opened. Its composer takes it as it comes on screen,
-// which a view transition can make a frame or more after the address changes, or at once when it is there already.
+// The chat that takes the cursor: the one openSession opened. It takes it as it comes on screen, which a view transition
+// can make a frame or more after the address changes, or at once when it is there already (SessionView says where).
 const wantsFocus = observable.box<string | null>(null);
 
 // Open a session's chat in the middle: its issue's page when it has one, which shows the chat with the issue beside it.
+// It opens to read, unless nothing is said in it yet ("unless i open an empty chat, don't focus on composer", the user,
+// 21 Oct).
 export function openSession(id: string, slug?: string | null) {
   slug ??= [...issues.bySlug.values()].find((i) => i.session === id)?.slug;
   go(slug ? `/issue/${slug}` : `/sessions/${id}`);
@@ -154,6 +157,9 @@ const Dot = observer(function Dot({ s }: { s: LiveSession }) {
   return <span className={`live-dot ${state}`} title={{ asks: "Waiting for you", working: "Working", idle: "Idle", off: "Connecting…" }[state]} />;
 });
 
+// Nothing said in the chat yet, by either side.
+const quiet = (s: LiveSession) => !s.items.length && !s.pending.length && !s.working;
+
 // A chat as the middle shows it; the Triage page draws one in its right pane too.
 export const SessionView = observer(function SessionView({ id }: { id: string }) {
   const s = useLive(id)!;
@@ -181,15 +187,27 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
     return () => keep.disconnect();
   }, []);
 
+  // The chat openSession opened takes the cursor once it knows whether anything is said in it: an empty one in its
+  // composer, any other in its conversation, to read first, where Space scrolls it and Enter goes into the composer
+  // (Frame).
+  const take = wantsFocus.get() === id && s.loaded ? (quiet(s) ? "type" : "read") : null;
+  useEffect(() => {
+    if (!take) return;
+    const el = scroller.current!;
+    if (take === "type") el.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
+    else el.focus({ preventScroll: true });
+    runInAction(() => wantsFocus.set(null));
+  }, [take]);
+
   // The composer lies over the conversation's end, as claude.ai's does: the foot sticks to the bottom of the view, and
   // the conversation runs on behind it (dock.css).
   return (
     <div className="session-view">
       <ChatHead s={s} />
-      <div className="dock-scroll" ref={scroller} onScroll={onScroll}>
+      <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>
         <div className="convo">
           {!s.loaded ? <p className="convo-empty">Connecting…</p>
-            : !s.items.length && !s.pending.length && !s.working ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
+            : quiet(s) ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
               : m?.bare || (m?.chat && s.startAs === "chat") ? `Just Claude, as claude runs in a terminal ${startsIn(s) === "~" ? "from your home folder" : `in ${startsIn(s)}`}: no issue and no desk instructions.`
               : m?.chat ? "Ask desk's agent anything: it files the work and does it here. Start with @ and a name to talk to one of your agents."
               : "Nothing said yet."}</p>
@@ -669,15 +687,8 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   const commands = useRef<Promise<Pick[]> | null>(null);
   const [known, setKnown] = useState<Set<string> | null>(null); // the names / takes, once asked
   const asked = useRef(0);
-  const focus = wantsFocus.get() === s.id;
   // Messages waiting for Claude's next step, or not sent, which ↑ takes back.
   const queued = s.pending.some((p) => (s.working && p.mid) || p.lost);
-
-  useEffect(() => {
-    if (!focus) return;
-    box.current!.focus();
-    runInAction(() => wantsFocus.set(null));
-  }, [focus]);
 
   const commandList = () => (commands.current ??= fetch(`/api/live/${s.id}/commands`).then((r) => r.json())
     .then((list: { name: string; description: string }[]) => {
@@ -874,7 +885,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
 });
 
 // A new desk chat that nobody has written in yet, whose chip still picks what it becomes.
-const fresh = (s: LiveSession) => Boolean(s.meta?.chat && !s.meta.agent && !s.meta.bare && !s.meta.issue) && !s.items.length && !s.pending.length && !s.working;
+const fresh = (s: LiveSession) => Boolean(s.meta?.chat && !s.meta.agent && !s.meta.bare && !s.meta.issue) && quiet(s);
 
 // The chip by +, until the first message: what the chat becomes. Issue is desk's agent, which files the talk in Triage
 // and works it; Chat is a bare Claude, which the sidebar lists under Chats (chats.ts, becomeBare).

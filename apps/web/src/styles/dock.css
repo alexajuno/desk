@@ -114,7 +114,7 @@
    the foot sits at its bottom. Its last words stop the fade's height above the foot, and only pass under the fade as
    it scrolls. */
 .dock-scroll { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
-               scrollbar-gutter: stable; }
+               scrollbar-gutter: stable; outline: 0; } /* it takes the cursor when a chat opens to read, with no ring */
 .convo { flex: 1 0 auto; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; width: 100%; max-width: 808px; margin: 0 auto;
          padding: 32px 24px var(--foot-fade); }
 /* Measured on claude.ai, 18 Oct, dark, at 2x: the composer's band is position: sticky at bottom: 0, the page's colour

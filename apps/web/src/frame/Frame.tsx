@@ -183,6 +183,8 @@ function onKeyDown(e: KeyboardEvent) {
       go(focused.getAttribute("href")!);
     }
   }
+  // Enter in a chat opened to read goes into its composer, as I does: the Inbox's Enter Enter Enter types.
+  else if (e.key === "Enter" && !e.shiftKey && focusComposer()) e.preventDefault(); // so the Enter is not typed in
   // C files a new issue, in the team whose pages these are, as Linear's C does in a team's views.
   else if (key === "c") {
     const team = /^\/team\/([\w-]+)/.exec(location.pathname)?.[1];
@@ -203,8 +205,8 @@ function onKeyDown(e: KeyboardEvent) {
     const group = document.querySelector<HTMLElement>(".group[data-group]:hover") ?? (focused && groups.find((g) => g.nextElementSibling?.contains(focused)));
     group?.querySelector<HTMLElement>(".group-toggle")?.click();
   }
-  // I, as vim's insert: back into the chat's composer, or, where no chat is open, into the issue's, as its Open chat
-  // button opens it; an issue with no session says so. O is Linear's, the first key of O then T, P and I.
+  // I, as vim's insert: back into the chat's composer, or, where no chat is open, the issue's chat, opened to read as its
+  // Open chat button opens it; an issue with no session says so. O is Linear's, the first key of O then T, P and I.
   else if (key === "i") {
     if (!focusComposer() && target()) openIssueSession(target()!);
     e.preventDefault(); // so the i is not typed into the composer it lands in
@@ -266,7 +268,7 @@ function onKeyDown(e: KeyboardEvent) {
   else if (e.key === "]") toggleIssue();
   else if (e.key === "Escape") {
     if (document.querySelector(".inbox") && page()) go("/inbox");
-    else if (page()) goBack();
+    else if (page() || location.pathname.startsWith("/sessions/")) goBack(); // a chat with no issue too, read and left
     else ui.focus(null);
   }
 }
