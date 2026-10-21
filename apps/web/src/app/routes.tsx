@@ -5,7 +5,7 @@ import { IssuePage } from "../issues/IssuePage";
 import { FilePage } from "../files/FilePage";
 import { AutomationPage } from "../lists/AutomationPage";
 import { AutomationsPage } from "../lists/AutomationsPage";
-import { INBOX_KEEP, InboxPage } from "../inbox/InboxPage";
+import { InboxPage } from "../inbox/InboxPage";
 import { IssuesPage, issuesApi, issuesPath, TABS } from "../lists/IssuesPage";
 import { ProjectPage } from "../lists/ProjectPage";
 import { ProjectsPage } from "../lists/ProjectsPage";
@@ -78,7 +78,9 @@ export const router = createBrowserRouter(
     { path: "/issue/:slug", element: <IssuePage />, loader: at(({ params }) => `/api/page/issue/${params.slug}`) },
     { path: "/issue/:slug/f/:name", element: <FilePage />,
       loader: at(({ params }) => `/api/page/file/${params.slug}/${encodeURIComponent(params.name ?? "")}`) },
-    { path: "/inbox", element: <InboxPage />, loader: at(({ request }) => listUrl("/inbox", "/api/page/inbox", search(request), INBOX_KEEP)) },
+    // The Inbox fetches nothing: its rows and its open issue come over the sync socket. Opened first, it is still the
+    // first page, so the next one is fetched before it draws.
+    { path: "/inbox", element: <InboxPage />, loader: () => (first(), null) },
     { path: "/search", element: <SearchPage /> },
     // Sessions left the sidebar on 17 Oct: it lists what runs, and the corner's clock finds the rest.
     { path: "/sessions", element: <Navigate to="/inbox" replace /> },
