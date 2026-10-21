@@ -10,6 +10,11 @@
 //     {"type": "changes", "after": 811, "changes": [{"seq": 812, "kind": "issues", "key": "<slug>", "row": <issue>}, ...]}
 //     {"type": "frame", "frame": <frame>}                         on connect, then when it changed
 //     {"type": "files", "slugs": [<slug>, ...]}                   its other files changed
+//     {"type": "page", "slug": "<slug>", "page": <page>}         the issue the app shows, then each time it changed
+//
+// The app sends one message, {"type": "show", "slug": "<slug>"}, or "slug": null, naming the issue it shows, as the
+// Inbox's right pane does: desk answers with its <page>, the issue as its page draws it (pages.ts, issuePageJson), or
+// null once it is gone, and again whenever it changed, until the app shows another or leaves.
 //
 // The first answer is the snapshot, or the changes the app missed, maybe none. Each "changes" goes on from the one
 // before it, whose last change is its "after": an app that holds another seq missed some, and connects again to get
@@ -123,7 +128,7 @@ async function frameNow() {
 const frame = serial("sync frame", frameNow);
 
 // Something the frame shows changed that no write says: tell the apps now.
-export const frameChanged = () => void frame();
+export const frameChanged = () => tellAgain();
 
 let wake: NodeJS.Timeout | null = null;
 
@@ -131,6 +136,32 @@ let wake: NodeJS.Timeout | null = null;
 function wakeAt(at: number | null) {
   if (wake) clearTimeout(wake);
   wake = at === null ? null : setTimeout(() => { wake = null; void frame(); }, Math.max(0, at - Date.now()));
+}
+
+// --- the issue each app shows --------------------------------------------------------------------------------------
+// Its page goes again at the frame's moments, and when its files changed: only when it differs from what that app was
+// last told.
+
+const shown = new Map<WebSocket, { slug: string; text: string }>();
+
+async function pagesNow() {
+  if (!shown.size) return;
+  const all = await store.loadAll(), texts = new Map<string, string>(); // one page per issue, however many apps show it
+  for (const [ws, s] of shown) {
+    if (!texts.has(s.slug)) texts.set(s.slug, JSON.stringify(all.has(s.slug) ? await pages.issuePageJson(all, s.slug) : null));
+    const text = texts.get(s.slug)!;
+    if (text === s.text || shown.get(ws) !== s) continue; // told already, or it moved on to another meanwhile
+    s.text = text;
+    ws.send(`{"type":"page","slug":${JSON.stringify(s.slug)},"page":${text}}`);
+  }
+}
+
+const pagesJob = serial("sync pages", pagesNow);
+
+// What the frame and the pages show may have moved: tell the apps.
+function tellAgain() {
+  void frame();
+  void pagesJob();
 }
 
 // The issues whose files a session may have written, now that its turn ended: its own, and a chat's.
@@ -145,17 +176,18 @@ function tellFiles(slugs: string[]) {
   if (!slugs.length) return;
   const message = JSON.stringify({ type: "files", slugs });
   for (const ws of [...listeners, ...legacy]) ws.send(message);
+  void pagesJob();
 }
 
 // Tell the apps each write, and the frame after it and after each word from the host; and the open chats.
 export async function start() {
   db.onWrite(told);
   db.onCommit(() => {
-    void frame();
+    tellAgain();
     live.moved(null);
   });
   turns.onChange((sessions, ended) => {
-    void frame();
+    tellAgain();
     live.moved(sessions);
     if (ended.length) void wroteIn(ended).then(tellFiles).catch((error) => console.error("sync files", error));
   });
@@ -168,9 +200,17 @@ export async function connect(ws: WebSocket, query: Record<string, string | unde
   const leave = () => {
     listeners.delete(ws);
     legacy.delete(ws);
+    shown.delete(ws);
   };
   ws.on("close", leave);
   ws.on("error", leave);
+  ws.on("message", (data) => {
+    const message = JSON.parse(String(data)) as { type: string; slug?: string | null };
+    if (message.type !== "show") return;
+    if (message.slug) shown.set(ws, { slug: message.slug, text: "" });
+    else shown.delete(ws);
+    void pagesJob();
+  });
   try {
     await db.locked(async () => {
       if (ws.readyState !== ws.OPEN) return;
