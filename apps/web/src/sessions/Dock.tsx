@@ -405,12 +405,12 @@ const Steps = observer(function Steps({ s, items, running, live: isLive }: { s: 
         {failed && <span className="steps-failed">a step failed</span>}
       </button>
       {!open && isLive && (now || pendingTool) && (
-        <p className="steps-now">{now ? (now.kind === "thinking" ? "Thinking…" : `${now.name ?? "Tool"}…`) : `${pendingTool!.name} ${pendingTool!.summary ?? ""}`}</p>
+        <p className="steps-now">{now ? (now.kind === "thinking" ? "Thinking" : now.name ?? "Tool") : `${pendingTool!.name} ${pendingTool!.summary ?? ""}`}</p>
       )}
       {open && (
         <div className="steps-list">
           {items.map((i) => (i.t === "thinking" ? <Thought key={i.key} text={i.text ?? ""} /> : <Step key={i.key} s={s} item={i} result={s.results.get(i.id!)} />))}
-          {running.map((b) => <p key={`${b.msg}:${b.index}`} className="step running"><span className="step-name">{b.kind === "thinking" ? "Thinking" : b.name}…</span></p>)}
+          {running.map((b) => <p key={`${b.msg}:${b.index}`} className="step running"><span className="step-name">{b.kind === "thinking" ? "Thinking" : b.name}</span></p>)}
         </div>
       )}
     </div>
