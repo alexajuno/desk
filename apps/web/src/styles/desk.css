@@ -865,13 +865,10 @@ button.inbox-tool.on { background: var(--btn-ghost-on); color: var(--text-1); }
 .project-panel .create-body { flex: 1; min-height: 0; max-height: none; padding: 24px 0; border-top: 0.5px solid var(--rule-modal); font: 450 15px/24px var(--font); }
 .project-panel footer { margin-top: 8px; padding: 12px 20px 4px; border-top: 0.5px solid var(--rule-modal); }
 
-/* projects: the list, a project's page and the project picker on an issue. The list's New project button is Linear's,
+/* projects: the list and a project's page. The list's New project button is Linear's,
    measured on 2026-10-18: a quiet 28px pill padded 0 10px 0 8px, with a 14px plus. */
 .bar .new-project { padding: 0 10px 0 8px; }
 .bar .new-project svg { width: 14px; height: 14px; }
-.project-pick select {
-  width: 100%; height: 32px; padding: 0 8px; border: 1px solid var(--border-3); border-radius: 6px; background: var(--bg-raised);
-  color: var(--text-1); font: 450 13px var(--font); }
 .project-row.archived { color: var(--text-3); }
 /* A project's Overview, measured on linear.app on 18 Oct (the muse project), dark and light, at 2x: a column of at most
    805px, centred, 64px under the view row. A 36px icon with 6px corners, the project's colour at 0.175 (0.125 in light)

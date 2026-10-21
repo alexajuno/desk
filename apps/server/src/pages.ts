@@ -419,7 +419,6 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
   return {
     issue: issueJson(i), body: i.body.trim(), body_html: toHtml(i.body, `/issue/${slug}/f/`), result_html: result && toHtml(result, `/issue/${slug}/f/`),
     team: team && { slug: team.slug, title: team.title },
-    all_teams: [...everyTeam.values()].filter((x) => x.state === "active" || x.slug === i.team).map((x) => ({ slug: x.slug, title: x.title, state: x.state })),
     project: project && { slug: project.slug, title: project.title, status: project.status },
     milestone: i.milestone ? (await projects.milestone(i.milestone))?.title ?? null : null,
     trail: trail.map((t) => ({ slug: t.slug, title: t.title })),

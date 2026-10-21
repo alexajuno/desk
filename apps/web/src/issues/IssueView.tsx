@@ -15,7 +15,7 @@ import { toast } from "../ui/toast";
 import { reloadPages, ui } from "../store/ui";
 import { copy, setField, setFolder } from "./actions";
 import { openSession } from "../sessions/Dock";
-import { fieldMenu, folderMenu, milestoneMenu, projectPicker, teamPicker, waitingMenu } from "./menus";
+import { fieldMenu, folderMenu, milestoneMenu, projectPicker, waitingMenu } from "./menus";
 import { datePicker } from "../ui/datepicker";
 import { DueChip } from "./Tree";
 import { painted } from "./painted";
@@ -35,7 +35,6 @@ export interface IssuePageData {
   body: string;
   body_html: string;
   team: { slug: string; title: string } | null;
-  all_teams: { slug: string; title: string; state: string }[];
   project: { slug: string; title: string; status: string } | null;
   milestone: string | null; // its title
   trail: { slug: string; title: string }[];
@@ -111,7 +110,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
         {...(p.session ? { "data-session": p.session.slice(0, 8) } : {})}>
         <div>
           <Title title={p.title} save={(t) => setField(p.slug, "title", t)} />
-          <Chips p={p} team={data.team} project={data.project} />
+          <Chips p={p} project={data.project} />
           {/* In review the card comes first, right under the title, beside the Approve that decides on it. A plan to
               say go to shows as the plan, below. */}
           {p.state === "review" && data.reviewing && (
@@ -204,7 +203,7 @@ function Pick({ className, slug, field, value, title, children }: { className: s
 
 // Linear's Inbox has no room for the Properties column in a pane under 820px, so it shows them as chips here
 // instead (desk.css); each opens the same picker as its row in the column.
-const Chips = observer(function Chips({ p, team, project }: { p: IssueRow; team: { slug: string; title: string } | null; project: { slug: string; title: string } | null }) {
+const Chips = observer(function Chips({ p, project }: { p: IssueRow; project: { slug: string; title: string } | null }) {
   return (
     <div className="chips">
       <Pick className="field-chip pick" slug={p.slug} field="state" value={p.state} title="Change status  S">
@@ -223,11 +222,6 @@ const Chips = observer(function Chips({ p, team, project }: { p: IssueRow; team:
           <span>{p.waiting_on || "Waiting on"}</span>
         </button>
       )}
-      <button className={`field-chip team-chip${p.team ? "" : " unset"}`} type="button" data-slug={p.slug} data-value={p.team ?? ""} title="Set team"
-        onClick={(e) => { if (!toggled(e.currentTarget)) teamPicker(p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "team", value)); }}>
-        {GLYPH.team}
-        <span>{team ? team.title : p.team || "Team"}</span>
-      </button>
       <button className={`field-chip project-chip${p.project ? "" : " unset"}`} type="button" data-slug={p.slug} data-value={p.project ?? ""} title="Set project  Shift P"
         onClick={(e) => { if (!toggled(e.currentTarget)) projectPicker(p.project, p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "project", value)); }}>
         {GLYPH.project}
@@ -272,13 +266,6 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
       <Pick className="prop pick" slug={p.slug} field="protocol" value={p.protocol} title="Change protocol: how much plan, and whether it waits for go">
         <span className="icon" data-field="protocol">{fieldIcon("protocol", p.protocol)}</span><span className="field-label" data-field="protocol">{PROTOCOL_NAMES[p.protocol as Protocol]}</span>
       </Pick>
-      <div className="label">Team</div>
-      <form className="prop project-pick" onSubmit={(e) => e.preventDefault()}>
-        <select name="value" aria-label="Team" value={p.team ?? ""} onChange={(e) => setField(p.slug, "team", e.target.value)}>
-          <option value="">No team</option>
-          {data.all_teams.map((t) => <option key={t.slug} value={t.slug}>{t.title}{t.state === "archived" ? " (archived)" : ""}</option>)}
-        </select>
-      </form>
       <div className="label">Project</div>
       <button className="prop project-pick-menu" type="button" data-slug={p.slug} data-value={p.project ?? ""} title="Set project  Shift P"
         onClick={(e) => { if (!toggled(e.currentTarget)) projectPicker(p.project, p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "project", value)); }}>
