@@ -15,6 +15,7 @@ import { toast } from "../ui/toast";
 import { reloadPages, ui } from "../store/ui";
 import { copy, setField, setFolder } from "./actions";
 import { openSession } from "../sessions/Dock";
+import { teamPath } from "../frame/open";
 import { fieldMenu, folderMenu, milestoneMenu, projectPicker, teamPicker, waitingMenu } from "./menus";
 import { datePicker } from "../ui/datepicker";
 import { DueChip } from "./Tree";
@@ -251,14 +252,15 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
       <Pick className="prop pick" slug={p.slug} field="state" value={p.state} title="Change status  S">
         <span className="icon" data-field="state">{fieldIcon("state", p.state)}</span><span className="field-label" data-field="state">{STATE_NAMES[p.state as State]}</span>
       </Pick>
-      {/* Linear's team row, under the status (desk.css), with a › to the team's page while the mouse is on it. */}
+      {/* Linear's team row, under the status (desk.css), with a › to the team while the mouse is on it. Linear's opens the
+          team's overview, which desk has not, so it opens on its issues, as O then T does. */}
       <div className="prop-go">
         <button className="prop team-pick" type="button" data-slug={p.slug} data-value={p.team ?? ""} title="Move to a different team  Ctrl ⇧ M"
           onClick={(e) => { if (!toggled(e.currentTarget)) teamPicker(p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "team", value)); }}>
           <span className="muted-icon">{GLYPH.team}</span>
           <span className={data.team ? undefined : "muted"}>{data.team?.title ?? "Add to team"}</span>
         </button>
-        {data.team && <Go className="go" to={`/team/${data.team.slug}`} aria-label="Open team overview">{GO_CHEVRON}</Go>}
+        {data.team && <Go className="go" to={teamPath(data.team.slug)} aria-label="Open the team">{GO_CHEVRON}</Go>}
       </div>
       <Pick className="prop pick" slug={p.slug} field="priority" value={p.priority} title="Change priority  P">
         <span className="icon" data-field="priority">{fieldIcon("priority", p.priority)}</span><span className="field-label" data-field="priority">{PRIORITY_NAMES[p.priority as Priority]}</span>

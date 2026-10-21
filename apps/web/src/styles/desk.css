@@ -483,7 +483,7 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .prop a:hover { color: var(--link); }
 /* An issue's team, Linear's, measured on OE-705 on 2026-10-21 at 2x, dark and light: a row like the status's, under it,
    and 4px after it a 28px circle in --bg-prop-go holding a 9 by 5 chevron in --text-3, turned to point right, which
-   opens the team's page and shows only while the mouse is on the row. Linear's rows end with their text; desk's span
+   opens the team and shows only while the mouse is on the row. Linear's rows end with their text; desk's span
    the column, so the circle sits at its end. */
 .prop-go { display: flex; align-items: center; gap: 4px; width: calc(100% + 16px); margin: 0 -8px; }
 .prop-go .prop { flex: 1; min-width: 0; width: auto; margin: 0; }
