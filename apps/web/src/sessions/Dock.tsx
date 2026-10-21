@@ -12,6 +12,7 @@ import { markdown } from "../lib/markdown";
 import { seenPage } from "../api/page";
 import { Title, type IssuePageData } from "../issues/IssueView";
 import { folderMenu } from "../issues/menus";
+import { Walk } from "../issues/walk";
 import { dock, SIDE_WIDTH, type Layout, type Reading } from "../store/dock";
 import { issues } from "../store/issues";
 import { toggleSide as toggleSidebar } from "../frame/side";
@@ -206,7 +207,8 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
 });
 
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, whether it works, its issue's
-// title, and its folder. The title shows or hides the issue beside it; a chat with no issue is renamed there.
+// title, and its folder. The title shows or hides the issue beside it; a chat with no issue is renamed there. While
+// the issue is hidden, its place in the list it was opened from shows at the right end, as the issue's top bar does.
 const ChatHead = observer(function ChatHead({ s }: { s: LiveSession }) {
   const m = s.meta;
   return (
@@ -220,6 +222,7 @@ const ChatHead = observer(function ChatHead({ s }: { s: LiveSession }) {
           : <span>{m?.issue?.title ?? m?.title ?? ""}</span>}
         {startsIn(s) && <span className="dock-folder" title={startsIn(s)}>{startsIn(s)}</span>}
       </div>
+      {dock.issue && m?.issue && !dock.sideShown && <Walk slug={m.issue.slug} />}
     </header>
   );
 });

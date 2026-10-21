@@ -616,11 +616,11 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .walk-at { font: 450 13px var(--font); font-variant-numeric: tabular-nums; color: var(--text-3); }
 .walk-at span { color: var(--text-5); }
 .walk-steps { display: flex; gap: 1px; }
-.bar .walk-steps button { justify-content: center; width: 28px; padding: 0 2px; border: 0; border-radius: 9999px 0 0 9999px; background: none; color: var(--text-3); }
-.bar .walk-steps button + button { border-radius: 0 9999px 9999px 0; }
-.bar .walk-steps button + button svg { transform: rotate(180deg); }
-.bar .walk-steps button:hover:not(:disabled) { background: var(--bg-walk-hover); }
-.bar .walk-steps button:disabled { color: var(--text-5); cursor: default; }
+.walk-steps button { justify-content: center; width: 28px; padding: 0 2px; border: 0; border-radius: 9999px 0 0 9999px; background: none; color: var(--text-3); }
+.walk-steps button + button { border-radius: 0 9999px 9999px 0; }
+.walk-steps button + button svg { transform: rotate(180deg); }
+.walk-steps button:hover:not(:disabled) { background: var(--bg-walk-hover); }
+.walk-steps button:disabled { color: var(--text-5); cursor: default; }
 /* the S and P menus filter from keys read on the window, so their box is text, with a drawn caret */
 div.menu-filter { flex: 1; line-height: 38px; color: var(--text-1); white-space: nowrap; overflow: hidden; }
 div.menu-filter:empty::before, div.menu-filter:not(:empty)::after { content: ""; display: inline-block; width: 1px; height: 15px;
