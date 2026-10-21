@@ -207,6 +207,13 @@ export const CHEVRON = (
     <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
+// Linear's › after a property that has a page of its own, such as an issue's team: its 9 by 5 chevron, turned to point
+// right (desk.css).
+export const GO_CHEVRON = (
+  <svg width="9" height="5" viewBox="0 0 9 5">
+    <path d="M1.915.557a.667.667 0 0 0-.943.943l2.862 2.862a.942.942 0 0 0 1.333 0L8.028 1.5a.667.667 0 0 0-.943-.943L4.5 3.14 1.915.557Z" />
+  </svg>
+);
 // Linear's triangle beside a group's or a section's heading (macros.html's toggle and fold).
 export const TRIANGLE = (
   <svg width="16" height="16" viewBox="0 0 16 16">

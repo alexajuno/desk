@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect } from "react";
 import { Outlet, useLocation } from "react-router";
 import { deskPath, go } from "../app/nav";
 import { remove, removeMany, setField, setFields, undo, undoList } from "../issues/actions";
-import { fieldMenu, milestoneMenu, projectPicker } from "../issues/menus";
+import { fieldMenu, milestoneMenu, projectPicker, teamPicker } from "../issues/menus";
 import { selectable, selectAll, selection, SelectionBar, selectionField } from "../issues/selection";
 import { listView, setView } from "../lists/current";
 import { noteAppPath, SettingsNav } from "../settings/SettingsPage";
@@ -109,6 +109,14 @@ function onKeyDown(e: KeyboardEvent) {
   if (typing(e.target)) { if (e.key === "Escape") (e.target as HTMLElement).blur(); return; }
   const key = e.key.toLowerCase();
 
+  // Linear's Ctrl ⇧ M: move the issue in focus or open, or every one selected, to another team.
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyM" && (ui.selected.size || target())) {
+    const slugs = ui.selected.size ? selection() : [target()!], one = slugs.length === 1 ? issues.bySlug.get(slugs[0]) : undefined;
+    const anchor = focusedRow()?.querySelector(".icon") ?? [...document.querySelectorAll(".team-pick, .select-bar")].find((el) => el.checkVisibility()) ?? null;
+    teamPicker(one?.team ?? null, { anchor }, (to) => (slugs.length === 1 ? setField(slugs[0], "team", to) : setFields(slugs, "team", to)));
+    e.preventDefault();
+    return;
+  }
   // Linear's Ctrl ⇧ ↑: the open issue's parent.
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key === "ArrowUp" && page()?.parent) { go(`/issue/${page()!.parent}`); e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {

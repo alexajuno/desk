@@ -8,14 +8,14 @@ import { post, said } from "../api/http";
 import { go, Go } from "../app/nav";
 import { fromSlack, PRIORITY_NAMES, PROTOCOL_NAMES, STATE_NAMES, type Field, type IssueRow, type Priority, type Protocol, type State, type TreeRow } from "../lib/desk";
 import { keyOf } from "../lib/keys";
-import { fieldIcon, GLYPH, PrioIcon, ProtoIcon, StateIcon, TRIANGLE } from "../ui/icons";
+import { fieldIcon, GLYPH, GO_CHEVRON, PrioIcon, ProtoIcon, StateIcon, TRIANGLE } from "../ui/icons";
 import { toggled } from "../ui/menu";
 import { showFolded } from "../ui/folds";
 import { toast } from "../ui/toast";
 import { reloadPages, ui } from "../store/ui";
 import { copy, setField, setFolder } from "./actions";
 import { openSession } from "../sessions/Dock";
-import { fieldMenu, folderMenu, milestoneMenu, projectPicker, waitingMenu } from "./menus";
+import { fieldMenu, folderMenu, milestoneMenu, projectPicker, teamPicker, waitingMenu } from "./menus";
 import { datePicker } from "../ui/datepicker";
 import { DueChip } from "./Tree";
 import { painted } from "./painted";
@@ -110,7 +110,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
         {...(p.session ? { "data-session": p.session.slice(0, 8) } : {})}>
         <div>
           <Title title={p.title} save={(t) => setField(p.slug, "title", t)} />
-          <Chips p={p} project={data.project} />
+          <Chips p={p} team={data.team} project={data.project} />
           {/* In review the card comes first, right under the title, beside the Approve that decides on it. A plan to
               say go to shows as the plan, below. */}
           {p.state === "review" && data.reviewing && (
@@ -203,12 +203,17 @@ function Pick({ className, slug, field, value, title, children }: { className: s
 
 // Linear's Inbox has no room for the Properties column in a pane under 820px, so it shows them as chips here
 // instead (desk.css); each opens the same picker as its row in the column.
-const Chips = observer(function Chips({ p, project }: { p: IssueRow; project: { slug: string; title: string } | null }) {
+const Chips = observer(function Chips({ p, team, project }: { p: IssueRow; team: { slug: string; title: string } | null; project: { slug: string; title: string } | null }) {
   return (
     <div className="chips">
       <Pick className="field-chip pick" slug={p.slug} field="state" value={p.state} title="Change status  S">
         <span className="icon" data-field="state"><StateIcon state={p.state} /></span><span className="field-label" data-field="state">{STATE_NAMES[p.state]}</span>
       </Pick>
+      <button className={`field-chip team-pick${p.team ? "" : " unset"}`} type="button" data-slug={p.slug} data-value={p.team ?? ""} title="Move to a different team  Ctrl ⇧ M"
+        onClick={(e) => { if (!toggled(e.currentTarget)) teamPicker(p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "team", value)); }}>
+        {GLYPH.team}
+        <span>{team ? team.title : "Team"}</span>
+      </button>
       <Pick className={`field-chip pick${p.priority === "none" ? " unset" : ""}`} slug={p.slug} field="priority" value={p.priority} title="Change priority  P">
         <span className="icon" data-field="priority"><PrioIcon level={p.priority} /></span><span className="field-label" data-field="priority">{p.priority === "none" ? "Priority" : PRIORITY_NAMES[p.priority]}</span>
       </Pick>
@@ -246,6 +251,15 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
       <Pick className="prop pick" slug={p.slug} field="state" value={p.state} title="Change status  S">
         <span className="icon" data-field="state">{fieldIcon("state", p.state)}</span><span className="field-label" data-field="state">{STATE_NAMES[p.state as State]}</span>
       </Pick>
+      {/* Linear's team row, under the status (desk.css), with a › to the team's page while the mouse is on it. */}
+      <div className="prop-go">
+        <button className="prop team-pick" type="button" data-slug={p.slug} data-value={p.team ?? ""} title="Move to a different team  Ctrl ⇧ M"
+          onClick={(e) => { if (!toggled(e.currentTarget)) teamPicker(p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "team", value)); }}>
+          <span className="muted-icon">{GLYPH.team}</span>
+          <span className={data.team ? undefined : "muted"}>{data.team?.title ?? "Add to team"}</span>
+        </button>
+        {data.team && <Go className="go" to={`/team/${data.team.slug}`} aria-label="Open team overview">{GO_CHEVRON}</Go>}
+      </div>
       <Pick className="prop pick" slug={p.slug} field="priority" value={p.priority} title="Change priority  P">
         <span className="icon" data-field="priority">{fieldIcon("priority", p.priority)}</span><span className="field-label" data-field="priority">{PRIORITY_NAMES[p.priority as Priority]}</span>
       </Pick>

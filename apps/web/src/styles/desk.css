@@ -56,6 +56,7 @@
   --bg-filter-box: lch(9.345% 0.85 272);   /* the box round the Inbox's filter chips, and its edge */
   --border-filter-box: lch(13.08% 1.48 272);
   --project-icon: lch(61.803% 1.2 272 / 0.175); /* behind a project's icon, over its name */
+  --bg-prop-go: color(srgb 0.1386 0.1397 0.1429 / 0.5); /* the › after an issue's team, to the team's page */
   --btn-primary: lch(47.918% 59.303 288.421);
   --btn-primary-hover: lch(52.418% 61.103 288.421);
   --btn-primary-text: lch(100% 5 288.421);
@@ -179,6 +180,7 @@
   --bg-filter-box: lch(94.44% 0.5 282);
   --border-filter-box: lch(89.84% 0 282);
   --project-icon: lch(39.176% 1.25 282 / 0.125);
+  --bg-prop-go: color(srgb 0.9412 0.9417 0.9455 / 0.5);
   --btn-primary: lch(53% 52.26 286.91);
   --btn-primary-hover: lch(47% 50.26 286.91);
   --btn-primary-text: lch(100% 5 286.91);
@@ -479,6 +481,16 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .prop .key { color: var(--text-3); min-width: 64px; }
 .prop a { color: var(--text-1); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prop a:hover { color: var(--link); }
+/* An issue's team, Linear's, measured on OE-705 on 2026-10-21 at 2x, dark and light: a row like the status's, under it,
+   and 4px after it a 28px circle in --bg-prop-go holding a 9 by 5 chevron in --text-3, turned to point right, which
+   opens the team's page and shows only while the mouse is on the row. Linear's rows end with their text; desk's span
+   the column, so the circle sits at its end. */
+.prop-go { display: flex; align-items: center; gap: 4px; width: calc(100% + 16px); margin: 0 -8px; }
+.prop-go .prop { flex: 1; min-width: 0; width: auto; margin: 0; }
+.prop-go .go { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9999px;
+  background: var(--bg-prop-go); opacity: 0; transition: opacity 0.1s; }
+.prop-go:hover .go, .prop-go .go:focus-visible { opacity: 1; }
+.prop-go .go svg { fill: var(--text-3); transform: rotate(-90deg); }
 .menu.folders { width: 360px; } .menu.folders ul { max-height: 300px; overflow: auto; }
 .menu li.empty { color: var(--text-3); cursor: default; }
 .folder-pick span, .waiting-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
