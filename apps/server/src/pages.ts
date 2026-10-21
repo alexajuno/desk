@@ -269,10 +269,12 @@ export const inboxRows = async () => (await notifications(await store.loadAll())
 // said something you have not read, from the Inbox's rows ("just literally list all sessions with status icon related
 // to their issue if there is", the user, 19 Oct). Pinned holds the sessions the user pinned, in the order pinned (pins.ts).
 // Chats holds the rest still in hand, the one that moved last first, with no cap: an issue's session while the issue is
-// open, and a chat with no issue for a day after it last moved, or while it works or holds a reply you have not read.
-// "the chats section only has at max 8 latest chats, which sounds wrong to me" (the user, 19 Oct): the newest 8 of any
-// kind dropped a quiet issue in progress. An automation's runs are its own page's, and a chat nobody wrote in has
-// nothing to show. Older ones are in the corner's history.
+// open, and any other chat, its issue parked, done or dropped or none, for a day after it last moved, or while it works
+// or holds a reply you have not read. "the chats section only has at max 8 latest chats, which sounds wrong to me" (the
+// user, 19 Oct): the newest 8 of any kind dropped a quiet issue in progress. "it drops the issue instantly, but i still
+// wanna read the report of chatting a bit longer" (the user, 21 Oct): a closed issue's chat left at once. An
+// automation's runs are its own page's, and a chat nobody wrote in has nothing to show. Older ones are in the corner's
+// history.
 const IN_HAND = new Set(["triage", "running", "waiting", "review", "landing"]);
 const DAY = 24 * 3600 * 1000;
 
@@ -286,8 +288,8 @@ function chatsNow(all: Map<string, Issue>) {
   });
   const bySession = new Map(shown.map((h) => [h.session, h]));
   const pinned = pins.all().filter((s) => bySession.has(s));
-  const inHand = (h: Held) => (h.issue ? IN_HAND.has(h.issue.state)
-    : Date.now() - moved(h) < DAY || turns.working(h.session) || inbox.unread(h.session));
+  const inHand = (h: Held) => (h.issue && IN_HAND.has(h.issue.state))
+    || Date.now() - moved(h) < DAY || turns.working(h.session) || inbox.unread(h.session);
   return {
     pinned: pinned.map((s) => row(bySession.get(s)!)),
     chats: shown.filter((h) => !pinned.includes(h.session) && inHand(h)).sort((a, b) => moved(b) - moved(a)).map(row),
