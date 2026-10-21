@@ -133,11 +133,10 @@
   --project-completed: lch(48% 59.31 288.43);
   --project-canceled: #8a8f98;
   --late: lch(65.2% 73 29);                /* a target or due date passed: Linear's red, its Off track's */
-  /* a project update's health, from linear.app's health menu on 2026-10-20, dark; Update missing's ring is desk's */
+  /* a project update's health, from linear.app's health menu on 2026-10-20, dark */
   --health-on_track: lch(67.2% 64.37 141.95);
   --health-at_risk: lch(87.2% 90 85);
   --health-off_track: lch(65.2% 73 29);
-  --health-missing: lch(87.2% 90 85);
   --text-running: lch(80% 90 85);
   --text-done: #4cb782;
   --text-blocked: lch(66% 80 48);
@@ -233,7 +232,6 @@
   --health-on_track: lch(50% 80 141.95);
   --health-at_risk: lch(50% 80 85);
   --health-off_track: lch(50% 80 29);
-  --health-missing: lch(50% 80 85);
   --late: lch(50% 80 29);
   --state-review: lch(68% 64.37 141.95);
   --state-cross: lch(100% 0 282);          /* Linear cuts the cross out of the circle; white matches that */
@@ -1161,7 +1159,6 @@ button.set-pick svg { color: var(--text-3); }
 .add-milestone:hover { color: var(--text-3); }
 .projects-row .health { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; }
 .projects-row .health-none { color: var(--text-3); }
-.projects-row .health-stale { color: var(--text-3); }
 /* A project's updates (lists/ProjectPage.tsx), Linear's, read off linear.app on 2026-10-20, dark: on Overview the latest
    update, or a box to write the first, a 1px-ringed card the column's width; on Activity the composer, Comment and
    Update and the health chip (24px pills, 12px/500, the health in its colour), the text, the progress since the last

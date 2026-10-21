@@ -40,7 +40,7 @@ export const ProjectsPage = observer(function ProjectsPage({ team = "" }: { team
                     data-key={`project/${p.slug}`} onMouseMove={() => { if (ui.focused !== `project/${p.slug}`) ui.focus(`project/${p.slug}`, true); }}>
                     <span className="name">{GLYPH.project}<span className="title">{p.title}</span></span>
                     <span className={`health health-${p.health.state}`} title={p.health.posted ? `Last update ${p.health.posted}` : undefined}>
-                      <HealthIcon health={p.health.state === "none" ? null : (["missing", "stale"].includes(p.health.state) ? null : p.health.state)} state={p.health.state} />{p.health.label}
+                      <HealthIcon health={p.health.state === "none" ? null : p.health.state} />{p.health.label}
                     </span>
                     {!team && <span className="muted">{p.team_title ?? ""}</span>}
                     <span className={p.late ? "late" : "muted"}>{p.target_label}</span>

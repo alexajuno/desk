@@ -28,17 +28,16 @@ export interface Project {
   status: string; // one of STATUSES
   start: string | null; // a period (periods.ts)
   target: string | null;
-  updates: string; // how often it is due an update: weekly, biweekly or never (updates.ts)
   created: string;
   body: string;
 }
 
-const FIELDS = ["title", "team", "status", "start", "target", "updates", "created"] as const;
+const FIELDS = ["title", "team", "status", "start", "target", "created"] as const;
 
 export const folder = (slug: string) => join(PROJECTS_DIR, slug);
 
 export function blank(slug: string, title: string): Project {
-  return { slug, title, team: null, status: "backlog", start: null, target: null, updates: "weekly", created: now(), body: "" };
+  return { slug, title, team: null, status: "backlog", start: null, target: null, created: now(), body: "" };
 }
 
 export function parse(slug: string, text: string): Project {
@@ -57,8 +56,9 @@ export function render(p: Project): string {
   return `---\n${dump(meta)}\n---\n\n${p.body.trim()}\n`;
 }
 
-type Row = Project & { written: string | null };
-const fromRow = ({ written: _, ...p }: Row): Project => p;
+// A database from before 21 Oct also has the column updates, the reminder's cadence (updates.ts), which nothing reads.
+type Row = Project & { written: string | null; updates?: string };
+const fromRow = ({ written: _, updates: __, ...p }: Row): Project => p;
 
 export async function loadAll(q: Db = sql()): Promise<Map<string, Project>> {
   const rows = (await q.query<Row>('select * from projects order by slug collate "C"')).rows;

@@ -184,14 +184,14 @@ function applyTeam(t: Team, fields: Record<string, string | null>) {
   for (const [name, value] of Object.entries(fields)) target[name] = name === "body" ? value || "" : value;
 }
 
-const PROJECT_FIELDS = ["title", "body", "team", "status", "start", "target", "updates"];
+const PROJECT_FIELDS = ["title", "body", "team", "status", "start", "target"];
 
 export async function projectJson(p: Project, full = false) {
   const mine = projects.issuesOf(await store.loadAll(), p.slug);
   const data: Record<string, unknown> = { slug: p.slug, title: p.title, team: p.team, status: p.status, start: p.start, target: p.target,
     created: p.created, url: `/project/${p.slug}`, issues: mine.length, open_issues: mine.filter((i) => OPEN.includes(i.state)).length,
-    progress: Math.round(projects.progress(mine) * 100), updates: p.updates };
-  const h = updates.healthOf(p, await updates.activityOf(p.slug));
+    progress: Math.round(projects.progress(mine) * 100) };
+  const h = updates.healthOf(await updates.activityOf(p.slug));
   data.health = { state: h.state, label: h.label, posted: h.at };
   if (full) Object.assign(data, { file: join(projects.folder(p.slug), projects.MAIN), body: p.body,
     milestones: projects.milestoneProgress(await projects.milestonesOf(p.slug), mine).map(({ sort: _, created: __, project: ___, ...m }) => m),
@@ -223,8 +223,6 @@ async function applyProject(p: Project, fields: Record<string, string | null>) {
   if ("status" in fields && !projects.STATUSES.includes(fields.status as string))
     throw new HttpError(422, `status must be one of: ${projects.STATUSES.join(", ")}`);
   if ("title" in fields && !fields.title) throw new HttpError(422, "title cannot be empty");
-  if ("updates" in fields && !updates.CADENCES.includes(fields.updates as string))
-    throw new HttpError(422, `updates must be one of: ${updates.CADENCES.join(", ")}, how often the project is due an update`);
   if (fields.team && !(await teams.exists(fields.team))) throw new HttpError(422, `No team ${fields.team}. List them with GET /api/teams.`);
   for (const name of ["start", "target"]) if (name in fields) fields[name] = period(name, fields[name]);
   const target = p as unknown as Record<string, string | null>;

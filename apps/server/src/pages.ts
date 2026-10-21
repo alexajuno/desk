@@ -538,9 +538,9 @@ export async function teamsPage() {
 // A project as its page and its row in Projects show it (projects.ts): its dates in words, whether its target date
 // passed, which shows red as Linear's does, and its progress in whole percent.
 function projectJson(p: Project, all: Map<string, Issue>, everyTeam: Map<string, Team>, activity: updates.Entry[]) {
-  const mine = projects.issuesOf(all, p.slug), h = updates.healthOf(p, activity);
+  const mine = projects.issuesOf(all, p.slug), h = updates.healthOf(activity);
   return {
-    health: { state: h.state, label: h.label, posted: h.at && shortDate(h.at) }, updates: p.updates,
+    health: { state: h.state, label: h.label, posted: h.at && shortDate(h.at) },
     slug: p.slug, title: p.title, team: p.team, team_title: p.team ? everyTeam.get(p.team)?.title ?? p.team : null, status: p.status,
     start: p.start, start_label: periods.label(p.start), target: p.target, target_label: periods.label(p.target),
     late: !projects.CLOSED.has(p.status) && periods.passed(p.target), created: p.created,

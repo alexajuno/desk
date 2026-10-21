@@ -6,8 +6,8 @@
 // group's + files a new issue in the project. Under the description, its milestones, Linear's: in their order, which
 // you drag, each with its diamond, name, description, target date and how far along it is, the current one yellow.
 // Over the description, as Linear's, its latest update, or a box to write the first; Activity (/project/<slug>/activity)
-// holds Linear's composer, prefilled with the draft desk's agent wrote when the update fell due (the server's
-// updates.ts), and every update and change, newest first, by month.
+// holds Linear's composer, prefilled with the draft the pm agent left when it judged the project At risk or Off track
+// (the server's updates.ts), and every update and change, newest first, by month.
 import { observer } from "mobx-react-lite";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams } from "react-router";
@@ -39,7 +39,6 @@ export interface ProjectRowData {
   target_label: string;
   late: boolean; // its target date passed and it is not completed or canceled
   health: { state: string; label: string; posted: string | null };
-  updates: string; // how often it is due an update: weekly, biweekly, never
   created: string;
   issues: number;
   progress: number; // whole percent
@@ -80,7 +79,6 @@ interface ProjectData {
 }
 
 const HEALTHS: [string, string][] = [["on_track", "On track"], ["at_risk", "At risk"], ["off_track", "Off track"]];
-const CADENCES: [string, string][] = [["weekly", "Weekly"], ["biweekly", "Every 2 weeks"], ["never", "Never"]];
 
 const TABS = [["", "Overview"], ["activity", "Activity"], ["issues", "Issues"]];
 
@@ -204,7 +202,7 @@ function changeText(e: Entry): string {
 }
 
 // Linear's composer on Activity: the health chip, the text, the progress since the last update, and Post update. A draft
-// desk's agent wrote fills it.
+// the pm agent wrote fills it.
 function Composer({ slug, data }: { slug: string; data: ProjectData }) {
   const draft = data.activity.find((e) => e.kind === "draft");
   const [health, setHealth] = useState(draft?.health ?? "on_track");
@@ -229,7 +227,7 @@ function Composer({ slug, data }: { slug: string; data: ProjectData }) {
           onClick={(e) => { if (!toggled(e.currentTarget)) openMenu({ anchor: e.currentTarget, items: () => HEALTHS.map(([h, label]) => ({ icon: <HealthIcon health={h} />, label, current: h === health, run: () => setHealth(h) })) }); }}>
           <HealthIcon health={health} />{HEALTHS.find(([h]) => h === health)?.[1]}
         </button>
-        {draft && <span className="muted draft-tag">Draft by desk's agent, {draft.at_short}</span>}
+        {draft && <span className="muted draft-tag">Draft by pm, {draft.at_short}</span>}
       </div>
       <textarea className="update-text" placeholder="Write a project update…" value={body} rows={4}
         onChange={(e) => setBody(e.target.value)}
@@ -247,19 +245,11 @@ function Composer({ slug, data }: { slug: string; data: ProjectData }) {
 const ProjectActivity = observer(function ProjectActivity({ slug }: { slug: string }) {
   const { data, error } = usePage<ProjectData>(`/api/page/project/${slug}`);
   const pr = data?.project;
-  const cadence = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (toggled(e.currentTarget) || !pr) return;
-    openMenu({ anchor: e.currentTarget, items: () => CADENCES.map(([c, label]) => ({ label, current: c === pr.updates, run: () => setProject(slug, "updates", c) })) });
-  };
   const shown = data?.activity.filter((e) => e.kind !== "draft") ?? [];
   const months = [...new Set(shown.map((e) => e.month))];
   return (
     <>
-      <Head slug={slug} title={pr?.title} tab="activity" tools={pr && (
-        <button type="button" className="ghost small" title="How often the project is due an update, while In Progress" onClick={cadence}>
-          {GLYPH.clock}{`Updates: ${CADENCES.find(([c]) => c === pr.updates)?.[1] ?? "Weekly"}`}
-        </button>
-      )} />
+      <Head slug={slug} title={pr?.title} tab="activity" />
       <div className="scroll">
         {error && !data && <p className="muted" style={{ padding: 24 }}>{error.replace("issue", "project")}</p>}
         {data && (

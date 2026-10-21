@@ -383,8 +383,6 @@ export async function create(): Promise<FastifyInstance> {
     else if (name === "team") {
       value = value || null;
       if (value && !(await teams.exists(value))) throw new HttpError(422, `No team ${value}.`);
-    } else if (name === "updates") {
-      if (!updates.CADENCES.includes(value)) throw new HttpError(422, `updates cannot be ${value}`);
     } else if (name === "start" || name === "target") {
       value = value ? periods.parse(value) : null;
       if (field(req, "value") && !value) throw new HttpError(422, `“${field(req, "value")}” is no date: try May 2027, Q4 or 20/05/2027.`);
