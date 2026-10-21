@@ -168,10 +168,11 @@ export const InboxPage = observer(function InboxPage() {
 });
 
 // An issue's row: its status, with a badge for what it asks of you, a dot while unread, its title as the issue has it
-// now, then what its session did and how long ago.
+// now, then what its session did and how long ago. The open row has no dot: anything new on it is read as it comes
+// (InboxPage), and the dot would show only while that is written.
 const IssueNotice = observer(function IssueNotice({ n, issue, open, query }: { n: InboxRow; issue: Issue; open: string | null; query: string }) {
   return (
-    <Go className={`item inbox-row${n.slug === open ? " selected" : ""}${n.read !== null ? " read" : ""}${ui.focused === n.slug ? " focus" : ""}`}
+    <Go className={`item inbox-row${n.slug === open ? " selected" : ""}${n.read !== null || n.slug === open ? " read" : ""}${ui.focused === n.slug ? " focus" : ""}`}
       to={rowHref(query, n.slug)} title={issue.title} data-slug={n.slug} data-state={issue.state} data-priority={issue.priority} data-parent={issue.parent ?? ""} data-row-key={n.id} data-waits={n.waits}
       onMouseMove={() => { if (ui.focused !== n.slug) ui.focus(n.slug, true); }}
       onContextMenu={(e) => { e.preventDefault(); ui.focus(n.slug); actionsMenu(issue, { x: e.clientX, y: e.clientY }, open); }}>
@@ -195,7 +196,7 @@ const IssueNotice = observer(function IssueNotice({ n, issue, open, query }: { n
 const ChatRow = observer(function ChatRow({ n, open, query }: { n: InboxRow; open: boolean; query: string }) {
   const agent = n.agent;
   return (
-    <Go className={`item inbox-row${open ? " selected" : ""}${n.read !== null ? " read" : ""}${ui.focused === n.slug ? " focus" : ""}`}
+    <Go className={`item inbox-row${open ? " selected" : ""}${n.read !== null || open ? " read" : ""}${ui.focused === n.slug ? " focus" : ""}`}
       to={rowHref(query, n.slug)} title={n.title} data-key={n.slug} data-session={n.session ?? ""} data-row-key={n.id} data-waits={n.waits}
       onMouseMove={() => { if (ui.focused !== n.slug) ui.focus(n.slug, true); }}>
       {agent
