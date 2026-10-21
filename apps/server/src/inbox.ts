@@ -144,12 +144,11 @@ export function take(wanted: Want[]): Promise<void> {
   });
 }
 
-// You read the rows that open this issue or chat, or the session's: now, unless already read.
-export async function read(by: { slug: string } | { session: string }) {
-  const [column, value] = "slug" in by ? ["slug", by.slug] : ["id", by.session];
-  if (![...rows.values()].some((r) => r[column as "slug" | "id"] === value && r.read === null)) return;
-  const done = await db.write((tx) => tx.query<Row>(`update inbox set read = $1, marked = null where ${column} = $2 and read is null
-    returning ${COLUMNS.join(", ")}`, [Date.now() / 1000, value]));
+// You read the session's row: now, unless already read.
+export async function read(by: { session: string }) {
+  if (rows.get(by.session)?.read !== null) return;
+  const done = await db.write((tx) => tx.query<Row>(`update inbox set read = $1, marked = null where id = $2 and read is null
+    returning ${COLUMNS.join(", ")}`, [Date.now() / 1000, by.session]));
   for (const r of done.rows) rows.set(r.id, r);
 }
 
