@@ -189,11 +189,11 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
 
   // The chat openSession opened takes the cursor once it knows whether anything is said in it: an empty one in its
   // composer, any other in its conversation, to read first, where Space scrolls it and Enter goes into the composer
-  // (Frame).
+  // (Frame). Only in the middle: the Inbox's pane showing the same chat is on its way out.
   const take = wantsFocus.get() === id && s.loaded ? (quiet(s) ? "type" : "read") : null;
   useEffect(() => {
-    if (!take) return;
     const el = scroller.current!;
+    if (!take || !el.closest(".dock")) return;
     if (take === "type") el.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
     else el.focus({ preventScroll: true });
     runInAction(() => wantsFocus.set(null));
