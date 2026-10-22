@@ -498,8 +498,8 @@ export function routes(app: FastifyInstance) {
     const plan = str(body.plan), chat = str(body.chat);
     // A session that has only planned it shows In review, holding the plan, once its turn ended.
     const planned = i.state === "running" || (i.state === "review" && (i.review_of ?? "result") !== "result");
-    if (!(i.state === "backlog" || (planned && i.session)))
-      throw new HttpError(409, `${slug} is ${i.state}; only a backlog issue, or one in progress or in review that its session has only planned, can start.`);
+    if (!(i.state === "backlog" || (i.state === "waiting" && !i.session) || (planned && i.session)))
+      throw new HttpError(409, `${slug} is ${i.state}; only a backlog issue, a waiting one with no session, or one in progress or in review that its session has only planned, can start.`);
     if (plan.trim()) {
       store.setSection(i, "Plan", plan);
       await store.save(i);
@@ -533,8 +533,8 @@ export function routes(app: FastifyInstance) {
     const slug = req.params.slug, i = await loadIssue(slug);
     const id = str(((req.body ?? {}) as Record<string, unknown>).chat);
     if (!id) throw new HttpError(422, "chat is required", [{ type: "missing", loc: ["body", "chat"], msg: "Field required", input: req.body ?? null }]);
-    if (!["triage", "backlog", "running", "review"].includes(i.state))
-      throw new HttpError(409, `${slug} is ${i.state}; only an issue in triage, the backlog, in progress or in review can be worked.`);
+    if (!["triage", "backlog", "running", "waiting", "review"].includes(i.state))
+      throw new HttpError(409, `${slug} is ${i.state}; only an issue in triage, the backlog, in progress, waiting or in review can be worked.`);
     if (!chats.exists(id)) throw new HttpError(404, "No such chat");
     const chat = chats.load(id);
     if (i.session && i.session !== chat.session) throw new HttpError(409, `${slug} already has its own session; open its page to talk to it.`);

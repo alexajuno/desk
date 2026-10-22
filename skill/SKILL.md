@@ -138,7 +138,7 @@ curl -s "http://127.0.0.1:8790/api/folders?q=site"
 
 ## Work an issue
 
-desk's own agent chat works an issue itself; it starts no other session. Bind the chat to the issue (the issue needs its `folder` set first), and the chat becomes the issue's session: the issue shows In progress, and the chat moves into the issue's folder, where that folder's CLAUDE.md, rules and skills load. A chat in a window moves once its turn ends, so end the turn right after binding; desk then resumes it in the folder and tells it to carry on. Send the chat's id, which the agent's prompt gives. An issue in triage, the backlog, or in progress with no other session, can be bound. One in triage with no folder binds where the chat runs and stays in triage; binding the chat to another issue drops its triage one as a duplicate:
+desk's own agent chat works an issue itself; it starts no other session. Bind the chat to the issue (the issue needs its `folder` set first), and the chat becomes the issue's session: the issue shows In progress, and the chat moves into the issue's folder, where that folder's CLAUDE.md, rules and skills load. A chat in a window moves once its turn ends, so end the turn right after binding; desk then resumes it in the folder and tells it to carry on. Send the chat's id, which the agent's prompt gives. An issue in triage, the backlog, in progress, waiting or in review, with no other session, can be bound. One in triage with no folder binds where the chat runs and stays in triage; binding the chat to another issue drops its triage one as a duplicate:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/work" --json '{"chat": "<chat id>"}'
@@ -156,7 +156,7 @@ Once it has landed, say where, which moves the issue to Done, or to Waiting on i
 curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"state": "done", "landed": "fe1aca7 on main"}'
 ```
 
-Any other Claude Code session (not the agent chat) can still start an issue's own background session. Send a plan: Direction (what to do, and which way), Done when, and What you may decide alone. A quick or brief issue may start with no plan, `--json '{}'`: its session writes its own brief, then works at once (quick) or waits for the user's "go" (brief). Only a backlog issue, or one in progress or in review whose session has only planned it, can start. If the call answers 409 "Workspace not trusted", tell the user to press Trust folder on the issue's page, then start again.
+Any other Claude Code session (not the agent chat) can still start an issue's own background session. Send a plan: Direction (what to do, and which way), Done when, and What you may decide alone. A quick or brief issue may start with no plan, `--json '{}'`: its session writes its own brief, then works at once (quick) or waits for the user's "go" (brief). Only a backlog issue, a waiting one with no session, or one in progress or in review whose session has only planned it, can start. If the call answers 409 "Workspace not trusted", tell the user to press Trust folder on the issue's page, then start again.
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/start" --json '{"plan": "Direction:\n\n- Send the user back to the page they came from after login.\n\nDone when: logging in from /pricing lands on /pricing.\n\nWhat you may decide alone: where the return address is kept."}'

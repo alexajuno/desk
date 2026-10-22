@@ -337,10 +337,8 @@ type Button = { label: string; action?: string; chat?: boolean; disabled?: boole
 // stands. Only Plan and Approve are clicks; everything else is said in the issue's chat, which Open chat brings up.
 export function step(i: Issue, asks: Set<string>, hasPlan: boolean, hasResult: boolean): { text: string; button: Button } {
   const chat = { label: "Open chat", chat: true };
-  if (i.state === "backlog") {
-    if (i.session) return { text: "Backlog", button: chat };
-    return { text: "Backlog", button: { label: runs(i) === "quick" ? "Start" : "Plan", action: "start" } };
-  }
+  const start = { label: runs(i) === "quick" ? "Start" : "Plan", action: "start" };
+  if (i.state === "backlog") return { text: "Backlog", button: i.session ? chat : start };
   if (i.state === "triage") return { text: "Triage", button: chat };
   if (i.state === "landing") {
     if (!landingStuck(i, asks)) return { text: "Landing", button: { label: "Landing…", disabled: true } };
@@ -355,7 +353,9 @@ export function step(i: Issue, asks: Set<string>, hasPlan: boolean, hasResult: b
   if (i.state === "waiting") {
     let since = waited(i.waiting_since);
     if (since !== "today") since = `${shortDate(i.waiting_since)} (${since})`;
-    return { text: `Waiting on ${i.waiting_on || "someone"} since ${since}`, button: i.session ? chat : null };
+    // One filed straight into Waiting, by another session or by hand, has no session yet: it starts one as Backlog does
+    // (22 Oct: "it has no session, then i can't start a session binded to it").
+    return { text: `Waiting on ${i.waiting_on || "someone"} since ${since}`, button: i.session ? chat : start };
   }
   if (i.state === "review") {
     // Approve lands a result, and only a result: on a plan the button says go.
