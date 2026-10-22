@@ -570,11 +570,11 @@ export async function create(): Promise<FastifyInstance> {
     if (lands) {
       // The steps you unticked, by their place: "1,3".
       const skip = new Set(field(req, "skip").split(",").filter(Boolean).map(Number));
-      const steps = lands.steps.filter((_, n) => !skip.has(n));
       if (!(await store.move(i, { state: "landing", landing: store.now() }))) return stay("Someone else moved the issue meanwhile.");
-      const { ran, ok, restart } = await land.runSteps(i, steps);
+      const { ran, ok, restart } = await land.runSteps(i, lands.steps, skip);
       if (ok) {
-        const landed = lands.landed || ran.at(-1)?.output.split("\n").at(-1) || (steps.length ? "steps ran" : "nothing to land");
+        const last = ran.filter((r) => !r.skipped).at(-1);
+        const landed = lands.landed || last?.output.split("\n").at(-1) || (last ? "steps ran" : "nothing to land");
         const pr = landed.match(api.PULL);
         await store.move(i, { ...(await store.landedState(i)), landed, ...(pr && !i.link && { link: pr[0] }) });
         message = `Landed: ${i.title}` + restart();

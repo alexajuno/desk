@@ -429,12 +429,13 @@ export function landsOf(i: Issue): Lands | null {
 // A step may push or call GitHub, but one that hangs must not hold Approve forever.
 const STEP_TIMEOUT = 300;
 
-export interface Step { step: string; code: number | null; output: string } // code null: not run, after one failed
+export interface Step { step: string; skipped: boolean; code: number | null; output: string } // code null: not run
 
-// Run the steps one after another in the issue's folder, stopping at the first that fails. The issue's Try goes back
-// first, so the steps find its checkout on its own branch. Returns what each did, and whether the commit desk runs
-// moved, which restart then acts on: once the caller saved the issue, since desk exits on it.
-export async function runSteps(i: Issue, steps: string[]): Promise<{ ran: Step[]; ok: boolean; restart: () => string }> {
+// Run the steps one after another in the issue's folder, but those the user unticked (skip, by their place), stopping
+// at the first that fails. The issue's Try goes back first, so the steps find its checkout on its own branch. Returns
+// what each did, and whether the commit desk runs moved, which restart then acts on: once the caller saved the issue,
+// since desk exits on it.
+export async function runSteps(i: Issue, steps: string[], skip: Set<number>): Promise<{ ran: Step[]; ok: boolean; restart: () => string }> {
   const top = await repo(i);
   const head = top && isDesk(top) ? await git(top, "rev-parse", "HEAD") : null;
   if (top) await locked(async () => {
@@ -442,8 +443,8 @@ export async function runSteps(i: Issue, steps: string[]): Promise<{ ran: Step[]
     const now = await trying(top);
     if (now && now.slug === i.slug) await putBack(top, now);
   });
-  const ran: Step[] = steps.map((step) => ({ step, code: null, output: "" }));
-  for (const r of ran) {
+  const ran: Step[] = steps.map((step, n) => ({ step, skipped: skip.has(n), code: null, output: "" }));
+  for (const r of ran.filter((r) => !r.skipped)) {
     try {
       const out = await run(["bash", "-c", r.step], { cwd: agents.workdir(i), timeout: STEP_TIMEOUT });
       Object.assign(r, { code: out.code, output: `${out.stdout}${out.stderr}`.trim() });
@@ -455,12 +456,13 @@ export async function runSteps(i: Issue, steps: string[]): Promise<{ ran: Step[]
   // Back on main, desk's own checkout goes to the next in line, as back-to-main hands it on.
   if (top && isDesk(top)) await locked(() => serve(top));
   const moved = top !== null && head !== null && (await git(top, "rev-parse", "HEAD")) !== head;
-  return { ran, ok: ran.every((r) => r.code === 0), restart: () => (moved ? restartIfDesk(top!) : "") };
+  return { ran, ok: ran.every((r) => r.skipped || r.code === 0), restart: () => (moved ? restartIfDesk(top!) : "") };
 }
 
 // The steps as a session's message shows them: each with how it went, and the failed one's last lines.
 export function told(ran: Step[]): string {
   return ran.map((r) => {
+    if (r.skipped) return `- \`${r.step}\`: skipped, as the user unticked it`;
     if (r.code === null) return `- \`${r.step}\`: not run`;
     if (!r.code) return `- \`${r.step}\`: done`;
     const tail = r.output.split("\n").slice(-40).join("\n");
