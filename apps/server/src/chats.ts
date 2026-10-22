@@ -212,9 +212,10 @@ export async function agentPrompt(chat: Chat, base: string): Promise<string> {
 const KINDS = new Set(["panel", "window"]);
 const BASE = `http://127.0.0.1:${PORT}`; // the address a chat reaches desk at, as SKILL.md's examples do
 
-// The agent's settings, as the Agent tab had them: no permission prompts, and a few commands no chat should run. Its
-// model and effort are the chat's pick (models.ts), and a new chat's those of Settings > Preferences.
-const OPTIONS = { permissionMode: "bypassPermissions", disallowedTools: ["Bash(sudo *)", "Bash(rm -rf /*)", "Bash(rm -rf ~*)"] } as const;
+// The agent's settings: no permission prompts and no command barred, sudo included, as the user's own Claude Code runs
+// (22 Oct: "remove all bans"). Its model and effort are the chat's pick (models.ts), and a new chat's those of
+// Settings > Preferences.
+const OPTIONS = { permissionMode: "bypassPermissions" } as const;
 
 const runsOn = (chat: Chat) => {
   const { model, effort } = models.shown(chat.session, true);
@@ -223,9 +224,9 @@ const runsOn = (chat: Chat) => {
 
 // How the host starts the chat's session again: where it runs, with its prompt and settings.
 export async function hostOptions(chat: Chat, cwd = runsIn(chat)): Promise<hosted.StartOptions> {
-  if (chat.agent) return { id: chat.session, resume: true, cwd, agent: chat.agent, settings: AGENT_SETTINGS, ...OPTIONS, ...runsOn(chat), disallowedTools: [...OPTIONS.disallowedTools] };
-  if (chat.bare) return { id: chat.session, resume: true, cwd, ...OPTIONS, ...runsOn(chat), disallowedTools: [...OPTIONS.disallowedTools] };
-  return { id: chat.session, resume: true, cwd, ...OPTIONS, ...runsOn(chat), disallowedTools: [...OPTIONS.disallowedTools], additionalDirectories: adds(cwd),
+  if (chat.agent) return { id: chat.session, resume: true, cwd, agent: chat.agent, settings: AGENT_SETTINGS, ...OPTIONS, ...runsOn(chat) };
+  if (chat.bare) return { id: chat.session, resume: true, cwd, ...OPTIONS, ...runsOn(chat) };
+  return { id: chat.session, resume: true, cwd, ...OPTIONS, ...runsOn(chat), additionalDirectories: adds(cwd),
     append: await agentPrompt(chat, BASE) };
 }
 
@@ -236,7 +237,7 @@ export async function newChat(base: string, start?: { issue: Issue; message: str
   const chat: Chat = { id: newId(), kind: "panel", title: start?.issue.title ?? "New chat", created: now(), session: "",
     ...(start && { issue: start.issue.slug, folder: DATA_DIR }) }; // where bind() leaves a chat whose issue has no folder
   const s = settings.load(), runs = { model: s.chat_model, effort: s.chat_effort };
-  const row = await hosted.start({ cwd: DATA_DIR, title: `desk chat ${stamp()}`, ...OPTIONS, ...runs, disallowedTools: [...OPTIONS.disallowedTools], append: await agentPrompt(chat, base),
+  const row = await hosted.start({ cwd: DATA_DIR, title: `desk chat ${stamp()}`, ...OPTIONS, ...runs, append: await agentPrompt(chat, base),
     ...(start ? { message: start.message } : {}) });
   chat.session = row.id;
   await models.keep(row.id, runs); // the chat keeps what it started on when Preferences change later
