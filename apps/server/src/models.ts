@@ -1,7 +1,8 @@
 // The model and effort each session runs on, which the composer's chip shows and changes, and the account's usage,
 // which the chip's menu shows. A session's pick is kept in the session_models table, by session id, so it holds when
-// the host starts the session again; a session with no pick runs as it started: a desk chat on Settings >
-// Preferences (settings.ts), any other on Claude Code's own default (~/.claude/settings.json).
+// the host starts the session again. A desk chat and an issue's session start on Settings > Preferences (settings.ts) and
+// keep it as their pick; a session with no pick, such as one from a terminal, runs on Claude Code's own default
+// (~/.claude/settings.json).
 //
 // The list of models and the usage come from Claude Code itself, asked by one started only for the question (as the
 // SDK's supportedModels and the call behind /usage), with no message, no settings and no transcript, so it costs

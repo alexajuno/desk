@@ -3,11 +3,11 @@
 //
 //     sub_issue_auto_close   a parent closed as Done or Dropped closes its open sub-issues the same way
 //     parent_auto_close      the last open sub-issue closed closes its parent
-//     chat_model             the model a new desk chat starts with, a Claude Code alias or model id such as opus
+//     chat_model             the model a new desk chat or issue session starts with, a Claude Code alias or model id such as opus
 //     chat_effort            the effort it starts with: low, medium, high, xhigh or max
 //
 // Linear keeps the first two in Settings > Team > Workflow (linear.app/docs/parent-and-sub-issues#status-automation);
-// desk has no teams, so they are Settings > Workflow. The chat's two are Settings > Preferences.
+// desk has no teams, so they are Settings > Workflow. The sessions' two are Settings > Preferences.
 import { join } from "node:path";
 import { DATA_DIR } from "./config.ts";
 import * as copies from "./copies.ts";

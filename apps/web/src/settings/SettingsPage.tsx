@@ -103,8 +103,8 @@ function useSettings(): [Settings | null, (changes: Partial<Settings>) => Promis
   return [shown, change];
 }
 
-// What a new chat starts on; the chip by a chat's Send changes it for that chat alone.
-function Chats() {
+// What a new chat or issue session starts on; the chip by a chat's Send changes it for that chat alone.
+function Sessions() {
   const [shown, change] = useSettings();
   const [list, setList] = useState<Model[]>([]);
   useEffect(() => { loadModels().then(setList, (e) => toast((e as Error).message)); }, []);
@@ -112,8 +112,8 @@ function Chats() {
   const model = list.find((m) => m.value === shown.chat_model);
   const efforts = model ? EFFORTS.filter(([value]) => model.efforts.includes(value)) : EFFORTS;
   return (
-    <Section title="Chats">
-      <Row id="chat_model" title="Model" about="The model a new chat starts with">
+    <Section title="Sessions">
+      <Row id="chat_model" title="Model" about="The model a new chat or issue session starts with">
         <button id="chat_model" type="button" className="set-pick" onClick={(e) => {
           if (toggled(e.currentTarget)) return;
           openMenu({ anchor: e.currentTarget, items: () => list.map((m) => ({ label: m.name, current: m.value === shown.chat_model, run: () => change({ chat_model: m.value }) })) });
@@ -122,7 +122,7 @@ function Chats() {
           {CHEVRON_DOWN}
         </button>
       </Row>
-      <Row id="chat_effort" title="Effort" about="How hard a new chat thinks before it answers">
+      <Row id="chat_effort" title="Effort" about="How hard a new chat or issue session thinks before it answers">
         <button id="chat_effort" type="button" className="set-pick" onClick={(e) => {
           if (toggled(e.currentTarget)) return;
           openMenu({ anchor: e.currentTarget, items: () => efforts.map(([value, label]) => ({ label, current: value === shown.chat_effort, run: () => change({ chat_effort: value }) })) });
@@ -188,7 +188,7 @@ export function SettingsPage() {
         <div className="settings">
           <h1>{TITLES[section]}</h1>
           {section === "workflow" && <p className="set-lead">Manage issue automations and other workflows.</p>}
-          {section === "preferences" ? <><Preferences /><Chats /></> : <Workflow />}
+          {section === "preferences" ? <><Preferences /><Sessions /></> : <Workflow />}
         </div>
       </div>
     </>

@@ -16,6 +16,7 @@ import type { Issue } from "./issues.ts";
 import * as hosted from "./hosted.ts";
 import { run, sleep, which } from "./proc.ts";
 import { BRIEF_PROMPT, BRIEF_STEPS, CHAT_PLAN_PROMPT, fill, GO_PROMPT, LAND_PROMPT, PLAN_PROMPT, STEPS_FAILED, TOLD } from "./prompts.ts";
+import * as settings from "./settings.ts";
 
 export async function git(cwd: string, ...args: string[]): Promise<string | null> {
   try {
@@ -126,8 +127,16 @@ export function trust(folder: string) {
     throw new Error("Claude Code rewrote its settings at the same moment and dropped the change. Press Trust folder again.");
 }
 
-// Start the issue's session in the host, in its folder, whose repo's rules say where to work; its session id.
-const newSession = async (i: Issue, prompt: string) => (await hosted.start({ cwd: workdir(i), title: [...i.title].slice(0, 40).join(""), message: prompt })).id;
+// Start the issue's session in the host, in its folder, whose repo's rules say where to work; its session id. It runs on
+// the model and effort of Settings > Preferences, as a desk chat does, and keeps them as its pick (models.ts): Claude
+// Code's own default is whatever /model a terminal last saved to ~/.claude/settings.json, which put issue sessions on
+// Sonnet at medium while desk's chats ran on Opus (the user, 22 Oct: "it's back on sonnet medium effort").
+async function newSession(i: Issue, prompt: string): Promise<string> {
+  const s = settings.load(), runs = { model: s.chat_model, effort: s.chat_effort };
+  const { id } = await hosted.start({ cwd: workdir(i), title: [...i.title].slice(0, 40).join(""), message: prompt, ...runs });
+  await (await import("./models.ts")).keep(id, runs);
+  return id;
+}
 
 // The session's first prompt, by the issue's protocol: a sketch planned with the user, or a brief, after which it
 // waits for "go" or goes on at once. chat is the Agent chat it came from, if any.
