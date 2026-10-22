@@ -38,9 +38,6 @@ export function shortDate(iso: string | null): string {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
-// Whether the issue came from a Slack message the user tagged with 🐧 (slack.ts), whose link it keeps.
-export const fromSlack = (link: string | null) => /^https:\/\/[\w-]+\.slack\.com\//.test(link ?? "");
-
 // An issue as the page JSON carries it (pages.ts, issueJson).
 export interface IssueRow {
   slug: string;

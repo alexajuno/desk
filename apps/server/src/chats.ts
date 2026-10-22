@@ -231,7 +231,7 @@ export async function hostOptions(chat: Chat, cwd = runsIn(chat)): Promise<hoste
 }
 
 // Start a chat's session in the host, idle until the user writes in its panel. Given an issue in Triage and a first
-// message, as for a Slack message the user tagged (slack.ts), the chat starts bound to the issue and works on the
+// message, the chat starts bound to the issue and works on the
 // message at once.
 export async function newChat(base: string, start?: { issue: Issue; message: string }): Promise<Chat> {
   const chat: Chat = { id: newId(), kind: "panel", title: start?.issue.title ?? "New chat", created: now(), session: "",

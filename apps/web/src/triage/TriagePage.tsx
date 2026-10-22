@@ -18,7 +18,7 @@ import { go, Go } from "../app/nav";
 import { Bar } from "../frame/Bar";
 import { setField } from "../issues/actions";
 import { actionsMenu } from "../issues/menus";
-import { fold, fromSlack, shortDate, type State } from "../lib/desk";
+import { fold, shortDate, type State } from "../lib/desk";
 import { SessionView } from "../sessions/Dock";
 import { live } from "../sessions/live";
 import { frame, talkOf } from "../store/frame";
@@ -114,7 +114,7 @@ export const TriagePage = observer(function TriagePage({ team = "" }: { team?: s
                   onContextMenu={(e) => { e.preventDefault(); ui.focus(p.slug); actionsMenu(p, { x: e.clientX, y: e.clientY }, picked?.slug ?? null); }}>
                   <span className={`triage-now ${p.now}`} title={NOW[p.now]}><StateIcon state="triage" /></span>
                   <span className="lines">
-                    <span className="line"><span className="title">{p.title}</span>{fromSlack(p.link) && <span className="from" title="Tagged in Slack">🐧</span>}</span>
+                    <span className="line"><span className="title">{p.title}</span></span>
                     <span className="line sub"><span className="says">{NOW[p.now]}</span><span className="age" title={p.created}>{shortDate(p.created)}</span></span>
                   </span>
                 </Go>

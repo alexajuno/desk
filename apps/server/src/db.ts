@@ -10,7 +10,7 @@
 // (since). Reads go through sql().
 //
 // The tables are the record of desk's state ("you should find whatever represent state, should be in db", the user, 19
-// Oct): issues, teams and projects, the Inbox, the trash, pins, each session's model, settings, Slack's tags and the line.
+// Oct): issues, teams and projects, the Inbox, the trash, pins, each session's model, settings and the line.
 // issue.md, team.md and project.md are only written out, for agents, git and an editor to read; desk reads them in only
 // into a database with no issues yet, as a new one (issues.importAll).
 import { PGlite, type Transaction } from "@electric-sql/pglite";
@@ -147,12 +147,6 @@ create table if not exists session_models ( -- the model and effort picked for a
 -- session's context, as "context:<session>".
 create table if not exists heard (name text primary key, value jsonb not null, at double precision not null);
 create table if not exists settings (name text primary key, value jsonb not null); -- each one set (settings.ts)
-create table if not exists slack_filed ( -- each Slack message tagged 🐧 that desk handled, "<channel>/<ts>" (slack.ts)
-  message text primary key,
-  seq bigint generated always as identity
-);
--- A thread's issue, and the ts of the newest message in it handed on to the issue's session (slack.ts).
-create table if not exists slack_threads (thread text primary key, slug text not null, read text);
 -- The line for a checkout (land.ts): who waits for it, the branch each issue last tried there, and the branch desk
 -- switched it to. repo is the checkout's folder.
 create table if not exists line (
@@ -248,7 +242,7 @@ export async function open(): Promise<PGlite> {
   await opened.exec(["review_of", "review_since", "landed", "project", "milestone", "due"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
   // The Inbox's delete and its mark as unread (inbox.ts), from 19 Oct.
   await opened.exec(["gone", "marked"].map((c) => `alter table inbox add column if not exists ${c} double precision;`).join(" "));
-  await opened.exec("alter table slack_threads add column if not exists read text;");
+  await opened.exec("drop table if exists slack_filed; drop table if exists slack_threads;"); // Slack's tags, out since 22 Oct
   // desk's database is a few MB: Postgres's default 128 MB of shared buffers only holds memory, about 50 MB of it. Set
   // once in postgresql.auto.conf, it applies from the next start.
   if ((await opened.query<{ shared_buffers: string }>("show shared_buffers")).rows[0]?.shared_buffers !== "16MB")

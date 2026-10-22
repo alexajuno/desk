@@ -1,13 +1,13 @@
 ---
 name: automation
-description: How to make desk act on its own when something happens or at a time - which trigger to pick (a push from the source, a call to an automation's /run, or a timed check as the last resort), how to write the check script, and the push sources already known, Slack's 🐧 tag among them. Use before creating or changing any desk automation, before writing a script that polls something, and whenever the user asks to be told, pinged or brought something when an event happens, even when "automation" is not said. Triggers include "new automation", "every morning check X and tell me", "tell me when", "let me know when", "notify me", "watch", "keep an eye on", "poll", "can we have a polling on X", "when someone writes on Slack", "check every N min".
+description: How to make desk act on its own when something happens or at a time - which trigger to pick (a push from the source, a call to an automation's /run, or a timed check as the last resort), how to write the check script, and the push sources already known. Use before creating or changing any desk automation, before writing a script that polls something, and whenever the user asks to be told, pinged or brought something when an event happens, even when "automation" is not said. Triggers include "new automation", "every morning check X and tell me", "tell me when", "let me know when", "notify me", "watch", "keep an eye on", "poll", "can we have a polling on X", "when someone writes on Slack", "check every N min".
 ---
 
 # Automations: push first, poll last
 
 This skill caches what earlier chats learned about making desk act on its own. Read it before writing any trigger, and add to it what you learn.
 
-It exists because of what happened on 19 Oct. A chat answered "can we have a polling on slack for this?" with a Slack search every 5 minutes. Yet desk already held a live Slack connection, and `~/notes/agent-notes/slack-dm-and-mention-detection-rate-limits.md` had said "use push, not polling" since 26 Sep. The user: "polling every 5min? how about letting the slack pushes us?". They asked for this skill "to avoid the same problem".
+It exists because of what happened on 19 Oct. A chat answered "can we have a polling on slack for this?" with a Slack search every 5 minutes. Desk then held a live Slack connection (since removed), and `~/notes/agent-notes/slack-dm-and-mention-detection-rate-limits.md` had said "use push, not polling" since 26 Sep. The user: "polling every 5min? how about letting the slack pushes us?". They asked for this skill "to avoid the same problem".
 
 The desk skill holds the API for automations (fields, create, `/run`). This skill says which trigger to choose and how to write it.
 
@@ -22,11 +22,7 @@ Before you pick, read the agent notes on the source (`grep -ril <source> ~/notes
 
 ## Push sources desk has
 
-- **Slack, the Ownego workspace.** desk keeps a Socket Mode connection through the desk Slack app (`apps/server/src/slack.ts`). Over it, Slack pushes every reaction and message in the conversations the user is in.
-  - **How a message comes in:** the user tags it with 🐧. It then lands in Triage, where a chat reads its thread.
-  - **After that:** every later message in the thread goes to that issue's session, gathered until the thread has been quiet for 60 s.
-  - **Nothing comes in untagged.** The user decided on tagging ("human has to decide, by tagging with emoji", 17 Oct). On 19 Oct they also dropped rules that would bring one person's messages in untagged.
-  - **So "tell me when chienct writes" is not an automation.** Tell the user to tag her message, and from then on the thread comes to them. Do not poll Slack.
+- **Slack, the Ownego workspace: none since 22 Oct.** The user deleted the desk Slack app and its token, so nothing in Slack pushes into desk, and "tell me when X writes" has no automation: ask the user to paste the text, and do not poll Slack (see the slack skill).
 - **Scripts that call `/run`.** Any of the user's scripts or n8n workflows can push into an automation this way (see the desk skill's `/run` example).
 
 When you find or build another push source, add it to this list with the date.

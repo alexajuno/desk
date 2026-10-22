@@ -1,6 +1,6 @@
 // desk's server, started by main.ts once the packages match the commit checked out. PORT picks the port (default 8790),
 // DESK_DATA the data folder (default ~/.local/share/desk), and DESK_CLOCK=0 leaves the line, the automations'
-// clock and the Slack connection off, as a second desk for testing should.
+// clock off, as a second desk for testing should.
 import { create } from "./app.ts";
 import * as automations from "./automations.ts";
 import * as chats from "./chats.ts";
@@ -14,7 +14,6 @@ import * as models from "./models.ts";
 import * as pins from "./pins.ts";
 import * as projects from "./projects.ts";
 import * as settings from "./settings.ts";
-import * as slack from "./slack.ts";
 import * as sync from "./sync.ts";
 import * as teams from "./teams.ts";
 import * as turns from "./turns.ts";
@@ -34,7 +33,6 @@ await chats.readIn();
 await settings.open();
 await pins.open();
 await models.open();
-await slack.open();
 await turns.load(); // what each session does, as the session host last told desk
 await inbox.load();
 await web.build();
@@ -45,7 +43,6 @@ setInterval(() => void hosted.keepCurrent().catch(() => {}), 60_000);
 setInterval(() => void db.prune().catch((error) => console.error("pruning the log", error)), 3600_000);
 if (process.env.DESK_CLOCK !== "0") {
   land.start(); // the line for desk's own checkout moves on its own
-  slack.connect(); // Slack pushes each 🐧 the user adds, and its message comes into Triage
   automations.startClock(); // each automation whose time came fires
 }
 

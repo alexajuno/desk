@@ -1,7 +1,7 @@
 // The files desk kept its small state in before Postgres held it (19 Oct): pins.json, session-models.json, settings.json
-// and slack.json in DATA_DIR, and the line's desk-line and desk-trying in a checkout's git folder. A branch from before
+// in DATA_DIR, and the line's desk-line and desk-trying in a checkout's git folder. A branch from before
 // then still reads them when Try runs it, and the line hands the checkout over through them, so desk writes each one out
-// whenever what it holds changes. And when a desk of such a branch changed one, as by filing a 🐧 or handing the
+// whenever what it holds changes. And when a desk of such a branch changed one, as by handing the
 // checkout on, desk reads it back in once, at the next start, which every switch of the checkout is: the copies table
 // keeps each file as desk last wrote it, which tells such a change from desk's own. Once no branch from before is left,
 // this module and the files can go.
