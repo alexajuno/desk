@@ -54,6 +54,7 @@ export interface Issue {
   link: string | null;
   landing: string | null; // in landing, when Approve told the session to land its work
   landed: string | null; // in done, where its session said the work landed: the commit, or the pull request's link
+  lands: string | null; // while open, how its session said the work lands, which Approve runs: JSON, as Lands (land.ts)
   session: string | null; // the one Claude Code session bound to this issue, from planning to done
   waiting_on: string | null; // in waiting, who or what it waits on, such as "QA on #570"
   waiting_since: string | null;
@@ -65,7 +66,7 @@ export interface Issue {
 
 // The fields in issue.md, in the order issues.py's dataclass wrote them.
 const FIELDS = ["title", "priority", "state", "parent", "team", "project", "milestone", "due", "folder", "protocol", "link", "landing", "landed",
-  "session", "waiting_on", "waiting_since", "review_of", "review_since", "created"] as const;
+  "lands", "session", "waiting_on", "waiting_since", "review_of", "review_since", "created"] as const;
 
 export const now = (d = new Date()) => {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -74,7 +75,7 @@ export const now = (d = new Date()) => {
 
 export function blank(slug: string, title: string): Issue {
   return { slug, title, priority: "none", state: "backlog", parent: null, team: null, project: null, milestone: null, due: null, folder: null, protocol: null, link: null,
-    landing: null, landed: null, session: null, waiting_on: null, waiting_since: null, review_of: null, review_since: null,
+    landing: null, landed: null, lands: null, session: null, waiting_on: null, waiting_since: null, review_of: null, review_since: null,
     created: now(), body: "" };
 }
 
@@ -291,6 +292,7 @@ async function put(tx: Db, i: Issue) {
   if (i.state !== "landing") i.landing = null;
   else if (!i.landing) i.landing = now();
   if (i.state !== "done" && i.state !== "waiting") i.landed = null;
+  if (CLOSED.has(i.state)) i.lands = null; // landed, or thrown away
   // A milestone is one of the issue's project's: moving the issue to another project, or out of one, drops it.
   if (i.milestone && (await tx.query<{ project: string }>("select project from milestones where id = $1", [i.milestone])).rows[0]?.project !== i.project)
     i.milestone = null;

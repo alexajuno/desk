@@ -551,11 +551,14 @@ export async function create(): Promise<FastifyInstance> {
     return fromInbox ? onward(reply, before, slug, `Go: ${i.title}`) : back(reply, slug);
   });
 
-  // Approve, the gate: the issue's session lands the work by its repo's rules, and the issue shows Landing until the
-  // session says, through the API, that it landed. With nothing to land, no repo or no session, it is done at once. A
-  // session in a worktree desk made cannot merge, so desk merges for it. Either way, an issue with a sub-issue still
-  // open waits on it instead of Done (issues.ts, landedState). From the Inbox you stay in the Inbox: the next
-  // notification opens.
+  // Approve, the gate. When the issue's session said how its work lands (land.ts, Lands), desk runs those steps itself,
+  // the ones you left ticked, and the issue is done with no turn of the session's: "approve means just mark the issue
+  // done instead of another round of agent" (the user, 22 Oct). A step that fails wakes the session with its output, to
+  // land the work itself, such as by rebasing onto a main that moved. A session that never said lands the work by its
+  // repo's rules, and the issue shows Landing until the session says, through the API, that it landed. With nothing to
+  // land, no repo or no session, it is done at once. A session in a worktree desk made cannot merge, so desk merges for
+  // it. Either way, an issue with a sub-issue still open waits on it instead of Done (issues.ts, landedState). From the
+  // Inbox you stay in the Inbox: the next notification opens.
   app.post("/issue/:slug/approve", async (req: Req, reply) => {
     const slug = req.params.slug, i = await store.load(slug);
     const fromInbox = field(req, "src") === "inbox";
@@ -563,6 +566,32 @@ export async function create(): Promise<FastifyInstance> {
     const stay = (message: string | null = null, trust = false) => back(reply, slug, message, trust, fromInbox);
     if (i.state !== "review") return stay("Only an issue in review can be approved.");
     let message = `Approved: ${i.title}`;
+    const lands = land.landsOf(i);
+    if (lands) {
+      // The steps you unticked, by their place: "1,3".
+      const skip = new Set(field(req, "skip").split(",").filter(Boolean).map(Number));
+      const steps = lands.steps.filter((_, n) => !skip.has(n));
+      if (!(await store.move(i, { state: "landing", landing: store.now() }))) return stay("Someone else moved the issue meanwhile.");
+      const { ran, ok, restart } = await land.runSteps(i, steps);
+      if (ok) {
+        const landed = lands.landed || ran.at(-1)?.output.split("\n").at(-1) || (steps.length ? "steps ran" : "nothing to land");
+        const pr = landed.match(api.PULL);
+        await store.move(i, { ...(await store.landedState(i)), landed, ...(pr && !i.link && { link: pr[0] }) });
+        message = `Landed: ${i.title}` + restart();
+      } else if (i.session) {
+        try {
+          await agents.landFailed(i, store.folder(slug), land.told(ran));
+          message = `A step failed, so the session lands it: ${i.title}` + restart();
+        } catch (error) {
+          await store.move(i, { state: "review", review_of: "result" });
+          return stay(`A step failed, and ${(error as Error).message}` + restart());
+        }
+      } else {
+        await store.move(i, { state: "review", review_of: "result" });
+        return stay(`A step failed: ${ran.find((r) => r.code)?.step}` + restart());
+      }
+      return fromInbox ? onward(reply, before, slug, message) : back(reply, slug);
+    }
     try {
       if (i.session && (await land.worktree(i))) {
         message = await land.merge(i);

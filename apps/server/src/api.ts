@@ -5,7 +5,8 @@
 //     GET    /api/issues/<slug>         one issue, with its body and files
 //     POST   /api/issues                create one: title, body, priority, state, parent, team, project, milestone, due, folder, protocol
 //     PATCH  /api/issues/<slug>         set any of those fields; its session also says what its turn hands you (review_of)
-//                                       and where its work landed (landed); a body sets the sections it holds
+//                                       and where its work landed (landed), or with its Result, the steps Approve runs to
+//                                       land it (lands); a body sets the sections it holds
 //     GET    /api/issues/<slug>/sections/<name>   one section of the issue's document, as Markdown
 //     PUT    /api/issues/<slug>/sections/<name>   write it, the Markdown as the request's body; empty takes it out
 //     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
@@ -67,6 +68,7 @@ export function asJson(i: Issue, full = false) {
   if (i.state === "waiting") Object.assign(data, { waiting_on: i.waiting_on, waiting_since: i.waiting_since });
   if (i.state === "review") Object.assign(data, { review_of: i.review_of ?? "result", review_since: i.review_since });
   if (i.state === "done" && i.landed) data.landed = i.landed;
+  if (i.lands) data.lands = JSON.parse(i.lands);
   if (full) Object.assign(data, { file: join(store.folder(i.slug), store.MAIN), files: store.files(i.slug), body: i.body });
   return data;
 }
@@ -77,7 +79,7 @@ async function loadIssue(slug: string): Promise<Issue> {
 }
 
 const FIELDS = ["title", "body", "priority", "state", "parent", "team", "project", "milestone", "due", "folder", "protocol", "waiting_on", "review_of", "landed"];
-const PULL = /https:\/\/github\.com\/\S+\/pull\/\d+/;
+export const PULL = /https:\/\/github\.com\/\S+\/pull\/\d+/;
 const AUTOMATION_FIELDS = ["title", "when", "check", "agent", "body", "state"];
 
 // The fields the body sends, as pydantic read them: strings or null, the rest left out.
@@ -162,6 +164,25 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
   if ("body" in fields) fields.body = store.withSections(i.body, fields.body || "");
   const target = i as unknown as Record<string, string | null>;
   for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "team", "project", "milestone", "due", "folder", "waiting_on", "landed"].includes(name) ? value || null : value;
+}
+
+// How the work lands, which a session sends with its Result, and Approve runs (land.ts, Lands): {"steps": [<bash
+// commands>], "landed": <where it will have landed>}, or null to take it back.
+function applyLands(i: Issue, body: unknown) {
+  if (!body || typeof body !== "object" || !("lands" in body)) return;
+  const lands = (body as { lands: unknown }).lands;
+  if (lands === null) {
+    i.lands = null;
+    return;
+  }
+  const shape = 'lands is {"steps": ["<a bash command>", ...], "landed": "<where the work will have landed>"}, with "steps": [] for nothing to land';
+  if (typeof lands !== "object" || Array.isArray(lands)) throw new HttpError(422, shape);
+  const { steps, landed } = lands as { steps?: unknown; landed?: unknown };
+  if (!Array.isArray(steps) || !steps.every((s) => typeof s === "string") || (landed !== undefined && landed !== null && typeof landed !== "string"))
+    throw new HttpError(422, shape);
+  if (i.state !== "review") throw new HttpError(422, 'lands goes with the Result: send "state": "review", "review_of": "result" with it');
+  const kept = (steps as string[]).map((s) => s.trim()).filter(Boolean);
+  i.lands = JSON.stringify({ steps: kept, ...(typeof landed === "string" && landed.trim() && { landed: landed.trim() }) });
 }
 
 async function teamJson(t: Team, full = false) {
@@ -300,6 +321,7 @@ export function routes(app: FastifyInstance) {
   app.patch("/api/issues/:slug", async (req: Req) => {
     const i = await loadIssue(req.params.slug);
     await apply(i, given(req.body, FIELDS));
+    applyLands(i, req.body);
     const closed = await store.save(i);
     return { ...asJson(i, true), ...(closed.length ? { closed } : {}) };
   });

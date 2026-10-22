@@ -52,6 +52,7 @@ export interface IssuePageData {
   step: { text: string; button: StepButton | null };
   trial: StepButton | null;
   landed: string | null; // in done, where its session said the work landed
+  lands: { steps: string[]; landed?: string } | null; // in review, the steps Approve runs, as its session gave them
 }
 
 const Html = ({ className, html }: { className: string; html: string }) => (
@@ -75,6 +76,10 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
   // Approve shows Landing while the server is still handing the work to the session, which takes a second or more.
   const landing = p.state === "landing" && data.issue.state !== "landing";
   const step = landing ? LANDING : data.step;
+  // The landing steps you unticked, by their place, which Approve skips; afresh for each issue and each set of steps.
+  const steps = data.lands?.steps ?? null;
+  const [skip, setSkip] = useState<number[]>([]);
+  useEffect(() => setSkip([]), [p.slug, steps?.join("\n")]);
 
   // A form route of the old pages: Plan, Start, Approve, Try, Trust folder. What its redirect says shows as a toast.
   // From the Inbox, Approve moves on as Linear does: the next notification opens, and a toast says what happened
@@ -86,7 +91,9 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
       setTrustFor(null);
     }
     try {
-      const res = await post(`/issue/${slug}/${action}`, inInbox ? { src: "inbox" } : {});
+      const res = await post(`/issue/${slug}/${action}`, {
+        ...(inInbox && { src: "inbox" }), ...(action === "approve" && skip.length && { skip: skip.join(",") }),
+      });
       const to = new URL(res.url), note = to.searchParams.get("note");
       if (inInbox && to.pathname === "/inbox" && note) {
         toast(note);
@@ -120,10 +127,12 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
               {data.card ? (
                 <>
                   <Html className="body review-card" html={data.card[0]} />
+                  {steps && <Lands steps={steps} skip={skip} setSkip={setSkip} />}
                   <details className="review-details"><summary>Details</summary><Html className="body" html={data.card[1]} /></details>
                 </>
               ) : data.result ? <Html className="body" html={data.result_html} />
                 : <p className="muted">No result: this was done in a chat, so check the work itself.</p>}
+              {steps && !data.card && <Lands steps={steps} skip={skip} setSkip={setSkip} />}
             </div>
           )}
           {/* The issue's one document: its Context, then its Plan and its Result, which its session writes through the
@@ -178,6 +187,30 @@ function Actions({ p, step, trial: t, trust, act }: {
         <button className="primary step" type="button" disabled={b.disabled} title={b.disabled ? undefined : stepTip(`${b.label}  Ctrl Enter`, step.text, p.state)}
           onClick={() => act(b.action!)}>{b.label}</button>
       )}
+    </div>
+  );
+}
+
+// What Approve runs to land the work, as the issue's session said (land.ts, Lands), each ticked: untick one to skip it.
+// Ticks as Linear's checklist draws them in a description; a step left out reads dimmed and struck through.
+function Lands({ steps, skip, setSkip }: { steps: string[]; skip: number[]; setSkip: (skip: number[]) => void }) {
+  if (!steps.length) return <p className="review-lands muted">Nothing to land: Approve marks it done.</p>;
+  return (
+    <div className="review-lands">
+      <div className="review-lands-head">Approve runs</div>
+      <ul>
+        {steps.map((step, n) => {
+          const on = !skip.includes(n);
+          return (
+            <li key={n} className={on ? undefined : "skip"}>
+              <label title={on ? "Untick to skip this step" : "Tick to run this step"}>
+                <input type="checkbox" checked={on} onChange={() => setSkip(on ? [...skip, n] : skip.filter((x) => x !== n))} />
+                <code>{step}</code>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

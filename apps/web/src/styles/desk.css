@@ -507,6 +507,14 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .review .review-card img { display: inline-block; vertical-align: top; width: calc(50% - 8px); height: auto; margin: 8px 4px 8px 0; border: 1px solid var(--border-3); border-radius: 8px; }
 /* two shots sit side by side as thumbnails, in one paragraph or two, so Approve stays in reach; a click opens one full size (desk.js) */
 .review .review-card p:has(> img) { display: inline; }
+/* The steps Approve runs (IssueView, Lands), ticked as the description's checklist is; a step left out dims and is struck. */
+.review-lands { margin: 0 0 12px; font-size: 13px; }
+.review-lands-head { font-weight: 500; color: var(--text-3); margin-bottom: 4px; }
+.review-lands ul { list-style: none; margin: 0; padding-left: 4px; }
+.review-lands li label { display: flex; align-items: flex-start; gap: 8px; min-height: 24px; cursor: pointer; }
+.review-lands li input { flex: none; margin: 5px 0 0; accent-color: var(--accent); cursor: pointer; }
+.review-lands li code { margin-top: 2px; word-break: break-all; }
+.review-lands li.skip code { color: var(--text-3); text-decoration: line-through; }
 .review-details { margin: 0 0 12px; }
 .review-details summary { cursor: pointer; width: fit-content; font-size: 13px; font-weight: 500; color: var(--text-3); }
 .review-details summary:hover { color: var(--text-2); }

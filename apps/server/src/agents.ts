@@ -15,7 +15,7 @@ import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as hosted from "./hosted.ts";
 import { run, sleep, which } from "./proc.ts";
-import { BRIEF_PROMPT, BRIEF_STEPS, CHAT_PLAN_PROMPT, fill, GO_PROMPT, LAND_PROMPT, PLAN_PROMPT, TOLD } from "./prompts.ts";
+import { BRIEF_PROMPT, BRIEF_STEPS, CHAT_PLAN_PROMPT, fill, GO_PROMPT, LAND_PROMPT, PLAN_PROMPT, STEPS_FAILED, TOLD } from "./prompts.ts";
 
 export async function git(cwd: string, ...args: string[]): Promise<string | null> {
   try {
@@ -150,6 +150,8 @@ export const planFromChat = (i: Issue, folder: string, chat: string) => newSessi
 export const go = (i: Issue, folder: string) => tell(i.session!, fill(GO_PROMPT, paths(i, folder)));
 // Approve: the issue's own session lands its work by the repo's rules.
 export const land = (i: Issue, folder: string) => tell(i.session!, fill(LAND_PROMPT, paths(i, folder)));
+// Approve ran the steps the session gave, and one failed: the session lands the work itself, from there.
+export const landFailed = (i: Issue, folder: string, ran: string) => tell(i.session!, fill(STEPS_FAILED, { ...paths(i, folder), ran }));
 // Give the issue's session one message, as the user would in its chat.
 export const say = (i: Issue, message: string) => tell(i.session!, message);
 

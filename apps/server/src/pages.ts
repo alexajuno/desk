@@ -427,6 +427,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     agent_files: agentFiles, plan: store.section(i, "Plan") || readOr(join(store.folder(slug), store.PLAN)), result, card, reviewing,
     session_kind: session.kind ?? null, live: talkOf(i),
     step: step(i, await asking(), store.hasPlan(i), Boolean(result)), landed: i.landed, trial: await tryButton(i),
+    lands: reviewing ? land.landsOf(i) : null, // the steps Approve runs, which the review lists to untick
   };
 }
 
