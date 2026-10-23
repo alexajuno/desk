@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { go, Go } from "../app/nav";
 import { Bar } from "../frame/Bar";
 import type { IssueRow } from "../lib/desk";
+import { drawn } from "../sessions/Dock";
+import { takeCaught } from "./catcher";
 import { issues } from "../store/issues";
 import { ui } from "../store/ui";
 import { PrioIcon, StateIcon } from "../ui/icons";
@@ -41,10 +43,21 @@ export const SearchPage = observer(function SearchPage() {
       ui.focus(found.some((h) => h.issue.slug === keep) ? keep : found[0]?.issue.slug ?? null);
     });
   }, [q, seq]);
+  const typed = (text: string) => {
+    setQ(text);
+    const t = text.trim();
+    go(t ? `/search?q=${encodeURIComponent(t)}` : "/search", { replace: true });
+  };
   useEffect(() => {
-    const el = box.current;
-    el?.focus();
-    el?.setSelectionRange(el.value.length, el.value.length);
+    void drawn().then(() => {
+      const el = box.current;
+      if (!el) return;
+      // Into the box itself as well, so that a key typed before React draws it again adds to what was caught.
+      const caught = takeCaught();
+      if (caught) typed(el.value += caught);
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
   }, []);
   const words = q.trim();
   return (
@@ -53,11 +66,7 @@ export const SearchPage = observer(function SearchPage() {
         <form className="search-box" action="/search" role="search" onSubmit={(e) => e.preventDefault()}>
           <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path fillRule="evenodd" d="M7 2C9.76142 2 12 4.23858 12 7C12 8.11012 11.6375 9.13519 11.0254 9.96484L13.7803 12.7197L13.832 12.7764C14.0723 13.0709 14.0549 13.5057 13.7803 13.7803C13.5057 14.0549 13.0709 14.0723 12.7764 13.832L12.7197 13.7803L9.96484 11.0254C9.13519 11.6375 8.11012 12 7 12C4.23858 12 2 9.76142 2 7C2 4.23858 4.23858 2 7 2ZM7 3.5C5.067 3.5 3.5 5.067 3.5 7C3.5 8.933 5.067 10.5 7 10.5C8.933 10.5 10.5 8.933 10.5 7C10.5 5.067 8.933 3.5 7 3.5Z" /></svg>
           <input ref={box} id="search-q" type="text" name="q" value={q} placeholder="Search issues by title or description…" autoComplete="off" spellCheck={false}
-            onChange={(e) => {
-              setQ(e.target.value);
-              const t = e.target.value.trim();
-              go(t ? `/search?q=${encodeURIComponent(t)}` : "/search", { replace: true });
-            }}
+            onChange={(e) => typed(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "ArrowDown" || e.key === "ArrowUp") { move(e.key === "ArrowDown" ? 1 : -1); e.preventDefault(); }
               else if (e.key === "Enter") { if (ui.focused) go(`/issue/${ui.focused}`); e.preventDefault(); }

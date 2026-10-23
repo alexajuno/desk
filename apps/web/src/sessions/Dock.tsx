@@ -59,11 +59,17 @@ export async function newSession(draft = "") {
 // motion is turned down, it changes at once.
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 let moving: Promise<void> | null = null; // the move on screen, which the issue's own slide in waits for
+let drawing: Promise<void> = Promise.resolve(); // its change to the page, which a text box to focus waits for
 function move(next: Layout, change: () => void) {
   if (next === dock.layout || !document.startViewTransition || still.matches) return change();
   const t = document.startViewTransition(() => flushSync(change));
+  drawing = t.updateCallbackDone.catch(() => {});
   const done = moving = t.finished.catch(() => {}).then(() => { if (moving === done) moving = null; });
 }
+
+// A page's text box takes the focus once the chat's move has drawn the page: leaving a chat that hides its issue, the
+// panel stays hidden until the move's next frame, and a hidden box ignores focus() (23 Oct: / from such an issue).
+export const drawn = () => drawing;
 
 // What an issue's page has to read beside its chat: its plan while it waits for go (in review on it, or the session
 // idle, no result yet), or its card from review on. A mark of both tells when the agent wrote either anew.

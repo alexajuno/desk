@@ -21,6 +21,7 @@ import { datePicker } from "../ui/datepicker";
 import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openViewer, viewerOpen } from "../ui/viewer";
 import { arrange, Dock, focusComposer, newSession, openSession, SideEdge, toggleIssue } from "../sessions/Dock";
+import { Catcher, catchKeys } from "../search/catcher";
 import { triageKey } from "../triage/TriagePage";
 import { deleteReadKey, deleteRow, markAllKey, toggleRead } from "../inbox/actions";
 import { Corner } from "./Corner";
@@ -269,7 +270,7 @@ function onKeyDown(e: KeyboardEvent) {
   else if (e.key === "/") {
     const box = document.getElementById("search-q");
     if (box) box.focus();
-    else go("/search");
+    else { catchKeys(); go("/search"); }
     e.preventDefault();
   }
   else if (e.key === "[") toggleSide();
@@ -342,6 +343,7 @@ export const Frame = observer(function Frame() {
       {pathname.startsWith("/settings") ? <SettingsNav /> : <Sidebar />}
       <div className="panel"><SideEdge /><Outlet /></div>
       <Dock />
+      <Catcher />
       <Corner />
       <KeysPanel />
       <SelectionBar />

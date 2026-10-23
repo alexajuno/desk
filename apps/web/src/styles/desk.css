@@ -377,6 +377,8 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
 /* search: the query box fills the top bar; a row shows the description where it matched */
 .search-box { display: flex; align-items: center; gap: 8px; flex: 1; margin: 0; color: var(--text-3); }
 .search-box input[type=text] { height: 42px; padding: 0; border: 0; background: transparent; font-size: 14px; }
+/* where the keys typed after / wait for the search page (search/catcher.tsx): out of sight, yet able to take the focus */
+.search-catch { position: fixed; top: -100px; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .results .item .title { flex: none; max-width: 60%; }
 .item .snippet { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
 .item mark { background: var(--bg-mark); color: var(--text-1); border-radius: 2px; }
