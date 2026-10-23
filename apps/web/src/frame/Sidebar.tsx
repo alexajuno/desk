@@ -1,7 +1,8 @@
 // The sidebar on every page (templates/base.html's aside.side), Linear's (measured on linear.app on 20 Oct): Inbox, My
-// issues and Triage; Workspace's Projects and Automations; Your teams, each team folding open to its own Triage, Issues
-// and Projects, as Linear's team does; then the sessions you pinned and those still in hand, as claude.ai's Starred and
-// Recents, then what desk's checkout runs.
+// issues and Triage; Your teams, each team folding open to its own Triage, Issues and Projects, as Linear's team does;
+// then the sessions you pinned and those still in hand, as claude.ai's Starred and Recents, then what desk's checkout
+// runs. Linear's Workspace section is left out ("projects are under teams already. and automations... honestly i
+// seldomly get into there", the user, 23 Oct): Projects stays on G then P, and Automations on its address.
 // An issue in progress or landing shows in Chats, by its session ("now that the chats section display all issues, feel like we don't need the in progress
 // section anymore", the user, 19 Oct); the rest stay in Issues.
 import { observer } from "mobx-react-lite";
@@ -125,16 +126,6 @@ export const Sidebar = observer(function Sidebar() {
         {TRIAGE_ICON}
         Triage{triage.length > 0 && <span className="count">{triage.length}</span>}
       </Go>
-      <Fold name="Workspace" folded={folded} toggle={toggle}>
-        <Go className={`nav-item${here === "/projects" || here.startsWith("/project/") ? " here" : ""}`} to="/projects" title="Go to projects  G then P">
-          {GLYPH.project}
-          Projects
-        </Go>
-        <Go className={`nav-item${here === "/automations" || here.startsWith("/automation/") ? " here" : ""}`} to="/automations" title="Agents that run on a time or a condition">
-          {GLYPH.clock}
-          Automations
-        </Go>
-      </Fold>
       <Fold name="Your teams" folded={folded} toggle={toggle}>
         {issues.activeTeams.map((t) => {
           const open = !folded.has(`team:${t.slug}`), mine = triage.filter((i) => i.team === t.slug).length;
