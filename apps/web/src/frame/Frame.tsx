@@ -7,9 +7,10 @@ import { useEffect, useLayoutEffect } from "react";
 import { Outlet, useLocation } from "react-router";
 import { deskPath, go } from "../app/nav";
 import { remove, removeMany, setField, setFields, undo, undoList } from "../issues/actions";
-import { fieldMenu, milestoneMenu, projectPicker, teamPicker } from "../issues/menus";
+import { fieldMenu, milestoneMenu, projectPicker, projectStatusMenu, teamPicker } from "../issues/menus";
 import { selectable, selectAll, selection, SelectionBar, selectionField } from "../issues/selection";
 import { listView, setView } from "../lists/current";
+import { setProject } from "../lists/ProjectPage";
 import { noteAppPath, SettingsNav } from "../settings/SettingsPage";
 import { filterMenu } from "../lists/parts";
 import { type Field } from "../lib/desk";
@@ -248,6 +249,12 @@ function onKeyDown(e: KeyboardEvent) {
     milestoneMenu(one?.project ?? null, one?.milestone ?? null, { anchor }, (id) => setField(slug, "milestone", id));
     e.preventDefault();
   }
+  // S on a project row: its status, from the menu at its status icon, as the project's own Change status chip.
+  else if (key === "s" && !e.shiftKey && focused?.dataset.key?.startsWith("project/")) {
+    const slug = focused.dataset.key.slice("project/".length);
+    projectStatusMenu(focused.dataset.status ?? "", { anchor: focused.querySelector(".status") }, (st) => setProject(slug, "status", st));
+    e.preventDefault();
+  }
   else if ((key === "s" || key === "p") && ui.selected.size) {
     // With a selection, S and P change every selected issue, from the menu at the row in focus or at the bar.
     const field = key === "s" ? "state" : "priority";
@@ -260,7 +267,7 @@ function onKeyDown(e: KeyboardEvent) {
     const field: Field = key === "s" ? "state" : "priority";
     // The issue's status and priority sit in its Properties column or, in a narrow Inbox pane, in its chips.
     const pick = [...document.querySelectorAll<HTMLElement>(`.pick[data-field=${field}]`)].find((el) => el.checkVisibility());
-    if (focused) {
+    if (focused?.dataset.slug) {
       const icon = focused.querySelector(`.icon[data-field=${field}]`);
       fieldMenu(focused.dataset.slug!, field, focused.dataset[field]!, { anchor: icon });
     }

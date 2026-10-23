@@ -37,7 +37,7 @@ export const ProjectsPage = observer(function ProjectsPage({ team = "" }: { team
                 <div className="projects-group"><ProjectStatusIcon status={g.status} /><span>{g.label}</span><span className="count">{g.items.length}</span></div>
                 {g.items.map((p) => (
                   <Go key={p.slug} className={`item projects-row${ui.focused === `project/${p.slug}` ? " focus" : ""}`} to={`/project/${p.slug}`}
-                    data-key={`project/${p.slug}`} onMouseMove={() => { if (ui.focused !== `project/${p.slug}`) ui.focus(`project/${p.slug}`, true); }}>
+                    data-key={`project/${p.slug}`} data-status={p.status} onMouseMove={() => { if (ui.focused !== `project/${p.slug}`) ui.focus(`project/${p.slug}`, true); }}>
                     <span className="name">{GLYPH.project}<span className="title">{p.title}</span></span>
                     <span className={`health health-${p.health.state}`} title={p.health.posted ? `Last update ${p.health.posted}` : undefined}>
                       <HealthIcon health={p.health.state === "none" ? null : p.health.state} />{p.health.label}
