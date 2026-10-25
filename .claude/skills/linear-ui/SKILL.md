@@ -60,6 +60,8 @@ desk.css holds the numbers, and its comments say where and when each was measure
 
 **Motion.** Colours change in 0.1s; a group's triangle turns in 0.15s; a tooltip grows in from 98% in about 70ms and fades out in about 200ms.
 
+**Loading** (read from linear.app's own HTML, and filmed reloading OE's Issues, on 25 Oct). Linear's HTML carries its splash: plain HTML and inline CSS that draw before any script, the window's background and the panel's empty outline (8px in, the sidebar's width from the left, 12px corners, a 0.5px border at 2x), in the theme and sidebar width it keeps in localStorage as `splashScreenConfig`. Its logo fades in at the panel's middle only after 1s, "Loading…" after 8s, and the splash fades out in 0.1s once the app has drawn. The sidebar and header then came whole at 0.84s and the list whole at 1.55s: no part pops in alone. desk's is `#splash` in index.html (`app/splash.ts`), held until the rows, the frame, the page's data and any chat are in, 3s at most; a part that waits for data holds it with `useSplash` rather than drawing a placeholder.
+
 **The screen.** The user's screen is 2x (eDP-1 at scale 2). Linear picks its hairlines when a page loads, by the screen: 0.5px rings on a 2x screen, and 1px rings with fainter colours on a 1x one. desk takes the 2x values, so check that `devicePixelRatio` is 2 before you read a ring or a border.
 
 ## Mistakes so far
@@ -84,6 +86,7 @@ Each one cost a redo. Check your work against them.
 - **Said what Linear does without looking** (21 Oct). Asked whether Linear's issue page has a team dropdown, the chat said no from memory, and the user made the work hang on it ("linear doesn't do this right? then we shouldn't either"); Linear shows the team as a row under the status. Measure before you answer a question about Linear, not only before you build.
 - **A form control where Linear has a row** (found 21 Oct). The issue page's team was a browser select under a Team heading of its own; the user: "weird dropdown and i don't know what does it do there". A property is a quiet row that opens a menu, with its keys in its tooltip.
 - **A tap that moved its own target** (25 Oct). On a phone, a new chat's folder chip needed two taps: the tap took focus from the box, the tabs came back, and the chip moved up before the click landed. Buttons beside a text box keep its focus (`onMouseDown` preventDefault on the composer's foot); test a phone change with `tap()` while typing, since a mouse click shows none of it.
+- **A page that drew in pieces** (25 Oct). Reloading an issue drew an empty frame, then the sidebar, then a chat saying "Connecting…", then the issue and its chat: five pops over 2.6s, the chats reordering after a second. The user: "not that beautiful". Linear holds its splash until the page can draw whole; desk's does too now, so anything new that waits for data must hold it (`useSplash`), and must not glide or fade in under it (`splashUp`).
 - **A sidebar section named after desk, not Linear** (20 Oct). desk's projects were ongoing work, Linear's teams; Linear's projects finish. They became "Your teams", and Projects is Linear's again. Name a part by what Linear's part of the same use is called.
 
 ## Keep this current

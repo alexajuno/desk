@@ -9,6 +9,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { postJson, reason } from "../api/http";
 import { go } from "../app/nav";
+import { splashUp, useSplash } from "../app/splash";
 import { markdown } from "../lib/markdown";
 import { seenPage } from "../api/page";
 import { Title, type IssuePageData } from "../issues/IssueView";
@@ -56,12 +57,13 @@ export async function newSession(draft = "") {
 
 // A change of layout moves as one piece, through the browser's view transitions: the issue page shrinks into the side
 // as its chat rises in the middle, and slides out when hidden (dock.css says how). Where the browser has none, or
-// motion is turned down, it changes at once.
+// motion is turned down, it changes at once, and so does the first one, under the splash, where nothing was seen to
+// move from: the page then drew whole only after a third of a second's glide (25 Oct).
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 let moving: Promise<void> | null = null; // the move on screen, which the issue's own slide in waits for
 let drawing: Promise<void> = Promise.resolve(); // its change to the page, which a text box to focus waits for
 function move(next: Layout, change: () => void) {
-  if (next === dock.layout || !document.startViewTransition || still.matches) return change();
+  if (next === dock.layout || !document.startViewTransition || still.matches || splashUp()) return change();
   const t = document.startViewTransition(() => flushSync(change));
   drawing = t.updateCallbackDone.catch(() => {});
   const done = moving = t.finished.catch(() => {}).then(() => { if (moving === done) moving = null; });
@@ -169,6 +171,7 @@ const quiet = (s: LiveSession) => !s.items.length && !s.pending.length && !s.wor
 // A chat as the middle shows it; the Triage page draws one in its right pane too.
 export const SessionView = observer(function SessionView({ id }: { id: string }) {
   const s = useLive(id)!;
+  useSplash(!s.loaded); // desk opening on a chat shows it with its conversation, never "Connecting…"
   const scroller = useRef<HTMLDivElement>(null);
   const stuck = useRef(true); // following the bottom, as new words come
   const m = s.meta;

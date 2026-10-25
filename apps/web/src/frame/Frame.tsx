@@ -6,6 +6,7 @@ import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect } from "react";
 import { Outlet, useLocation } from "react-router";
 import { deskPath, go } from "../app/nav";
+import { firstDrawn } from "../app/splash";
 import { remove, removeMany, setField, setFields, undo, undoList } from "../issues/actions";
 import { fieldMenu, milestoneMenu, projectPicker, projectStatusMenu, teamPicker } from "../issues/menus";
 import { ofProjects, projectsStatus, projectsTeam, selectable, selectAll, selection, SelectionBar, selectionField } from "../issues/selection";
@@ -350,6 +351,7 @@ export const Frame = observer(function Frame() {
   useEffect(() => ui.clearSelection(), [pathname]); // a selection belongs to its page's list
   const chat = chatOf(pathname);
   useLayoutEffect(() => arrange(chat.session, chat.slug), [chat.session, chat.slug]);
+  useEffect(() => firstDrawn(), []); // the splash goes once the parts drawn are whole
   useEffect(() => {
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("click", onClickFirst, true);

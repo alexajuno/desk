@@ -308,6 +308,20 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
 .bar .side-toggle { display: none; flex: none; margin-left: -8px; }  /* a long title squeezed it to 20px (15 Oct) */
 .side-collapsed .bar .side-toggle { display: grid; }
 
+/* The splash (index.html, app/splash.ts), Linear's, read from linear.app's own HTML on 25 Oct: the window's background
+   and the panel's empty outline, drawn before any script runs, in the page's theme and with the sidebar shown or hidden
+   as the page will have it. It covers the app until the page can draw whole, then fades out in 0.1s, as Linear's does.
+   Linear's logo fades in at the panel's middle, in 0.4s, only once a load has taken 1s; desk's penguin does the same,
+   greyed and faint as Linear's grey logo is. */
+#splash { position: fixed; inset: 0; z-index: 100; background: var(--bg-app); pointer-events: none; transition: opacity 0.1s; }
+.splash-panel { position: absolute; top: 8px; right: 8px; bottom: 8px; left: 244px; display: grid; place-items: center;
+                background: var(--bg-panel); border: 0.5px solid var(--border-2); border-radius: 12px; box-shadow: var(--shadow-panel); }
+.side-collapsed .splash-panel { left: 8px; }
+@media (max-width: 900px) { .splash-panel { left: 8px; } }
+.splash-mark { opacity: 0; filter: grayscale(1); animation: splash-mark 0.4s ease-out 1s forwards; }
+@keyframes splash-mark { to { opacity: 0.4; } }
+.splashed #splash { opacity: 0; }
+
 /* the inset panel and its top bar */
 .panel { position: fixed; top: 8px; right: 8px; bottom: 8px; left: 244px; display: flex; flex-direction: column;
          background: var(--bg-panel); border: 0.5px solid var(--border-2); border-radius: 12px;

@@ -4,9 +4,12 @@
 // change redraws only what differs: no blank frame, no lost scroll or open fold.
 //
 // Moving to another page draws no blank frame either: each route's loader fetches the page's JSON first (prime), and
-// the router keeps the old page on screen until it is in, as Linear never shows a page without its data. Every answer is
-// kept by its address (seen), so going back to a page draws it at once, and fetches it again behind.
+// the router keeps the old page on screen until it is in, as Linear never shows a page without its data. The first page
+// waits the same way under the splash, which a page still without its data, after a slow loader, holds up
+// (app/splash.ts). Every answer is kept by its address (seen), so going back to a page draws it at once, and fetches it
+// again behind.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSplash } from "../app/splash";
 import { issues } from "../store/issues";
 import { onReload } from "../store/ui";
 
@@ -85,5 +88,6 @@ export function usePage<T>(url: string, also: string | number = "") {
     reload();
   }, [reload, seq, also]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => onReload(reload), [reload]);
+  useSplash(!data && !error);
   return { data, error, reload };
 }

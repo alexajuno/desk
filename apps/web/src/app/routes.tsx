@@ -17,13 +17,14 @@ import { SettingsPage } from "../settings/SettingsPage";
 import { SessionFullRoute } from "../sessions/SessionFullRoute";
 import { TriagePage } from "../triage/TriagePage";
 import { Crashed } from "./Crashed";
+import { rowsIn } from "./splash";
 
 // Each page's loader fetches its JSON before the router moves to it, so the page on screen stays until the next one can
-// draw whole (api/page.ts, prime). The first page desk opens on draws at once, as before, and fetches its own.
-let opened = false;
-const first = () => !opened && (opened = true);
+// draw whole (api/page.ts, prime). The first page desk opens on waits the same way, under the splash (app/splash.ts).
 const search = (request: Request) => new URL(request.url).search;
-const at = (url: (args: LoaderFunctionArgs) => string) => (args: LoaderFunctionArgs) => (first() ? null : prime(url(args)));
+const at = (url: (args: LoaderFunctionArgs) => string) => (args: LoaderFunctionArgs) => prime(url(args));
+// Under the splash nothing draws until the first page can (react-router's own fallback warns when a route has none).
+const Booting = () => null;
 
 // The Backlog listed every open issue, and became All issues on 17 Oct; a link to it, in an issue's text, keeps its view.
 function ToIssues() {
@@ -54,9 +55,10 @@ function ToTeamIssues() {
   return <Navigate to={`/team/${slug}/all${useLocation().search}`} replace />;
 }
 
-// desk's pages, at the addresses they always had.
+// desk's pages, at the addresses they always had. The frame waits for desk's rows once, as desk opens; after that it
+// has them, kept current over the sync socket.
 export const router = createBrowserRouter(
-  [{ element: <Frame />, errorElement: <Crashed />, children: [
+  [{ element: <Frame />, errorElement: <Crashed />, HydrateFallback: Booting, loader: rowsIn, shouldRevalidate: () => false, children: [
     { path: "/", element: <Navigate to="/issues" replace /> },
     ...["", ...TABS].map(tabRoute),
     { path: "/backlog", element: <ToIssues /> },
@@ -78,9 +80,8 @@ export const router = createBrowserRouter(
     { path: "/issue/:slug", element: <IssuePage />, loader: at(({ params }) => `/api/page/issue/${params.slug}`) },
     { path: "/issue/:slug/f/:name", element: <FilePage />,
       loader: at(({ params }) => `/api/page/file/${params.slug}/${encodeURIComponent(params.name ?? "")}`) },
-    // The Inbox fetches nothing: its rows and its open issue come over the sync socket. Opened first, it is still the
-    // first page, so the next one is fetched before it draws.
-    { path: "/inbox", element: <InboxPage />, loader: () => (first(), null) },
+    // The Inbox fetches nothing: its rows and its open issue come over the sync socket.
+    { path: "/inbox", element: <InboxPage /> },
     { path: "/search", element: <SearchPage /> },
     // Sessions left the sidebar on 17 Oct: it lists what runs, and the corner's clock finds the rest.
     { path: "/sessions", element: <Navigate to="/inbox" replace /> },

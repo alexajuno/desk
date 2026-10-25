@@ -1,9 +1,10 @@
 // A page that crashed, in place of React Router's bare "Unexpected Application Error!". Most often the app a tab has
 // meets a desk of another version, since desk runs whichever commit Try, a test or a landing checked out, and a reload
-// brings the app that matches: so it reloads once on its own. Crashing again within a minute shows the error, with a
-// Reload button, rather than reloading in a loop.
+// brings the app that matches: so it reloads once on its own, under the splash when desk was just opening. Crashing
+// again within a minute shows the error, with a Reload button, rather than reloading in a loop.
 import { useEffect } from "react";
 import { useRouteError } from "react-router";
+import { firstDrawn } from "./splash";
 
 const AGAIN = 60_000; // ms within which a second crash stops the reloading
 
@@ -12,7 +13,10 @@ export function Crashed() {
   const again = Date.now() - Number(sessionStorage.crashedAt ?? 0) < AGAIN;
   useEffect(() => {
     console.error(error);
-    if (again) return;
+    if (again) {
+      firstDrawn(); // the error is the page: the splash goes
+      return;
+    }
     sessionStorage.crashedAt = Date.now();
     location.reload();
   }, [error, again]);

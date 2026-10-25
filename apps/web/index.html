@@ -5,6 +5,8 @@
     <!-- On a phone, the keyboard shrinks the page, so a chat's composer stays above it. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- The font starts loading with the page, not once the first text is laid out: the splash waits for it. -->
+    <link rel="preload" href="/fonts/InterVariable.ttf" as="font" type="font/ttf" crossorigin />
     <!-- desk as an app on the phone, which Chrome installs from the manifest; the phone's bar takes the panel's colour,
          --bg-panel in desk.css, by the system's theme. -->
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -22,6 +24,8 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- The splash, Linear's: the empty frame in the page's theme, until the page can draw whole (app/splash.ts). -->
+    <div id="splash" aria-hidden="true"><div class="splash-panel"><img class="splash-mark" src="/favicon.svg" alt="" width="32" height="32" /></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

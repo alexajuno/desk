@@ -17,6 +17,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocation, useSearchParams } from "react-router";
 import { postJson } from "../api/http";
 import { go, Go } from "../app/nav";
+import { useSplash } from "../app/splash";
 import { Bar } from "../frame/Bar";
 import { IssueView } from "../issues/IssueView";
 import { actionsMenu } from "../issues/menus";
@@ -98,6 +99,7 @@ export const InboxPage = observer(function InboxPage() {
   useEffect(() => shown.show(isIssue ? i : null), [i, isIssue]);
   useEffect(() => () => shown.show(null), []);
   const open = isIssue ? shown.page : null, waiting = isIssue && shown.of !== i;
+  useSplash(waiting);
   const chat = isIssue || !i ? undefined : [...issues.inbox.values()].find((r) => r.slug === i && !r.issue && r.session);
   // Opening a row reads it, and anything new on it while it is open: as the server's inbox.ts reads a slug's rows.
   const unreadHere = [...issues.inbox.values()].filter((r) => r.slug === i && r.read === null).map((r) => r.id).join(" ");
