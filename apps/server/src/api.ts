@@ -16,7 +16,8 @@
 //     GET    /api/teams                 list teams (state=active|archived|all); /api/issues takes team=<slug>
 //     GET    /api/teams/<slug>          one team, with its description and issues
 //     POST   /api/teams                 create one: title, body
-//     PATCH  /api/teams/<slug>          set title, body, state (active or archived)
+//     PATCH  /api/teams/<slug>          set title, body, state (active or archived), or slug, its identifier, which
+//                                       moves it to a new address; its old slugs still name it, here and on its pages
 //     GET    /api/projects              list projects, Linear's, which finish (status=, team=); /api/issues takes project=
 //     GET    /api/projects/<slug>       one project, with its description and issues
 //     POST   /api/projects              create one: title, body, team, status, start, target
@@ -137,7 +138,7 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
     if (!all.has(parent)) throw new HttpError(422, `No issue ${parent} to be the parent.`);
     if (parent === i.slug || store.descendants(all, i.slug).includes(parent)) throw new HttpError(422, `${parent} is ${i.slug} or under it, so it cannot be its parent.`);
   }
-  if (fields.team && !(await teams.exists(fields.team))) throw new HttpError(422, `No team ${fields.team}. List them with GET /api/teams.`);
+  if (fields.team) fields.team = await teamNamed(fields.team);
   if (fields.project) {
     if (!(await projects.exists(fields.project)))
       throw new HttpError(422, (await teams.exists(fields.project))
@@ -188,14 +189,33 @@ function applyLands(i: Issue, body: unknown) {
 async function teamJson(t: Team, full = false) {
   const mine = teams.issuesOf(await store.loadAll(), t.slug);
   const data: Record<string, unknown> = { slug: t.slug, title: t.title, state: t.state, created: t.created, url: `/team/${t.slug}`,
+    aliases: t.aliases ? t.aliases.split(" ") : [],
     issues: mine.length, open_issues: mine.filter((i) => OPEN.includes(i.state)).length };
   if (full) Object.assign(data, { file: join(teams.folder(t.slug), teams.MAIN), body: t.body, issue_list: mine.map((i) => asJson(i)) });
   return data;
 }
 
 async function loadTeam(slug: string): Promise<Team> {
-  if (!(await teams.exists(slug))) throw new HttpError(404, `No team ${slug}. List them with GET /api/teams.`);
-  return teams.load(slug);
+  const found = await teams.resolve(slug);
+  if (!found) throw new HttpError(404, `No team ${slug}. List them with GET /api/teams.`);
+  return teams.load(found);
+}
+
+// The team a field names, by its slug or one it had before a rename (teams.resolve).
+async function teamNamed(slug: string): Promise<string> {
+  const found = await teams.resolve(slug);
+  if (!found) throw new HttpError(422, `No team ${slug}. List them with GET /api/teams.`);
+  return found;
+}
+
+// A new identifier for a team (teams.rename), or the team as it was when the slug is its own already.
+export async function renameTeam(t: Team, slug: string): Promise<Team> {
+  try {
+    return await teams.rename(t.slug, slug.trim().toLowerCase());
+  } catch (error) {
+    if (error instanceof teams.Refused) throw new HttpError(422, error.message);
+    throw error;
+  }
 }
 
 function applyTeam(t: Team, fields: Record<string, string | null>) {
@@ -244,7 +264,7 @@ async function applyProject(p: Project, fields: Record<string, string | null>) {
   if ("status" in fields && !projects.STATUSES.includes(fields.status as string))
     throw new HttpError(422, `status must be one of: ${projects.STATUSES.join(", ")}`);
   if ("title" in fields && !fields.title) throw new HttpError(422, "title cannot be empty");
-  if (fields.team && !(await teams.exists(fields.team))) throw new HttpError(422, `No team ${fields.team}. List them with GET /api/teams.`);
+  if (fields.team) fields.team = await teamNamed(fields.team);
   for (const name of ["start", "target"]) if (name in fields) fields[name] = period(name, fields[name]);
   const target = p as unknown as Record<string, string | null>;
   for (const [name, value] of Object.entries(fields)) target[name] = name === "body" ? value || "" : value || null;
@@ -291,7 +311,8 @@ export function routes(app: FastifyInstance) {
   // Open issues unless state says otherwise (state=all, or a list such as state=running,review), in the backlog's
   // order; with q, the ones desk's search finds, best match first; team= keeps one team's, project= one project's.
   app.get("/api/issues", async (req: Req) => {
-    const { q = "", state = "", team = "", project = "" } = req.query;
+    const { q = "", state = "", project = "" } = req.query;
+    const team = req.query.team && ((await teams.resolve(req.query.team)) ?? req.query.team);
     const states = state === "all" ? store.STATES : state ? state.split(",") : OPEN;
     const issues = new Map([...(await store.loadAll())].filter(([, i]) => states.includes(i.state) && (!team || i.team === team)
       && (!project || i.project === project)));
@@ -429,7 +450,7 @@ export function routes(app: FastifyInstance) {
   app.post("/api/teams", async (req, reply) => {
     const fields = given(req.body, ["title", "body", "state"]);
     if (!(fields.title ?? "").trim()) throw new HttpError(422, "title is required");
-    const t: Team = { slug: teams.newSlug(fields.title!), title: fields.title!, state: "active", created: store.now(), body: "" };
+    const t: Team = { slug: teams.newSlug(fields.title!), title: fields.title!, state: "active", created: store.now(), aliases: "", body: "" };
     applyTeam(t, fields);
     await teams.save(t);
     return reply.code(201).send(await teamJson(t, true));
@@ -437,15 +458,17 @@ export function routes(app: FastifyInstance) {
 
   app.patch("/api/teams/:slug", async (req: Req) => {
     const t = await loadTeam(req.params.slug);
-    applyTeam(t, given(req.body, ["title", "body", "state"]));
+    const { slug, ...fields } = given(req.body, ["title", "body", "state", "slug"]);
+    applyTeam(t, fields);
     await teams.save(t);
-    return teamJson(t, true);
+    return teamJson(slug ? await renameTeam(t, slug) : t, true);
   });
 
   // Every project, the open ones first (status=all by default; status=started, or a list, for some), each with its
   // progress, as Linear's Projects list; team= keeps one team's.
   app.get("/api/projects", async (req: Req) => {
-    const { status = "", team = "" } = req.query;
+    const { status = "" } = req.query;
+    const team = req.query.team && ((await teams.resolve(req.query.team)) ?? req.query.team);
     const statuses = status && status !== "all" ? status.split(",") : projects.STATUSES;
     const found = [...(await projects.loadAll()).values()].filter((p) => statuses.includes(p.status) && (!team || p.team === team));
     found.sort((a, b) => Number(projects.CLOSED.has(a.status)) - Number(projects.CLOSED.has(b.status)) || (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));

@@ -56,6 +56,7 @@ export interface Team {
   title: string;
   state: "active" | "archived";
   created: string;
+  aliases?: string; // the slugs it had before a rename, space-separated, which still lead to it (teams.ts)
 }
 
 // A chat (the server's chats.ts): a session desk keeps, desk's own, an agent's or a bare one, with the issue it works.

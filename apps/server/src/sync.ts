@@ -19,7 +19,7 @@
 // The first answer is the snapshot, or the changes the app missed, maybe none. Each "changes" goes on from the one
 // before it, whose last change is its "after": an app that holds another seq missed some, and connects again to get
 // them. A row is the table's, less what the app is not sent (db.ts, HELD): an <issue> is every field of issue.md but
-// its description, a <team> its slug, title, state and created, a <chat> its id, session, issue, title and who it is
+// its description, a <team> its slug, title, state, created and aliases, a <chat> its id, session, issue, title and who it is
 // with, an Inbox <row> every column (inbox.ts); a deleted row comes as null. A description is part of its issue's row, so a new one comes as a change: the page
 // showing it asks again. A <frame> is the sidebar's sessions and desk's checkout, with each open issue's session state
 // (pages.ts, framePage), which no table holds yet. "files" names the issues whose files beside issue.md may have changed

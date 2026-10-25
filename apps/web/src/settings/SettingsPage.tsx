@@ -4,14 +4,16 @@
 // automations (the two auto-close toggles). The server's settings are settings.ts. Linear keeps the auto-close toggles under each team; desk's
 // teams have no settings of their own, so they are desk's.
 import { observer } from "mobx-react-lite";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, useLocation, useParams } from "react-router";
 import { usePage } from "../api/page";
 import { reason } from "../api/http";
 import { deskPath, Go } from "../app/nav";
 import { Bar } from "../frame/Bar";
 import { applyTheme } from "../frame/theme";
+import { useEditorKeys } from "../issues/IssueView";
 import { EFFORTS, effortName, loadModels, type Model } from "../sessions/models";
+import { ui } from "../store/ui";
 import { GLYPH } from "../ui/icons";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
@@ -57,29 +59,54 @@ export const SettingsNav = observer(function SettingsNav() {
   );
 });
 
-// A card of settings rows under a section's heading, as Linear's.
-function Section({ title, about, children }: { title: string; about?: string; children: ReactNode }) {
+// A card of settings rows under a section's heading, as Linear's; the first card of a page may have none.
+export function Section({ title, about, children }: { title?: string; about?: string; children: ReactNode }) {
   return (
     <section className="set-section">
-      <h3>{title}</h3>
+      {title && <h3>{title}</h3>}
       {about && <p className="set-about">{about}</p>}
       <ul className="set-card">{children}</ul>
     </section>
   );
 }
 
-function Row({ id, title, about, children }: { id: string; title: string; about: string; children: ReactNode }) {
+export function Row({ id, title, about, children }: { id: string; title: string; about?: string; children: ReactNode }) {
   return (
     <li className="set-row">
-      <div className="set-text"><label htmlFor={id}>{title}</label><span>{about}</span></div>
+      <div className="set-text"><label htmlFor={id}>{title}</label>{about && <span>{about}</span>}</div>
       {children}
     </li>
   );
 }
 
 // Linear's switch: a 30x20 checkbox drawn as a pill, its knob a 14px circle.
-function Switch({ id, on, change }: { id: string; on: boolean; change: (on: boolean) => void }) {
+export function Switch({ id, on, change }: { id: string; on: boolean; change: (on: boolean) => void }) {
   return <input id={id} className="switch" type="checkbox" role="switch" checked={on} onChange={(e) => change(e.target.checked)} />;
+}
+
+// Linear's text field in a row, which saves what was typed when it loses focus or on Enter, and puts back what it held on
+// Escape, or when the save says false. clean shapes the text as it is typed, such as an identifier's lowercase.
+export function TextField({ id, value, save, clean = (typed) => typed }: {
+  id: string; value: string; save: (value: string) => Promise<boolean>; clean?: (typed: string) => string;
+}) {
+  const [shown, setShown] = useState(value);
+  const box = useRef<HTMLInputElement>(null);
+  const done = useRef(true);
+  useEffect(() => { if (done.current) setShown(value); }, [value]);
+  function finish(keep: boolean) {
+    if (done.current) return;
+    done.current = true;
+    ui.setEditing(false);
+    const next = shown.trim();
+    if (keep && next && next !== value) void save(next).then((ok) => { if (!ok) setShown(value); });
+    else setShown(value);
+    box.current?.blur();
+  }
+  const keys = useEditorKeys((_e, k) => k === "Enter", finish);
+  return (
+    <input ref={box} id={id} className="set-input" value={shown} spellCheck={false} autoComplete="off" {...keys}
+      onChange={(e) => setShown(clean(e.target.value))} onFocus={() => { done.current = false; ui.setEditing(true); }} onBlur={() => finish(true)} />
+  );
 }
 
 const THEMES: [string, string][] = [["system", "System preference"], ["light", "Light"], ["dark", "Dark"]];

@@ -207,6 +207,18 @@ export function milestoneProgress(milestones: Milestone[], issues: Issue[]) {
   });
 }
 
+// Each project.md written out again from its row where the row changed under it, as when its team's slug changes
+// (teams.rename).
+export async function rewriteIn(tx: Db) {
+  for (const row of (await tx.query<Row>("select * from projects")).rows) {
+    const text = render(fromRow(row));
+    if (text === row.written) continue;
+    mkdirSync(folder(row.slug), { recursive: true });
+    writeFileSync(join(folder(row.slug), MAIN), text, "utf8");
+    await tx.query("update projects set written = $1 where slug = $2", [text, row.slug]);
+  }
+}
+
 // Read every project.md in, as Postgres held none: a new database, or one lost (issues.importAll). Before 20 Oct
 // projects/ held what are teams now, which teams.moveFolders moves out first.
 export function importAll(): Promise<number> {

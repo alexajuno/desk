@@ -1,49 +1,49 @@
-// A team's own page, its settings as Linear keeps them: its name and description, both edited where they are, and its
-// status, active or archived. Its issues, its Triage and its projects are pages of their own under it
-// (/team/<slug>/all, triage and projects), as Linear's team has them in the sidebar. Until 20 Oct this was a desk
-// project's page, with its issues on a tab.
+// A team's own page, its settings as Linear's team General settings keep them (measured 25 Oct): a card with its name and
+// its identifier, the slug in its address, each a field that saves as it loses focus; then its description, and whether
+// it is archived. Its issues, its Triage and its projects are pages of their own under it (/team/<slug>/all, triage and
+// projects), as Linear's team has them in the sidebar. Until 20 Oct this was a desk project's page, with its issues on a
+// tab; until 25 Oct its name was edited as its title, as a project's is.
 import { observer } from "mobx-react-lite";
-import { useEffect, type ReactNode } from "react";
+import { useEffect } from "react";
 import { useParams } from "react-router";
 import { post, reason } from "../api/http";
 import { usePage } from "../api/page";
-import { Go } from "../app/nav";
+import { go, Go } from "../app/nav";
 import { Description } from "../editor/Description";
 import { Bar } from "../frame/Bar";
-import { Title } from "../issues/IssueView";
+import { Row, Section, Switch, TextField } from "../settings/SettingsPage";
 import { reloadPages } from "../store/ui";
-import { GLYPH, StateIcon } from "../ui/icons";
-import { openMenu, toggled } from "../ui/menu";
+import { GLYPH } from "../ui/icons";
 import { toast } from "../ui/toast";
 
-type TeamState = "active" | "archived";
 interface TeamData {
-  team: { slug: string; title: string; state: TeamState; body: string; body_html: string };
+  team: { slug: string; title: string; state: "active" | "archived"; body: string; body_html: string };
 }
 
 // Its sidebar's pages, as links under the name.
 const PAGES: [string, string][] = [["triage", "Triage"], ["all", "Issues"], ["projects", "Projects"]];
-const STATUS: Record<TeamState, { label: string; icon: ReactNode }> = {
-  active: { label: "Active", icon: <StateIcon state="running" /> },
-  archived: { label: "Archived", icon: GLYPH.archive },
-};
 
-async function setTeam(slug: string, field: string, value: string) {
+async function setTeam(slug: string, field: string, value: string): Promise<boolean> {
   const res = await post(`/team/${slug}/set`, { field, value });
   if (!res.ok) toast(await reason(res));
   await reloadPages();
+  return res.ok;
 }
 
-function statusMenu(slug: string, current: TeamState, anchor: Element) {
-  const states = Object.keys(STATUS) as TeamState[];
-  openMenu({
-    anchor, filter: "keys", placeholder: "Change status…",
-    items: (q) => states.filter((s) => STATUS[s].label.toLowerCase().includes(q.toLowerCase())).map((s) => ({
-      icon: STATUS[s].icon, label: STATUS[s].label, hint: states.indexOf(s) + 1, num: states.indexOf(s) + 1, current: s === current,
-      run: () => s !== current && setTeam(slug, "state", s),
-    })),
-  });
+// A new identifier moves the team to its new address, where the route answers once the move is done; its old one still
+// leads to it.
+async function setIdentifier(slug: string, value: string): Promise<boolean> {
+  const res = await post(`/team/${slug}/set`, { field: "slug", value });
+  if (!res.ok) {
+    toast(await reason(res));
+    return false;
+  }
+  go(new URL(res.url).pathname, { replace: true });
+  return true;
 }
+
+// An identifier as it is typed: lowercase, with a hyphen for a space.
+const identifier = (typed: string) => typed.toLowerCase().replace(/[\s_]+/g, "-");
 
 export function TeamPage() {
   const { slug = "" } = useParams();
@@ -73,18 +73,26 @@ const TeamOverview = observer(function TeamOverview({ slug }: { slug: string }) 
       <div className="scroll">
         {error && !data && <p className="muted" style={{ padding: 24 }}>{error}</p>}
         {pr && (
-          <div className="project-overview">
-            <div className="project-icon">{GLYPH.team}</div>
-            <Title title={pr.title} save={(t) => setTeam(slug, "title", t)} />
-            <div className="project-props">
-              <h3>Properties</h3>
-              <button className="prop-chip" type="button" title="Change status"
-                onClick={(e) => { if (!toggled(e.currentTarget)) statusMenu(slug, pr.state, e.currentTarget); }}>
-                {STATUS[pr.state].icon}<span>{STATUS[pr.state].label}</span>
-              </button>
-            </div>
-            <h3>Description</h3>
-            <Description body={pr.body} html={pr.body_html} save={(t) => setTeam(slug, "body", t)} />
+          <div className="settings">
+            <h1>General</h1>
+            <Section>
+              <Row id="team-name" title="Name">
+                <TextField id="team-name" value={pr.title} save={(t) => setTeam(pr.slug, "title", t)} />
+              </Row>
+              <Row id="team-identifier" title="Identifier" about={`Used in its address, /team/${pr.slug}`}>
+                <TextField id="team-identifier" value={pr.slug} clean={identifier} save={(t) => setIdentifier(pr.slug, t)} />
+              </Row>
+            </Section>
+            <Section title="Description" about="What the team is for">
+              <li className="set-body">
+                <Description body={pr.body} html={pr.body_html} save={(t) => setTeam(pr.slug, "body", t)} />
+              </li>
+            </Section>
+            <Section title="Status">
+              <Row id="team-archived" title="Archived" about="Out of Your teams, with its issues and projects kept">
+                <Switch id="team-archived" on={pr.state === "archived"} change={(on) => setTeam(pr.slug, "state", on ? "archived" : "active")} />
+              </Row>
+            </Section>
           </div>
         )}
       </div>

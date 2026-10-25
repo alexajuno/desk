@@ -80,6 +80,9 @@
   --shadow-card: lch(100% 0 0 / 0.083) 0 0 0 0.5px, lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
   --hairline: lch(100% 0 0 / 0.083);
   --switch-off: lch(47.551% 0.913 272);
+  /* Settings' text fields (a team's Name and Identifier), measured on Linear's team General settings on 2026-10-25 */
+  --border-field: lch(30.833% 1.93 272);
+  --border-field-hover: lch(28.032% 6.93 272);
   --bg-selected: lch(12.5% 6 282);         /* a selected row (the Selection block below), not measured */
   --bg-selected-hover: lch(15% 8 282);
   /* a group's triangle at rest (--text-2 under the mouse), and Linear's tooltip with its key caps: one shade
@@ -196,9 +199,11 @@
   --rule-modal: lch(86.5% 0 282);
   --text-hint: lch(66% 1 282);
   --shadow-modal: var(--shadow-pop);
-  --bg-card: lch(100% 0 282);             /* Settings' cards and switches: not measured in light, set to match */
-  --shadow-card: lch(0 0 0 / 0.09) 0 0 0 0.5px, lch(0 0 0 / 0.04) 0 1px 2px;
-  --hairline: lch(0% 0 0 / 0.09);
+  --bg-card: lch(100% 0 282);             /* Settings' cards, measured in light on a team's General settings, 2026-10-25 */
+  --shadow-card: lch(0 0 0 / 0.088) 0 0 0 0.5px, lch(0 0 0 / 0.02) 0 3px 6px -2px, lch(0 0 0 / 0.04) 0 1px 1px 0;
+  --hairline: lch(0% 0 0 / 0.088);
+  --border-field: lch(86.5% 0 282);
+  --border-field-hover: lch(78.5% 0 282);
   --switch-off: lch(80% 1.25 282);
   --bg-selected: lch(93% 5 282);
   --bg-selected-hover: lch(90.5% 7 282);
@@ -1046,6 +1051,16 @@ input.switch::after { content: ""; position: absolute; top: 3px; left: 3px; widt
 input.switch:checked { background: var(--btn-primary); }
 input.switch:checked::after { left: 13px; }
 input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* A text field in a row, as a team's Name and Identifier in Linear's team General settings (measured 2026-10-25, dark
+   and light): 200x32, 13px at weight 400, 6px 12px padded, 8px corners, the card's own fill and a 0.5px border that
+   changes in 0.15s under the mouse; focused, a 1px outline in --btn-primary, 1px inside. A card that holds a text,
+   as its Description, pads it 16px, at least 120px high. */
+.set-input { flex: none; width: 200px; height: 32px; box-sizing: border-box; padding: 6px 12px; border: 0.5px solid var(--border-field);
+             border-radius: 8px; background: var(--bg-card); color: var(--text-1); font: 400 13px var(--font); transition: border 0.15s; }
+.set-input:hover { border-color: var(--border-field-hover); }
+.set-input:focus { outline: 1px solid var(--btn-primary); outline-offset: -1px; }
+.set-body { min-height: 120px; box-sizing: border-box; padding: 16px; }
+.set-body .body { font-size: 13px; line-height: 22px; }
 button.set-pick { height: 30px; padding: 0 8px 0 10px; border-radius: 6px; font-size: 13px; color: var(--text-1); box-shadow: var(--shadow-card); }
 button.set-pick svg { color: var(--text-3); }
 

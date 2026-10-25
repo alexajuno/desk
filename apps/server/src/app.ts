@@ -45,6 +45,18 @@ function urlencode(query: Record<string, string>): string {
 
 const cut = (text: string, n: number) => [...text].slice(0, n).join("");
 const words = (text: string) => text.split(/\s+/).filter(Boolean).join(" ");
+const fail = (detail: string): never => {
+  throw new HttpError(422, detail);
+};
+
+// A team page's address under a slug the team had before a rename (teams.rename), as its new one: a link in an issue
+// or a bookmark goes on to the team, as Linear's old identifiers do. Null for any other address.
+async function teamMoved(url: string): Promise<string | null> {
+  const [, slug, rest] = url.match(/^\/team\/([\w-]+)(.*)$/) ?? [];
+  if (!slug || (await teams.exists(slug))) return null;
+  const now = await teams.resolve(slug);
+  return now && `/team/${now}${rest}`;
+}
 
 const hostname = (host: string) => {
   try {
@@ -116,8 +128,7 @@ async function checked(i: store.Issue, name: string, given: string): Promise<str
     value = words(value) || null;
     if (i.state !== "waiting") throw new HttpError(422, "Only a waiting issue says who it waits on.");
   } else if (name === "team") {
-    value = value || null;
-    if (value && !(await teams.exists(value))) throw new HttpError(422, `No team ${value}.`);
+    value = value ? await teams.resolve(value) ?? fail(`No team ${value}.`) : null;
   } else if (name === "project") {
     value = value || null;
     if (value && !(await projects.exists(value))) throw new HttpError(422, `No project ${value}.`);
@@ -251,7 +262,10 @@ export async function create(): Promise<FastifyInstance> {
 
   // desk's pages are the app's: each address answers with it, and the app asks /api/page/... for the data.
   for (const path of ["/issues", "/issues/:tab", "/triage", "/teams", "/team/:slug", "/team/:slug/all", "/team/:slug/active", "/team/:slug/backlog", "/team/:slug/triage", "/team/:slug/projects", "/projects", "/project/:slug/issues", "/project/:slug/activity", "/automations", "/automation/:slug", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
-    app.get(path, async (_req, reply) => web.index(reply));
+    app.get(path, async (req, reply) => {
+      const moved = await teamMoved(req.url);
+      return moved ? reply.redirect(moved, 302) : web.index(reply);
+    });
   app.get("/", async (_req, reply) => reply.redirect("/issues", 307));
   // A team's Issues is Linear's /team/<slug>/all now, with its Active and Backlog beside it.
   app.get("/team/:slug/issues", async (req: Req, reply) => reply.redirect(`/team/${req.params.slug}/all`, 301));
@@ -349,17 +363,18 @@ export async function create(): Promise<FastifyInstance> {
   app.post("/teams", async (req: Req, reply) => {
     const title = words(field(req, "title"));
     if (!title) throw new HttpError(422, "A team needs a title.");
-    const t = { slug: teams.newSlug(title), title, state: "active", created: store.now(), body: "" };
+    const t = { slug: teams.newSlug(title), title, state: "active", created: store.now(), aliases: "", body: "" };
     await teams.save(t);
     return reply.redirect(`/team/${t.slug}`, 303);
   });
 
   app.post("/team/:slug/set", async (req: Req, reply) => {
-    const slug = req.params.slug;
-    if (!(await teams.exists(slug))) throw new HttpError(404, "That team is gone.");
+    const slug = await teams.resolve(req.params.slug);
+    if (!slug) throw new HttpError(404, "That team is gone.");
     const p = await teams.load(slug);
     const name = field(req, "field", null);
     let value = field(req, "value");
+    if (name === "slug") return reply.redirect(`/team/${(await api.renameTeam(p, value)).slug}`, 303);
     if (name === "state") {
       if (!teams.STATES.includes(value)) throw new HttpError(422, `state cannot be ${value}`);
     } else if (name === "title") {
@@ -386,8 +401,7 @@ export async function create(): Promise<FastifyInstance> {
       if (!value) throw new HttpError(422, "A title cannot be empty.");
     } else if (name === "body") value = value.replace(/\r\n/g, "\n");
     else if (name === "team") {
-      value = value || null;
-      if (value && !(await teams.exists(value))) throw new HttpError(422, `No team ${value}.`);
+      value = value ? await teams.resolve(value) ?? fail(`No team ${value}.`) : null;
     } else if (name === "start" || name === "target") {
       value = value ? periods.parse(value) : null;
       if (field(req, "value") && !value) throw new HttpError(422, `“${field(req, "value")}” is no date: try May 2027, Q4 or 20/05/2027.`);

@@ -515,9 +515,12 @@ export async function issuesPage(tab: string, query: string, team = "") {
   return { ...listingJson(listing, path, t ? { team: t.slug, teamTitle: t.title } : {}, all), team: t && { slug: t.slug, title: t.title } };
 }
 
+// A team by its slug, or by one it had before a rename (teams.resolve): its page answers as the team's, which the app
+// moves to its address.
 async function loadTeam(slug: string) {
-  if (!(await teams.exists(slug))) throw new HttpError(404, "That team is gone.");
-  return teams.load(slug);
+  const found = await teams.resolve(slug);
+  if (!found) throw new HttpError(404, "That team is gone.");
+  return teams.load(found);
 }
 
 // The names a list's chips and groups show for a team's or a project's slug.
@@ -572,7 +575,7 @@ export async function projectPage(slug: string, query: string) {
 // first in each.
 export async function projectsPage(team = "") {
   const all = await store.loadAll(), everyTeam = await teams.loadAll();
-  if (team) await loadTeam(team);
+  if (team) team = (await loadTeam(team)).slug;
   const everyone = [...(await projects.loadAll()).values()].filter((p) => !team || p.team === team).sort((a, b) => byCreated(a, b));
   return Promise.all(projects.STATUSES.map(async (status) => ({ status, label: projects.STATUS_NAMES[status],
     items: await Promise.all(everyone.filter((p) => p.status === status).map(async (p) => projectJson(p, all, everyTeam, await updates.activityOf(p.slug)))) })))

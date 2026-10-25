@@ -491,21 +491,22 @@ async function back(tx: Db, slug: string) {
 }
 
 // Each issue.md desk wrote before what it holds changed, such as on 20 Oct, when each issue's project became its team,
-// written out again from its row, so the files say what the table does. Returns how many.
-export function rewrite(): Promise<number> {
-  return db.write(async (tx) => {
-    let wrote = 0;
-    for (const row of (await tx.query<Row>("select * from issues")).rows) {
-      const text = render(fromRow(row));
-      if (text === row.written) continue;
-      mkdirSync(folder(row.slug), { recursive: true });
-      writeFileSync(join(folder(row.slug), MAIN), text, "utf8");
-      await tx.query("update issues set written = $1 where slug = $2", [text, row.slug]);
-      wrote++;
-    }
-    return wrote;
-  });
+// or when a team's slug changes (teams.rename), written out again from its row, so the files say what the table does.
+// Returns how many.
+export async function rewriteIn(tx: Db): Promise<number> {
+  let wrote = 0;
+  for (const row of (await tx.query<Row>("select * from issues")).rows) {
+    const text = render(fromRow(row));
+    if (text === row.written) continue;
+    mkdirSync(folder(row.slug), { recursive: true });
+    writeFileSync(join(folder(row.slug), MAIN), text, "utf8");
+    await tx.query("update issues set written = $1 where slug = $2", [text, row.slug]);
+    wrote++;
+  }
+  return wrote;
 }
+
+export const rewrite = (): Promise<number> => db.write(rewriteIn);
 
 // Read every issue.md in, as Postgres held none: a new database, or one lost. desk reads issue.md at no other time.
 export function importAll(): Promise<number> {

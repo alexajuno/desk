@@ -356,7 +356,7 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
 }
 
 // Enter during composition belongs to the input method, not to the editor.
-function useEditorKeys(isSave: (e: React.KeyboardEvent, k: string) => boolean, finish: (keep: boolean) => void) {
+export function useEditorKeys(isSave: (e: React.KeyboardEvent, k: string) => boolean, finish: (keep: boolean) => void) {
   const s = useRef({ composing: false, escDown: false });
   return {
     onCompositionStart: () => { s.current.composing = true; },

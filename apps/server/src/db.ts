@@ -69,6 +69,7 @@ create table if not exists teams ( -- teams.ts: desk's projects until 20 Oct
   title text not null,
   state text not null default 'active',
   created text not null,
+  aliases text not null default '', -- the slugs it had before a rename, space-separated, which still lead to it
   body text not null default '',
   written text
 );
@@ -245,6 +246,7 @@ export async function open(): Promise<PGlite> {
   // The Inbox's delete and its mark as unread (inbox.ts), from 19 Oct.
   await opened.exec(["gone", "marked"].map((c) => `alter table inbox add column if not exists ${c} double precision;`).join(" "));
   await opened.exec("alter table chats add column if not exists deleted text;"); // a chat's Delete (chats.ts, remove), from 25 Oct
+  await opened.exec("alter table teams add column if not exists aliases text not null default '';"); // a team's rename (teams.ts), from 25 Oct
   await opened.exec("drop table if exists slack_filed; drop table if exists slack_threads;"); // Slack's tags, out since 22 Oct
   // desk's database is a few MB: Postgres's default 128 MB of shared buffers only holds memory, about 50 MB of it. Set
   // once in postgresql.auto.conf, it applies from the next start.

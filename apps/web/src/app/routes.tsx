@@ -1,3 +1,5 @@
+import { observer } from "mobx-react-lite";
+import type { ReactNode } from "react";
 import { createBrowserRouter, type LoaderFunctionArgs, Navigate, useLocation, useParams } from "react-router";
 import { prime } from "../api/page";
 import { Frame } from "../frame/Frame";
@@ -15,6 +17,7 @@ import { listUrl } from "../lists/useList";
 import { SearchPage } from "../search/SearchPage";
 import { SettingsPage } from "../settings/SettingsPage";
 import { SessionFullRoute } from "../sessions/SessionFullRoute";
+import { issues } from "../store/issues";
 import { TriagePage } from "../triage/TriagePage";
 import { Crashed } from "./Crashed";
 import { rowsIn } from "./splash";
@@ -35,6 +38,15 @@ function ToIssues() {
 const tabRoute = (tab: string) => ({
   path: tab ? `/issues/${tab}` : "/issues", element: <IssuesPage key={tab} tab={tab} />,
   loader: at(({ request }) => listUrl(tab ? `/issues/${tab}` : "/issues", tab ? `/api/page/issues/${tab}` : "/api/page/issues", search(request))),
+});
+
+// A team's page under a slug it had before a rename (teams.ts, rename), as a link in an issue's text, goes on to its
+// address now, as Linear's old identifiers lead to their team; desk sends a page loaded whole there itself (app.ts).
+const Moved = observer(function Moved({ children }: { children: ReactNode }) {
+  const { slug = "" } = useParams();
+  const { pathname, search } = useLocation();
+  const now = issues.teams.has(slug) ? null : [...issues.teams.values()].find((t) => t.aliases?.split(" ").includes(slug));
+  return now ? <Navigate to={`/team/${now.slug}${pathname.slice(`/team/${slug}`.length)}${search}`} replace /> : children;
 });
 
 // A team's Issues tabs, Triage and Projects, Linear's team pages: the same pages as desk's own, on the team alone.
@@ -69,12 +81,12 @@ export const router = createBrowserRouter(
     { path: "/project/:slug/issues", element: <ProjectPage tab="issues" />,
       loader: at(({ params, request }) => listUrl(`/project/${params.slug}/issues`, `/api/page/project/${params.slug}`, search(request))) },
     { path: "/teams", element: <TeamsPage />, loader: at(() => "/api/page/teams") },
-    { path: "/team/:slug", element: <TeamPage />, loader: at(({ params }) => `/api/page/team/${params.slug}`) },
-    ...["", ...TABS].map((tab) => ({ path: `/team/:slug/${tab || "all"}`, element: <TeamIssues tab={tab} />,
+    { path: "/team/:slug", element: <Moved><TeamPage /></Moved>, loader: at(({ params }) => `/api/page/team/${params.slug}`) },
+    ...["", ...TABS].map((tab) => ({ path: `/team/:slug/${tab || "all"}`, element: <Moved><TeamIssues tab={tab} /></Moved>,
       loader: at(({ params, request }) => listUrl(issuesPath(tab, params.slug), issuesApi(tab, params.slug), search(request))) })),
     { path: "/team/:slug/issues", element: <ToTeamIssues /> },
-    { path: "/team/:slug/triage", element: <TeamTriage /> },
-    { path: "/team/:slug/projects", element: <TeamProjects />, loader: at(({ params }) => `/api/page/team/${params.slug}/projects`) },
+    { path: "/team/:slug/triage", element: <Moved><TeamTriage /></Moved> },
+    { path: "/team/:slug/projects", element: <Moved><TeamProjects /></Moved>, loader: at(({ params }) => `/api/page/team/${params.slug}/projects`) },
     { path: "/automations", element: <AutomationsPage />, loader: at(() => "/api/page/automations") },
     { path: "/automation/:slug", element: <AutomationPage />, loader: at(({ params }) => `/api/page/automation/${params.slug}`) },
     { path: "/issue/:slug", element: <IssuePage />, loader: at(({ params }) => `/api/page/issue/${params.slug}`) },
