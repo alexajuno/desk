@@ -20,9 +20,13 @@
   .tabs .count { position: absolute; top: 5px; left: calc(50% + 6px); box-sizing: border-box; min-width: 16px; height: 16px; padding: 0 4px;
                  border-radius: 9999px; background: var(--accent); font: 500 10px/16px var(--font); color: var(--on-accent); }
 
-  /* Typing in a chat, the keyboard takes the tabs' place (index.html's viewport resizes the page for it). */
-  html:has(.dock textarea:focus) .tabs { display: none; }
-  html:has(.dock textarea:focus) .dock, html:has(.dock textarea:focus) .panel { bottom: 0; }
+  /* Typing in a chat or a menu's filter, the keyboard takes the tabs' place (index.html's viewport resizes the page
+     for it, and the menu places itself again). */
+  html:has(.dock textarea:focus, .menu input:focus) .tabs { display: none; }
+  html:has(.dock textarea:focus, .menu input:focus) :is(.dock, .panel) { bottom: 0; }
+
+  /* A menu's rows are tall enough for a finger. */
+  .menu:not(.command) li:not(.heading, .divider) { height: 40px; }
 
   .corner { left: 8px; right: 8px; bottom: calc(var(--tabs-h) + 8px); justify-content: center; pointer-events: none; }
   .corner > * { pointer-events: auto; }
@@ -32,6 +36,9 @@
   .toast { left: 8px; right: 8px; bottom: calc(var(--tabs-h) + 8px); }
 
   .composer { width: calc(100% - 16px); margin-bottom: 8px; }
+  /* A new chat's folder shows its end, where folders differ, as "…/projects/desk"; its effort makes room for it. */
+  .start-in > span { direction: rtl; }
+  .composer-foot:has(.start-in) .runs .effort { display: none; }
 
   /* A phone's Chrome shows a notification only from a service worker, which desk has not; the line offering them
      would turn on nothing. */

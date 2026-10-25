@@ -10,7 +10,7 @@
 // too, in case its keydown never arrived.
 import { action, makeObservable, observableRef } from "mobx";
 import { observer } from "mobx-react-lite";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { keyOf } from "../lib/keys";
 import { CHEVRON, TICK } from "./icons";
@@ -86,6 +86,31 @@ export const openMenu = (o: MenuOptions) => menus.open(o);
 export const closeMenu = () => menus.close();
 // Whether a click on this anchor only closed its own menu, so it must not open it again.
 export const toggled = (anchor: Element | null) => anchor !== null && anchor === menus.justClosed;
+
+// Placed under its anchor, or above it when the window has no room below, and kept 8px inside the window.
+function place(box: HTMLElement, o: MenuOptions) {
+  const w = box.offsetWidth, h = box.offsetHeight;
+  let x = o.x ?? 0, y = o.y ?? 0;
+  if (o.anchor?.isConnected) {
+    const r = o.anchor.getBoundingClientRect();
+    x = r.left;
+    y = r.bottom + 4;
+    if (y + h > innerHeight - 8) y = Math.max(8, r.top - 4 - h);
+  } else if (y + h > innerHeight - 8) y = Math.max(8, innerHeight - 8 - h);
+  box.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`;
+  box.style.top = `${y}px`;
+}
+
+// And placed again when the window resizes, as a phone's does when its keyboard comes up for the filter: left where
+// it opened, the menu ran under the keyboard (25 Oct).
+function usePlacedOnResize(el: RefObject<HTMLDivElement | null>, o: MenuOptions) {
+  useEffect(() => {
+    if (o.center) return;
+    const again = () => { if (el.current) place(el.current, o); };
+    addEventListener("resize", again);
+    return () => removeEventListener("resize", again);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+}
 
 const typing = (el: Element | null) => el?.closest?.("input, textarea, select, [contenteditable]");
 
@@ -176,21 +201,10 @@ function MenuView({ o }: { o: MenuOptions }) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Placed under its anchor, or above it when the window has no room below, and kept 8px inside the window.
   useLayoutEffect(() => {
-    const box = el.current;
-    if (!box || o.center) return; // the command menu's CSS places it
-    const w = box.offsetWidth, h = box.offsetHeight;
-    let x = o.x ?? 0, y = o.y ?? 0;
-    if (o.anchor?.isConnected) {
-      const r = o.anchor.getBoundingClientRect();
-      x = r.left;
-      y = r.bottom + 4;
-      if (y + h > innerHeight - 8) y = Math.max(8, r.top - 4 - h);
-    } else if (y + h > innerHeight - 8) y = Math.max(8, innerHeight - 8 - h);
-    box.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`;
-    box.style.top = `${y}px`;
+    if (el.current && !o.center) place(el.current, o); // the command menu's CSS places it
   }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  usePlacedOnResize(el, o);
 
   useLayoutEffect(() => {
     el.current?.querySelector("li.on")?.scrollIntoView({ block: "nearest" });
@@ -278,15 +292,8 @@ function PopView({ o }: { o: MenuOptions }) {
       removeEventListener("keyup", onKey, true);
     };
   }, []);
-  useLayoutEffect(() => {
-    const box = el.current, r = o.anchor?.isConnected ? o.anchor.getBoundingClientRect() : null;
-    if (!box) return;
-    const w = box.offsetWidth, h = box.offsetHeight;
-    let x = r ? r.left : o.x ?? 0, y = r ? r.bottom + 4 : o.y ?? 0;
-    if (y + h > innerHeight - 8) y = Math.max(8, (r ? r.top - 4 : innerHeight - 8) - h);
-    box.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`;
-    box.style.top = `${y}px`;
-  });
+  useLayoutEffect(() => { if (el.current) place(el.current, o); });
+  usePlacedOnResize(el, o);
   return <div ref={el} className={`menu ${o.className ?? ""}`} tabIndex={-1}>{o.render!()}</div>;
 }
 

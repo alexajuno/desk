@@ -868,7 +868,9 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
             }
           }} />
       </div>
-      <div className="composer-foot">
+      {/* A tap on its buttons leaves the box focused: on a phone, the box losing focus brings the tabs back, which
+          moved the button up before the tap's click reached it, so the first tap did nothing (25 Oct). */}
+      <div className="composer-foot" onMouseDown={(e) => e.preventDefault()}>
         <label className="dock-btn attach" title="Attach an image">
           {GLYPH.plus}
           <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
@@ -931,7 +933,7 @@ const StartIn = observer(function StartIn({ s }: { s: LiveSession }) {
         s.startIn(f);
         requestAnimationFrame(focusComposer); // back to typing the first message
       }); }}>
-      {GLYPH.folder}<span>{now}</span>
+      {GLYPH.folder}<span><bdi>{now}</bdi></span>
       <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
     </button>
   );
@@ -944,7 +946,7 @@ const Runs = observer(function Runs({ s }: { s: LiveSession }) {
   return (
     <button className="runs" type="button" title="Model and effort" onMouseEnter={warm} onFocus={warm}
       onClick={(e) => { if (!toggled(e.currentTarget)) runsMenu(e.currentTarget, s.id, runs, (set, shown) => void s.pick(set, shown)); }}>
-      {runs.effort ? `${runs.name} · ${effortName(runs.effort)}` : runs.name}
+      {runs.name}{runs.effort && <span className="effort"> · {effortName(runs.effort)}</span>}
       <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
     </button>
   );
