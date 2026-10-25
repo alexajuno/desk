@@ -616,9 +616,13 @@ export function markRows(act: "read" | "unread" | "delete", ids: string[] | null
 // Search's hits, best match first, their matched words marked, as Linear's search page: issues and projects in one list,
 // or one kind (type), narrowed to some teams and to open or closed ones by the filters its @ menu adds. A project ties
 // ahead of an issue, as Linear's "muse" found the project first.
-export async function searchPage(q: string, type = "", team: string[] = [], status = "") {
+export async function searchPage(q: string, type = "", team = "", status = "") {
   const all = await store.loadAll(), everyTeam = await teams.loadAll();
-  const kept = (t: string | null, closed: boolean) => (!team.length || team.includes(t ?? "")) && (!status || (status === "closed") === closed);
+  // A filter as the lists write theirs: "desk,muse", or "not:desk" for every other value.
+  const filter = (text: string) => ({ not: text.startsWith("not:"), values: text.replace(/^not:/, "").split(",").filter(Boolean) });
+  const passes = (f: ReturnType<typeof filter>, value: string) => !f.values.length || f.values.includes(value) !== f.not;
+  const byTeam = filter(team), byStatus = filter(status);
+  const kept = (t: string | null, closed: boolean) => passes(byTeam, t ?? "") && passes(byStatus, closed ? "closed" : "open");
   const teamOf = (slug: string | null) => (slug ? { slug, title: everyTeam.get(slug)?.title ?? slug } : null);
   const projectHits = type === "issues" ? [] : findProjects(await projects.loadAll(), q).filter(([, h]) => kept(h.project.team, projects.CLOSED.has(h.project.status)))
     .map(([score, { project: p, title, snippet }]) => ({ score, hit: { kind: "project", key: `project/${p.slug}`, title, snippet, team: teamOf(p.team),

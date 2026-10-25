@@ -308,7 +308,7 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/api/page/automations", async () => pages.automationsPage());
   app.get("/api/page/automation/:slug", async (req: Req) => pages.automationPage(req.params.slug));
   app.get("/api/page/search", async (req: Req) =>
-    pages.searchPage(req.query.q ?? "", req.query.type ?? "", (req.query.team ?? "").split(",").filter(Boolean), req.query.status ?? ""));
+    pages.searchPage(req.query.q ?? "", req.query.type ?? "", req.query.team ?? "", req.query.status ?? ""));
   app.get("/api/page/file/:slug/:name", async (req: Req) => pages.filePage(req.params.slug, req.params.name));
   // The Inbox's rows, newest first, for an agent or a script: the app holds them itself (inbox.ts).
   app.get("/api/inbox", async () => pages.inboxRows());
