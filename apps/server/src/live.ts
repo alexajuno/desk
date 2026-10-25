@@ -72,7 +72,7 @@ export async function meta(id: string): Promise<Meta> {
   const chat = chats.agentChatOf(id);
   const all = await store.loadAll();
   const issue = [...all.values()].find((i) => i.session === id) ?? (chat?.issue ? all.get(chat.issue) : undefined) ?? null;
-  const row = await agents.liveRow(id);
+  const row = await agents.shownRow(id);
   const cwd = row.cwd ?? (chat ? chats.runsIn(chat) : transcript.cwdOf(id)) ?? "";
   const { chatTitleOf, titleOf } = await import("./sessions.ts");
   return {

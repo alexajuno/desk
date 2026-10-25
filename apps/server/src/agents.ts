@@ -91,6 +91,17 @@ export async function live(fresh = false): Promise<Map<string, Row>> {
 export const liveRow = async (session: string | null | undefined, fresh = false): Promise<Row> =>
   (session ? (await live(fresh)).get(session) : undefined) ?? {};
 
+// The session's row as Claude Code last listed it, at once, for what a page only shows: an issue's "open in a terminal",
+// a chat's folder. Waiting for a new listing held each issue page and each chat's first words up by 0.15 s (25 Oct), so a
+// listing over a second old is asked for again behind, and the next look has it; only before the first one is it waited
+// for.
+let relisting: Promise<unknown> | null = null;
+export async function shownRow(session: string | null | undefined): Promise<Row> {
+  if (!seen[0]) return liveRow(session);
+  if (performance.now() / 1000 - seen[0] >= 1) relisting ??= live().catch(() => {}).finally(() => { relisting = null; });
+  return (session ? seen[1].get(session) : undefined) ?? {};
+}
+
 // Where the session stands, from its row in `claude agents --json`: working while a turn runs (status busy), idle while
 // its process lives between turns, stopped with no process, whatever `state` says; none when it does not list.
 export function status(row: Row): string {

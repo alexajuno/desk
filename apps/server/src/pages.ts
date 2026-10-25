@@ -406,7 +406,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     if (!store.section(i, head) && isFile(path)) agentFiles[name] = toHtml(read(path), `/issue/${slug}/f/`);
   }
   const direct = store.children(all, slug);
-  const session = await agents.liveRow(i.session);
+  const session = await agents.shownRow(i.session);
   const result = store.result(i);
   const everyTeam = await teams.loadAll(), everyProject = await projects.loadAll();
   const team = i.team ? everyTeam.get(i.team) ?? null : null;
