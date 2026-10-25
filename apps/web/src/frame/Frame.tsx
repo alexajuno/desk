@@ -166,7 +166,7 @@ function onKeyDown(e: KeyboardEvent) {
     return;
   }
   if (key === "o" && !e.shiftKey) { oPressed = Date.now(); return; }
-  // P and R on the sidebar's chat under the mouse pin and rename it, before any row in focus.
+  // P, R and Delete on the sidebar's chat under the mouse pin, rename and delete it, before any row in focus.
   if (chatKey(e)) { e.preventDefault(); return; }
 
   const focused = focusedRow();

@@ -70,14 +70,14 @@ function chatMenu(c: ChatRow, pinned: boolean, at: At) {
   openMenu({ ...at, className: "actions", items: () => [
     { icon: GLYPH.pin, label: pinned ? "Unpin" : "Pin", hint: "P", key: "p", run: pin },
     ...(rename ? [{ icon: GLYPH.pencil, label: "Rename…", hint: "R", key: "r", more: true, run: () => rename(at) }] : []),
-    ...(remove ? [{ group: 2, icon: GLYPH.trash, label: "Delete", hint: "Ctrl ⌫", run: remove }] : []),
+    ...(remove ? [{ group: 2, icon: GLYPH.trash, label: "Delete", hint: "Del", run: remove }] : []),
   ] });
 }
 
 // The keys of the chat under the mouse, as Linear's keys act on the row under it: P pins or unpins it, R renames it,
-// Ctrl ⌫ deletes it. Linear's own sidebar and Agent chats take no keys (measured 25 Oct); its list rows do, and their
-// menu's Delete is Ctrl Delete. A key the chat has no action for says why, rather than falling through to the issue
-// open beside it.
+// Delete deletes it ("del key", the user, 25 Oct), as do Backspace, as on an Inbox row, and Linear's Ctrl Delete.
+// Linear's own sidebar and Agent chats take no keys (measured 25 Oct); its list rows do. A key the chat has no action
+// for says why, rather than falling through to the issue open beside it.
 export function chatKey(e: KeyboardEvent): boolean {
   const row = document.querySelector<HTMLElement>(".side [data-chat]:hover"), d = frame.data;
   const c = row && d && (d.pinned.find((p) => p.session === row.dataset.chat) ?? d.chats.find((p) => p.session === row.dataset.chat));
@@ -89,7 +89,7 @@ export function chatKey(e: KeyboardEvent): boolean {
     if (rename) rename({ anchor: row!.querySelector(".nav-title") ?? row });
     else toast("A chat with an issue goes by the issue's title.");
   }
-  else if (ctrl && (k === "Delete" || k === "Backspace")) {
+  else if (k === "Delete" || k === "Backspace") {
     if (remove) void remove();
     else toast(why);
   }
