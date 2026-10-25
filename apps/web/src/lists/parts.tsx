@@ -52,7 +52,7 @@ export function iconOf(key: string | null | undefined, menu = false): ReactNode 
   return menu ? GLYPH[v as keyof typeof GLYPH] ?? null : <ListGlyph name={v} />;
 }
 
-const CROSS = <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2.97 2.97a.75.75 0 0 1 1.06 0L8 6.94l3.97-3.97a.75.75 0 1 1 1.06 1.06L9.06 8l3.97 3.97a.75.75 0 1 1-1.06 1.06L8 9.06l-3.97 3.97a.75.75 0 0 1-1.06-1.06L6.94 8 2.97 4.03a.75.75 0 0 1 0-1.06z" /></svg>;
+export const CROSS = <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2.97 2.97a.75.75 0 0 1 1.06 0L8 6.94l3.97-3.97a.75.75 0 1 1 1.06 1.06L9.06 8l3.97 3.97a.75.75 0 1 1-1.06 1.06L8 9.06l-3.97 3.97a.75.75 0 0 1-1.06-1.06L6.94 8 2.97 4.03a.75.75 0 0 1 0-1.06z" /></svg>;
 
 type Where = Pick<MenuOptions, "anchor" | "x" | "y">;
 

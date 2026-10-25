@@ -213,6 +213,7 @@ function onKeyDown(e: KeyboardEvent) {
   else if (key === "x" && selectable(ui.focused)) { ui.toggleSelect(ui.focused!); e.preventDefault(); }
   // Linear's F and Shift+V (linear.app/docs/filters, linear.app/docs/display-options).
   else if (key === "f" && !e.shiftKey && document.querySelector(".filter-open")) { filterMenu({ anchor: document.querySelector(".filter-open") }); e.preventDefault(); }
+  else if (key === "f" && !e.shiftKey && document.querySelector(".search-filter")) { document.querySelector<HTMLElement>(".search-filter")!.click(); e.preventDefault(); }
   else if (key === "v" && e.shiftKey && document.querySelector(".display-open")) { listView.setDisplay(!listView.displayOpen); e.preventDefault(); }
   // T folds the group under the mouse, or the focused row's.
   else if (key === "t") {

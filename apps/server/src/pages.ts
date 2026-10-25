@@ -18,7 +18,7 @@ import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
 import { toHtml, toHtmlWithToc } from "./render.ts";
 import * as roster from "./roster.ts";
-import { find } from "./search.ts";
+import { findProjects, findScored } from "./search.ts";
 import * as sessions from "./sessions.ts";
 import * as teams from "./teams.ts";
 import type { Team } from "./teams.ts";
@@ -613,9 +613,20 @@ export function markRows(act: "read" | "unread" | "delete", ids: string[] | null
   return inbox.mark(act, ids ?? every.map((r) => r.id));
 }
 
-// Search's hits, best match first, their matched words marked.
-export async function searchPage(q: string) {
-  return find(await store.loadAll(), q).map((h) => ({ issue: issueJson(h.issue), title: h.title, snippet: h.snippet }));
+// Search's hits, best match first, their matched words marked, as Linear's search page: issues and projects in one list,
+// or one kind (type), narrowed to some teams and to open or closed ones by the filters its @ menu adds. A project ties
+// ahead of an issue, as Linear's "muse" found the project first.
+export async function searchPage(q: string, type = "", team: string[] = [], status = "") {
+  const all = await store.loadAll(), everyTeam = await teams.loadAll();
+  const kept = (t: string | null, closed: boolean) => (!team.length || team.includes(t ?? "")) && (!status || (status === "closed") === closed);
+  const teamOf = (slug: string | null) => (slug ? { slug, title: everyTeam.get(slug)?.title ?? slug } : null);
+  const projectHits = type === "issues" ? [] : findProjects(await projects.loadAll(), q).filter(([, h]) => kept(h.project.team, projects.CLOSED.has(h.project.status)))
+    .map(([score, { project: p, title, snippet }]) => ({ score, hit: { kind: "project", key: `project/${p.slug}`, title, snippet, team: teamOf(p.team),
+      date: shortDate(p.created), project: { slug: p.slug, status: p.status, progress: Math.round(projects.progress(projects.issuesOf(all, p.slug)) * 100) } } }));
+  const issueHits = type === "projects" ? [] : findScored(all, q).filter(([, h]) => kept(h.issue.team, CLOSED.has(h.issue.state)))
+    .map(([score, { issue, title, snippet }]) => ({ score, hit: { kind: "issue", key: issue.slug, title, snippet, team: teamOf(issue.team), date: shortDate(issue.created), issue: issueJson(issue) } }));
+  const found: { score: number; hit: object }[] = [...projectHits, ...issueHits];
+  return found.sort((a, b) => b.score - a.score).map((f) => f.hit);
 }
 
 // An issue's own file, by name, when it is one: null for anything outside its folder.

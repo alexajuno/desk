@@ -381,6 +381,33 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
 .results .item .title { flex: none; max-width: 60%; }
 .item .snippet { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
 .item mark { background: var(--bg-mark); color: var(--text-1); border-radius: 2px; }
+/* search's rows, Linear's (linear.app/alexajuno/search, measured on 25 Oct at 2x, dark and light): 40px, 8px corners, padded
+   0 8px 0 10px. First what the row is, Issue or Project, in 12px/450 text-3 in a 40px column, 16px before its 16px icon;
+   8px on, its title in 13px/450 text-2 with the matched words in 700 rather than on a fill; at the right its team (a 14px
+   icon, its name 8px after it) and its age, both in 12px text-3. Linear's rows show no description; desk's keep where it
+   matched, as before. */
+.results .item.search-row { height: 40px; gap: 8px; margin: 0 8px; padding: 0 8px 0 10px; border-radius: 8px; }
+.search-row .kind { flex: none; width: 40px; margin-right: 8px; font-size: 12px; color: var(--text-3); }
+.search-row .status { display: inline-flex; flex: none; color: var(--text-1); }
+.search-row .title { font-weight: 450; color: var(--text-2); }
+.search-row mark { background: none; color: inherit; font-weight: 700; }
+.search-row .team { display: inline-flex; flex: none; align-items: center; gap: 8px; margin-left: 8px; font-size: 12px; color: var(--text-3); }
+.search-row .team .glyph { width: 14px; height: 14px; margin: 0 2px; }
+.results .filter-bar { margin: 0 8px 4px; }
+.dim-icon { display: contents; color: var(--text-3); }
+
+/* search's @ menu (measured on linear.app's search on 25 Oct at 2x, dark and light): 350px wide, 4px under the box, its left
+   edge at the @; the tooltip's palette, 10px corners, a 0.5px edge and the shortcuts panel's shadow. 4px in, each group
+   headed in 12px/500 (28px, 14px in), a 1px rule with 4px either side between groups; rows of 34px whose focus is a fill
+   4px in from the sides, a 16px icon 14px in and the name 12px after it, in 13px/450. The fill's corners are not
+   measured. */
+.at-menu { position: fixed; z-index: 20; width: 350px; box-sizing: border-box; padding: 4px 0; border-radius: 10px; background: var(--bg-tip);
+           border: 0.5px solid var(--border-tip); box-shadow: var(--shadow-keys); color: var(--text-cmd-on); font: 450 13px var(--font); }
+.at-heading { display: flex; align-items: center; height: 28px; box-sizing: border-box; padding: 0 14px 2px; font: 500 12px var(--font); color: var(--text-tip-key); }
+.at-heading.ruled { height: 33px; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border-tip); }
+.at-row { display: flex; align-items: center; gap: 12px; height: 34px; margin: 0 4px; padding: 0 10px; border-radius: 6px; cursor: pointer; }
+.at-row.on { background: var(--bg-cmd-on); }
+.at-row svg { flex: none; width: 16px; height: 16px; }
 
 input[type=text] { font: 450 13px var(--font); height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border-3);
                    background: var(--bg-raised); color: var(--text-1); box-sizing: border-box; width: 100%; }

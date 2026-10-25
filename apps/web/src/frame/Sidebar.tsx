@@ -28,7 +28,7 @@ function triageTip(triage: { slug: string; session: string | null }[]) {
   return `${triage.length ? `${triage.length} not settled yet${waits ? `, ${waits} waiting for you` : ""}` : "Nothing to settle"}  G then T`;
 }
 const ISSUES_TIP = "All issues  G then E\nActive  G then A\nBacklog  G then B";
-const ISSUES_ICON = <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"><rect x="2.25" y="4.75" width="9" height="9" rx="2" /><path d="M4.75 2.25h7c1.1 0 2 .9 2 2v7" strokeLinecap="round" /></svg>;
+export const ISSUES_ICON = <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"><rect x="2.25" y="4.75" width="9" height="9" rx="2" /><path d="M4.75 2.25h7c1.1 0 2 .9 2 2v7" strokeLinecap="round" /></svg>;
 const TRIAGE_ICON = <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9.5h3.25l1 1.75h3.5l1-1.75H14" /><path d="M2 9.5l1.6-5.1c.13-.42.52-.65.95-.65h6.9c.43 0 .82.23.95.65L14 9.5v2.75c0 .55-.45 1-1 1H3c-.55 0-1-.45-1-1z" /><path d="M8 4.5v3.25M6.6 6.4 8 7.75 9.4 6.4" /></svg>;
 
 // A team's right-click: its settings page, and every team.
