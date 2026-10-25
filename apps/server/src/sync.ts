@@ -109,6 +109,10 @@ function serial(name: string, work: () => Promise<void>): () => Promise<void> {
 // code runs, which says nothing, turns.ts looks again every few seconds instead, until it gives way.)
 
 let frameText = ""; // the frame as the apps were last told
+// The apps that connected since, told no frame yet: the next one goes to them even when it is the last one again. An app
+// that connects waits for a frame worked out afresh rather than the last, which can be a while old: its sidebar's chats
+// then reordered a second after the page drew (25 Oct).
+const unframed = new Set<WebSocket>();
 
 async function frameNow() {
   if (!listeners.size && !legacy.size) {
@@ -119,10 +123,11 @@ async function frameNow() {
   const all = await store.loadAll();
   const text = JSON.stringify(await pages.framePage(legacy.size > 0, all));
   wakeAt(pages.nextMove(all));
-  if (text === frameText) return;
+  const to = text === frameText ? [...unframed] : [...listeners, ...legacy];
+  unframed.clear();
   frameText = text;
   const message = `{"type":"frame","frame":${text}}`;
-  for (const ws of [...listeners, ...legacy]) ws.send(message);
+  for (const ws of to) if (ws.readyState === ws.OPEN) ws.send(message);
 }
 
 const frame = serial("sync frame", frameNow);
@@ -200,6 +205,7 @@ export async function connect(ws: WebSocket, query: Record<string, string | unde
   const leave = () => {
     listeners.delete(ws);
     legacy.delete(ws);
+    unframed.delete(ws);
     shown.delete(ws);
   };
   ws.on("close", leave);
@@ -228,8 +234,8 @@ export async function connect(ws: WebSocket, query: Record<string, string | unde
     ws.close(1011);
     return;
   }
-  if (frameText && ws.readyState === ws.OPEN) ws.send(`{"type":"frame","frame":${frameText}}`);
-  void frame(); // what it was told may be from before the last app left
+  unframed.add(ws);
+  void frame();
 }
 
 // The process is stopping: close every socket, so the apps reconnect to the desk that comes next (code 1012, restart).

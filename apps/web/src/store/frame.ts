@@ -56,7 +56,8 @@ export const talkOf = (i: { slug: string; session: string | null }) => (i.sessio
 // Which branch runs on 8790 and which wait for it, which an issue's Try button says.
 export const lineKey = () => (frame.data ? [frame.data.trying?.slug, ...frame.data.line.map((w) => w.slug)].join(" ") : "");
 
+// The first frame comes over the sync socket, worked out afresh for this app (the server's sync.ts): fetching it as well
+// had desk work it out twice as the page opened, and drew whichever came first.
 export function startFrame() {
   onReload(() => frame.load()); // an action redraws the sidebar with its page, as the old soft refresh swapped both
-  frame.load();
 }
