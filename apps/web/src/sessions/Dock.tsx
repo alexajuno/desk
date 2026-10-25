@@ -718,20 +718,34 @@ async function runsIn(text: string): Promise<{ set: { model?: string; effort?: s
 
 // What is typed and not yet sent, by chat (localStorage.composerDrafts), so a closed or reloaded tab gives it back,
 // as claude.ai's composer does. Text only: attached files would soon fill the browser's few megabytes. The 50 chats typed in
-// last keep theirs.
-const drafts = (): Record<string, string> => JSON.parse(localStorage.composerDrafts ?? "{}");
+// last keep theirs. What Ctrl S put away is kept the same way (localStorage.composerStashes).
+type Kept = "composerDrafts" | "composerStashes";
 
-function keepDraft(id: string, text: string) {
-  const { [id]: _, ...rest } = drafts();
+const kept = (store: Kept): Record<string, string> => JSON.parse(localStorage[store] ?? "{}");
+const drafts = () => kept("composerDrafts");
+
+function keep(store: Kept, id: string, text: string) {
+  const { [id]: _, ...rest } = kept(store);
   const all = Object.entries(rest);
   if (text.trim()) all.push([id, text]);
-  localStorage.composerDrafts = JSON.stringify(Object.fromEntries(all.slice(-50)));
+  localStorage[store] = JSON.stringify(Object.fromEntries(all.slice(-50)));
 }
+
+const keepDraft = (id: string, text: string) => keep("composerDrafts", id, text);
+
+// What Ctrl S put away, one per chat, as Claude Code's stash: the text, its files while the page lasts, and where the
+// cursor was.
+interface Stash { text: string; attached: Attachment[]; caret: number }
 
 const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   const [text, setText] = useState(() => drafts()[s.id] ?? "");
   useEffect(() => keepDraft(s.id, text), [s.id, text]);
   const [attached, setAttached] = useState<Attachment[]>([]);
+  const [stash, setStash] = useState<Stash | null>(() => {
+    const t = kept("composerStashes")[s.id];
+    return t ? { text: t, attached: [], caret: t.length } : null;
+  });
+  useEffect(() => keep("composerStashes", s.id, stash?.text ?? ""), [s.id, stash]);
   const picker = useRef<HTMLInputElement>(null);
   const [picks, setPicks] = useState<Pick[]>([]);
   const [at, setAt] = useState(0);
@@ -834,6 +848,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
       return putBack();
     }
     if (!(await s.send(t, sending))) putBack();
+    else unstash();
   }
 
   // Ctrl+Enter while Claude works, Claude Code's send now: what is typed and what is queued go in at once.
@@ -846,7 +861,36 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
     if (left) {
       setText(left.text); // put back what failed to go
       setAttached(left.attached);
-    }
+    } else unstash();
+  }
+
+  // Ctrl S, Claude Code's stash: what is typed goes away and the box empties, to write something else first. Ctrl S on
+  // an empty box brings it back, and so does the next message sent; Ctrl S over both swaps them, so neither is lost.
+  function swapStash() {
+    const now = text.trim() || attached.length ? { text, attached, caret: box.current!.selectionStart } : null;
+    if (!now && !stash) return toast("Ctrl S puts away what is typed, until the next message is sent.");
+    setStash(now);
+    restore(stash ?? { text: "", attached: [], caret: 0 });
+  }
+
+  // A message gone: the stash comes back into the box, unless something was typed meanwhile. What send saw as typed
+  // is gone already, so this reads the box itself.
+  function unstash() {
+    if (!stash || box.current?.value.trim()) return;
+    setStash(null);
+    restore(stash);
+    toast("Stash restored");
+  }
+
+  function restore(back: Stash) {
+    setText(back.text);
+    setAttached(back.attached);
+    setPicks([]);
+    requestAnimationFrame(() => {
+      const el = box.current!;
+      el.focus();
+      el.selectionStart = el.selectionEnd = back.caret;
+    });
   }
 
   // ↑ on the box's first line while messages wait: they come back into the box, above what is typed, to edit.
@@ -944,6 +988,9 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
             } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === "KeyD") {
               e.preventDefault(); // D for directory, and not the browser's bookmark
               pickFolder(e.currentTarget);
+            } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === "KeyS") {
+              e.preventDefault(); // and not the browser's Save page
+              swapStash();
             } else if (e.key === "Escape") {
               e.preventDefault();
               e.stopPropagation(); // the frame's Esc would also leave the page: that is the next Esc's to do
@@ -961,6 +1008,11 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
         </label>
         {fresh(s) && <StartAs s={s} />}
         {fresh(s) && <StartIn s={s} />}
+        {stash && (
+          <button className="runs stashed" type="button" title={`${text.trim() || attached.length ? "Swap with the stash" : "Bring back the stash"}  Ctrl S`} onClick={swapStash}>
+            {GLYPH.archive}<span>{stash.text.trim().split("\n")[0] || `${stash.attached.length} ${stash.attached.length === 1 ? "file" : "files"}`}</span>
+          </button>
+        )}
         <span className="spacer" />
         <Runs s={s} />
         {s.working && (
