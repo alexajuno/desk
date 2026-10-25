@@ -83,9 +83,10 @@ export const Sidebar = observer(function Sidebar() {
   // An issue's title and state as the rows say them, which a change brings before the frame that follows it.
   const held = (i: { slug: string; title: string; state: State }) => issues.bySlug.get(i.slug) ?? i;
   const [folded, toggle] = useFolded();
-  // A session's row: its issue's state, or a ring for a chat with no issue, then on the right the dock's pulse while it
-  // works, or the Inbox's dot while its row there is unread. One with an issue opens the issue, where its chat docks,
-  // and goes by the issue's title.
+  // A session's row: its issue's state, or a ring for a chat with no issue, then on the right the Inbox's dot while its
+  // row there is unread and the chat is not working. It shows no dot of its own while it works: its issue's In progress
+  // icon says so ("not necessary", the user, 25 Oct). One with an issue opens the issue, where its chat docks, and goes
+  // by the issue's title.
   const chatRow = (c: ChatRow, pinned: boolean) => {
     const unread = issues.inbox.get(c.session)?.read === null;
     return (
@@ -95,7 +96,7 @@ export const Sidebar = observer(function Sidebar() {
         onContextMenu={(e) => { e.preventDefault(); chatMenu(c, pinned, { x: e.clientX, y: e.clientY }); }}>
         {c.issue ? <StateIcon state={issues.bySlug.get(c.issue.slug)?.state ?? c.issue.state} /> : <Ring />}
         <span className="nav-title">{c.title}</span>
-        {c.working ? <span className="live-dot working" /> : unread ? <span className="unread" aria-label="Unread" /> : null}
+        {!c.working && unread && <span className="unread" aria-label="Unread" />}
       </Go>
     );
   };
