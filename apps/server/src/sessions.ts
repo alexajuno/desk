@@ -14,6 +14,7 @@ import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import { patternOf } from "./search.ts";
 import * as transcripts from "./transcript.ts";
+import * as uploads from "./uploads.ts";
 import { ago } from "./when.ts";
 
 export const PROJECTS = join(HOME, ".claude", "projects");
@@ -39,7 +40,7 @@ const table = new Map<string, TableRow>();
 function textOf(event: { message?: { content?: unknown } }): string {
   let content = event.message?.content;
   if (Array.isArray(content)) content = content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n");
-  const text = String(content ?? "").split(/\s+/).filter(Boolean).join(" ");
+  const text = uploads.split(String(content ?? "")).text.split(/\s+/).filter(Boolean).join(" "); // without the files' paths
   return text.startsWith("<") ? "" : [...text].slice(0, 300).join("");
 }
 
