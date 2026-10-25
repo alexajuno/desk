@@ -12,7 +12,7 @@ import { toggled } from "../ui/menu";
 import { ui } from "../store/ui";
 import { painted } from "./painted";
 import { actionsMenu, fieldMenu } from "./menus";
-import { selectionMenu, selectTo } from "./selection";
+import { SelectBox, selectionMenu, selectTo } from "./selection";
 
 export const Row = observer(function Row({ issue, context = false, here = null, children }: { issue: IssueRow; context?: boolean; here?: string | null; children?: ReactNode }) {
   const p = painted(issue);
@@ -36,10 +36,7 @@ export const Row = observer(function Row({ issue, context = false, here = null, 
         if (selected) selectionMenu({ x: e.clientX, y: e.clientY });
         else actionsMenu(p, { x: e.clientX, y: e.clientY }, here);
       }}>
-      <span className="select-box" role="checkbox" aria-checked={selected} aria-label="Select" title="Select  X"
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (e.shiftKey) selectTo(p.slug); else ui.toggleSelect(p.slug); }}>
-        <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 8.5l3 3 6-7" /></svg>
-      </span>
+      <SelectBox id={p.slug} selected={selected} />
       <span className="icon" data-field="priority" title="Change priority  P" onClick={icon("priority")}><PrioIcon level={p.priority} /></span>
       <span className="icon" data-field="state" title="Change status  S" onClick={icon("state")}><StateIcon state={p.state} /></span>
       <span className="title">{p.title}</span>

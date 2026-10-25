@@ -37,7 +37,7 @@ function keyCaps(keys: string) {
 
 function fillTip(el: HTMLElement) {
   if (el.matches(".group-toggle")) {
-    const verb = el.closest(".group")?.classList.contains("collapsed") ? "expand" : "collapse";
+    const verb = el.closest(".group, .projects-group")?.classList.contains("collapsed") ? "expand" : "collapse";
     const line = (keys: string, text: string) => { const div = document.createElement("div"); div.append(keyCaps(keys), ` to ${text}`); return div; };
     const lines = Object.assign(document.createElement("div"), { className: "lines" });
     lines.append(line("T", `${verb} group`), line("Alt Click", `${verb} all`));

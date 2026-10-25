@@ -143,6 +143,26 @@ export function FilterBar({ list }: { list: Pick<ListData, "chips"> }) {
 // { "/issues": ["low"], ... }).
 const collapsedOf = (key: string): string[] => JSON.parse(localStorage.collapsed ?? "{}")[key] ?? [];
 
+// A list's folded groups and the triangle's click: Alt folds or opens every group of the list, as Linear's does.
+export function useFolded(key: string, values: string[]) {
+  const [shut, setShut] = useState(() => collapsedOf(key));
+  useEffect(() => setShut(collapsedOf(key)), [key]);
+  function toggle(value: string, all: boolean, el: Element) {
+    const closing = !shut.includes(value);
+    const memory = JSON.parse(localStorage.collapsed ?? "{}"), now = new Set<string>(memory[key]);
+    for (const g of all ? values : [value]) closing ? now.add(g) : now.delete(g);
+    if (now.size) memory[key] = [...now];
+    else delete memory[key];
+    localStorage.collapsed = JSON.stringify(memory);
+    setShut([...now]);
+    const at = ui.focused ? CSS.escape(ui.focused) : null;
+    if (at && !document.querySelector(`.item[data-slug="${at}"], .item[data-key="${at}"]`)?.checkVisibility()) ui.focus(null);
+    // The key or click hid its tooltip: show the new verb.
+    requestAnimationFrame(() => { if (tipShownFor() === el && el.matches(":hover")) showTip(el as HTMLElement); });
+  }
+  return { shut, toggle };
+}
+
 // A list's body: its filter bar, then its groups as rows, or as a board's columns when its Layout is Board.
 export function Listing({ list, empty }: { list: ListData; empty: string }) {
   const board = list.view.layout === "board";
@@ -159,20 +179,7 @@ export function Listing({ list, empty }: { list: ListData; empty: string }) {
 // click this triangle).
 export function Groups({ list, empty, here = null }: { list: ListData; empty: string; here?: string | null }) {
   const key = list.collapse_key;
-  const [shut, setShut] = useState(() => collapsedOf(key));
-  useEffect(() => setShut(collapsedOf(key)), [key]);
-  function toggle(value: string, all: boolean, el: Element) {
-    const closing = !shut.includes(value);
-    const memory = JSON.parse(localStorage.collapsed ?? "{}"), now = new Set<string>(memory[key]);
-    for (const g of all ? list.groups.map((x) => x.value) : [value]) closing ? now.add(g) : now.delete(g);
-    if (now.size) memory[key] = [...now];
-    else delete memory[key];
-    localStorage.collapsed = JSON.stringify(memory);
-    setShut([...now]);
-    if (ui.focused && !document.querySelector(`.item[data-slug="${CSS.escape(ui.focused)}"]`)?.checkVisibility()) ui.focus(null);
-    // The key or click hid its tooltip: show the new verb.
-    requestAnimationFrame(() => { if (tipShownFor() === el && el.matches(":hover")) showTip(el as HTMLElement); });
-  }
+  const { shut, toggle } = useFolded(key, list.groups.map((x) => x.value));
   return (
     <div className="issue-list" data-collapse-key={key}>
       {list.groups.map((g) => {

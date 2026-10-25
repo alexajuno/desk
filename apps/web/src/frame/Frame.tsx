@@ -8,7 +8,7 @@ import { Outlet, useLocation } from "react-router";
 import { deskPath, go } from "../app/nav";
 import { remove, removeMany, setField, setFields, undo, undoList } from "../issues/actions";
 import { fieldMenu, milestoneMenu, projectPicker, projectStatusMenu, teamPicker } from "../issues/menus";
-import { selectable, selectAll, selection, SelectionBar, selectionField } from "../issues/selection";
+import { ofProjects, projectsStatus, projectsTeam, selectable, selectAll, selection, SelectionBar, selectionField } from "../issues/selection";
 import { listView, setView } from "../lists/current";
 import { setProject } from "../lists/ProjectPage";
 import { noteAppPath, SettingsNav } from "../settings/SettingsPage";
@@ -112,7 +112,12 @@ function onKeyDown(e: KeyboardEvent) {
   if (typing(e.target)) { if (e.key === "Escape") (e.target as HTMLElement).blur(); return; }
   const key = e.key.toLowerCase();
 
-  // Linear's Ctrl ⇧ M: move the issue in focus or open, or every one selected, to another team.
+  // Linear's Ctrl ⇧ M: move the issue in focus or open, or every one selected, to another team; or every project selected.
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyM" && ofProjects()) {
+    projectsTeam({ anchor: document.querySelector(".select-bar") });
+    e.preventDefault();
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyM" && (ui.selected.size || target())) {
     const slugs = ui.selected.size ? selection() : [target()!], one = slugs.length === 1 ? issues.bySlug.get(slugs[0]) : undefined;
     const anchor = focusedRow()?.querySelector(".icon") ?? [...document.querySelectorAll(".team-pick, .select-bar")].find((el) => el.checkVisibility()) ?? null;
@@ -130,8 +135,9 @@ function onKeyDown(e: KeyboardEvent) {
     else if (chatKey(e)) e.preventDefault();
     else if (key === "z" && undoList().length) { undo(); e.preventDefault(); }
     // Linear's Ctrl A: the whole list on screen, filtered as it is.
-    else if (key === "a" && document.querySelector(".tree .item[data-slug]")) { selectAll(); e.preventDefault(); }
-    else if ((e.key === "Delete" || e.key === "Backspace") && ui.selected.size) { removeMany(selection()); e.preventDefault(); }
+    else if (key === "a" && document.querySelector(".tree .item[data-slug], .projects-row")) { selectAll(); e.preventDefault(); }
+    // desk has no way to delete a project, so a selection of them ignores it.
+    else if ((e.key === "Delete" || e.key === "Backspace") && ui.selected.size) { if (!ofProjects()) removeMany(selection()); e.preventDefault(); }
     else if (e.key === ",") { go("/settings"); e.preventDefault(); } // the usual key for an app's settings
     // Linear's Ctrl B: the list as a board, and back.
     else if (key === "b" && listView.view?.layout) { setView({ layout: listView.view.layout === "board" ? "list" : "board" }); e.preventDefault(); }
@@ -217,8 +223,8 @@ function onKeyDown(e: KeyboardEvent) {
   else if (key === "v" && e.shiftKey && document.querySelector(".display-open")) { listView.setDisplay(!listView.displayOpen); e.preventDefault(); }
   // T folds the group under the mouse, or the focused row's.
   else if (key === "t") {
-    const groups = [...document.querySelectorAll<HTMLElement>(".group[data-group]")];
-    const group = document.querySelector<HTMLElement>(".group[data-group]:hover") ?? (focused && groups.find((g) => g.nextElementSibling?.contains(focused)));
+    const groups = [...document.querySelectorAll<HTMLElement>(":is(.group, .projects-group)[data-group]")];
+    const group = document.querySelector<HTMLElement>(":is(.group, .projects-group)[data-group]:hover") ?? (focused && groups.find((g) => g.nextElementSibling?.contains(focused)));
     group?.querySelector<HTMLElement>(".group-toggle")?.click();
   }
   // I, as vim's insert: back into the chat's composer, or, where no chat is open, the issue's chat, opened to read as its
@@ -235,7 +241,7 @@ function onKeyDown(e: KeyboardEvent) {
     e.preventDefault();
   }
   // Linear's Shift P: the project of the issue in focus or open, or of every one selected.
-  else if (key === "p" && e.shiftKey && (ui.selected.size || target())) {
+  else if (key === "p" && e.shiftKey && !ofProjects() && (ui.selected.size || target())) {
     const slugs = ui.selected.size ? selection() : [target()!], one = slugs.length === 1 ? issues.bySlug.get(slugs[0]) : undefined;
     const anchor = focused?.querySelector(".icon") ?? [...document.querySelectorAll(".project-pick-menu, .project-chip, .select-bar")].find((el) => el.checkVisibility()) ?? null;
     projectPicker(one?.project ?? null, one?.team ?? null, { anchor }, (to) => (slugs.length === 1 ? setField(slugs[0], "project", to) : setFields(slugs, "project", to)));
@@ -255,13 +261,19 @@ function onKeyDown(e: KeyboardEvent) {
     milestoneMenu(one?.project ?? null, one?.milestone ?? null, { anchor }, (id) => setField(slug, "milestone", id));
     e.preventDefault();
   }
+  // S with projects selected: the status of every one, from the menu at the row in focus, if selected, or at the bar.
+  else if (key === "s" && !e.shiftKey && ofProjects()) {
+    const at = (focused && ui.selected.has(focused.dataset.key ?? "") && focused.querySelector(".status")) || document.querySelector(".select-bar");
+    projectsStatus({ anchor: at });
+    e.preventDefault();
+  }
   // S on a project row: its status, from the menu at its status icon, as the project's own Change status chip.
   else if (key === "s" && !e.shiftKey && focused?.dataset.key?.startsWith("project/")) {
     const slug = focused.dataset.key.slice("project/".length);
     projectStatusMenu(focused.dataset.status ?? "", { anchor: focused.querySelector(".status") }, (st) => setProject(slug, "status", st));
     e.preventDefault();
   }
-  else if ((key === "s" || key === "p") && ui.selected.size) {
+  else if ((key === "s" || key === "p") && ui.selected.size && !ofProjects()) {
     // With a selection, S and P change every selected issue, from the menu at the row in focus or at the bar.
     const field = key === "s" ? "state" : "priority";
     const at = (focused && ui.selected.has(focused.dataset.slug ?? "") && focused.querySelector(`.icon[data-field=${field}]`))

@@ -348,8 +348,8 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
                 border: 0; border-radius: 9999px; background: none; color: var(--group-toggle); }
 .group-toggle:hover { background: none; color: var(--text-2); }
 .group-toggle svg { fill: currentColor; transform: rotate(90deg); transition: transform 0.15s; }
-.group.collapsed .group-toggle svg { transform: none; }
-.group.collapsed + .tree { display: none; }
+.group.collapsed .group-toggle svg, .projects-group.collapsed .group-toggle svg { transform: none; }
+.group.collapsed + .tree, .projects-group.collapsed + .projects-rows { display: none; }
 /* Linear's + at the right of a group, and of the Sub-issues label: a new issue that starts in that group, or under this issue */
 .group-add, .add-sub { width: 24px; height: 24px; padding: 0; justify-content: center; margin-left: auto; border: 0; border-radius: 6px;
                        background: none; color: var(--text-3); }
@@ -1038,16 +1038,17 @@ button.set-pick svg { color: var(--text-3); }
 /* Selection, as Linear's lists: a selected row tinted, a 14px checkbox in the row's left gutter under the mouse, on
    every row once one is selected; and the bar of what to do with them, floating over the foot of the panel. Rows with
    no gutter (an issue's sub-issues, a project's issues) select with X and Shift-click only. */
-.tree .item { position: relative; }
+.tree .item, .projects-row { position: relative; }
 .item.selected { background: var(--bg-selected); }
 .item.selected:hover, .item.selected.focus { background: var(--bg-selected-hover); }
 .item .select-box { display: none; }
-.tree .item .select-box { position: absolute; left: 5px; top: 50%; translate: 0 -50%; display: grid; place-items: center; box-sizing: border-box;
+.tree .item .select-box, .projects-row .select-box { position: absolute; left: 5px; top: 50%; translate: 0 -50%; display: grid; place-items: center; box-sizing: border-box;
                           width: 14px; height: 14px; border: 1px solid var(--border-3); border-radius: 4px; background: var(--bg-panel);
                           color: transparent; cursor: pointer; opacity: 0; }
 .tree .tree .item .select-box { left: 1px; }
 .issue .tree .item .select-box { display: none; }
-.tree .item:hover .select-box, .item.selected .select-box, :root:has(.item.selected) .tree .item .select-box { opacity: 1; }
+.tree .item:hover .select-box, .projects-row:hover .select-box, .item.selected .select-box,
+:root:has(.item.selected) :is(.tree .item, .projects-row) .select-box { opacity: 1; }
 .item.selected .select-box { border-color: var(--accent); background: var(--accent); color: var(--on-accent); } /* as a menu's ticked box */
 .select-bar { position: fixed; bottom: 24px; left: calc(244px + (100vw - 252px) / 2); translate: -50% 0; z-index: 30; display: flex;
               align-items: center; gap: 4px; height: 40px; padding: 0 6px 0 14px; box-sizing: border-box; background: var(--bg-pop);
@@ -1161,14 +1162,17 @@ button.set-pick svg { color: var(--text-3); }
 /* Projects (lists/ProjectsPage.tsx), Linear's list of them, read off linear.app's All projects on 2026-10-20 in dark: a
    row of column names in --text-3, then each status's group, its header 44px with the status icon, name and count, and
    its rows 48px: the name with the project's cube, then the columns, Status last with the icon and the percent. A
-   team's list has no Team column. */
+   team's list has no Team column. Measured again on 2026-10-25, dark and light, from the row's left edge: a group's
+   triangle 8px in and its status icon at 34px; a row's checkbox 11px in, under the mouse, and its cube at 36px, under
+   the Name column's label. The triangle and the checkbox are the issue lists' (.group-toggle, .select-box). */
 .projects-list { --cols: minmax(0, 1fr) 150px 150px 110px 56px 80px; padding-top: 0; }
 .projects-list.in-team { --cols: minmax(0, 1fr) 150px 110px 56px 80px; }
 .projects-cols, .projects-row { display: grid; grid-template-columns: var(--cols); align-items: center; gap: 12px; }
 .projects-cols { height: 36px; padding: 0 16px 0 36px; font: 500 12px var(--font); color: var(--text-3); }
-.projects-group { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 22px; font-weight: 500; color: var(--text-1); }
+.projects-group { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px 0 8px; font-weight: 500; color: var(--text-1); }
 .projects-group .count { color: var(--text-3); font-weight: 450; }
-.projects-row { height: 48px; padding: 0 16px 0 22px; }
+.projects-row { height: 48px; padding: 0 16px 0 36px; }
+.projects-row .select-box { left: 11px; }
 .projects-row .name { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .projects-row .name .glyph { flex: none; color: var(--text-2); }
 .projects-row .muted, .projects-row .num { color: var(--text-2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

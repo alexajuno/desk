@@ -1,20 +1,25 @@
 // Selecting many issues at once, as Linear's lists do (linear.app/docs/select-issues): X selects the row in focus,
 // Shift-click a range from the row last selected, Shift ↑ ↓ grows it a row at a time, Ctrl A takes the whole list, Esc
 // clears it. S, P, Ctrl Delete, a selected row's right-click and the bar at the bottom then act on every selected issue.
+// The Projects list selects its projects the same way, and S, Ctrl ⇧ M, the right-click and the bar act on them.
 import { observer } from "mobx-react-lite";
+import { post, reason } from "../api/http";
 import { setFields, removeMany } from "./actions";
-import { parentPicker, projectPicker, teamPicker, valueMenu } from "./menus";
-import { ui } from "../store/ui";
-import { fieldIcon, GLYPH } from "../ui/icons";
+import { parentPicker, projectPicker, projectStatusMenu, teamPicker, valueMenu } from "./menus";
+import { reloadPages, ui } from "../store/ui";
+import { fieldIcon, GLYPH, ProjectStatusIcon } from "../ui/icons";
 import { openMenu, toggled, type MenuItem, type MenuOptions } from "../ui/menu";
+import { toast } from "../ui/toast";
 
 type Where = Pick<MenuOptions, "anchor" | "x" | "y" | "onClose">;
 
-// The rows a selection takes: issue rows in a list, on screen, but not a parent greyed out only to place a match.
-const rows = () => [...document.querySelectorAll<HTMLElement>(".tree .item[data-slug]:not(.context)")].filter((row) => row.checkVisibility());
-const slugsOf = (list: HTMLElement[]) => list.map((row) => row.dataset.slug!);
+// The rows a selection takes: issue rows in a list, on screen, but not a parent greyed out only to place a match; or
+// the Projects list's rows, each by its key, project/<slug>.
+const rows = () => [...document.querySelectorAll<HTMLElement>(".tree .item[data-slug]:not(.context), .projects-row[data-key]")].filter((row) => row.checkVisibility());
+const keyOf = (row: HTMLElement) => row.dataset.slug ?? row.dataset.key!;
+const slugsOf = (list: HTMLElement[]) => list.map(keyOf);
 
-export const selectable = (slug: string | null) => Boolean(slug && rows().some((row) => row.dataset.slug === slug));
+export const selectable = (slug: string | null) => Boolean(slug && rows().some((row) => keyOf(row) === slug));
 
 // The selection as it stands on screen, in the list's order; a selected issue the list no longer shows is let go.
 export function selection(): string[] {
@@ -34,6 +39,14 @@ export function selectTo(slug: string) {
 }
 
 export const selectAll = () => ui.select(slugsOf(rows()));
+
+// A row's checkbox, in its left gutter under the mouse, and on every row once one is selected.
+export const SelectBox = ({ id, selected }: { id: string; selected: boolean }) => (
+  <span className="select-box" role="checkbox" aria-checked={selected} aria-label="Select" title="Select  X"
+    onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (e.shiftKey) selectTo(id); else ui.toggleSelect(id); }}>
+    <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 8.5l3 3 6-7" /></svg>
+  </span>
+);
 
 // What the selected issues share of a field, or "" when they differ.
 function shared(slugs: string[], field: "state" | "priority"): string {
@@ -65,6 +78,47 @@ export function selectionMenu(where: Where) {
   openMenu({ ...where, className: "actions", items: () => items });
 }
 
+// Whether the selection is the Projects list's, whose keys are project/<slug>.
+export const ofProjects = () => [...ui.selected].some((key) => key.startsWith("project/"));
+const projectSlugs = () => selection().map((key) => key.slice("project/".length));
+
+// What the selected projects share of a field, or "" when they differ.
+function sharedProject(slugs: string[], field: "status" | "team"): string {
+  const values = new Set(slugs.map((slug) => document.querySelector<HTMLElement>(`.projects-row[data-key="project/${CSS.escape(slug)}"]`)?.dataset[field] ?? ""));
+  return values.size === 1 ? [...values][0] : "";
+}
+
+// The same field on every selected project.
+async function setProjects(slugs: string[], field: "status" | "team", value: string) {
+  const res = await Promise.all(slugs.map((slug) => post(`/project/${slug}/set`, { field, value })));
+  const failed = res.find((r) => !r.ok);
+  if (failed) toast(await reason(failed));
+  else toast(`${slugs.length} project${slugs.length === 1 ? "" : "s"} changed`);
+  await reloadPages();
+}
+
+export function projectsStatus(where: Where) {
+  const slugs = projectSlugs();
+  if (slugs.length) projectStatusMenu(sharedProject(slugs, "status"), where, (status) => setProjects(slugs, "status", status));
+}
+
+export function projectsTeam(where: Where) {
+  const slugs = projectSlugs();
+  if (slugs.length) teamPicker(sharedProject(slugs, "team") || null, where, (to) => setProjects(slugs, "team", to));
+}
+
+// A selected project row's right-click: what the bar does.
+export function projectsMenu(where: Where) {
+  const slugs = projectSlugs();
+  if (!slugs.length) return;
+  const items: MenuItem[] = [
+    { group: 0, icon: <ProjectStatusIcon status={sharedProject(slugs, "status") || "backlog"} />, label: "Status", hint: "S", key: "s", more: true, run: () => projectsStatus(where) },
+    { group: 0, icon: GLYPH.team, label: "Set team…", hint: "Ctrl ⇧ M", more: true, run: () => projectsTeam(where) },
+    { group: 1, icon: GLYPH.close, label: "Clear selection", hint: "Esc", run: () => ui.clearSelection() },
+  ];
+  openMenu({ ...where, className: "actions", items: () => items });
+}
+
 // Linear's bulk bar: how many are selected, a way out, and the common changes, floating over the list's foot.
 export const SelectionBar = observer(function SelectionBar() {
   const n = ui.selected.size;
@@ -72,6 +126,15 @@ export const SelectionBar = observer(function SelectionBar() {
   const open = (run: (where: Where) => void) => (e: React.MouseEvent<HTMLButtonElement>) => {
     if (!toggled(e.currentTarget)) run({ anchor: e.currentTarget });
   };
+  if (ofProjects()) return (
+    <div className="select-bar" role="toolbar" aria-label="Selected projects">
+      <span className="select-count">{n} selected</span>
+      <button type="button" className="ghost small select-clear" title="Clear selection  Esc" aria-label="Clear selection" onClick={() => ui.clearSelection()}>{GLYPH.close}</button>
+      <span className="select-sep" />
+      <button type="button" className="small" title="Change status  S" onClick={open(projectsStatus)}><ProjectStatusIcon status="backlog" />Status</button>
+      <button type="button" className="small" title="Set team  Ctrl ⇧ M" onClick={open(projectsTeam)}>{GLYPH.team}Team</button>
+    </div>
+  );
   return (
     <div className="select-bar" role="toolbar" aria-label="Selected issues">
       <span className="select-count">{n} selected</span>
