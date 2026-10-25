@@ -141,8 +141,14 @@ export function working(session: string): boolean {
   return Date.now() - statSync(t.path).mtimeMs < QUIET;
 }
 
+// The table as the last look found it, while the code that asked still runs. The frame asks for every chat's title in
+// one go, and those asks share one look at the transcripts rather than taking one each: on 25 Oct a frame took about 90
+// looks of 5 ms, 0.45 s that held up every page load.
+let looked: Map<string, TableRow> | null = null;
+
 // The session table, brought up to date with the transcripts.
 export function refresh(): Map<string, TableRow> {
+  if (looked) return looked;
   if (!table.size && existsSync(CACHE)) {
     try {
       for (const [k, v] of Object.entries(JSON.parse(readFileSync(CACHE, "utf8")) as Record<string, TableRow>)) table.set(k, v);
@@ -188,7 +194,9 @@ export function refresh(): Map<string, TableRow> {
     writeFileSync(temp, JSON.stringify(Object.fromEntries(table)), "utf8");
     renameSync(temp, CACHE);
   }
-  return new Map(table);
+  looked = new Map(table);
+  queueMicrotask(() => { looked = null; });
+  return looked;
 }
 
 // --- what the corner's history and the sidebar show -------------------------------------------------------------------
