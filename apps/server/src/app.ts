@@ -750,6 +750,19 @@ export async function create(): Promise<FastifyInstance> {
     }
     return { ok: true }; // the write tells the apps, and the frame with it
   });
+  // A sidebar row's Delete, out of sight with its files kept, and its toast's Undo (deleted false).
+  app.post("/api/live/:id/delete", async (req: Req) => {
+    mustBePage(req);
+    const { deleted } = (req.body ?? {}) as unknown as { deleted?: boolean };
+    try {
+      await chats.remove(sessionOf(req), deleted !== false);
+    } catch (error) {
+      if (error instanceof chats.NoChat) throw new HttpError(404, error.message);
+      if (error instanceof chats.AtWork) throw new HttpError(409, error.message);
+      throw error;
+    }
+    return { ok: true };
+  });
   // A sidebar row's Pin and Unpin: the session goes up into Pinned, or back to Chats.
   app.post("/api/live/:id/pin", async (req: Req) => {
     mustBePage(req);

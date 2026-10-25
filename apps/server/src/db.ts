@@ -120,6 +120,7 @@ create table if not exists chats ( -- desk's chats (chats.ts): each a session, a
   "from" text,
   automation text,
   seen double precision,
+  deleted text, -- when the user deleted it: out of sight, its row and transcript kept
   extra jsonb not null default '{}' -- what else its file held, such as the messages of a chat from before the panel
 );
 create table if not exists automations ( -- what happened to each of automations/*.md, which hold the rest (automations.ts)
@@ -243,6 +244,7 @@ export async function open(): Promise<PGlite> {
   await opened.exec(["review_of", "review_since", "landed", "project", "milestone", "due", "lands"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
   // The Inbox's delete and its mark as unread (inbox.ts), from 19 Oct.
   await opened.exec(["gone", "marked"].map((c) => `alter table inbox add column if not exists ${c} double precision;`).join(" "));
+  await opened.exec("alter table chats add column if not exists deleted text;"); // a chat's Delete (chats.ts, remove), from 25 Oct
   await opened.exec("drop table if exists slack_filed; drop table if exists slack_threads;"); // Slack's tags, out since 22 Oct
   // desk's database is a few MB: Postgres's default 128 MB of shared buffers only holds memory, about 50 MB of it. Set
   // once in postgresql.auto.conf, it applies from the next start.

@@ -388,6 +388,14 @@ export async function renameChat(id: string, title: string) {
   }
 }
 
+// A chat's Delete, which takes it out of sight and keeps its files (the server's chats.ts, remove), and its toast's Undo.
+export async function deleteChat(id: string, deleted = true): Promise<boolean> {
+  const res = await postJson(`/api/live/${id}/delete`, { deleted });
+  if (!res.ok) toast(await reason(res));
+  else if (deleted) toast("Chat deleted", { label: "Undo", run: () => deleteChat(id, false) });
+  return res.ok;
+}
+
 // The session, connected while the component that draws it is on screen; one that shows no conversation (reads false)
 // leaves its replies unread.
 export function useLive(id: string | null, reads = true): LiveSession | null {

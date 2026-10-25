@@ -72,6 +72,7 @@ export interface Chat {
   named: string | null; // the title the user gave it
   from: string | null; // the script whose message started it
   automation: string | null; // the automation whose run it is
+  deleted: string | null; // when the user deleted it: out of sight
 }
 
 // A row of the Inbox (the server's inbox.ts): what a session last did for you, or an issue in Triage with no chat to

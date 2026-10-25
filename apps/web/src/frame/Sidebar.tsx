@@ -13,7 +13,7 @@ import type { State } from "../lib/desk";
 import { frame, talkOf, type ChatRow } from "../store/frame";
 import { issues } from "../store/issues";
 import { ui } from "../store/ui";
-import { pinChat, renameChat } from "../sessions/live";
+import { deleteChat, pinChat, renameChat } from "../sessions/live";
 import { GLYPH, Ring, SIDE_ICON, StateIcon, TRIANGLE } from "../ui/icons";
 import { openMenu, toggled } from "../ui/menu";
 import { helpMenu } from "./help";
@@ -38,17 +38,27 @@ function teamMenu(slug: string, at: { x: number; y: number }) {
 }
 const WHY = "desk runs this branch instead of main: a session's test, or your Try";
 
+// The states of an issue being worked, whose chat has no Delete: the server's chats.ts, AT_WORK.
+const AT_WORK = new Set<State>(["running", "waiting", "review", "landing"]);
+
 // A row's right-click menu: Pin or Unpin, and for a chat with no issue, Rename, typed over its title. An empty one
-// gives it back Claude Code's.
+// gives it back Claude Code's. Then Delete, for a chat whose issue is not being worked: it goes out of sight, and its
+// files stay ("removing out of sight is better", the user, 25 Oct). A chat's Triage issue is dropped with it.
 function chatMenu(c: ChatRow, pinned: boolean, at: { x: number; y: number }) {
   const rename = () => openMenu({
     ...at, filter: "input", className: "folders", query: c.title, placeholder: "Rename chat…",
     items: () => [], empty: "Enter saves it; empty gives back its own title",
     onEnter: (typed) => void renameChat(c.session, typed.replace(/\s+/g, " ").trim()),
   });
+  const remove = async () => {
+    if ((await deleteChat(c.session)) && deskPath() === `/sessions/${c.session}`) go("/inbox", { replace: true });
+  };
+  const isChat = [...issues.chats.values()].some((chat) => chat.session === c.session);
+  const working = c.issue && AT_WORK.has(issues.bySlug.get(c.issue.slug)?.state ?? c.issue.state);
   openMenu({ ...at, className: "actions", items: () => [
     { icon: GLYPH.pin, label: pinned ? "Unpin" : "Pin", hint: "P", key: "p", run: () => void pinChat(c.session, !pinned) },
     ...(c.issue ? [] : [{ icon: GLYPH.pencil, label: "Rename…", hint: "R", key: "r", more: true, run: rename }]),
+    ...(isChat && !working ? [{ group: 2, icon: GLYPH.trash, label: "Delete", run: remove }] : []),
   ] });
 }
 

@@ -48,6 +48,7 @@ export interface Chat {
   from?: string; // the script whose message started it (push)
   automation?: string; // the automation whose run it is, by slug (automations.ts)
   seen?: number; // when the user last looked at it, in seconds, until 19 Oct: the inbox table keeps it since (inbox.ts)
+  deleted?: string; // when the user deleted it (remove)
   [key: string]: unknown; // what else its file held, such as the messages of a chat from before the panel
 }
 
@@ -99,7 +100,7 @@ const now = () => store.now();
 
 // --- the table -------------------------------------------------------------------------------------------------------
 
-const COLUMNS = ["id", "kind", "title", "created", "updated", "session", "issue", "folder", "cwd", "agent", "bare", "named", "from", "automation", "seen"];
+const COLUMNS = ["id", "kind", "title", "created", "updated", "session", "issue", "folder", "cwd", "agent", "bare", "named", "from", "automation", "seen", "deleted"];
 
 const UPSERT = `insert into chats (${[...COLUMNS, "extra"].map((c) => `"${c}"`).join(", ")})
   values (${[...COLUMNS, "extra"].map((_, n) => `$${n + 1}`).join(", ")})
@@ -179,6 +180,7 @@ export function transcript(id: string): string {
 // where it runs.
 export async function bind(chat: Chat, i: Issue, base: string) {
   chat.issue = i.slug;
+  delete chat.deleted; // a chat at work is in sight
   chat.folder = i.folder ? resolve(agents.workdir(i)) : runsIn(chat);
   await save(chat, (tx) => store.saveIn(tx, i));
   if (!same(chat.folder, runsIn(chat)) && !MOVING.has(chat.id)) {
@@ -338,6 +340,40 @@ export async function rename(session: string, title: string) {
 
 // The title the user gave the session's chat, if any.
 export const namedOf = (session: string) => ofSession(session)?.named ?? "";
+
+// The states of an issue being worked: its chat shows though deleted, and Delete is refused, since the issue's questions
+// and its review reach you through it. Drop the issue instead.
+export const AT_WORK = new Set(["running", "waiting", "review", "landing"]);
+
+export class AtWork extends Error {}
+
+// Delete in a chat's menu, or its Undo: the chat goes out of sight, from the sidebar, the Inbox and the corner's history
+// (pages.ts, sessions.ts), and comes back. Its row and its transcript stay. "some chats were started for testing and not
+// meant to be displayed... maybe we don't need to clean up locally but just removing out of sight is better" (the user,
+// 25 Oct). A chat's issue in Triage is the chat's own, so it is dropped with it, and Undo puts it back in Triage.
+export async function remove(session: string, deleted: boolean) {
+  const chat = agentChatOf(session);
+  if (!chat) throw new NoChat("No such chat");
+  const i = chat.issue && (await store.exists(chat.issue)) ? await store.load(chat.issue) : null;
+  if (deleted && i && AT_WORK.has(i.state)) throw new AtWork(`Its issue is ${{ running: "in progress", review: "in review" }[i.state] ?? i.state}: drop the issue instead.`);
+  let moves = false;
+  if (deleted) {
+    chat.deleted = now();
+    if (i?.state === "triage") {
+      i.state = "dropped";
+      chat.dropped = i.slug;
+      moves = true;
+    }
+  } else {
+    delete chat.deleted;
+    if (i && chat.dropped === i.slug && i.state === "dropped") {
+      i.state = "triage";
+      moves = true;
+    }
+    delete chat.dropped;
+  }
+  await save(chat, moves ? (tx) => store.saveIn(tx, i!) : undefined);
+}
 
 // The user's words and the agent's, in order, from a chat's transcript.
 export function* said(chat: Chat): Generator<[string, string]> {

@@ -248,13 +248,15 @@ async function issuesBySession(): Promise<Map<string, Issue>> {
 }
 
 // The sessions, the one that moved last first; with a query, only those whose title, folder, issue or prompts hold
-// every word of it, where a word starts.
+// every word of it, where a word starts. A chat the user deleted is left out.
 export async function rows(query = "") {
   const t = refresh(), issues = await issuesBySession(), live = await agents.live();
   const desks = new Set(chats.agentChats().map((c) => c.session));
+  const deleted = new Set(chats.agentChats().filter((c) => c.deleted).map((c) => c.session)); // out of sight (chats.ts, remove)
   const patterns = query.split(/\s+/).filter(Boolean).map((w) => patternOf([w]));
   const found: { id: string; title: string; folder: string; moved: Date; state: string }[] = [];
   for (const row of [...t.values()].sort((a, b) => (b.moved ?? 0) - (a.moved ?? 0))) {
+    if (deleted.has(row.id)) continue;
     const sid = row.id, i = issues.get(sid) ?? null, name = shown(row, i, desks.has(sid));
     if (patterns.length) {
       const text = [name, row.cwd, i && `${i.slug} ${i.title}`, row.first_prompt, row.last_prompt].filter(Boolean).join(" ");
@@ -271,7 +273,7 @@ export async function rows(query = "") {
 // never pile up and none is ever removed: desk's reaper used to remove them, and on 17 Oct a restart, which forgot the
 // open panels, took one while the user wrote its first message ("Its folder is gone").
 export async function newSession(base: string): Promise<chats.Chat> {
-  return chats.agentChats().find(chats.empty) ?? (await chats.newChat(base));
+  return chats.agentChats().find((c) => !c.deleted && chats.empty(c)) ?? (await chats.newChat(base));
 }
 
 // The corner's history menu: the newest sessions, or those matching what is typed.

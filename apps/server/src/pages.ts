@@ -139,7 +139,8 @@ interface Held { session: string; issue: Issue | null; chat: chats.Chat | null }
 
 // Every session desk keeps, each once: the chats (desk's own, an agent's, a bare one, an automation's run), the one
 // that moved last first, then the issues' sessions desk started in the background, which have no chat. Of two issues
-// with one session, such as a chat's Triage one dropped as a duplicate, the open one.
+// with one session, such as a chat's Triage one dropped as a duplicate, the open one. A chat the user deleted is left
+// out, and its issue's session with it, unless that issue is being worked (chats.ts, remove).
 function held(all: Map<string, Issue>): Held[] {
   const issueOf = new Map<string, Issue>();
   for (const i of all.values()) {
@@ -150,7 +151,9 @@ function held(all: Map<string, Issue>): Held[] {
   for (const chat of chats.agentChats()) {
     if (!chat.session || had.has(chat.session)) continue;
     had.add(chat.session);
-    found.push({ session: chat.session, issue: (chat.issue && all.get(chat.issue)) || issueOf.get(chat.session) || null, chat });
+    const issue = (chat.issue && all.get(chat.issue)) || issueOf.get(chat.session) || null;
+    if (chat.deleted && !(issue && chats.AT_WORK.has(issue.state))) continue;
+    found.push({ session: chat.session, issue, chat });
   }
   for (const [session, issue] of issueOf) if (!had.has(session)) found.push({ session, issue, chat: null });
   return found;
