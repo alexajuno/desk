@@ -35,6 +35,7 @@ import * as roster from "./roster.ts";
 import * as transcript from "./transcript.ts";
 import type { Item } from "./transcript.ts";
 import * as turns from "./turns.ts";
+import * as uploads from "./uploads.ts";
 
 export const SESSION_ID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 
@@ -252,6 +253,7 @@ export async function connect(ws: WebSocket, id: string) {
 export interface Sent {
   text: string;
   images?: { media_type: string; data: string }[];
+  files?: uploads.Upload[]; // attached files Claude takes by path (uploads.ts)
   uuid?: string; // the panel's, to take it back while it waits
   as?: "chat"; // a new chat's chip set to Chat
   now?: boolean; // Ctrl+Enter: Claude reads it at once, as Claude Code's send now
@@ -268,7 +270,9 @@ function content(m: Sent): hosted.Content {
 
 // Send the user's message. A session still at work in Claude Code's daemon, from before the panel, takes no message
 // mid-turn: the message waits here until its turn ends, then the host takes the session in with it.
-export async function send(id: string, m: Sent): Promise<{ queued: boolean }> {
+export async function send(id: string, sent: Sent): Promise<{ queued: boolean }> {
+  const { files = [], ...m } = sent;
+  m.text = uploads.attach(id, m.text ?? "", files);
   // A new chat's first message: @name as its first words makes it that agent's (chats.ts, becomeAgent), and the chip
   // set to Chat makes it bare (becomeBare).
   const chat = chats.agentChatOf(id), fresh = chat && chats.empty(chat);

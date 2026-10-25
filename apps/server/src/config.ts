@@ -14,6 +14,7 @@ export const TEAMS_DIR = join(DATA_DIR, "teams");
 export const PROJECTS_DIR = join(DATA_DIR, "projects"); // Linear's projects, which finish (projects.ts), since 20 Oct
 export const AUTOMATIONS_DIR = join(DATA_DIR, "automations");
 export const CHATS_DIR = join(DATA_DIR, "chats");
+export const UPLOADS_DIR = join(DATA_DIR, "uploads"); // the files attached in a composer, by session (uploads.ts)
 // The database, beside the data it holds, in DATA_DIR/.db, which git leaves alone (db.ts writes its .gitignore).
 export const DB_DIR = resolve(expand(process.env.DESK_DB ?? join(DATA_DIR, ".db", "pg")));
 // The code repo: apps/server/src is three levels under it.

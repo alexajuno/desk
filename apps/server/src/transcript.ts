@@ -5,6 +5,7 @@
 // An item is one thing the panel draws, in order:
 //
 //     {"t": "you", "key": "<uuid>", "text": "…", "images": 1, "queued": true}   what the user wrote; queued while a turn ran
+//     {"t": "you", …, "files": ["report.pdf"]}                                   with the files attached by path (uploads.ts)
 //     {"t": "text", "key": "<uuid>:0", "msg": "msg_…", "text": "…"}             Claude's words, Markdown
 //     {"t": "thinking", "key": …, "msg": …, "text": "…"}
 //     {"t": "tool", "key": …, "msg": …, "id": "toolu_…", "name": "Read", "summary": "src/app.ts", "input": "…"}
@@ -15,6 +16,7 @@
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { HOME } from "./config.ts";
+import * as uploads from "./uploads.ts";
 
 export const PROJECTS = join(HOME, ".claude", "projects");
 
@@ -29,6 +31,7 @@ export interface Item {
   input?: string;
   error?: boolean;
   images?: number;
+  files?: string[];
   queued?: boolean;
 }
 
@@ -147,6 +150,12 @@ function typed(text: string): string {
   return t.startsWith("<") ? "" : t;
 }
 
+// What the user wrote, with the files attached to it by path as their names.
+function you(key: string, typed: string): Item {
+  const { text, files } = uploads.split(typed);
+  return { t: "you", key, text, ...(files.length ? { files } : {}) };
+}
+
 // What Claude Code itself tells Claude in a user message that the user should see too, as a note: a task it ran beside
 // the conversation ended (<task-notification>, its <summary> such as `Agent "count files" finished`), a watch saw a
 // line (the same, with `Monitor event: "ticks"` and the line in <event>), or a slash command printed something
@@ -186,7 +195,7 @@ function entryItems(e: Entry): Item[] {
   const uuid = String(e.uuid ?? "");
   if (e.type === "attachment" && e.attachment?.type === "queued_command" && typeof e.attachment.prompt === "string") {
     const note = notice(e.attachment.prompt);
-    return note !== null ? noted(uuid, note) : [{ t: "you", key: uuid, text: e.attachment.prompt, queued: true }];
+    return note !== null ? noted(uuid, note) : [{ ...you(uuid, e.attachment.prompt), queued: true }];
   }
   if (e.type === "system" && e.subtype === "compact_boundary") return [{ t: "note", key: uuid, text: "Compacted the conversation" }];
   // A slash command's output, which the transcript records after the command (Claude Code 2.1.285). The host's stream
@@ -210,7 +219,7 @@ function entryItems(e: Entry): Item[] {
       if (push) return [{ t: "note", key: uuid, text: `Sent by ${push[1]}` }];
       const text = typed(content);
       if (text === "[Request interrupted by user]") return [{ t: "note", key: uuid, text: "Stopped" }];
-      return text ? [{ t: "you", key: uuid, text }] : [];
+      return text ? [you(uuid, text)] : [];
     }
     const items: Item[] = [];
     const texts: string[] = [];
@@ -225,7 +234,7 @@ function entryItems(e: Entry): Item[] {
         else if (text) texts.push(text);
       } else if (b.type === "image") images++;
     });
-    if (texts.length || images) items.unshift({ t: "you", key: uuid, text: texts.join("\n\n"), ...(images ? { images } : {}) });
+    if (texts.length || images) items.unshift({ ...you(uuid, texts.join("\n\n")), ...(images ? { images } : {}) });
     return items;
   }
   const msg = String(e.message?.id ?? "");

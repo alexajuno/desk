@@ -20,8 +20,8 @@ import { toggleSide as toggleSidebar } from "../frame/side";
 import { GLYPH, SIDE_ICON } from "../ui/icons";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
-import { live, renameChat, useLive, type Ask, type Block, type Image, type Item, type LiveSession, type Status, type Task } from "./live";
-import { effortName, runsMenu, warm } from "./models";
+import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
+import { EFFORTS, effortName, loadModels, runsMenu, warm, type Runs as RunsShown } from "./models";
 
 // The chat that takes the cursor: the one openSession opened. It takes it as it comes on screen, which a view transition
 // can make a frame or more after the address changes, or at once when it is there already (SessionView says where).
@@ -284,14 +284,14 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
   const starts = s.pending.reduce((n, p, i) => (p.mid ? n : i + 1), 0);
   const tail = s.working && !starts; // the last fold is the reply's own, and takes its tool calls streaming now
   const you = (p: (typeof s.pending)[number]) => (
-    <You key={p.key} text={p.text} images={p.images.length} queued={s.working && p.mid && !p.lost} lost={p.lost} onSend={() => void s.resend(p)}
+    <You key={p.key} text={p.text} images={p.attached.filter((a) => a.url).length} files={p.attached.filter((a) => !a.url).map((a) => a.name)} queued={s.working && p.mid && !p.lost} lost={p.lost} onSend={() => void s.resend(p)}
       onSendNow={p === lastQueued ? () => void s.sendNow("", []) : undefined} />
   );
   return (
     <>
       {rows.map((r, n) => {
         // One typed mid-turn is in the transcript once Claude takes it in, at its next step: by then it's sent, not queued.
-        if (r.kind === "you") return <You key={r.item.key} text={r.item.text ?? ""} images={r.item.images} />;
+        if (r.kind === "you") return <You key={r.item.key} text={r.item.text ?? ""} images={r.item.images} files={r.item.files} />;
         if (r.kind === "text") return <Reply key={r.item.key} text={r.item.text ?? ""} />;
         if (r.kind === "note") {
           const agent = r.item.id ? s.items.find((i) => i.t === "tool" && i.id === r.item.id && (i.name === "Agent" || i.name === "Task")) : undefined;
@@ -311,14 +311,16 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
 
 const LONG = 600; // characters past which a message shows its first lines only, as claude.ai shows a long paste
 
-function You({ text, images, queued, lost, onSend, onSendNow }: { text: string; images?: number; queued?: boolean; lost?: boolean; onSend?: () => void;
-  onSendNow?: () => void }) {
+function You({ text, images, files, queued, lost, onSend, onSendNow }: { text: string; images?: number; files?: string[]; queued?: boolean; lost?: boolean;
+  onSend?: () => void; onSendNow?: () => void }) {
   const [all, setAll] = useState(false);
   const long = text.length > LONG && !all;
   return (
     <div className={`you${queued || lost ? " queued" : ""}`}>
       <div className={`you-bubble${long ? " folded" : ""}`}>
-        {images ? <span className="you-images">{images === 1 ? "1 image" : `${images} images`}</span> : null}
+        {images || files?.length ? (
+          <span className="you-images">{[...(images ? [images === 1 ? "1 image" : `${images} images`] : []), ...(files ?? [])].join(" · ")}</span>
+        ) : null}
         {text}
       </div>
       {long && <button className="you-more" type="button" onClick={() => setAll(true)}>Show all</button>}
@@ -659,18 +661,63 @@ function marked(text: string, known: Set<string> | null) {
   return out;
 }
 
-async function readImage(file: File): Promise<Image | null> {
-  if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) return null;
+// The images Claude takes inline, as claude.ai's composer sends them; any other file goes by its path (live.ts, Attachment).
+const INLINE = /^image\/(png|jpeg|gif|webp)$/;
+
+// What one message may carry, short of the server's 32 MB for a request once base64 has made it a third bigger.
+const MAX_ATTACHED = 22 * 1024 * 1024;
+
+async function readFile(file: File): Promise<Attachment> {
   const url = await new Promise<string>((resolve) => {
     const r = new FileReader();
     r.onload = () => resolve(String(r.result));
     r.readAsDataURL(file);
   });
-  return { media_type: file.type, data: url.slice(url.indexOf(",") + 1), url };
+  const type = file.type || "application/octet-stream";
+  return { name: file.name || "file", media_type: type, data: url.slice(url.indexOf(",") + 1), size: file.size, ...(INLINE.test(type) ? { url } : {}) };
+}
+
+const megabytes = (n: number) => `${Math.round(n / 1024 / 1024)} MB`;
+
+// A file's kind under its name, as claude.ai's cards show it: its extension, or FILE.
+const kindOf = (name: string) => /\.([^.]{1,8})$/.exec(name)?.[1].toUpperCase() ?? "FILE";
+
+// /model and /effort at the start of a message, as many as typed and in any order (`/model opus /effort med`), set as
+// the chip sets them, by a word that starts a model's or an effort's name; what follows them goes as the message.
+// Claude Code would take only the first, with the rest as its argument. Null when the message starts with neither, and
+// for one alone that desk can't name, such as /effort auto or a full model id, which Claude Code runs as it always has.
+const RUNS_CMD = /^\/(model|effort)\s+(\S+)(?:\s+|$)/;
+
+async function runsIn(text: string): Promise<{ set: { model?: string; effort?: string }; shown: Partial<RunsShown>; rest: string } | null> {
+  const set: { model?: string; effort?: string } = {}, shown: Partial<RunsShown> = {}, unknown: string[] = [];
+  let rest = text, m: RegExpExecArray | null;
+  while ((m = RUNS_CMD.exec(rest))) {
+    const [, command, word] = m, w = word.toLowerCase(), bare = (name: string) => name.toLowerCase().replace(/\s+/g, "");
+    rest = rest.slice(m[0].length);
+    if (command === "effort") {
+      const effort = EFFORTS.find(([value, label]) => value.startsWith(w) || bare(label).startsWith(w));
+      if (effort) set.effort = shown.effort = effort[0];
+      else unknown.push(`/effort ${word}`);
+    } else {
+      const model = (await loadModels().catch(() => [])).find((x) => x.value.toLowerCase().startsWith(w) || bare(x.name).startsWith(w));
+      if (!model) unknown.push(`/model ${word}`);
+      else {
+        set.model = model.value;
+        shown.name = model.name;
+        if (!model.efforts.length) shown.effort = "";
+      }
+    }
+  }
+  if (rest === text) return null;
+  if (unknown.length) {
+    if (unknown.length === 1 && !set.model && !set.effort && !rest.trim()) return null;
+    throw new Error(`desk can't set ${unknown.join(" or ")}: a model is one the chip lists, an effort low, medium, high, xhigh or max.`);
+  }
+  return { set, shown, rest: rest.trim() };
 }
 
 // What is typed and not yet sent, by chat (localStorage.composerDrafts), so a closed or reloaded tab gives it back,
-// as claude.ai's composer does. Text only: images would soon fill the browser's few megabytes. The 50 chats typed in
+// as claude.ai's composer does. Text only: attached files would soon fill the browser's few megabytes. The 50 chats typed in
 // last keep theirs.
 const drafts = (): Record<string, string> => JSON.parse(localStorage.composerDrafts ?? "{}");
 
@@ -684,7 +731,8 @@ function keepDraft(id: string, text: string) {
 const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   const [text, setText] = useState(() => drafts()[s.id] ?? "");
   useEffect(() => keepDraft(s.id, text), [s.id, text]);
-  const [images, setImages] = useState<Image[]>([]);
+  const [attached, setAttached] = useState<Attachment[]>([]);
+  const picker = useRef<HTMLInputElement>(null);
   const [picks, setPicks] = useState<Pick[]>([]);
   const [at, setAt] = useState(0);
   const [token, setToken] = useState<ReturnType<typeof tokenAt>>(null);
@@ -761,28 +809,43 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   }
 
   async function send() {
-    const t = text.trim();
-    if (!t && !images.length) return;
+    const typed = text.trim();
+    if (!typed && !attached.length) return;
     setText("");
-    const sending = images;
-    setImages([]);
+    const sending = attached;
+    setAttached([]);
     setPicks([]);
-    if (!(await s.send(t, sending))) {
-      setText(t); // put back what failed to go
-      setImages(sending);
+    const putBack = () => { // what failed to go
+      setText(typed);
+      setAttached(sending);
+    };
+    let t = typed;
+    try {
+      const runs = await runsIn(typed);
+      if (runs) {
+        if (!(await s.pick(runs.set, runs.shown))) return putBack();
+        const now = s.meta?.runs; // the pick's, drawn at once
+        if (now) toast(`Now on ${now.effort ? `${now.name} · ${effortName(now.effort)}` : now.name}`);
+        t = runs.rest;
+        if (!t && !sending.length) return;
+      }
+    } catch (error) {
+      toast((error as Error).message);
+      return putBack();
     }
+    if (!(await s.send(t, sending))) putBack();
   }
 
   // Ctrl+Enter while Claude works, Claude Code's send now: what is typed and what is queued go in at once.
   async function sendNow() {
-    const t = text.trim(), sending = images;
+    const t = text.trim(), sending = attached;
     setText("");
-    setImages([]);
+    setAttached([]);
     setPicks([]);
     const left = await s.sendNow(t, sending);
     if (left) {
       setText(left.text); // put back what failed to go
-      setImages(left.images);
+      setAttached(left.attached);
     }
   }
 
@@ -791,7 +854,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
     const back = await s.withdraw();
     if (!back) return;
     setText((now) => [back.text, now].filter(Boolean).join("\n"));
-    setImages((now) => [...back.images, ...now]);
+    setAttached((now) => [...back.attached, ...now]);
     requestAnimationFrame(() => {
       const el = box.current!;
       el.focus();
@@ -800,9 +863,18 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   }
 
   async function attach(files: Iterable<File>) {
-    const read = (await Promise.all([...files].map(readImage))).filter((x): x is Image => Boolean(x));
-    if (read.length) setImages((now) => [...now, ...read]);
-    else toast("Only images can be attached here: PNG, JPEG, GIF or WebP.");
+    const list = [...files], has = attached.reduce((n, a) => n + a.size, 0), adds = list.reduce((n, f) => n + f.size, 0);
+    if (!list.length) return;
+    if (has + adds > MAX_ATTACHED) return toast(`A message carries up to ${megabytes(MAX_ATTACHED)} of files${has ? `, and ${megabytes(has)} is attached already` : ""}.`);
+    const read = await Promise.all(list.map(readFile));
+    setAttached((now) => [...now, ...read]);
+  }
+
+  // Ctrl D: the folder chip's menu, which a new chat has until its first message.
+  function pickFolder(from: HTMLElement) {
+    const chip = from.closest(".composer")?.querySelector<HTMLButtonElement>(".start-in");
+    if (chip) chip.click();
+    else toast("A chat's folder is picked before its first message.");
   }
 
   return (
@@ -817,12 +889,18 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           ))}
         </div>
       )}
-      {images.length > 0 && (
+      {attached.length > 0 && (
         <div className="attached">
-          {images.map((img, n) => (
-            <span key={n} className="thumb">
-              <img src={img.url} alt="" />
-              <button type="button" title="Remove" onClick={() => setImages(images.filter((_, k) => k !== n))}>{GLYPH.close}</button>
+          {attached.map((a, n) => (
+            <span key={n} className={a.url ? "thumb" : "thumb file"} title={a.name}>
+              {a.url ? <img src={a.url} alt="" /> : (
+                <>
+                  {GLYPH.file}
+                  <span className="file-name">{a.name}</span>
+                  <span className="file-kind">{kindOf(a.name)}</span>
+                </>
+              )}
+              <button type="button" title="Remove" onClick={() => setAttached(attached.filter((_, k) => k !== n))}>{GLYPH.close}</button>
             </span>
           ))}
         </div>
@@ -834,7 +912,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           onScroll={(e) => { if (layer.current) layer.current.scrollTop = e.currentTarget.scrollTop; }}
           onChange={(e) => { setText(e.target.value); void complete(tokenAt(e.target.value, e.target.selectionStart)); }}
           onPaste={(e) => {
-            const files = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
+            const files = [...e.clipboardData.files];
             if (files.length) { e.preventDefault(); void attach(files); }
           }}
           onKeyDown={(e) => {
@@ -860,6 +938,12 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
             } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === "KeyC" && s.working && e.currentTarget.selectionStart === e.currentTarget.selectionEnd) {
               e.preventDefault(); // a terminal's Ctrl C; with text selected it copies
               void s.interrupt();
+            } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === "KeyU") {
+              e.preventDefault(); // Slack's key to upload a file, and not the browser's page source
+              picker.current?.click();
+            } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === "KeyD") {
+              e.preventDefault(); // D for directory, and not the browser's bookmark
+              pickFolder(e.currentTarget);
             } else if (e.key === "Escape") {
               e.preventDefault();
               e.stopPropagation(); // the frame's Esc would also leave the page: that is the next Esc's to do
@@ -871,9 +955,9 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
       {/* A tap on its buttons leaves the box focused: on a phone, the box losing focus brings the tabs back, which
           moved the button up before the tap's click reached it, so the first tap did nothing (25 Oct). */}
       <div className="composer-foot" onMouseDown={(e) => e.preventDefault()}>
-        <label className="dock-btn attach" title="Attach an image">
+        <label className="dock-btn attach" title="Attach a file  Ctrl U">
           {GLYPH.plus}
-          <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
+          <input ref={picker} type="file" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
         {fresh(s) && <StartAs s={s} />}
         {fresh(s) && <StartIn s={s} />}
@@ -884,7 +968,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
             <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><rect x="1" y="1" width="8" height="8" rx="1.5" /></svg>
           </button>
         )}
-        <button className="send" type="button" title={s.working ? "Queue  Enter\nSend now  Ctrl Enter" : "Send  Enter"} disabled={!text.trim() && !images.length} onClick={() => void send()}>
+        <button className="send" type="button" title={s.working ? "Queue  Enter\nSend now  Ctrl Enter" : "Send  Enter"} disabled={!text.trim() && !attached.length} onClick={() => void send()}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" /></svg>
         </button>
       </div>
@@ -928,7 +1012,7 @@ const startsIn = (s: LiveSession) => (fresh(s) && !s.meta?.picked && s.startAs =
 const StartIn = observer(function StartIn({ s }: { s: LiveSession }) {
   const now = startsIn(s);
   return (
-    <button className="runs start-in" type="button" title="The folder this chat runs in"
+    <button className="runs start-in" type="button" title="The folder this chat runs in  Ctrl D"
       onClick={(e) => { if (!toggled(e.currentTarget)) folderMenu(now, e.currentTarget, (f) => {
         s.startIn(f);
         requestAnimationFrame(focusComposer); // back to typing the first message

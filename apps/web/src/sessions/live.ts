@@ -17,6 +17,7 @@ export interface Item {
   input?: string;
   error?: boolean;
   images?: number;
+  files?: string[]; // the names of the files attached by path
 }
 
 export interface Ask {
@@ -64,16 +65,20 @@ export interface Meta {
   runs: { model: string; name: string; effort: string }; // for the composer's chip
 }
 
-export interface Image {
+// A file attached in the composer. An image Claude takes inline (PNG, JPEG, GIF, WebP) has a thumbnail and goes in the
+// message itself; any other file desk keeps on disk, and the message names it by its path (the server's uploads.ts).
+export interface Attachment {
+  name: string;
   media_type: string;
   data: string; // base64
-  url: string; // for the thumbnail
+  size: number;
+  url?: string; // an inline image's, for the thumbnail
 }
 
 interface Pending {
   key: string; // its uuid too, by which ↑ takes it back from Claude's queue
   text: string;
-  images: Image[];
+  attached: Attachment[];
   at: number; // when it was sent
   lost?: boolean; // still not in the transcript well after the turn ended: lost on the way
   mid?: boolean; // sent while Claude worked, so it waits in Claude Code's queue; one sent while idle starts the turn
@@ -257,8 +262,8 @@ export class LiveSession {
     if (kept.length) this.items = [...this.items, ...kept];
   }
 
-  sending(text: string, images: Image[]): Pending {
-    const p = { key: crypto.randomUUID(), text, images, at: Date.now(), lost: false, mid: this.working };
+  sending(text: string, attached: Attachment[]): Pending {
+    const p = { key: crypto.randomUUID(), text, attached, at: Date.now(), lost: false, mid: this.working };
     this.pending.push(p);
     if (!this.working) this.setWorking(true); // drawn at once; the server's word follows
     return p;
@@ -268,10 +273,12 @@ export class LiveSession {
     if (!ok) this.pending = this.pending.filter((x) => x.key !== p.key);
   }
 
-  async send(text: string, images: Image[], now = false) {
-    const p = this.sending(text, images);
+  async send(text: string, attached: Attachment[], now = false) {
+    const p = this.sending(text, attached);
     await this.moving;
-    const res = await postJson(`/api/live/${this.id}/send`, { text, images: images.map(({ media_type, data }) => ({ media_type, data })), uuid: p.key,
+    const images = attached.filter((a) => a.url).map(({ media_type, data }) => ({ media_type, data }));
+    const files = attached.filter((a) => !a.url).map(({ name, data }) => ({ name, data }));
+    const res = await postJson(`/api/live/${this.id}/send`, { text, images, ...(files.length ? { files } : {}), uuid: p.key,
       ...(this.startAs === "chat" ? { as: "chat" } : {}), ...(now ? { now: true } : {}) });
     this.sent(p, res.ok);
     if (!res.ok) toast(await reason(res));
@@ -281,7 +288,7 @@ export class LiveSession {
 
   // ↑ in the composer, as in Claude Code's terminal: the messages queued while Claude works come back from its queue,
   // joined, for the user to edit. One Claude has read already stays in the chat; one not sent comes back as it is.
-  async withdraw(): Promise<{ text: string; images: Image[] } | null> {
+  async withdraw(): Promise<{ text: string; attached: Attachment[] } | null> {
     const queued = this.pending.filter((p) => p.mid || p.lost), back: Pending[] = [];
     let read = 0;
     for (const p of queued) {
@@ -299,17 +306,17 @@ export class LiveSession {
     }
     this.took(back);
     if (read) toast(queued.length === 1 ? "Claude has read it already." : `Claude has read ${read} of them already.`);
-    return back.length ? { text: back.map((p) => p.text).filter(Boolean).join("\n"), images: back.flatMap((p) => p.images) } : null;
+    return back.length ? { text: back.map((p) => p.text).filter(Boolean).join("\n"), attached: back.flatMap((p) => p.attached) } : null;
   }
 
   // Ctrl+Enter while Claude works, as Claude Code's send now: the queued messages and what is typed go in at once, as
   // one message. Claude Code takes no word to hurry a message it holds, so the queued ones are taken back and sent
   // again. What could not go comes back, for the box.
-  async sendNow(text: string, images: Image[]): Promise<{ text: string; images: Image[] } | null> {
+  async sendNow(text: string, attached: Attachment[]): Promise<{ text: string; attached: Attachment[] } | null> {
     const back = await this.withdraw();
-    const all = { text: [back?.text, text].filter(Boolean).join("\n"), images: [...(back?.images ?? []), ...images] };
-    if (!all.text && !all.images.length) return null;
-    return (await this.send(all.text, all.images, true)) ? null : all;
+    const all = { text: [back?.text, text].filter(Boolean).join("\n"), attached: [...(back?.attached ?? []), ...attached] };
+    if (!all.text && !all.attached.length) return null;
+    return (await this.send(all.text, all.attached, true)) ? null : all;
   }
 
   took(back: Pending[]) {
@@ -319,7 +326,7 @@ export class LiveSession {
   // A message not sent, sent again as it was.
   resend(p: Pending) {
     this.took([p]);
-    return this.send(p.text, p.images);
+    return this.send(p.text, p.attached);
   }
 
   async interrupt() {
@@ -327,7 +334,7 @@ export class LiveSession {
     if (!res.ok) toast(await reason(res));
   }
 
-  // Pick the model or effort: the chip shows it at once, and the server's next meta confirms it.
+  // Pick the model or effort: the chip shows it at once, and the server's next meta confirms it. True once it is set.
   async pick(set: { model?: string; effort?: string }, shown: Partial<Meta["runs"]> = {}) {
     const was = this.meta;
     if (was) this.shows({ ...was, runs: { ...was.runs, ...set, ...shown } });
@@ -336,6 +343,7 @@ export class LiveSession {
       if (was) this.shows(was);
       toast(await reason(res));
     }
+    return res.ok;
   }
 
   // The composer's folder chip, before the first message: the chat's session starts again in the folder. Picks go one

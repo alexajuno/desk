@@ -677,7 +677,7 @@ export async function create(): Promise<FastifyInstance> {
   app.post("/api/live/:id/send", async (req: Req) => {
     mustBePage(req);
     const body = (req.body ?? {}) as unknown as live.Sent;
-    if (!body.text?.trim() && !body.images?.length) throw new HttpError(422, "Nothing to send.");
+    if (!body.text?.trim() && !body.images?.length && !body.files?.length) throw new HttpError(422, "Nothing to send.");
     try {
       return await live.send(sessionOf(req), body);
     } catch (error) {
