@@ -94,13 +94,13 @@ export const SearchPage = observer(function SearchPage() {
   // The address follows the page, in place, so Back leaves search rather than stepping through each key typed.
   useEffect(() => {
     const p = new URLSearchParams();
-    if (s.q.trim()) p.set("q", s.q.trim());
+    if (words) p.set("q", words); // an @word half typed is no search yet
     if (s.type) p.set("type", s.type);
     if (team) p.set("team", team);
     if (status) p.set("status", status);
     const to = `/search${p.size ? `?${p.toString().replace(/%2C/gi, ",").replace(/%3A/gi, ":")}` : ""}`;
     if (to !== location.pathname + location.search) go(to, { replace: true });
-  }, [s.q, s.type, team, status]);
+  }, [words, s.type, team, status]);
   useEffect(() => {
     const mine = ++asked.current, keep = ui.focused;
     const p = new URLSearchParams({ q: words, type: s.type, team, status });
