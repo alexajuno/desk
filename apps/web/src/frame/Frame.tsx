@@ -32,7 +32,7 @@ import { TeamCreatorHost } from "./TeamCreator";
 import { KeysPanel } from "./KeysPanel";
 import { noteVisit, openIssue, openProject, openTeam, teamPath } from "./open";
 import { noteWalk, placeOf, stepFrom } from "../issues/walk";
-import { Sidebar } from "./Sidebar";
+import { chatKey, Sidebar } from "./Sidebar";
 import { Tabs } from "./Tabs";
 import { closeSide, sideOpen, toggleSide } from "./side";
 import { issues } from "../store/issues";
@@ -126,6 +126,8 @@ function onKeyDown(e: KeyboardEvent) {
     // The issue's next step, the primary button in the row over its Properties.
     const step = keyOf(e) === "Enter" && document.querySelector<HTMLButtonElement>(".issue-acts .step:not(:disabled)");
     if (step) { step.click(); e.preventDefault(); }
+    // Ctrl ⌫ on the sidebar's chat under the mouse deletes it, not the issue in focus or open.
+    else if (chatKey(e)) e.preventDefault();
     else if (key === "z" && undoList().length) { undo(); e.preventDefault(); }
     // Linear's Ctrl A: the whole list on screen, filtered as it is.
     else if (key === "a" && document.querySelector(".tree .item[data-slug]")) { selectAll(); e.preventDefault(); }
@@ -164,6 +166,8 @@ function onKeyDown(e: KeyboardEvent) {
     return;
   }
   if (key === "o" && !e.shiftKey) { oPressed = Date.now(); return; }
+  // P and R on the sidebar's chat under the mouse pin and rename it, before any row in focus.
+  if (chatKey(e)) { e.preventDefault(); return; }
 
   const focused = focusedRow();
   // Linear's Shift ↑ ↓: the selection grows from the row in focus, a row at a time.

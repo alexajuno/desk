@@ -15,7 +15,9 @@ import { issues } from "../store/issues";
 import { ui } from "../store/ui";
 import { deleteChat, pinChat, renameChat } from "../sessions/live";
 import { GLYPH, Ring, SIDE_ICON, StateIcon, TRIANGLE } from "../ui/icons";
-import { openMenu, toggled } from "../ui/menu";
+import { keyOf } from "../lib/keys";
+import { openMenu, toggled, type MenuOptions } from "../ui/menu";
+import { toast } from "../ui/toast";
 import { helpMenu } from "./help";
 import { toggleSide } from "./side";
 
@@ -41,25 +43,58 @@ const WHY = "desk runs this branch instead of main: a session's test, or your Tr
 // The states of an issue being worked, whose chat has no Delete: the server's chats.ts, AT_WORK.
 const AT_WORK = new Set<State>(["running", "waiting", "review", "landing"]);
 
-// A row's right-click menu: Pin or Unpin, and for a chat with no issue, Rename, typed over its title. An empty one
-// gives it back Claude Code's. Then Delete, for a chat whose issue is not being worked: it goes out of sight, and its
-// files stay ("removing out of sight is better", the user, 25 Oct). A chat's Triage issue is dropped with it.
-function chatMenu(c: ChatRow, pinned: boolean, at: { x: number; y: number }) {
-  const rename = () => openMenu({
-    ...at, filter: "input", className: "folders", query: c.title, placeholder: "Rename chat…",
-    items: () => [], empty: "Enter saves it; empty gives back its own title",
-    onEnter: (typed) => void renameChat(c.session, typed.replace(/\s+/g, " ").trim()),
-  });
-  const remove = async () => {
-    if ((await deleteChat(c.session)) && deskPath() === `/sessions/${c.session}`) go("/inbox", { replace: true });
-  };
+// A row's actions, which its right-click menu and its keys share: Pin or Unpin, and for a chat with no issue, Rename,
+// typed over its title. An empty one gives it back Claude Code's. Then Delete, for a chat whose issue is not being
+// worked: it goes out of sight, and its files stay ("removing out of sight is better", the user, 25 Oct). A chat's
+// Triage issue is dropped with it.
+type At = Pick<MenuOptions, "anchor" | "x" | "y">;
+function chatActions(c: ChatRow, pinned: boolean) {
   const isChat = [...issues.chats.values()].some((chat) => chat.session === c.session);
   const working = c.issue && AT_WORK.has(issues.bySlug.get(c.issue.slug)?.state ?? c.issue.state);
+  return {
+    pin: () => void pinChat(c.session, !pinned),
+    rename: c.issue ? null : (at: At) => openMenu({
+      ...at, filter: "input", className: "folders", query: c.title, placeholder: "Rename chat…",
+      items: () => [], empty: "Enter saves it; empty gives back its own title",
+      onEnter: (typed) => void renameChat(c.session, typed.replace(/\s+/g, " ").trim()),
+    }),
+    remove: isChat && !working ? async () => {
+      if ((await deleteChat(c.session)) && deskPath() === `/sessions/${c.session}`) go("/inbox", { replace: true });
+    } : null,
+    why: working ? "Its issue is being worked: delete the chat once that ends." : "Only a desk chat can be deleted, not an issue's own session.",
+  };
+}
+
+function chatMenu(c: ChatRow, pinned: boolean, at: At) {
+  const { pin, rename, remove } = chatActions(c, pinned);
   openMenu({ ...at, className: "actions", items: () => [
-    { icon: GLYPH.pin, label: pinned ? "Unpin" : "Pin", hint: "P", key: "p", run: () => void pinChat(c.session, !pinned) },
-    ...(c.issue ? [] : [{ icon: GLYPH.pencil, label: "Rename…", hint: "R", key: "r", more: true, run: rename }]),
-    ...(isChat && !working ? [{ group: 2, icon: GLYPH.trash, label: "Delete", run: remove }] : []),
+    { icon: GLYPH.pin, label: pinned ? "Unpin" : "Pin", hint: "P", key: "p", run: pin },
+    ...(rename ? [{ icon: GLYPH.pencil, label: "Rename…", hint: "R", key: "r", more: true, run: () => rename(at) }] : []),
+    ...(remove ? [{ group: 2, icon: GLYPH.trash, label: "Delete", hint: "Ctrl ⌫", run: remove }] : []),
   ] });
+}
+
+// The keys of the chat under the mouse, as Linear's keys act on the row under it: P pins or unpins it, R renames it,
+// Ctrl ⌫ deletes it. Linear's own sidebar and Agent chats take no keys (measured 25 Oct); its list rows do, and their
+// menu's Delete is Ctrl Delete. A key the chat has no action for says why, rather than falling through to the issue
+// open beside it.
+export function chatKey(e: KeyboardEvent): boolean {
+  const row = document.querySelector<HTMLElement>(".side [data-chat]:hover"), d = frame.data;
+  const c = row && d && (d.pinned.find((p) => p.session === row.dataset.chat) ?? d.chats.find((p) => p.session === row.dataset.chat));
+  if (!c || e.altKey || e.shiftKey) return false;
+  const k = keyOf(e), ctrl = e.ctrlKey || e.metaKey;
+  const { pin, rename, remove, why } = chatActions(c, d!.pinned.includes(c));
+  if (!ctrl && k.toLowerCase() === "p") pin();
+  else if (!ctrl && k.toLowerCase() === "r") {
+    if (rename) rename({ anchor: row!.querySelector(".nav-title") ?? row });
+    else toast("A chat with an issue goes by the issue's title.");
+  }
+  else if (ctrl && (k === "Delete" || k === "Backspace")) {
+    if (remove) void remove();
+    else toast(why);
+  }
+  else return false;
+  return true;
 }
 
 // The sections folded by a click on their label, as Linear's sidebar sections fold, kept in localStorage.sideFolded.
@@ -101,7 +136,7 @@ export const Sidebar = observer(function Sidebar() {
     const unread = issues.inbox.get(c.session)?.read === null;
     return (
       <Go key={c.session} className={`nav-item${c.issue ? at(`/issue/${c.issue.slug}`) : ""}${at(`/sessions/${c.session}`)}`}
-        to={c.issue ? `/issue/${c.issue.slug}` : `/sessions/${c.session}`}
+        to={c.issue ? `/issue/${c.issue.slug}` : `/sessions/${c.session}`} data-chat={c.session}
         title={c.working ? "Working" : unread ? "Said something you have not read" : c.title}
         onContextMenu={(e) => { e.preventDefault(); chatMenu(c, pinned, { x: e.clientX, y: e.clientY }); }}>
         {c.issue ? <StateIcon state={issues.bySlug.get(c.issue.slug)?.state ?? c.issue.state} /> : <Ring />}
