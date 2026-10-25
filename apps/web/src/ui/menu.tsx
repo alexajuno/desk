@@ -45,7 +45,7 @@ export interface MenuOptions {
   empty?: string;
   items: (query: string) => MenuItem[] | Promise<MenuItem[]>;
   onEnter?: (typed: string) => void;
-  onTab?: (item: MenuItem | undefined, setQuery: (text: string) => void) => void;
+  onTab?: (item: MenuItem | undefined, setQuery: (text: string) => void, shown: MenuItem[], query: string) => void;
   onArrow?: (step: number) => void;
   onClose?: () => void;
   // A popover of its own in the menu's place, such as the date picker, instead of a list: it keeps the menu's placing,
@@ -158,7 +158,7 @@ function MenuView({ o }: { o: MenuOptions }) {
         else if (o.onEnter) { const typed = s.query; closeMenu(); o.onEnter(typed); }
       }
       else if (o.onArrow && (k === "ArrowLeft" || k === "ArrowRight")) o.onArrow(k === "ArrowRight" ? 1 : -1);
-      else if (k === "Tab") o.onTab?.(s.shown[s.at], setQuery);
+      else if (k === "Tab") o.onTab?.(s.shown[s.at], setQuery, s.shown, s.query);
       else if (o.filter !== "input" && plain && /^\d$/.test(k) && !s.query && (i = s.shown.findIndex((item) => item.num === +k)) >= 0) pick(i);
       else if (!o.filter && plain && (i = s.shown.findIndex((item) => item.key === k.toLowerCase())) >= 0) pick(i);
       else if (o.filter === "keys" && k === "Backspace") setQuery(s.query.slice(0, -1));

@@ -160,15 +160,29 @@ export function projectStatusMenu(current: string, where: Where, choose: (status
   });
 }
 
-// Works in, for an issue or a new chat: your repos and the folders used before, or a path typed with Tab completing it.
+// Works in, for an issue or a new chat: your repos and the folders used before, or a path typed. Tab completes as a
+// shell does: what the rows share, so proj gives ~/projects/ rather than the first row's ~/projects/adblock/, and the
+// row in focus, with its /, once they share nothing more than what was typed.
 export function folderMenu(current: string, anchor: Element, set: (folder: string) => unknown) {
   openMenu({
     anchor, filter: "input", className: "folders", placeholder: "Search repos, or type ~/path…", empty: "No folder matches",
     items: async (q) => ((await (await fetch(`/api/folders?q=${encodeURIComponent(q)}`)).json()) as string[])
       .map((path) => ({ icon: GLYPH.folder, label: path, current: path === current, run: () => set(path) })),
-    onTab: (item, setQuery) => { if (item) setQuery(`${item.label}/`); },
+    onTab: (item, setQuery, shown, typed) => {
+      const common = shown.length > 1 ? sharedStart(shown.map((row) => row.label)) : "";
+      // Kept only while it still holds every word typed: desk finds ~/projects/desk and ~/.local/share/desk, which
+      // share only ~/.
+      if (common.length > typed.length && fold(typed).split(/\s+/).every((w) => fold(common).includes(w))) setQuery(common);
+      else if (item) setQuery(`${item.label}/`);
+    },
     onEnter: (typed) => { if (typed.trim()) set(typed.trim()); },
   });
 }
+
+const sharedStart = (texts: string[]) => texts.reduce((common, text) => {
+  let n = 0;
+  while (n < common.length && common[n] === text[n]) n++;
+  return common.slice(0, n);
+});
 
 export const isClosed = (state: string) => CLOSED.includes(state as State);
