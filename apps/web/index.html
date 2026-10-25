@@ -2,8 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- On a phone, the keyboard shrinks the page, so a chat's composer stays above it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- desk as an app on the phone, which Chrome installs from the manifest; the phone's bar takes the panel's colour,
+         --bg-panel in desk.css, by the system's theme. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121213" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f9f9fa" />
     <title>desk</title>
     <script>
       // Set before the page draws, as base.html does: the theme (the system's, unless pinned in this browser), read

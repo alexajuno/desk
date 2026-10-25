@@ -1,0 +1,50 @@
+/* desk on a phone (25 Oct), which Chrome installs as an app from the manifest and reaches over Tailscale: at 640px and
+   under, the page and a chat fill the screen above the tabs (frame/Tabs.tsx), which take the corner's place; the
+   corner keeps only the pill of a chat you left. Linear's phone app is native, so nothing here is measured on
+   linear.app: it follows desk's heights and colours. */
+:root { --tabs-h: calc(56px + env(safe-area-inset-bottom)); }
+.tabs { display: none; }
+
+@media (max-width: 640px) {
+  .panel, .side-collapsed .panel, .chat-center .panel, .dock, .side-collapsed .dock, .chat-center:not(.side-off) .dock {
+    top: 0; left: 0; right: 0; bottom: var(--tabs-h); width: auto; border: 0; border-radius: 0; box-shadow: none;
+  }
+
+  .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 7; display: flex; box-sizing: border-box; height: var(--tabs-h);
+          padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--border-1); background: var(--bg-panel); }
+  .tabs .tab { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+               height: 56px; padding: 0; border: 0; border-radius: 0; background: none; font: 500 11px var(--font);
+               color: var(--text-3); text-decoration: none; -webkit-tap-highlight-color: transparent; }
+  .tabs .tab svg { width: 18px; height: 18px; }
+  .tabs .tab.here { color: var(--text-1); }
+  .tabs .count { position: absolute; top: 5px; left: calc(50% + 6px); box-sizing: border-box; min-width: 16px; height: 16px; padding: 0 4px;
+                 border-radius: 9999px; background: var(--accent); font: 500 10px/16px var(--font); color: var(--on-accent); }
+
+  /* Typing in a chat, the keyboard takes the tabs' place (index.html's viewport resizes the page for it). */
+  html:has(.dock textarea:focus) .tabs { display: none; }
+  html:has(.dock textarea:focus) .dock, html:has(.dock textarea:focus) .panel { bottom: 0; }
+
+  .corner { left: 8px; right: 8px; bottom: calc(var(--tabs-h) + 8px); justify-content: center; pointer-events: none; }
+  .corner > * { pointer-events: auto; }
+  .corner-new, .dock-history { display: none; }
+  .dock-pill { max-width: 100%; box-shadow: var(--shadow-pop); }
+  .corner .dock-pill .dock-pill-x { opacity: 1; } /* no mouse to show it */
+  .toast { left: 8px; right: 8px; bottom: calc(var(--tabs-h) + 8px); }
+
+  .composer { width: calc(100% - 16px); margin-bottom: 8px; }
+
+  /* A phone's Chrome shows a notification only from a service worker, which desk has not; the line offering them
+     would turn on nothing. */
+  .notify-ask { display: none; }
+
+  /* An automation's row: its name on the first line, when it fires, its agent and when it fires next on the second. */
+  .item.automation-row { flex-wrap: wrap; row-gap: 6px; height: auto; padding: 10px 16px; }
+  .automation-row .title { flex: 1 1 calc(100% - 40px); }
+  .automation-row .snippet { display: none; }
+  .automation-row .snippet + * { margin-left: 26px; }
+  .automation-row .next { min-width: 0; margin-left: auto; }
+
+  /* An automation's or a project's page: the column fills the screen, and its properties wrap. */
+  .project-overview { margin-top: 24px; padding: 0 16px 40px; }
+  .project-props { flex-wrap: wrap; }
+}

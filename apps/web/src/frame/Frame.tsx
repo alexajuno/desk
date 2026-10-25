@@ -33,6 +33,7 @@ import { KeysPanel } from "./KeysPanel";
 import { noteVisit, openIssue, openProject, openTeam, teamPath } from "./open";
 import { noteWalk, placeOf, stepFrom } from "../issues/walk";
 import { Sidebar } from "./Sidebar";
+import { Tabs } from "./Tabs";
 import { closeSide, sideOpen, toggleSide } from "./side";
 import { issues } from "../store/issues";
 import { toast as say } from "../ui/toast";
@@ -352,6 +353,7 @@ export const Frame = observer(function Frame() {
       <Dock />
       <Catcher />
       <Corner />
+      <Tabs />
       <KeysPanel />
       <SelectionBar />
       <CreatorHost />

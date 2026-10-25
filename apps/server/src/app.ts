@@ -22,6 +22,7 @@ import * as projects from "./projects.ts";
 import { HttpError } from "./pages.ts";
 import * as sessions from "./sessions.ts";
 import * as sync from "./sync.ts";
+import { tailnetName } from "./tailnet.ts";
 import * as teams from "./teams.ts";
 import * as transcript from "./transcript.ts";
 import * as updates from "./updates.ts";
@@ -53,11 +54,12 @@ const hostname = (host: string) => {
   }
 };
 
-// Whether desk's own page sent the request: its Origin is the page's own address on a loopback name. The agent's curl
-// sends none.
+// Whether desk's own page sent the request: its Origin is the page's own address, on a loopback name or, through
+// `tailscale serve`, over HTTPS on this machine's tailnet name (tailnet.ts). The agent's curl sends none.
 function fromPage(req: FastifyRequest): boolean {
-  const host = req.headers.host ?? "";
-  return LOOPBACK.has(hostname(host)) && req.headers.origin === `http://${host}`;
+  const host = req.headers.host ?? "", name = hostname(host);
+  if (LOOPBACK.has(name)) return req.headers.origin === `http://${host}`;
+  return name === tailnetName() && req.headers.origin === `https://${host}`;
 }
 
 // The same for a WebSocket, whose peer must be loopback too, so neither another site nor a name rebound to 127.0.0.1
@@ -281,6 +283,9 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/assets/*", async (req: Req, reply) => web.asset(reply, `assets/${req.params["*"]}`, "public, max-age=31536000, immutable"));
   app.get("/fonts/*", async (req: Req, reply) => web.asset(reply, `fonts/${req.params["*"]}`, "no-cache"));
   app.get("/favicon.svg", async (_req, reply) => web.asset(reply, "favicon.svg", "no-cache"));
+  // What Chrome on the phone needs to install desk as an app: its manifest and its icons.
+  app.get("/manifest.webmanifest", async (_req, reply) => web.asset(reply, "manifest.webmanifest", "no-cache"));
+  app.get("/icons/*", async (req: Req, reply) => web.asset(reply, `icons/${req.params["*"]}`, "no-cache"));
 
   // --- the pages' data
   app.get("/api/page/frame", async () => pages.framePage(sync.oldTabs()));

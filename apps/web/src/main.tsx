@@ -14,6 +14,7 @@ import "./styles/desk.css";
 import "./styles/editor.css";
 import "./styles/sessions.css";
 import "./styles/dock.css";
+import "./styles/phone.css";
 import "./index.css";
 
 watchTheme();

@@ -43,6 +43,7 @@ const TYPES: Record<string, string> = {
   ".txt": "text/plain; charset=utf-8", ".csv": "text/csv; charset=utf-8", ".mp4": "video/mp4", ".webm": "video/webm",
   ".xml": "application/xml", ".zip": "application/zip", ".gz": "application/gzip", ".py": "text/x-python; charset=utf-8",
   ".sh": "application/x-sh", ".yaml": "application/yaml", ".yml": "application/yaml", ".wasm": "application/wasm",
+  ".webmanifest": "application/manifest+json",
 };
 
 // A file as it is, with its type, size and time, as Starlette's FileResponse sends one.
