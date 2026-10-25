@@ -85,7 +85,7 @@ Try the branch as CLAUDE.md says, then read the same properties off desk's eleme
 
 - desk's theme is pinned per browser in `localStorage.theme`, which beats an emulated scheme (the playwright browser had `light` pinned on 18 Oct). Set it to `dark`, reload, and put back what was there.
 - Wait for the page's data before reading: Filter and Display only appear once the list has loaded.
-- When the playwright browser is busy with another session, the agents' Chrome (`chrome` server) can test 8790 too, at 2x. It has Vimium, which takes `/`, `f` and Esc before desk does (25 Oct): open the page by its address, and send such keys with `dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }))` on the element. Take `localStorage.theme` out again when done.
+- When the playwright browser is busy with another session, the agents' Chrome (`chrome` server) can test 8790 too, at 2x. It has Vimium, which takes `/`, `f` and Esc before desk does (25 Oct), and whose X closes the tab (twice on 25 Oct) and T opens a new one: open the page by its address, and send such keys with `dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }))` on the element. Take `localStorage.theme` out again when done.
 - The playwright browser is 1x, which shows a 0.5px ring fainter than the user's 2x screen does. Compare computed values, not how the screenshot looks.
 
 ## Files
