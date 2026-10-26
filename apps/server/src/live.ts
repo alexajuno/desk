@@ -73,7 +73,9 @@ export async function meta(id: string): Promise<Meta> {
   const all = await store.loadAll();
   const issue = [...all.values()].find((i) => i.session === id) ?? (chat?.issue ? all.get(chat.issue) : undefined) ?? null;
   const row = await agents.shownRow(id);
-  const cwd = row.cwd ?? (chat ? chats.runsIn(chat) : transcript.cwdOf(id)) ?? "";
+  // A chat the host runs is where desk last started it: a listing from before its composer picked a folder still names
+  // the old one (26 Oct). A process of the user's own, such as one resumed in a terminal, is where it runs.
+  const cwd = (chat && (!row.cwd || row.kind === "host") ? chats.runsIn(chat) : row.cwd ?? transcript.cwdOf(id)) ?? "";
   const { chatTitleOf, titleOf } = await import("./sessions.ts");
   return {
     id, cwd, folder: tilde(cwd), chat: Boolean(chat), agent: chat?.agent ?? null, bare: Boolean(chat?.bare),
