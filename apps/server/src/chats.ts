@@ -178,11 +178,23 @@ export function transcript(id: string): string {
 // The chat becomes the issue's session: the issue, as the caller set it, and the chat are saved as one write. desk
 // moves the chat into the issue's folder once its turn ends. An issue in Triage has no folder yet, so the chat stays
 // where it runs.
-export async function bind(chat: Chat, i: Issue, base: string) {
+// The issue's earlier session, which the chat takes over, lets the issue go too when it is a chat of its own.
+export async function bind(chat: Chat, i: Issue, base: string, previous: string | null = null) {
   chat.issue = i.slug;
   delete chat.deleted; // a chat at work is in sight
   chat.folder = i.folder ? resolve(agents.workdir(i)) : runsIn(chat);
-  await save(chat, (tx) => store.saveIn(tx, i));
+  const found = previous ? agentChatOf(previous) : null, old = found?.issue === i.slug ? found : null;
+  if (old) {
+    delete old.issue;
+    old.updated = now();
+  }
+  await save(chat, async (tx) => {
+    await store.saveIn(tx, i);
+    if (old) {
+      await put(tx, old);
+      keep(all(), old);
+    }
+  });
   if (!same(chat.folder, runsIn(chat)) && !MOVING.has(chat.id)) {
     MOVING.add(chat.id);
     void move(chat.id, base);

@@ -10,7 +10,8 @@
 //     GET    /api/issues/<slug>/sections/<name>   one section of the issue's document, as Markdown
 //     PUT    /api/issues/<slug>/sections/<name>   write it, the Markdown as the request's body; empty takes it out
 //     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
-//     POST   /api/issues/<slug>/work    the agent chat works it itself: the chat becomes the issue's session
+//     POST   /api/issues/<slug>/work    the agent chat works it itself: the chat becomes the issue's session, taking
+//                                       over one that sits idle
 //     POST   /api/issues/<slug>/try     run the issue's branch in its folder's checkout, to test it (land.ts)
 //     POST   /api/issues/<slug>/back-to-main   and back, handing desk's checkout to the next in line
 //     GET    /api/teams                 list teams (state=active|archived|all); /api/issues takes team=<slug>
@@ -58,6 +59,7 @@ import { find } from "./search.ts";
 import * as settings from "./settings.ts";
 import * as teams from "./teams.ts";
 import type { Team } from "./teams.ts";
+import * as transcripts from "./transcript.ts";
 
 const OPEN = store.STATES.filter((s) => s !== "done" && s !== "dropped");
 
@@ -573,7 +575,9 @@ export function routes(app: FastifyInstance) {
   // The agent chat works this issue itself: the chat's session becomes the issue's session, the chat moves into the
   // issue's folder (a window chat once its turn ends), and the issue shows In progress. A chat's own issue in Triage
   // with no folder binds where the chat runs and stays in Triage. A chat that binds to another issue leaves its Triage
-  // one behind as a duplicate of it, dropped.
+  // one behind as a duplicate of it, dropped. An issue whose session sits idle or stopped is taken over, and the reply
+  // names that session and its transcript, for what the document lacks; only one working or asking now keeps it (26
+  // Oct: "we should allowing new session to be binded", after a brief written on 22 Oct held one).
   app.post("/api/issues/:slug/work", async (req: Req) => {
     const slug = req.params.slug, i = await loadIssue(slug);
     const id = str(((req.body ?? {}) as Record<string, unknown>).chat);
@@ -582,19 +586,25 @@ export function routes(app: FastifyInstance) {
       throw new HttpError(409, `${slug} is ${i.state}; only an issue in triage, the backlog, in progress, waiting or in review can be worked.`);
     if (!chats.exists(id)) throw new HttpError(404, "No such chat");
     const chat = chats.load(id);
-    if (i.session && i.session !== chat.session) throw new HttpError(409, `${slug} already has its own session; open its page to talk to it.`);
+    const previous = i.session && i.session !== chat.session ? i.session : null;
+    if (previous) {
+      const row = await agents.liveRow(previous, true);
+      if (row.status === "busy" || row.status === "waiting" || row.state === "blocked")
+        throw new HttpError(409, `${slug}'s session is ${row.status === "busy" ? "working on a turn" : "waiting on a question"} now; wait until it is done, or talk to it on its page.`);
+    }
     const triage = i.state === "triage" && !i.folder;
     if (!triage && (!i.folder || !isDir(agents.workdir(i))))
       throw new HttpError(422, "Set the issue's folder first (PATCH folder; find it with /api/folders?q=<name>).");
     i.session = chat.session;
     i.state = triage ? "triage" : "running";
     const was = chat.issue;
-    await chats.bind(chat, i, baseOf(req)); // the issue and its chat, as one write
+    await chats.bind(chat, i, baseOf(req), previous); // the issue, its chat and the chat it had, as one write
     if (was && was !== slug && (await store.exists(was))) {
       const old = await store.load(was);
       if (old.state === "triage") await store.move(old, { state: "dropped", link: `/issue/${slug}` });
     }
-    return asJson(i);
+    if (!previous) return asJson(i);
+    return { ...asJson(i), previous: { session: previous, transcript: transcripts.pathOf(previous) } };
   });
 
   // Switch the issue's folder checkout to its branch, to test it in the one running app; in desk's own repo, while
