@@ -166,20 +166,20 @@
              animation: dock-fade 0.2s ease; }
 .steps-list { display: flex; flex-direction: column; gap: 1px; margin: 4px 0 0 7px; padding-left: 10px; border-left: 1px solid var(--border-2);
               animation: dock-fade 0.15s ease; }
-/* a step still being written is a bare p, drawn as a step's line: a tool step waiting on its result is a div whose own
-   line already is one, and padding the div too pushed that line a space in */
-.step-line, p.step.running { width: 100%; height: 24px; justify-content: flex-start; gap: 8px; margin: 0; padding: 0 6px; border-radius: 6px;
-                             background: transparent; font: 450 12px var(--font); color: var(--text-3); display: flex; align-items: center; }
-p.step.running { box-sizing: border-box; border: 0.5px solid transparent; }
+/* a step still running is "busy", not "running", which is the foot's box below: a busy step still being written is a bare
+   p drawn as a step's line, and one waiting on its result is a div holding a .step-line of its own */
+.step-line, p.step.busy { width: 100%; height: 24px; justify-content: flex-start; gap: 8px; margin: 0; padding: 0 6px; border-radius: 6px;
+                          background: transparent; font: 450 12px var(--font); color: var(--text-3); display: flex; align-items: center; }
+p.step.busy { box-sizing: border-box; border: 0.5px solid transparent; }
 .step-line:hover { background: var(--btn-ghost-hover); }
 .step-name { flex: none; font-weight: 500; color: var(--text-2); }
 .step-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .step.error .step-name { color: var(--state-waiting); }
 @media (prefers-reduced-motion: no-preference) {
   .steps-now { --shimmer: var(--text-4); --shimmer-band: var(--text-1); animation: dock-fade 0.2s ease, dock-shimmer 2s linear infinite; }
-  .step.running .step-name { --shimmer: var(--text-4); --shimmer-band: var(--text-1); animation: dock-shimmer 2s linear infinite; }
-  .steps-now, .step.running .step-name { background: linear-gradient(90deg, var(--shimmer) 40%, var(--shimmer-band) 50%, var(--shimmer) 60%) 0 0 / 200% 100%;
-                                         -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .step.busy .step-name { --shimmer: var(--text-4); --shimmer-band: var(--text-1); animation: dock-shimmer 2s linear infinite; }
+  .steps-now, .step.busy .step-name { background: linear-gradient(90deg, var(--shimmer) 40%, var(--shimmer-band) 50%, var(--shimmer) 60%) 0 0 / 200% 100%;
+                                      -webkit-background-clip: text; background-clip: text; color: transparent; }
 }
 .step-detail pre { max-height: 240px; margin: 2px 0 6px 6px; padding: 8px 10px; overflow: auto; border-radius: 6px; background: var(--bg-raised);
                    font: 11.5px/1.5 var(--mono); color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }

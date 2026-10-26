@@ -442,7 +442,7 @@ const Steps = observer(function Steps({ s, items, running, live: isLive }: { s: 
       {open && (
         <div className="steps-list">
           {items.map((i) => (i.t === "thinking" ? <Thought key={i.key} text={i.text ?? ""} /> : <Step key={i.key} s={s} item={i} result={s.results.get(i.id!)} />))}
-          {running.map((b) => <p key={`${b.msg}:${b.index}`} className="step running"><span className="step-name">{b.kind === "thinking" ? "Thinking" : b.name}</span></p>)}
+          {running.map((b) => <p key={`${b.msg}:${b.index}`} className="step busy"><span className="step-name">{b.kind === "thinking" ? "Thinking" : b.name}</span></p>)}
         </div>
       )}
     </div>
@@ -467,7 +467,7 @@ function Step({ s, item, result }: { s: LiveSession; item: Item; result?: Item }
   const [open, setOpen] = useState(false);
   const agent = item.name === "Agent" || item.name === "Task";
   return (
-    <div className={`step${result?.error ? " error" : ""}${result ? "" : " running"}`}>
+    <div className={`step${result?.error ? " error" : ""}${result ? "" : " busy"}`}>
       <button className="step-line" type="button" onClick={() => setOpen(!open)}>
         <span className="step-name">{item.name}</span>
         <span className="step-what">{item.summary}</span>
