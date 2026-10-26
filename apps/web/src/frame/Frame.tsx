@@ -317,9 +317,11 @@ function onClickFirst(e: MouseEvent) {
 
 function onClick(e: MouseEvent) {
   const t = e.target as Element;
-  if (e.defaultPrevented || t.closest(".menu")) return;
-  // so Back returns to a page with it closed; the toggle that just opened it is no click outside it
+  if (t.closest(".menu")) return;
+  // so Back returns to a page with it closed; the toggle that just opened it is no click outside it. Before the
+  // check below, since the router's links prevent their click's default.
   if (sideOpen() && (t.closest(".side a") || !t.closest(".side, .side-toggle"))) closeSide();
+  if (e.defaultPrevented) return;
   const hash = t.closest<HTMLAnchorElement>('a[href^="#"]');
   if (hash) unfoldTo(document.getElementById(decodeURIComponent(hash.hash.slice(1))));
   const head = t.closest(".sec-head");
