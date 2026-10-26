@@ -166,8 +166,11 @@
              animation: dock-fade 0.2s ease; }
 .steps-list { display: flex; flex-direction: column; gap: 1px; margin: 4px 0 0 7px; padding-left: 10px; border-left: 1px solid var(--border-2);
               animation: dock-fade 0.15s ease; }
-.step-line, .step.running:not(.thought) { width: 100%; height: 24px; justify-content: flex-start; gap: 8px; margin: 0; padding: 0 6px; border-radius: 6px;
-                                          background: transparent; font: 450 12px var(--font); color: var(--text-3); display: flex; align-items: center; }
+/* a step still being written is a bare p, drawn as a step's line: a tool step waiting on its result is a div whose own
+   line already is one, and padding the div too pushed that line a space in */
+.step-line, p.step.running { width: 100%; height: 24px; justify-content: flex-start; gap: 8px; margin: 0; padding: 0 6px; border-radius: 6px;
+                             background: transparent; font: 450 12px var(--font); color: var(--text-3); display: flex; align-items: center; }
+p.step.running { box-sizing: border-box; border: 0.5px solid transparent; }
 .step-line:hover { background: var(--btn-ghost-hover); }
 .step-name { flex: none; font-weight: 500; color: var(--text-2); }
 .step-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
