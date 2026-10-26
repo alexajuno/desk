@@ -340,10 +340,10 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
 .bar button.more { width: 28px; height: 24px; padding: 0; justify-content: center; background: none; border: 0; color: var(--text-3); }
 .bar button.more:hover { background: var(--bg-raised); color: var(--text-1); }
 .bar .bar-title { flex: none; color: var(--text-1); margin-right: 4px; }
-/* an issue's crumb keeps to the bar's one line, on a phone too: each part shrinks to an ellipsis, the issue's own title
-   first */
+/* an issue's crumb keeps to the bar's one line, on a phone too: its own title shrinks to an ellipsis, while its team and
+   parents keep their width up to a cap (a shrink of a fraction of a pixel would already cut "Issues" to "Issu…") */
 .bar .crumb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bar span.crumb { flex-shrink: 100; }
+.bar a.crumb { flex-shrink: 0; max-width: 35%; }
 /* Linear's view row under the top bar of its Issues page, measured on linear.app on 18 Oct, dark and light: 43px, the
    tabs (All issues, Active, Backlog) from its left, Filter and Display at its right end. A tab is a 28px pill, 12px at
    weight 500, filled like a button, with a 0.5px ring and the panel's shadow; the open one is filled brighter, with the
