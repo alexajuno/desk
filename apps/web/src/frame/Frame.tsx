@@ -318,7 +318,8 @@ function onClickFirst(e: MouseEvent) {
 function onClick(e: MouseEvent) {
   const t = e.target as Element;
   if (e.defaultPrevented || t.closest(".menu")) return;
-  if (sideOpen() && (t.closest(".side a") || !t.closest(".side"))) closeSide(); // so Back returns to a page with it closed
+  // so Back returns to a page with it closed; the toggle that just opened it is no click outside it
+  if (sideOpen() && (t.closest(".side a") || !t.closest(".side, .side-toggle"))) closeSide();
   const hash = t.closest<HTMLAnchorElement>('a[href^="#"]');
   if (hash) unfoldTo(document.getElementById(decodeURIComponent(hash.hash.slice(1))));
   const head = t.closest(".sec-head");
