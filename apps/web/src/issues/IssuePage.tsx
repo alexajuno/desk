@@ -41,9 +41,9 @@ export const IssuePage = observer(function IssuePage() {
       <Bar
         crumb={shown && p ? (
           <>
-            {shown.team ? <Go to={`/team/${shown.team.slug}`}>{shown.team.title}</Go> : <Go to="/issues">Issues</Go>}
-            {shown.trail.map((a) => (<Fragment key={a.slug}><span className="sep">›</span><Go to={`/issue/${a.slug}`}>{a.title}</Go></Fragment>))}
-            <span className="sep">›</span><span>{p.title}</span>
+            {shown.team ? <Go className="crumb" to={`/team/${shown.team.slug}`}>{shown.team.title}</Go> : <Go className="crumb" to="/issues">Issues</Go>}
+            {shown.trail.map((a) => (<Fragment key={a.slug}><span className="sep">›</span><Go className="crumb" to={`/issue/${a.slug}`}>{a.title}</Go></Fragment>))}
+            <span className="sep">›</span><span className="crumb">{p.title}</span>
           </>
         ) : null}
         tools={
