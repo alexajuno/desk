@@ -812,7 +812,9 @@ button.inbox-tool.on { background: var(--btn-ghost-on); color: var(--text-1); }
 @media (max-width: 900px) { .bar .inbox-head { width: calc(var(--inbox-list) - 36px); } }
 @media (max-width: 769px) {
   .inbox { grid-template-columns: minmax(0, 1fr); }
-  .inbox:has(.inbox-open .issue) .inbox-list, .inbox:not(:has(.inbox-open .issue)) .inbox-open { display: none; }
+  /* the open row takes the screen when it is an issue's page or a chat (a chat row, or Triage's), else the list does */
+  .inbox:has(.inbox-open :is(.issue, .session-view)) .inbox-list,
+  .inbox:not(:has(.inbox-open :is(.issue, .session-view))) .inbox-open { display: none; }
   .inbox-list { border-right: 0; }
   .bar:has(.inbox-head)::after { content: none; }
   .bar .inbox-head, .side-collapsed .bar .inbox-head { width: auto; }
