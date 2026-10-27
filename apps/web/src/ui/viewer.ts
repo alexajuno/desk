@@ -66,8 +66,9 @@ function open(pictures: Element[], picture: Element) {
   const help = viewer.querySelector(".viewer-help") as HTMLDivElement;
   const close = viewer.querySelector(".viewer-close") as HTMLButtonElement;
   close.addEventListener("mousedown", (e) => e.stopPropagation());
-  close.addEventListener("click", closeViewer);
+  close.addEventListener("click", () => closeViewer());
   document.body.append(viewer);
+  history.pushState({ ...history.state, viewer: true }, "");
   let scale = 1, x = 0, y = 0, drag: { sx: number; sy: number } | null = null;
   let source: Element, copyOf: SVGSVGElement & HTMLImageElement;
   const apply = () => { stage.style.transform = `translate(${x}px, ${y}px) scale(${scale})`; };
@@ -107,10 +108,23 @@ function open(pictures: Element[], picture: Element) {
   v.addEventListener("dblclick", fit);
 }
 
-// Esc: the viewer closes, and the chat or page shows the picture last seen, in its middle when it was out of sight or
-// under the chat's composer.
-export function closeViewer() {
-  viewer?.remove();
+// Back closes it too, as a phone's photo viewer: it opens on an entry of its own in the tab's history, at the same
+// address, which Back leaves and Esc or × steps back off, so Back is never spent on it twice. The router never sees
+// those steps, which change no page.
+let steppingBack = false;
+addEventListener("popstate", (e) => {
+  if (viewer) closeViewer(true);
+  else if (!steppingBack && !(e.state as { viewer?: boolean } | null)?.viewer) return;
+  steppingBack = false;
+  e.stopImmediatePropagation();
+}, { capture: true });
+
+// Esc, × or Back: the viewer closes, and the chat or page shows the picture last seen, in its middle when it was out of
+// sight or under the chat's composer.
+export function closeViewer(byBack = false) {
+  if (!viewer) return;
+  if (!byBack && (history.state as { viewer?: boolean } | null)?.viewer) { steppingBack = true; history.back(); }
+  viewer.remove();
   viewer = null;
   show = null;
   const last = walk[at], view = last?.closest(".dock-scroll, .scroll");
