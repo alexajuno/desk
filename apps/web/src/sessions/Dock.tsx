@@ -20,7 +20,8 @@ import { dock, SIDE_WIDTH, type Layout, type Reading } from "../store/dock";
 import { issues } from "../store/issues";
 import { lineKey } from "../store/frame";
 import { toggleSide as toggleSidebar } from "../frame/side";
-import { GLYPH, SIDE_ICON } from "../ui/icons";
+import { GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
+import type { PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
@@ -262,7 +263,8 @@ type Row =
   | { kind: "text"; item: Item }
   | { kind: "note"; item: Item }
   | { kind: "steps"; key: string; items: Item[] }
-  | { kind: "sent"; key: string; section: Section };
+  | { kind: "sent"; key: string; section: Section }
+  | { kind: "step"; key: string; place: string; title: string | null };
 
 // What a session's command sent of its issue's document: the sections it PUT at their address, once it ran and desk
 // took them (a refusal answers with its "detail", api.ts).
@@ -272,14 +274,28 @@ function sentBy(tool: Item, result: Item | undefined, slug: string | null): Sect
   return [...(tool.input ?? "").matchAll(SECTION)].filter((m) => m[1] === slug).map((m) => m[2] as Section);
 }
 
+// The steps a session's command sent their diagram and decisions, by their place (PUT /steps/1.2, api.ts), with the
+// step's title from desk's answer when the command kept it: the places move as steps join the list, the title stays.
+const STEP_SENT = /\/api\/issues\/([^/\\"'\s]+)\/steps\/([1-9][\d.]*)/g;
+function stepsSentBy(tool: Item, result: Item | undefined, slug: string | null): { place: string; title: string | null }[] {
+  if (!slug || !result || result.error || result.text?.includes('"detail"') || !/-X\s*PUT\b|--request\s+PUT\b/.test(tool.input ?? "")) return [];
+  const title = /"step_title":\s*"((?:[^"\\]|\\.)*)"/.exec(result.text ?? "");
+  const named = title ? (JSON.parse(`"${title[1]}"`) as string) : null;
+  const places = [...(tool.input ?? "").matchAll(STEP_SENT)].filter((m) => m[1] === slug).map((m) => m[2].replace(/\.$/, ""));
+  return places.map((place) => ({ place, title: places.length === 1 ? named : null }));
+}
+
 // The items in the order drawn, the tool steps and thoughts between two replies folded into one row. A step that sent
 // the issue its plan or its card leaves the fold and shows as what it sent.
 function rowsOf(items: Item[], results: Map<string, Item>, slug: string | null): Row[] {
   const rows: Row[] = [];
   for (const item of items) {
-    const sent = item.t === "tool" && item.name === "Bash" ? sentBy(item, results.get(item.id!), slug) : [];
-    if (sent.length) {
+    const bash = item.t === "tool" && item.name === "Bash";
+    const sent = bash ? sentBy(item, results.get(item.id!), slug) : [];
+    const drew = bash ? stepsSentBy(item, results.get(item.id!), slug) : [];
+    if (sent.length || drew.length) {
       for (const section of sent) rows.push({ kind: "sent", key: `${item.key}:${section}`, section });
+      for (const { place, title } of drew) rows.push({ kind: "step", key: `${item.key}:step:${place}`, place, title });
       continue;
     }
     if (item.t === "tool" || item.t === "thinking") {
@@ -350,6 +366,10 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
   // Desk keeps only the latest plan and card, which show at their last send; an earlier send is a line.
   const latest: Record<Section, number> = { Plan: -1, Result: -1 };
   rows.forEach((r, n) => { if (r.kind === "sent") latest[r.section] = n; });
+  // And each step's diagram, at its step's last send.
+  const steps = page?.plan_steps ?? [];
+  const latestStep = new Map<string, number>();
+  rows.forEach((r, n) => { if (r.kind === "step") latestStep.set(stepNamed(steps, r)?.title ?? r.place, n); });
   // A reply streaming now: its words show as they come, its tool calls join the last fold.
   const liveSteps = s.partial.filter((b) => b.kind === "tool_use" || b.kind === "thinking");
   const liveText = s.partial.filter((b) => b.kind === "text");
@@ -370,6 +390,10 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
         if (r.kind === "you") return <You key={r.item.key} text={r.item.text ?? ""} images={r.item.images} files={r.item.files} />;
         if (r.kind === "text") return <Reply key={r.item.key} at={r.item.key} text={r.item.text ?? ""} />;
         if (r.kind === "sent") return <Sent key={r.key} at={r.key} page={page} section={r.section} latest={n === latest[r.section]} />;
+        if (r.kind === "step") {
+          const step = stepNamed(steps, r);
+          return <StepSent key={r.key} at={r.key} step={step} top={steps[Number(r.place.split(".")[0]) - 1]?.title ?? null} latest={latestStep.get(step?.title ?? r.place) === n} />;
+        }
         if (r.kind === "note") {
           const agent = r.item.id ? s.items.find((i) => i.t === "tool" && i.id === r.item.id && (i.name === "Agent" || i.name === "Task")) : undefined;
           return agent ? <AgentNote key={r.item.key} s={s} note={r.item} /> : <p key={r.item.key} className="convo-note">{r.item.text}</p>;
@@ -386,10 +410,12 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
   );
 });
 
-// The plan or the card a session sent, where it sent it: the latest of each drawn, its text folded under Details; an
-// earlier one a line. What it waits on from you, Go or Approve, is on top of the composer (StepBar).
+// The card a session sent, where it sent it: the latest drawn, its text folded under Details; an earlier one a line. The
+// plan is always a line, never drawn: while a step runs the chat shows that step's diagram only, and the whole plan is
+// a click away in the side ("never go go all or anything. we had all diagrams on sidebar", the user, 27 Oct). What it
+// waits on from you, Go or Approve, is on top of the composer (StepBar).
 const Sent = observer(function Sent({ at, page, section, latest }: { at: string; page: IssuePageData | null; section: Section; latest: boolean }) {
-  const parts = !page ? null : section === "Plan" ? page.plan_card : page.card ?? (page.result ? [page.result_html, ""] : null);
+  const parts = !page || section === "Plan" ? null : page.card ?? (page.result ? [page.result_html, ""] : null);
   const name = section === "Plan" ? "Plan" : "Card"; // as the bar and the side say it
   if (!latest || !page || !parts) {
     return <p className="sent-line" data-at={at}>{GLYPH.file}<span>{name}</span><span className="sent-when">{latest ? "sent" : "an earlier version, sent"}</span></p>;
@@ -407,6 +433,44 @@ const Sent = observer(function Sent({ at, page, section, latest }: { at: string;
     </div>
   );
 });
+
+// The step a send names: by its title from desk's answer, else by its place in the list as it stands.
+function stepNamed(steps: PlanStep[], r: { place: string; title: string | null }): PlanStep | null {
+  if (r.title) {
+    const find = (list: PlanStep[]): PlanStep | null => {
+      for (const s of list) {
+        if (s.title === r.title) return s;
+        const inner = find(s.kids ?? []);
+        if (inner) return inner;
+      }
+      return null;
+    };
+    const found = find(steps);
+    if (found) return found;
+  }
+  let level = steps, step: PlanStep | null = null;
+  for (const n of r.place.split(".").map(Number)) {
+    step = level[n - 1] ?? null;
+    if (!step) return null;
+    level = step.kids ?? [];
+  }
+  return step;
+}
+
+// A step's diagram, where its session sent it, as the step stands now: the latest send of each step drawn, an earlier
+// one a line, since desk keeps only the step's latest. Its decisions are the side's (Steps), not the chat's.
+const StepSent = function StepSent({ at, step, top, latest }: { at: string; step: PlanStep | null; top: string | null; latest: boolean }) {
+  const name = step?.title ?? "A step";
+  if (!latest || !step?.diagram_html) {
+    return <p className="sent-line" data-at={at}>{GLYPH.file}<span>{name}</span><span className="sent-when">{!latest ? "an earlier diagram, sent" : step?.said_html ? "its decisions, sent" : "sent"}</span></p>;
+  }
+  return (
+    <div className="sent step-sent" data-at={at}>
+      <div className="sent-head"><StateIcon state={step.state} /><span>{name}</span>{top && top !== name && <span className="step-sent-where">{top}</span>}</div>
+      <div className="reply body sent-body" dangerouslySetInnerHTML={{ __html: step.diagram_html }} />
+    </div>
+  );
+};
 
 // What the issue waits on from you, on top of the composer, where you act ("user take action in the composer only", the
 // user, 27 Oct), as a question's buttons are: Go on a plan, Approve on a card, with Try beside it and the steps Approve

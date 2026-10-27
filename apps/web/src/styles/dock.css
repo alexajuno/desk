@@ -170,6 +170,9 @@
 .sent-line span:first-of-type, .sent-head span { color: var(--text-2); }
 .sent-when { font-weight: 450; }
 .sent .sent-body .d2 { margin-bottom: 12px; }
+.step-sent .sent-body .d2 { margin-bottom: 0; }
+.step-sent .sent-head svg { flex: none; }
+.step-sent .step-sent-where { margin-left: auto; color: var(--text-4); font-weight: 450; }
 .sent .reply.body { font-size: 14px; line-height: 22px; }
 .sent-details { margin: 10px 0 0; }
 

@@ -454,7 +454,7 @@ export function routes(app: FastifyInstance) {
       return { ...asJson(i), section: name, written: Boolean(sent.trim()) };
     });
 
-    // Its d2 block is the step's diagram, the rest its decisions; empty takes both out. The reply names the step, which
+    // Its d2 block is the step's diagram, the rest its decisions; empty takes both out. The reply names the step (step_title), which
     // the chat draws where the session sent it, by its title, as the list's places move.
     raw.put("/api/issues/:slug/steps/:place", async (req: StepReq) => {
       const i = await loadIssue(req.params.slug);
@@ -468,7 +468,7 @@ export function routes(app: FastifyInstance) {
       if (said) step.said = said;
       i.plan_steps = JSON.stringify(steps);
       await store.save(i);
-      return { ...asJson(i), step: req.params.place, title: step.title, diagram: Boolean(diagram), said: Boolean(said) };
+      return { ...asJson(i), step: req.params.place, step_title: step.title, diagram: Boolean(diagram), said: Boolean(said) };
     });
   });
 

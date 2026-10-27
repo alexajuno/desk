@@ -4,7 +4,8 @@
 // suppose?", the user, 27 Oct). The issue's page and the side beside its chat both show it.
 import { StateIcon } from "../ui/icons";
 
-export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[] };
+// diagram_html and said_html: the step's diagram and decisions, drawn (pages.ts, drawnSteps).
+export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[]; diagram_html?: string; said_html?: string };
 
 export function Steps({ steps }: { steps: PlanStep[] }) {
   return (
