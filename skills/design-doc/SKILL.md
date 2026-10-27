@@ -54,7 +54,7 @@ after: After {
 
 - **Now** changes on every rewrite.
 - **The diagram** is the thing itself, not the progress: what exists and what changes, Today and After, a table as a table, the part being worked on with a double border. Where the work stands is a few words in the Now line ("maybe we don't even need progress diagram at all?", "i mean, there are in total 4 steps", 27 Oct). It holds only what has been said, about a dozen shapes at most; a part or a term the talk goes into opens inside the part it belongs to, once it is talked about, not before. A second diagram is for a second part that changes, never for the progress.
-- **Steps** are the work, a numbered line of a few words each: ✓ before a finished one, → before the one being worked on ("ai has to gimme the plan, do each step", 27 Oct). They come once the shape is settled, with Done when, and a step that turns up on the way joins the list where it falls. A step is what one diagram or one short diff shows, minutes of work.
+- **Steps** are the work, a numbered line of a few words each: ✓ before a finished one, → before the one being worked on ("ai has to gimme the plan, do each step", 27 Oct). They are there from the first draft ("i started a new session and see no steps in the plan", 27 Oct): first the design's pieces to settle, such as "how to carry a quarter credit", then the build's steps once they are known. A step that turns up on the way joins the list where it falls. A step is what one diagram or one short diff shows, minutes of work.
 - **Details** hold the text: Said so far, Done when and Decide alone, which you work from and the review card checks. The user reads the diagram, not these ("i don't read them at all", 27 Oct), so nothing the user must see lives only there.
 - **Said so far** is the record. One line per decision, with the user's reason in their words and dated; your own picks stay marked as yours until the user takes them. When the user decides without a reason, ask for one line. A decision that changes is rewritten in place.
 - **Done when** and **Decide alone** come once the shape is settled, before "go".
@@ -62,7 +62,7 @@ after: After {
 
 ## Writing it live
 
-- Write a first draft as soon as you understand the problem: the Now line, a first Today and After, and what the user has said. No more.
+- Write a first draft as soon as you understand the problem: the Now line, a first Today and After, the steps as you see them, and what the user has said. No more.
 - Rewrite it after each exchange that changes it, with the Write or Edit tool, in its draft, then send it again. In the chat, say the change in short words; don't paste the plan.
 - Something bigger than one plan, such as a whole system, is an overview sketch first, then a plan per part.
 - Outside desk, keep the plan in a plan.md in the folder you work in, with a `# <what we are solving>` title and `## Said so far`, or draw the sketch in the chat when there is no folder.
