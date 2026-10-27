@@ -12,9 +12,10 @@ export function Steps({ steps }: { steps: PlanStep[] }) {
       {steps.map((s, n) => {
         const kids = s.kids ?? [];
         const end = kids.length ? `${kids.filter((k) => k.state === "done").length} of ${kids.length}` : s.note;
+        const here = s.state === "running" && !kids.some((k) => k.state === "running"); // the one being worked on, not its parent
         return (
           <li key={n}>
-            <div className={`step${s.state === "running" ? " here" : ""}`} data-state={s.state}>
+            <div className={`step${here ? " here" : ""}`} data-state={s.state}>
               <span className="step-icon"><StateIcon state={s.state} /></span>
               <span className="step-title">{s.title}</span>
               {end && <span className="step-note">{end}</span>}
