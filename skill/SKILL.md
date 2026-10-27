@@ -29,7 +29,7 @@ An issue's fields:
 - `milestone`: one of its project's milestones, by id or title, or null
 - `due`: its due date, a day, such as `2026-11-08` (desk also reads `Nov 8` or `20/05/2027`), or null. The Inbox tells the user the day before, and the day after it passes
 - `folder`: where its session works, usually a repo, such as `~/projects/desk`
-- `protocol`: how much plan it gets, and whether its session waits for the user's "go": `quick` (a three-line brief, then the work at once), `brief` (the same brief, then "go") or `design` (planned in the chat in short words and a sketch, then "go"). Pick one when you file: quick for a fix or a small feature, brief where a wrong guess costs more than a redo (a team repo, real data, anything outside), design when the user wants to discuss it. An issue with none runs design. Every protocol ends in the review card and the user's Approve
+- `protocol`: how much plan it gets, and whether its session waits for the user's "go": `quick` (a three-line brief, then the work at once), `brief` (the same brief, then "go") or `design` (planned in the chat in short words and a sketch, then "go", then carried out one step at a time with the user). Pick design almost always: quick only for a task that is super small, brief only for one in a project that is not important ("try to lean toward almost always design unless the task is super small or the project is not important", the user, 27 Oct). An issue with none runs design. Every protocol ends in the review card and the user's Approve
 
 List the open issues, or search them by the words in their title or body, best match first. Add `&state=all` to include done and dropped ones, or pick states with a list such as `state=running,review`:
 
@@ -146,7 +146,7 @@ desk's own agent chat works an issue itself; it starts no other session. Bind th
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/work" --json '{"chat": "<chat id>"}'
 ```
 
-Then work it by its protocol, in the chat: send its Plan section, a three-line brief for quick and brief, and for design a sketch built with the user in short words, as the design-doc skill says, ending with Done when and Decide alone. Go straight on for quick; for the others, end your turn on `"review_of": "plan"` and wait for the user's "go". Carry the work out in the chat, send its Result section with the review card, and end your turn on `"review_of": "result"`, with the steps that land the work by the repo's rules, which the user's Approve runs with no turn of yours:
+Then work it by its protocol, in the chat: send its Plan section, a three-line brief for quick and brief, and for design one diagram of the work's steps built with the user in short words, as the design-doc skill says, ending with Done when and Decide alone. Go straight on for quick; for the others, end your turn on `"review_of": "plan"` and wait for the user's "go". Carry the work out in the chat, a design issue one step at a time, each step reported and ending your turn, as desk's prompt says; send its Result section with the review card, and end your turn on `"review_of": "result"`, with the steps that land the work by the repo's rules, which the user's Approve runs with no turn of yours:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"state": "review", "review_of": "result", "lands": {"steps": ["~/projects/desk/bin/land feat/login-redirect"]}}'
