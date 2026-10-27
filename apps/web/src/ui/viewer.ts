@@ -11,6 +11,9 @@ export const viewerOpen = () => viewer !== null;
 const PICTURES = ".body img, .d2";
 const isPicture = (el: Element) => !(el.tagName === "IMG" && el.closest("a"));
 
+// GLYPH.close (icons.tsx), as markup, since the viewer is built outside React.
+const CROSS = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>';
+
 // What a picture shows full screen: a screenshot itself, or a diagram's drawing in the theme on screen.
 function drawingOf(picture: Element): Element | null {
   if (!picture.classList.contains("d2")) return picture;
@@ -56,9 +59,14 @@ function open(pictures: Element[], picture: Element) {
   at = Math.max(0, walk.indexOf(picture));
   viewer = document.createElement("div");
   viewer.className = "viewer";
-  viewer.innerHTML = '<div class="viewer-stage"></div><div class="viewer-help"></div>';
+  // × closes it where no Esc key is, on a phone (27 Oct: "on phone there is no way to escape the view?").
+  viewer.innerHTML = `<div class="viewer-stage"></div><div class="viewer-help"></div>
+    <button class="viewer-close" type="button" title="Close  Esc" aria-label="Close">${CROSS}</button>`;
   const stage = viewer.querySelector(".viewer-stage") as HTMLDivElement;
   const help = viewer.querySelector(".viewer-help") as HTMLDivElement;
+  const close = viewer.querySelector(".viewer-close") as HTMLButtonElement;
+  close.addEventListener("mousedown", (e) => e.stopPropagation());
+  close.addEventListener("click", closeViewer);
   document.body.append(viewer);
   let scale = 1, x = 0, y = 0, drag: { sx: number; sy: number } | null = null;
   let source: Element, copyOf: SVGSVGElement & HTMLImageElement;

@@ -902,6 +902,10 @@ button.inbox-tool.on { background: var(--btn-ghost-on); color: var(--text-1); }
 .viewer.dragging { cursor: grabbing; }
 .viewer-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .viewer-stage svg { display: block; max-height: none; }
+/* its × is the new issue panel's close, a quiet 28px circle, in the corner; 40px on a phone (phone.css) */
+.viewer-close { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: 12px; width: 28px; padding: 0; justify-content: center;
+                border: 0; border-radius: 9999px; background: none; color: var(--text-3); cursor: pointer; }
+.viewer-close:hover { background: var(--bg-active); color: var(--text-1); }
 .viewer-help { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--text-3);
                background: var(--bg-raised); border: 0.5px solid var(--border-3); border-radius: 8px; padding: 4px 10px; pointer-events: none; }
 
