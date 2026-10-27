@@ -189,6 +189,9 @@
 .side-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-what { flex: none; margin-left: auto; font-size: 12px; color: var(--text-4); }
 .side-switch { height: 24px; padding: 0 8px; font-size: 12px; }
+/* The card unfolded under its row where the side lies over the chat, its text under the row's name: 8px of padding,
+   the 14px glyph and the 8px gap. */
+.side-card { padding: 4px 8px 12px 30px; }
 .brought { animation: brought 1.2s ease; border-radius: 8px; }
 @keyframes brought { 0%, 40% { box-shadow: 0 0 0 2px var(--accent); } 100% { box-shadow: 0 0 0 2px transparent; } }
 
