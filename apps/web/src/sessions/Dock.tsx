@@ -265,12 +265,12 @@ type Row =
   | { kind: "steps"; key: string; items: Item[] }
   | { kind: "sent"; key: string; section: Section };
 
-// What a session's command sent of its issue's document, by desk's answer to it (api.ts, the section's PUT): the
-// sections written, none when desk refused one.
-const SENT = /"slug":"([^"]+)"[^}]*?"section":"(Plan|Result)","written":true/g;
-function sentBy(result: Item | undefined, slug: string | null): Section[] {
-  if (!slug || !result?.text) return [];
-  return [...result.text.matchAll(SENT)].filter((m) => m[1] === slug).map((m) => m[2] as Section);
+// What a session's command sent of its issue's document: the sections it PUT at their address, once it ran and desk
+// took them (a refusal answers with its "detail", api.ts).
+const SECTION = /\/api\/issues\/([^/\\"'\s]+)\/sections\/(Plan|Result)\b/g;
+function sentBy(tool: Item, result: Item | undefined, slug: string | null): Section[] {
+  if (!slug || !result || result.error || result.text?.includes('"detail"') || !/-X\s*PUT\b|--request\s+PUT\b/.test(tool.input ?? "")) return [];
+  return [...(tool.input ?? "").matchAll(SECTION)].filter((m) => m[1] === slug).map((m) => m[2] as Section);
 }
 
 // The items in the order drawn, the tool steps and thoughts between two replies folded into one row. A step that sent
@@ -278,7 +278,7 @@ function sentBy(result: Item | undefined, slug: string | null): Section[] {
 function rowsOf(items: Item[], results: Map<string, Item>, slug: string | null): Row[] {
   const rows: Row[] = [];
   for (const item of items) {
-    const sent = item.t === "tool" && item.name === "Bash" ? sentBy(results.get(item.id!), slug) : [];
+    const sent = item.t === "tool" && item.name === "Bash" ? sentBy(item, results.get(item.id!), slug) : [];
     if (sent.length) {
       for (const section of sent) rows.push({ kind: "sent", key: `${item.key}:${section}`, section });
       continue;
