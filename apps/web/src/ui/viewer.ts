@@ -1,7 +1,7 @@
 // The diagram and screenshot viewer, as desk.js's: click to open full screen, wheel to zoom, drag to move,
-// double-click to fit, Esc to close (the shortcuts close it). V opens the picture on screen, and ← and → walk every
-// one in the chat or page it sits in, as Telegram's viewer walks a chat's media; Esc leaves the chat at the last one
-// seen (27 Oct: "i like the v and arrows").
+// double-click to fit, Esc to close (the shortcuts close it). V opens the picture on screen, and ← and →, or vim's h and
+// l, walk every one in the chat or page it sits in, as Telegram's viewer walks a chat's media; Esc leaves the chat at
+// the last one seen (27 Oct: "i like the v and arrows"; "vim motion h/l for moving between artifacts in v view?").
 let viewer: HTMLDivElement | null = null;
 let walk: Element[] = [], at = 0, show: (() => void) | null = null;
 
@@ -44,7 +44,7 @@ export function openNearest(): boolean {
   return true;
 }
 
-// ← and →: the previous or next picture, stopping at either end.
+// ← and →, or h and l: the previous or next picture, stopping at either end.
 export function stepViewer(by: number) {
   if (!viewer || at + by < 0 || at + by >= walk.length) return;
   at += by;
@@ -80,7 +80,7 @@ function open(pictures: Element[], picture: Element) {
     copyOf = source.cloneNode(true) as SVGSVGElement & HTMLImageElement;
     copyOf.removeAttribute("style");
     stage.replaceChildren(copyOf);
-    help.textContent = [walk.length > 1 && `${at + 1} of ${walk.length} · ← → to walk`, "Wheel to zoom · drag to move · double-click to fit · Esc to close"].filter(Boolean).join(" · ");
+    help.textContent = [walk.length > 1 && `${at + 1} of ${walk.length} · ← → or h l to walk`, "Wheel to zoom · drag to move · double-click to fit · Esc to close"].filter(Boolean).join(" · ");
     fit();
   };
   show();

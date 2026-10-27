@@ -97,7 +97,9 @@ let gPressed = 0, nPressed = 0, oPressed = 0;
 
 function onKeyDown(e: KeyboardEvent) {
   if (e.key === "Escape" && viewerOpen()) { closeViewer(); return; }
-  if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && viewerOpen()) { stepViewer(e.key === "ArrowLeft" ? -1 : 1); e.preventDefault(); return; }
+  // ← and →, or vim's h and l, walk the viewer's pictures.
+  const by = ({ ArrowLeft: -1, ArrowRight: 1, h: -1, l: 1 } as Record<string, number>)[e.key];
+  if (by && viewerOpen() && !e.ctrlKey && !e.metaKey && !e.altKey) { stepViewer(by); e.preventDefault(); return; }
   if (menus.current || viewerOpen() || ui.editing || ui.creator || ui.teamCreator || ui.projectCreator !== null) return;
   // Ctrl+/ works from a text box too, and Esc closes the shortcuts from their own search box.
   if ((e.ctrlKey || e.metaKey) && e.key === "/") { ui.setKeys(!ui.keysOpen); e.preventDefault(); return; }
@@ -236,7 +238,7 @@ function onKeyDown(e: KeyboardEvent) {
     const group = document.querySelector<HTMLElement>(":is(.group, .projects-group)[data-group]:hover") ?? (focused && groups.find((g) => g.nextElementSibling?.contains(focused)));
     group?.querySelector<HTMLElement>(".group-toggle")?.click();
   }
-  // V: the diagram or image on screen, full screen; ← and → walk the rest (viewer.ts).
+  // V: the diagram or image on screen, full screen; ← and →, or h and l, walk the rest (viewer.ts).
   else if (key === "v" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && openNearest()) e.preventDefault();
   // I, as vim's insert: back into the chat's composer, or, where no chat is open, the issue's chat, opened to read as its
   // Open chat button opens it; an issue with no session says so. O is Linear's, the first key of O then T, P and I.
