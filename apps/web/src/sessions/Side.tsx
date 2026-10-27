@@ -1,8 +1,8 @@
 // The side of an issue's chat ("i feel like the plan should be on the sidebar i suppse? with all the artifacts
 // generated?", the user, 27 Oct), under its top bar's "Plan": the plan as it stands, then what the chat made, its plan,
 // its card and its images, each a row that brings its message into view. An earlier send of the plan or the card is
-// left out: desk keeps only the latest, so it is a line in the chat with nothing to see. It stays put beside the chat, and ] hides it (store/dock.ts). The work as a
-// tree comes once desk keeps the steps.
+// left out: desk keeps only the latest, so it is a line in the chat with nothing to see. It stays put beside the chat,
+// and ] hides it (store/dock.ts). The work as a tree comes once desk keeps the steps.
 import { observer } from "mobx-react-lite";
 import { useMemo } from "react";
 import type { IssuePageData } from "../issues/IssueView";
