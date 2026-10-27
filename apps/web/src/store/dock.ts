@@ -1,11 +1,11 @@
 // Where a session's chat stands (the plan of "Chat in the center, the issue on the side"): whatever you work on takes
-// the middle of the screen. An issue with a chat opens as that chat, in the middle. Its issue comes beside it on the
-// right, as claude.ai shows an artifact, only when it has something to read (the plan of "Shape the issue for agent-run
-// work"): its plan while it waits for go, its card in review, and again whenever the agent writes either anew.
-// ] or the issue's title in the chat's head hides the issue and brings it back, and that holds until something new
-// comes to read. Any other page takes the middle, and the chat you left waits as a pill at the bottom right.
+// the middle of the screen. An issue with a chat opens as that chat, in the middle, with its side on the right: the
+// plan as it stands and what the chat made (Side.tsx), which stays put while the plan and the card show in the chat
+// (the plan of "An issue's whole flow shows in the main chat"; Dock.tsx, readingOf). ] or the issue's title in the
+// chat's head hides the side and brings it back, and that holds. Any other page takes the middle, and the chat you left
+// waits as a pill at the bottom right.
 //
-//   issue page, no chat ── Plan · Start · O ──▶ chat ── a plan or card to read ──▶ chat + its issue ── ] ──▶ chat
+//   issue page, no chat ── Plan · Start · O ──▶ chat + its side ── ] ──▶ chat
 //
 // At 1100px and under the two can't share the screen: the chat stands alone, and ] lays the issue over it until you
 // leave the chat. Your ] on the last chat, the side's width and the chat you left are remembered in this browser.

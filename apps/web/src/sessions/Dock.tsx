@@ -79,19 +79,12 @@ function move(next: Layout, change: () => void) {
 // panel stays hidden until the move's next frame, and a hidden box ignores focus() (23 Oct: / from such an issue).
 export const drawn = () => drawing;
 
-// What an issue's page has to read beside its chat: nothing, since its plan and its card show in the chat, where its
-// session sent them (Sent), and the page comes beside it only on ] ("i don't like the issue as right sidebar anymore.
-// i think the whole flow has to be on the main chat", the user, 27 Oct). A mark of both tells when the agent wrote
-// either anew.
-export function readingOf(data: IssuePageData): Reading {
-  const { plan, result } = data;
-  return { want: false, has: false, mark: `${hash(plan)}.${hash(result)}` };
-}
-
-function hash(text: string) {
-  let h = 5381;
-  for (let i = 0; i < text.length; i++) h = (h * 33) ^ text.charCodeAt(i);
-  return (h >>> 0).toString(36);
+// What an issue's page has beside its chat: always its side, the plan as it stands and what the chat made (Side.tsx),
+// which stays put, while its plan and its card show in the chat where its session sent them (Sent) ("i don't like the
+// issue as right sidebar anymore. i think the whole flow has to be on the main chat", the user, 27 Oct). Its mark never
+// changes, so your ] holds until you press it again, whatever the agent writes.
+export function readingOf(_data: IssuePageData): Reading {
+  return { want: true, has: true, mark: "side" };
 }
 
 // What the page on screen asks for (the frame calls it as the address changes): an issue page's chat comes with its
@@ -310,6 +303,22 @@ const IssueConversation = observer(function IssueConversation({ s, slug }: { s: 
   return <Conversation s={s} page={page} slug={slug} />;
 });
 
+// What a chat made, in order, for its side to list (Side.tsx): each send of the plan or the card, and each image in a
+// reply, with where it is in the chat (its data-at, and which image there) to bring it into view.
+export interface Artifact { at: string; img?: number; kind: "plan" | "card" | "image"; name: string; latest: boolean }
+const IMAGE = /!\[([^\]]*)\]\(([^)\s]+)/g;
+export function artifactsOf(s: LiveSession, slug: string): Artifact[] {
+  const rows = rowsOf(s.items, s.results, slug), last: Partial<Record<Section, string>> = {}, found: Artifact[] = [];
+  for (const r of rows) if (r.kind === "sent") last[r.section] = r.key;
+  for (const r of rows) {
+    if (r.kind === "sent") found.push({ at: r.key, kind: r.section === "Plan" ? "plan" : "card", name: r.section === "Plan" ? "Plan" : "Card", latest: last[r.section] === r.key });
+    else if (r.kind === "text") {
+      [...(r.item.text ?? "").matchAll(IMAGE)].forEach((m, n) => found.push({ at: r.item.key, img: n, kind: "image", name: m[1] || m[2].split("/").pop()!, latest: false }));
+    }
+  }
+  return found;
+}
+
 const Conversation = observer(function Conversation({ s, page, slug }: { s: LiveSession; page: IssuePageData | null; slug: string | null }) {
   const sends = s.results.size; // a send shows as what it sent once desk's answer to it is in
   const rows = useMemo(() => rowsOf(s.items, s.results, slug), [s.items, sends, slug]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -334,8 +343,8 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
       {rows.map((r, n) => {
         // One typed mid-turn is in the transcript once Claude takes it in, at its next step: by then it's sent, not queued.
         if (r.kind === "you") return <You key={r.item.key} text={r.item.text ?? ""} images={r.item.images} files={r.item.files} />;
-        if (r.kind === "text") return <Reply key={r.item.key} text={r.item.text ?? ""} />;
-        if (r.kind === "sent") return <Sent key={r.key} page={page} section={r.section} latest={n === latest[r.section]} />;
+        if (r.kind === "text") return <Reply key={r.item.key} at={r.item.key} text={r.item.text ?? ""} />;
+        if (r.kind === "sent") return <Sent key={r.key} at={r.key} page={page} section={r.section} latest={n === latest[r.section]} />;
         if (r.kind === "note") {
           const agent = r.item.id ? s.items.find((i) => i.t === "tool" && i.id === r.item.id && (i.name === "Agent" || i.name === "Task")) : undefined;
           return agent ? <AgentNote key={r.item.key} s={s} note={r.item} /> : <p key={r.item.key} className="convo-note">{r.item.text}</p>;
@@ -354,14 +363,14 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
 
 // The plan or the card a session sent, where it sent it: the latest of each drawn, its text folded under Details; an
 // earlier one a line. What it waits on from you, Go or Approve, is on top of the composer (StepBar).
-const Sent = observer(function Sent({ page, section, latest }: { page: IssuePageData | null; section: Section; latest: boolean }) {
+const Sent = observer(function Sent({ at, page, section, latest }: { at: string; page: IssuePageData | null; section: Section; latest: boolean }) {
   const parts = !page ? null : section === "Plan" ? page.plan_card : page.card ?? (page.result ? [page.result_html, ""] : null);
   const name = section === "Plan" ? "Plan" : "Result";
   if (!latest || !page || !parts) {
-    return <p className="sent-line">{GLYPH.file}<span>{name}</span><span className="sent-when">{latest ? "sent" : "an earlier version, sent"}</span></p>;
+    return <p className="sent-line" data-at={at}>{GLYPH.file}<span>{name}</span><span className="sent-when">{latest ? "sent" : "an earlier version, sent"}</span></p>;
   }
   return (
-    <div className="sent">
+    <div className="sent" data-at={at}>
       <div className="sent-head">{GLYPH.file}<span>{name}</span></div>
       <div className="reply body sent-body" dangerouslySetInnerHTML={{ __html: parts[0] }} />
       {parts[1] && (
@@ -439,9 +448,10 @@ function You({ text, images, files, queued, lost, onSend, onSendNow }: { text: s
   );
 }
 
-const Reply = function Reply({ text, streaming = false }: { text: string; streaming?: boolean }) {
+// A reply, marked with where it is (at) for the side's artifacts to bring into view.
+const Reply = function Reply({ at, text, streaming = false }: { at?: string; text: string; streaming?: boolean }) {
   const html = useMemo(() => markdown(text), [text]);
-  return <div className={`reply body${streaming ? " streaming" : ""}`} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div className={`reply body${streaming ? " streaming" : ""}`} data-at={at} dangerouslySetInnerHTML={{ __html: html }} />;
 };
 
 // Draws again each second while on, for a time that runs.

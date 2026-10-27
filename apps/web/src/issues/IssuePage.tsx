@@ -1,6 +1,6 @@
 // An issue's page (templates/issue.html): the top bar's crumb and its … button, then the issue (IssueView).
 import { observer } from "mobx-react-lite";
-import { Fragment, useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { usePage } from "../api/page";
 import { Go } from "../app/nav";
@@ -11,6 +11,7 @@ import { toggled } from "../ui/menu";
 import { GLYPH } from "../ui/icons";
 import { dock } from "../store/dock";
 import { offerIssue, readingOf, toggleIssue } from "../sessions/Dock";
+import { ChatSide } from "../sessions/Side";
 import { painted } from "./painted";
 import { IssueView, type IssuePageData } from "./IssueView";
 import { actionsMenu } from "./menus";
@@ -34,12 +35,16 @@ export const IssuePage = observer(function IssuePage() {
   const chatHere = dock.center && dock.issue && shown?.issue.slug === slug && shown.issue.session === dock.session;
   const reading = chatHere ? readingOf(shown) : null;
   useEffect(() => { if (reading) void offerIssue(shown!.issue.session!, reading); }, [chatHere, reading?.mark, reading?.want]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Beside its chat the issue shows its side, the plan and what the chat made; Issue brings its page itself there.
+  const [whole, setWhole] = useState(false);
+  useEffect(() => setWhole(false), [slug]);
+  const side = Boolean(chatHere) && !whole;
 
   const p = shown && painted(shown.issue);
   return (
     <>
       <Bar
-        crumb={shown && p ? (
+        crumb={side ? <span className="crumb">Plan</span> : shown && p ? (
           <>
             {shown.team ? <Go className="crumb" to={`/team/${shown.team.slug}`}>{shown.team.title}</Go> : <Go className="crumb" to="/issues">Issues</Go>}
             {shown.trail.map((a) => (<Fragment key={a.slug}><span className="sep">›</span><Go className="crumb" to={`/issue/${a.slug}`}>{a.title}</Go></Fragment>))}
@@ -48,18 +53,23 @@ export const IssuePage = observer(function IssuePage() {
         ) : null}
         tools={
           <>
-            <button className="more" type="button" title="Actions"
+            {chatHere && (
+              <button className="ghost side-switch" type="button" title={whole ? "The plan and what the chat made" : "The issue's page"} onClick={() => setWhole(!whole)}>
+                {whole ? "Plan" : "Issue"}
+              </button>
+            )}
+            {!side && <button className="more" type="button" title="Actions"
               onClick={(e) => { if (shown && p && !toggled(e.currentTarget)) actionsMenu(p, { anchor: e.currentTarget }, p.slug); }}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25" /><circle cx="8" cy="8" r="1.25" /><circle cx="12.5" cy="8" r="1.25" /></svg>
-            </button>
+            </button>}
             {/* Beside its chat, × leaves the chat alone; the issue's title in the chat's head brings it back. */}
             {dock.sideShown && <button className="more" type="button" title="Hide the issue  ]" onClick={toggleIssue}>{GLYPH.close}</button>}
-            <Walk slug={slug} />
+            {!side && <Walk slug={slug} />}
           </>
         }
       />
       <div className="scroll" ref={scroll}>
-        {shown ? <IssueView data={shown} /> : error ? <p className="muted" style={{ padding: 24 }}>{error}</p> : null}
+        {shown ? side ? <ChatSide data={shown} /> : <IssueView data={shown} /> : error ? <p className="muted" style={{ padding: 24 }}>{error}</p> : null}
       </div>
     </>
   );
