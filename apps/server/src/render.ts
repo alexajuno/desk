@@ -9,6 +9,30 @@ const D2_BLOCK = /^```d2\n([\s\S]*?)^```/gm;
 // shows the one for the theme in use.
 const D2_THEMES: [string, number][] = [["dark", 200], ["light", 0]];
 
+// Linear's look, as its Mermaid diagrams have it (its changelog, 20 Nov 2025): grey boxes a step above the ground, thin
+// grey lines and arrows, small corners, a mono font, upright labels, no colour. The greys are desk.css's tokens in hex,
+// which d2 needs: the ground is --bg-raised, the text --text-2, the dim text --text-3.
+const PALETTES: Record<string, { ground: string; fills: [string, string, string]; line: string; text: string; dim: string; faint: string }> = {
+  dark: { ground: "#1a1a1b", fills: ["#1d1d1f", "#202122", "#232425"], line: "#414244", text: "#e3e4e6", dim: "#959597", faint: "#6a6a6c" },
+  light: { ground: "#efeff0", fills: ["#f3f3f4", "#f8f8f9", "#fdfefe"], line: "#c6c6c7", text: "#2f2f31", dim: "#5c5c5e", faint: "#9c9d9f" },
+};
+
+// The look as one line of d2 put before each diagram, so an error's line number is off by one only. D2's colour codes:
+// N1 text, N2 an edge's label, N7 the ground, B1 every line, B2 a dashed line and a table's column names, B4 to B6 the
+// fills by depth, N4 a diamond's, B3 a person's, AA2 a table's constraint (its "+ new"), the other AA and AB codes the
+// other shapes'. A table's stroke fills its rows.
+function look(name: string): string {
+  const p = PALETTES[name], [b4, b5, b6] = p.fills;
+  const colours = { N1: p.text, N2: p.dim, N3: p.faint, N4: b6, N5: b5, N6: b4, N7: p.ground, B1: p.line, B2: p.dim, B3: b6,
+    B4: b4, B5: b5, B6: b6, AA2: p.text, AA4: b6, AA5: b6, AB4: b6, AB5: b6 };
+  return [
+    `vars: {d2-config: {theme-overrides: {${Object.entries(colours).map(([code, hex]) => `${code}: "${hex}"`).join("; ")}}}}`,
+    "**.style: {border-radius: 4; font: mono; stroke-width: 1; bold: false}",
+    ...["->", "<-", "<->", "--"].map((arrow) => `(** ${arrow} **)[*].style: {stroke-width: 1; italic: false; font: mono}`),
+    `**: {&shape: sql_table; style: {fill: "${b6}"; font-color: "${p.text}"; stroke: "${b5}"}}`,
+  ].join("; ") + "\n";
+}
+
 const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 // Cached by the diagram's source: a page draws its diagrams again on every change.
@@ -18,9 +42,10 @@ function draw(source: string): string {
   if (hit !== undefined) return hit;
   const renders: string[] = [];
   for (const [name, theme] of D2_THEMES) {
-    const run = spawnSync("d2", ["--pad=16", `--theme=${theme}`, "-", "-"], { input: source });
+    const run = spawnSync("d2", ["--pad=16", `--theme=${theme}`, "-", "-"], { input: look(name) + source });
     if (run.status !== 0) {
-      const err = `<pre class="err">${escapeHtml(run.stderr.toString())}</pre>`;
+      const stderr = run.stderr.toString().replace(/-:(\d+):(\d+)/g, (_, line, col) => `-:${Number(line) - 1}:${col}`);
+      const err = `<pre class="err">${escapeHtml(stderr)}</pre>`;
       drawn.set(source, err);
       return err;
     }
