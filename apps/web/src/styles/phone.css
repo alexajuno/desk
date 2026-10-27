@@ -6,6 +6,10 @@
 .tabs { display: none; }
 
 @media (max-width: 640px) {
+  /* an issue's chat's head keeps room for its title: its status and priority as icons alone, its team and folder left
+     out (Dock.tsx, HeadChips) */
+  .head-chips .field-label, .head-chips .team-pick, .dock-head .dock-folder { display: none; }
+  .head-chips .field-chip { padding: 0 5px; }
   .panel, .side-collapsed .panel, .chat-center .panel, .dock, .side-collapsed .dock, .chat-center:not(.side-off) .dock {
     top: 0; left: 0; right: 0; bottom: var(--tabs-h); width: auto; border: 0; border-radius: 0; box-shadow: none;
   }
