@@ -681,8 +681,9 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
    on 2026-10-21 (an issue page opened from Issues, dark and light): "7" in --text-3 and "/ 187" in --text-5, 13px/450 in
    tabular figures, 8px before two 28px buttons 1px apart, each half a pill, a 14px arrow in --text-3, filled under the
    mouse. At either end, the button that has nowhere to go is not measured: dimmed. */
-.walk { display: flex; align-items: center; gap: 8px; }
-.walk-at { font: 450 13px var(--font); font-variant-numeric: tabular-nums; color: var(--text-3); }
+/* It never wraps nor shrinks: in a narrow bar "4 / 9" broke onto three lines (27 Oct); the title shortens instead. */
+.walk { flex: none; display: flex; align-items: center; gap: 8px; }
+.walk-at { font: 450 13px var(--font); font-variant-numeric: tabular-nums; color: var(--text-3); white-space: nowrap; }
 .walk-at span { color: var(--text-5); }
 .walk-steps { display: flex; gap: 1px; }
 .walk-steps button { justify-content: center; width: 28px; padding: 0 2px; border: 0; border-radius: 9999px 0 0 9999px; background: none; color: var(--text-3); }
