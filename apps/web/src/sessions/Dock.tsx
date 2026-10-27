@@ -344,15 +344,19 @@ const ContextFold = observer(function ContextFold({ page }: { page: IssuePageDat
   );
 });
 
-// What a chat made, in order, for its side to list (Side.tsx): each send of the plan or the card, and each image in a
-// reply, with where it is in the chat (its data-at, and which image there) to bring it into view.
-export interface Artifact { at: string; img?: number; kind: "plan" | "card" | "image"; name: string; latest: boolean }
+// What a chat made, in order, for its side to list (Side.tsx): each send of the plan, the card or a step's diagram, and
+// each image in a reply, with where it is in the chat (its data-at, and which image there) to bring it into view.
+export interface Artifact { at: string; img?: number; kind: "plan" | "card" | "step" | "image"; name: string; latest: boolean; place?: string }
 const IMAGE = /!\[([^\]]*)\]\(([^)\s]+)/g;
-export function artifactsOf(s: LiveSession, slug: string): Artifact[] {
+export function artifactsOf(s: LiveSession, slug: string, steps: PlanStep[] = []): Artifact[] {
   const rows = rowsOf(s.items, s.results, slug), last: Partial<Record<Section, string>> = {}, found: Artifact[] = [];
+  const lastStep = new Map<string, string>(); // each step's latest send, by its title, else its place
+  const named = (r: { place: string; title: string | null }) => stepNamed(steps, r)?.title ?? r.title ?? `Step ${r.place}`;
   for (const r of rows) if (r.kind === "sent") last[r.section] = r.key;
+  for (const r of rows) if (r.kind === "step") lastStep.set(named(r), r.key);
   for (const r of rows) {
     if (r.kind === "sent") found.push({ at: r.key, kind: r.section === "Plan" ? "plan" : "card", name: r.section === "Plan" ? "Plan" : "Card", latest: last[r.section] === r.key });
+    else if (r.kind === "step") found.push({ at: r.key, kind: "step", name: named(r), latest: lastStep.get(named(r)) === r.key, place: r.place });
     else if (r.kind === "text") {
       [...(r.item.text ?? "").matchAll(IMAGE)].forEach((m, n) => found.push({ at: r.item.key, img: n, kind: "image", name: m[1] || m[2].split("/").pop()!, latest: false }));
     }

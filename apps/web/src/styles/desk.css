@@ -389,6 +389,19 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
 .plan-step-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plan-step[data-state="todo"] .plan-step-title { color: var(--text-2); }
 .plan-step-note { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-3); }
+/* A step its session drew: the whole row opens its diagram and decisions under it. */
+button.plan-step { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; transition: background-color .1s; }
+button.plan-step:hover, button.plan-step.open { background: var(--bg-hover); }
+.plan-step-drawn { display: inline-flex; flex: none; color: var(--text-3); }
+.plan-step-drawn .glyph { width: 14px; height: 14px; }
+.plan-step-open { margin: 4px 0 8px 31px; border: 1px solid var(--border-3); border-radius: 8px; background: var(--bg-raised); overflow: hidden; }
+.plan-step-open .d2 { margin: 0; }
+.body.plan-step-said { padding: 8px 12px; border-top: 1px solid var(--border-2); font-size: 12px; line-height: 18px; color: var(--text-3); }
+.plan-step-open .plan-step-said:first-child { border-top: 0; }
+.body.plan-step-said ul, .body.plan-step-said p { margin: 0; }
+.body.plan-step-said ul { padding-left: 14px; list-style: disc; }
+.body.plan-step-said li + li { margin-top: 4px; }
+.body.plan-step-said strong { font-weight: 500; color: var(--text-2); }
 .tree .tree { margin-left: 30px; border-left: 1px solid var(--border-3); }
 .item { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px 0 24px; text-decoration: none; color: var(--text-1);
         border-radius: 6px; }
