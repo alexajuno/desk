@@ -11,12 +11,14 @@ import { postJson, reason } from "../api/http";
 import { go } from "../app/nav";
 import { splashUp, useSplash } from "../app/splash";
 import { markdown } from "../lib/markdown";
-import { seenPage } from "../api/page";
-import { Title, type IssuePageData } from "../issues/IssueView";
+import { seenPage, usePage } from "../api/page";
+import { Lands, Title, useStep, type IssuePageData } from "../issues/IssueView";
+import { useLive as useIssueLive } from "../issues/useLive";
 import { folderMenu } from "../issues/menus";
 import { Walk } from "../issues/walk";
 import { dock, SIDE_WIDTH, type Layout, type Reading } from "../store/dock";
 import { issues } from "../store/issues";
+import { lineKey } from "../store/frame";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { GLYPH, SIDE_ICON } from "../ui/icons";
 import { openMenu, toggled } from "../ui/menu";
@@ -73,14 +75,13 @@ function move(next: Layout, change: () => void) {
 // panel stays hidden until the move's next frame, and a hidden box ignores focus() (23 Oct: / from such an issue).
 export const drawn = () => drawing;
 
-// What an issue's page has to read beside its chat: its plan while it waits for go (in review on it, or the session
-// idle, no result yet), or its card from review on. A mark of both tells when the agent wrote either anew.
-const CARDED = ["review", "landing", "waiting", "done"];
+// What an issue's page has to read beside its chat: nothing, since its plan and its card show in the chat, where its
+// session sent them (Sent), and the page comes beside it only on ] ("i don't like the issue as right sidebar anymore.
+// i think the whole flow has to be on the main chat", the user, 27 Oct). A mark of both tells when the agent wrote
+// either anew.
 export function readingOf(data: IssuePageData): Reading {
-  const { plan, result } = data, state = data.issue.state;
-  const want = data.issue.review_of === "plan" ? Boolean(plan)
-    : result ? CARDED.includes(state) : ["running", "review"].includes(state) && Boolean(plan) && data.live !== "working";
-  return { want, has: Boolean(plan || result), mark: `${hash(plan)}.${hash(result)}` };
+  const { plan, result } = data;
+  return { want: false, has: false, mark: `${hash(plan)}.${hash(result)}` };
 }
 
 function hash(text: string) {
@@ -221,7 +222,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
               : m?.chat ? "Ask desk's agent anything: it files the work and does it here. Start with @ and a name to talk to one of your agents."
               : "Nothing said yet."}</p>
             : null}
-          <Conversation s={s} />
+          {m?.issue ? <IssueConversation s={s} slug={m.issue.slug} /> : <Conversation s={s} page={null} slug={null} />}
         </div>
         <div className="dock-foot">
           <Running s={s} />
@@ -256,16 +257,32 @@ const ChatHead = observer(function ChatHead({ s }: { s: LiveSession }) {
 
 // --- the conversation ------------------------------------------------------------------------------------------------
 
+type Section = "Plan" | "Result";
 type Row =
   | { kind: "you"; item: Item }
   | { kind: "text"; item: Item }
   | { kind: "note"; item: Item }
-  | { kind: "steps"; key: string; items: Item[] };
+  | { kind: "steps"; key: string; items: Item[] }
+  | { kind: "sent"; key: string; section: Section };
 
-// The items in the order drawn, the tool steps and thoughts between two replies folded into one row.
-function rowsOf(items: Item[]): Row[] {
+// What a session's command sent of its issue's document, by desk's answer to it (api.ts, the section's PUT): the
+// sections written, none when desk refused one.
+const SENT = /"slug":"([^"]+)"[^}]*?"section":"(Plan|Result)","written":true/g;
+function sentBy(result: Item | undefined, slug: string | null): Section[] {
+  if (!slug || !result?.text) return [];
+  return [...result.text.matchAll(SENT)].filter((m) => m[1] === slug).map((m) => m[2] as Section);
+}
+
+// The items in the order drawn, the tool steps and thoughts between two replies folded into one row. A step that sent
+// the issue its plan or its card leaves the fold and shows as what it sent.
+function rowsOf(items: Item[], results: Map<string, Item>, slug: string | null): Row[] {
   const rows: Row[] = [];
   for (const item of items) {
+    const sent = item.t === "tool" && item.name === "Bash" ? sentBy(results.get(item.id!), slug) : [];
+    if (sent.length) {
+      for (const section of sent) rows.push({ kind: "sent", key: `${item.key}:${section}`, section });
+      continue;
+    }
     if (item.t === "tool" || item.t === "thinking") {
       const last = rows[rows.length - 1];
       if (last?.kind === "steps") last.items.push(item);
@@ -275,8 +292,20 @@ function rowsOf(items: Item[]): Row[] {
   return rows;
 }
 
-const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
-  const rows = useMemo(() => rowsOf(s.items), [s.items]);
+// An issue's chat: its conversation, with the plan and the card its session sent drawn from the issue's page, kept
+// current as the issue's page is.
+const IssueConversation = observer(function IssueConversation({ s, slug }: { s: LiveSession; slug: string }) {
+  const { data, reload } = usePage<IssuePageData>(`/api/page/issue/${slug}`, `${issues.files.get(slug) ?? 0} ${lineKey()}`);
+  useIssueLive(data, reload);
+  return <Conversation s={s} page={data?.issue.slug === slug ? data : null} slug={slug} />;
+});
+
+const Conversation = observer(function Conversation({ s, page, slug }: { s: LiveSession; page: IssuePageData | null; slug: string | null }) {
+  const sends = s.results.size; // a send shows as what it sent once desk's answer to it is in
+  const rows = useMemo(() => rowsOf(s.items, s.results, slug), [s.items, sends, slug]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Desk keeps only the latest plan and card, which show at their last send; an earlier send is a line.
+  const latest: Record<Section, number> = { Plan: -1, Result: -1 };
+  rows.forEach((r, n) => { if (r.kind === "sent") latest[r.section] = n; });
   // A reply streaming now: its words show as they come, its tool calls join the last fold.
   const liveSteps = s.partial.filter((b) => b.kind === "tool_use" || b.kind === "thinking");
   const liveText = s.partial.filter((b) => b.kind === "text");
@@ -296,6 +325,7 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
         // One typed mid-turn is in the transcript once Claude takes it in, at its next step: by then it's sent, not queued.
         if (r.kind === "you") return <You key={r.item.key} text={r.item.text ?? ""} images={r.item.images} files={r.item.files} />;
         if (r.kind === "text") return <Reply key={r.item.key} text={r.item.text ?? ""} />;
+        if (r.kind === "sent") return <Sent key={r.key} page={page} section={r.section} latest={n === latest[r.section]} />;
         if (r.kind === "note") {
           const agent = r.item.id ? s.items.find((i) => i.t === "tool" && i.id === r.item.id && (i.name === "Agent" || i.name === "Task")) : undefined;
           return agent ? <AgentNote key={r.item.key} s={s} note={r.item} /> : <p key={r.item.key} className="convo-note">{r.item.text}</p>;
@@ -309,6 +339,47 @@ const Conversation = observer(function Conversation({ s }: { s: LiveSession }) {
       {s.pending.slice(starts).map(you)}
       {s.working && !liveText.length && !s.asks.length && <Working since={s.since} status={s.status} />}
     </>
+  );
+});
+
+// The plan or the card a session sent, where it sent it: the latest of each drawn, its text folded under Details, over
+// the step it waits on, Go under a plan and Approve under a card; an earlier one a line.
+const Sent = observer(function Sent({ page, section, latest }: { page: IssuePageData | null; section: Section; latest: boolean }) {
+  const parts = !page ? null : section === "Plan" ? page.plan_card : page.card ?? (page.result ? [page.result_html, ""] : null);
+  const name = section === "Plan" ? "Plan" : "Result";
+  if (!latest || !page || !parts) {
+    return <p className="sent-line">{GLYPH.file}<span>{name}</span><span className="sent-when">{latest ? "sent" : "an earlier version, sent"}</span></p>;
+  }
+  return (
+    <div className="sent">
+      <div className="sent-head">{GLYPH.file}<span>{name}</span></div>
+      <div className="reply body sent-body" dangerouslySetInnerHTML={{ __html: parts[0] }} />
+      {parts[1] && (
+        <details className="review-details sent-details">
+          <summary>Details</summary>
+          <div className="reply body" dangerouslySetInnerHTML={{ __html: parts[1] }} />
+        </details>
+      )}
+      <SentStep page={page} section={section} />
+    </div>
+  );
+});
+
+// What the issue waits on under what was sent: Go under its plan, the landing steps, Try and Approve under its card.
+const SentStep = observer(function SentStep({ page, section }: { page: IssuePageData; section: Section }) {
+  const { step, landing, steps, skip, setSkip, act } = useStep(page);
+  const b = step.button;
+  if (!b?.action && !landing) return null;
+  if (section === "Plan" ? b?.action !== "go" : b?.action !== "approve" && !landing) return null;
+  const t = section === "Result" && !landing ? page.trial : null;
+  return (
+    <div className="sent-foot">
+      {section === "Result" && steps && <Lands steps={steps} skip={skip} setSkip={setSkip} />}
+      <div className="sent-acts">
+        {t && <button type="button" title={t.title} disabled={t.disabled} onClick={() => act(t.action!)}>{t.label}</button>}
+        <button className="primary" type="button" disabled={b?.disabled} onClick={() => act(b!.action!)}>{b?.label}</button>
+      </div>
+    </div>
   );
 });
 

@@ -411,14 +411,14 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
   const everyTeam = await teams.loadAll(), everyProject = await projects.loadAll();
   const team = i.team ? everyTeam.get(i.team) ?? null : null;
   const project = i.project ? everyProject.get(i.project) ?? null : null;
-  // The review shows a result only while it holds one: a plan or a question is read in the plan and the chat.
+  // The review shows a result only while it holds one: a plan or a question is read in the plan and the chat. The
+  // chat shows the card wherever the session sent it, in review or after, and the plan the same way, its text folded
+  // under Details as the card's write-up is.
   const of = i.state === "review" ? reviewOf(i) : null;
   const reviewing = of === "result" || (of === "reply" && Boolean(result));
-  let card: string[] | null = null;
-  if (reviewing && result) {
-    const parts = splitResult(result);
-    if (parts) card = parts.map((part) => toHtml(part, `/issue/${slug}/f/`));
-  }
+  const split = (text: string) => (splitResult(text) ?? [text, ""]).map((part) => toHtml(part, `/issue/${slug}/f/`));
+  const card = result && splitResult(result) ? split(result) : null;
+  const plan = store.section(i, "Plan") || readOr(join(store.folder(slug), store.PLAN));
   return {
     issue: issueJson(i), body: i.body.trim(), body_html: toHtml(i.body, `/issue/${slug}/f/`), result_html: result && toHtml(result, `/issue/${slug}/f/`),
     team: team && { slug: team.slug, title: team.title },
@@ -427,7 +427,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     trail: trail.map((t) => ({ slug: t.slug, title: t.title })),
     kids: treeJson(kidsOf(slug), kidsOf),
     progress: [direct.filter((k) => k.state === "done").length, direct.filter((k) => k.state !== "dropped").length],
-    agent_files: agentFiles, plan: store.section(i, "Plan") || readOr(join(store.folder(slug), store.PLAN)), result, card, reviewing,
+    agent_files: agentFiles, plan, plan_card: plan ? split(plan) : null, result, card, reviewing,
     session_kind: session.kind ?? null, live: talkOf(i),
     step: step(i, await asking(), store.hasPlan(i), Boolean(result)), landed: i.landed, trial: await tryButton(i),
     lands: reviewing ? land.landsOf(i) : null, // the steps Approve runs, which the review lists to untick

@@ -43,9 +43,10 @@ export interface IssuePageData {
   progress: [number, number];
   agent_files: Record<string, string>; // an older issue's plan.md and result.md, while its document lacks the section
   plan: string; // the Plan, as Markdown, or ""
+  plan_card: [string, string] | null; // the Plan drawn, above its "### Details" and under it, as its chat shows it
   result: string; // the Result, as Markdown, or ""
   result_html: string;
-  card: [string, string] | null;
+  card: [string, string] | null; // the Result drawn, its card and its write-up, when it has a "### Details"
   reviewing: boolean; // in review, holding a result to approve rather than a plan or a question
   session_kind: string | null;
   live: string;
@@ -69,7 +70,9 @@ const stepTip = (head: string, text: string, state: State) => (text === STATE_NA
 // The step of an issue landing (pages.ts, step), drawn at once on Approve.
 const LANDING: IssuePageData["step"] = { text: "Landing", button: { label: "Landing…", disabled: true } };
 
-export const IssueView = observer(function IssueView({ data, inInbox = false }: { data: IssuePageData; inInbox?: boolean }) {
+// An issue's step, its one primary button, and the landing steps Approve runs, which you untick to skip: on its page,
+// and in its chat under the plan or the card its session sent.
+export function useStep(data: IssuePageData, inInbox = false) {
   const p = painted(data.issue);
   // Trust folder takes the step's place once starting the issue's session found its folder untrusted.
   const [trustFor, setTrustFor] = useState<string | null>(null);
@@ -109,6 +112,12 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
       ui.unpaint(slug);
     }
   }
+
+  return { p, step, landing, steps, skip, setSkip, trust: trustFor === p.slug, act };
+}
+
+export const IssueView = observer(function IssueView({ data, inInbox = false }: { data: IssuePageData; inInbox?: boolean }) {
+  const { p, step, landing, steps, skip, setSkip, trust, act } = useStep(data, inInbox);
 
   useLayoutEffect(() => showFolded());
 
@@ -156,7 +165,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
           )}
         </div>
         <div className="issue-side">
-          <Actions p={p} step={step} trial={landing ? null : data.trial} trust={trustFor === p.slug} act={act} />
+          <Actions p={p} step={step} trial={landing ? null : data.trial} trust={trust} act={act} />
           <Properties data={data} p={p} />
         </div>
       </div>
@@ -193,7 +202,7 @@ function Actions({ p, step, trial: t, trust, act }: {
 
 // What Approve runs to land the work, as the issue's session said (land.ts, Lands), each ticked: untick one to skip it.
 // Ticks as Linear's checklist draws them in a description; a step left out reads dimmed and struck through.
-function Lands({ steps, skip, setSkip }: { steps: string[]; skip: number[]; setSkip: (skip: number[]) => void }) {
+export function Lands({ steps, skip, setSkip }: { steps: string[]; skip: number[]; setSkip: (skip: number[]) => void }) {
   if (!steps.length) return <p className="review-lands muted">Nothing to land: Approve marks it done.</p>;
   return (
     <div className="review-lands">
