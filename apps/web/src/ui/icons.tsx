@@ -5,7 +5,8 @@ import type { Priority, Protocol, State } from "../lib/desk";
 
 const FILL: Record<string, number> = { backlog: 0, running: 0.5, review: 0.75, landing: 0.9 };
 
-export function StateIcon({ state }: { state: State }) {
+// A step's "todo" (issues/Steps.tsx) is Linear's Todo: the empty circle, solid, in the backlog's grey.
+export function StateIcon({ state }: { state: State | "todo" }) {
   if (state === "done")
     return (
       <svg width="14" height="14" viewBox="0 0 14 14" style={{ color: "var(--state-done)" }}>
@@ -36,7 +37,7 @@ export function StateIcon({ state }: { state: State }) {
     );
   const f = FILL[state] ?? 0;
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: `var(--state-${state})` }}>
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: `var(--state-${state === "todo" ? "backlog" : state})` }}>
       <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" {...(state === "backlog" ? { strokeDasharray: "1.4 1.74", strokeDashoffset: "0.65" } : {})} />
       {f > 0 && <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="4" strokeDasharray={`${(12.566 * f).toFixed(3)} 12.566`} transform="rotate(-90 7 7)" />}
     </svg>

@@ -55,6 +55,7 @@ export interface Issue {
   landing: string | null; // in landing, when Approve told the session to land its work
   landed: string | null; // in done, where its session said the work landed: the commit, or the pull request's link
   lands: string | null; // while open, how its session said the work lands, which Approve runs: JSON, as Lands (land.ts)
+  plan_steps: string | null; // JSON: a design issue's steps, which its session sets and ticks (api.ts, PlanStep)
   session: string | null; // the one Claude Code session bound to this issue, from planning to done
   waiting_on: string | null; // in waiting, who or what it waits on, such as "QA on #570"
   waiting_since: string | null;
@@ -66,7 +67,7 @@ export interface Issue {
 
 // The fields in issue.md, in the order issues.py's dataclass wrote them.
 const FIELDS = ["title", "priority", "state", "parent", "team", "project", "milestone", "due", "folder", "protocol", "link", "landing", "landed",
-  "lands", "session", "waiting_on", "waiting_since", "review_of", "review_since", "created"] as const;
+  "lands", "plan_steps", "session", "waiting_on", "waiting_since", "review_of", "review_since", "created"] as const;
 
 export const now = (d = new Date()) => {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -75,7 +76,7 @@ export const now = (d = new Date()) => {
 
 export function blank(slug: string, title: string): Issue {
   return { slug, title, priority: "none", state: "backlog", parent: null, team: null, project: null, milestone: null, due: null, folder: null, protocol: null, link: null,
-    landing: null, landed: null, lands: null, session: null, waiting_on: null, waiting_since: null, review_of: null, review_since: null,
+    landing: null, landed: null, lands: null, plan_steps: null, session: null, waiting_on: null, waiting_since: null, review_of: null, review_since: null,
     created: now(), body: "" };
 }
 

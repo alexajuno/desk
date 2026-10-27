@@ -55,6 +55,7 @@ create table if not exists issues (
   landing text,
   landed text,
   lands text, -- JSON: the steps Approve runs to land the work, which its session gave with its Result (land.ts, Lands)
+  plan_steps text, -- JSON: a design issue's steps, which its session sets and ticks as it goes (api.ts, PlanStep)
   session text,
   waiting_on text,
   waiting_since text,
@@ -242,7 +243,7 @@ export async function open(): Promise<PGlite> {
   await toTeams(opened);
   await opened.exec(SCHEMA);
   // Since 20 Oct, an issue's project is Linear's (projects.ts), as its team is what its project was before.
-  await opened.exec(["review_of", "review_since", "landed", "project", "milestone", "due", "lands"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
+  await opened.exec(["review_of", "review_since", "landed", "project", "milestone", "due", "lands", "plan_steps"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
   // The Inbox's delete and its mark as unread (inbox.ts), from 19 Oct.
   await opened.exec(["gone", "marked"].map((c) => `alter table inbox add column if not exists ${c} double precision;`).join(" "));
   await opened.exec("alter table chats add column if not exists deleted text;"); // a chat's Delete (chats.ts, remove), from 25 Oct

@@ -34,12 +34,6 @@ after: After {
 }
 ```
 
-### Steps
-
-1. ✓ <a finished step, a few words>
-2. → <the one being worked on>
-3. <a later one>
-
 ### Details
 
 #### Said so far
@@ -54,7 +48,7 @@ after: After {
 
 - **Now** changes on every rewrite.
 - **The diagram** is the thing itself, not the progress: what exists and what changes, Today and After, a table as a table, the part being worked on with a double border. Where the work stands is a few words in the Now line ("maybe we don't even need progress diagram at all?", "i mean, there are in total 4 steps", 27 Oct). It holds only what has been said, about a dozen shapes at most; a part or a term the talk goes into opens inside the part it belongs to, once it is talked about, not before. A second diagram is for a second part that changes, never for the progress.
-- **Steps** are the work, a numbered line of a few words each: ✓ before a finished one, → before the one being worked on ("ai has to gimme the plan, do each step", 27 Oct). They are there from the first draft ("i started a new session and see no steps in the plan", 27 Oct): first the design's pieces to settle, such as "how to carry a quarter credit", then the build's steps once they are known. A step that turns up on the way joins the list where it falls. A step is what one diagram or one short diff shows, minutes of work.
+- **Steps** are the work, from the first draft ("i started a new session and see no steps in the plan", 27 Oct): first the design's pieces to settle, such as "how to carry a quarter credit", then the build's steps once they are known; a step that turns up on the way joins the list where it falls. A step is what one diagram or one short diff shows, minutes of work. In desk, desk keeps them, not the plan's text ("i think we need database and new column here", 27 Oct): its prompt gives the call, and it draws them with the issues' status circles on the issue's page and beside its chat. Outside desk, a short numbered list under `### Steps`.
 - **Details** hold the text: Said so far, Done when and Decide alone, which you work from and the review card checks. The user reads the diagram, not these ("i don't read them at all", 27 Oct), so nothing the user must see lives only there.
 - **Said so far** is the record. One line per decision, with the user's reason in their words and dated; your own picks stay marked as yours until the user takes them. When the user decides without a reason, ask for one line. A decision that changes is rewritten in place.
 - **Done when** and **Decide alone** come once the shape is settled, before "go".

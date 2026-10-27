@@ -72,6 +72,7 @@ export function asJson(i: Issue, full = false) {
   if (i.state === "review") Object.assign(data, { review_of: i.review_of ?? "result", review_since: i.review_since });
   if (i.state === "done" && i.landed) data.landed = i.landed;
   if (i.lands) data.lands = JSON.parse(i.lands);
+  if (i.plan_steps) data.plan_steps = JSON.parse(i.plan_steps);
   if (full) Object.assign(data, { file: join(store.folder(i.slug), store.MAIN), files: store.files(i.slug), body: i.body });
   return data;
 }
@@ -186,6 +187,35 @@ function applyLands(i: Issue, body: unknown) {
   if (i.state !== "review") throw new HttpError(422, 'lands goes with the Result: send "state": "review", "review_of": "result" with it');
   const kept = (steps as string[]).map((s) => s.trim()).filter(Boolean);
   i.lands = JSON.stringify({ steps: kept, ...(typeof landed === "string" && landed.trim() && { landed: landed.trim() }) });
+}
+
+// A design issue's steps, which its session sends whole each time one changes, and desk draws as a tree with the
+// issues' own status circles: "ai has to gimme the plan, do each step", "i think we need database and new column here
+// rather than text rendering level only" (the user, 27 Oct). null takes them back.
+export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[] };
+const STEP_STATES = ["todo", "running", "done"];
+const STEP_SHAPE = 'plan_steps is a list of {"title": "<a few words>", "state": "todo", "running" or "done", "note": "<optional, a few words>", "kids": [<its own steps, optional>]}, or null';
+
+function planSteps(list: unknown, depth = 0): PlanStep[] {
+  if (!Array.isArray(list) || depth > 3) throw new HttpError(422, STEP_SHAPE);
+  return list.map((s) => {
+    const { title, state, note, kids } = (s ?? {}) as Record<string, unknown>;
+    if (typeof title !== "string" || !title.trim() || typeof state !== "string" || !STEP_STATES.includes(state) ||
+      (note !== undefined && note !== null && typeof note !== "string")) throw new HttpError(422, STEP_SHAPE);
+    const step: PlanStep = { title: title.trim(), state: state as PlanStep["state"] };
+    if (typeof note === "string" && note.trim()) step.note = note.trim();
+    if (kids !== undefined && kids !== null) {
+      const inner = planSteps(kids, depth + 1);
+      if (inner.length) step.kids = inner;
+    }
+    return step;
+  });
+}
+
+function applyPlanSteps(i: Issue, body: unknown) {
+  if (!body || typeof body !== "object" || !("plan_steps" in body)) return;
+  const list = (body as { plan_steps: unknown }).plan_steps;
+  i.plan_steps = list === null ? null : JSON.stringify(planSteps(list));
 }
 
 async function teamJson(t: Team, full = false) {
@@ -345,6 +375,7 @@ export function routes(app: FastifyInstance) {
     const i = await loadIssue(req.params.slug);
     await apply(i, given(req.body, FIELDS));
     applyLands(i, req.body);
+    applyPlanSteps(i, req.body);
     const closed = await store.save(i);
     return { ...asJson(i, true), ...(closed.length ? { closed } : {}) };
   });

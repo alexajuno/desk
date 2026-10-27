@@ -432,6 +432,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     session_kind: session.kind ?? null, live: talkOf(i),
     step: step(i, await asking(), store.hasPlan(i), Boolean(result)), landed: i.landed, trial: await tryButton(i),
     lands: reviewing ? land.landsOf(i) : null, // the steps Approve runs, which the review lists to untick
+    plan_steps: i.plan_steps ? JSON.parse(i.plan_steps) : null, // a design issue's steps (api.ts, PlanStep)
   };
 }
 

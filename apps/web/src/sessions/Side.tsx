@@ -2,12 +2,13 @@
 // generated?", the user, 27 Oct), under its top bar's "Plan": the plan as it stands, then what the chat made, its plan,
 // its card and its images, each a row that brings its message into view. An earlier send of the plan or the card is
 // left out: desk keeps only the latest, so it is a line in the chat with nothing to see. It stays put beside the chat,
-// and ] hides it (store/dock.ts). The work as a tree comes once desk keeps the steps.
+// and ] hides it (store/dock.ts). A design issue's steps, which desk keeps, come first (issues/Steps.tsx).
 import { observer } from "mobx-react-lite";
 import { useMemo } from "react";
 import type { IssuePageData } from "../issues/IssueView";
 import { GLYPH } from "../ui/icons";
 import { artifactsOf, type Artifact } from "./Dock";
+import { Steps } from "../issues/Steps";
 import { useLive } from "./live";
 
 // A row's message, in the middle of the chat, and a moment's ring round it so the eye finds it.
@@ -28,6 +29,12 @@ export const ChatSide = observer(function ChatSide({ data }: { data: IssuePageDa
   const plan = data.plan_card;
   return (
     <div className="chat-side">
+      {data.plan_steps && data.plan_steps.length > 0 && (
+        <section className="side-part">
+          <div className="side-head">Steps</div>
+          <Steps steps={data.plan_steps} />
+        </section>
+      )}
       <section className="side-part">
         {plan ? (
           <>

@@ -22,6 +22,7 @@ import { datePicker } from "../ui/datepicker";
 import { DueChip } from "./Tree";
 import { painted } from "./painted";
 import { Tree } from "./Tree";
+import { Steps, type PlanStep } from "./Steps";
 import { Description } from "../editor/Description";
 
 export interface StepButton {
@@ -56,6 +57,7 @@ export interface IssuePageData {
   trial: StepButton | null;
   landed: string | null; // in done, where its session said the work landed
   lands: { steps: string[]; landed?: string } | null; // in review, the steps Approve runs, as its session gave them
+  plan_steps: PlanStep[] | null; // a design issue's steps, which its session sets and ticks
 }
 
 const Html = ({ className, html }: { className: string; html: string }) => (
@@ -145,6 +147,13 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
                 : <p className="muted">No result: this was done in a chat, so check the work itself.</p>}
               {steps && !data.card && <Lands steps={steps} skip={skip} setSkip={setSkip} />}
             </div>
+          )}
+          {/* A design issue's steps, the work's map, above the document they come from. */}
+          {data.plan_steps && data.plan_steps.length > 0 && (
+            <section className="sec" data-sec="steps">
+              <div className="section-label sec-head"><Fold />Steps</div>
+              <div className="sec-body"><Steps steps={data.plan_steps} /></div>
+            </section>
           )}
           {/* The issue's one document: its Context, then its Plan and its Result, which its session writes through the
               API. An older issue's plan.md and result.md follow it, in the same order. Then the sub-issues, which the

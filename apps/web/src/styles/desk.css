@@ -378,6 +378,17 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
                        background: none; color: var(--text-3); }
 .group-add:hover, .add-sub:hover { background: var(--bg-active); color: var(--text-1); }
 .tree { list-style: none; margin: 0; padding: 0; }
+/* A design issue's steps (issues/Steps.tsx), drawn as the sub-issues are: rows with the issues' status circles, a step's
+   own steps under a thin line, the one being worked on filled, a note or a parent's count in the quiet grey at the end
+   (the user's pick of the mockups, 27 Oct: "this linear looks feel insanely good"). Not measured on linear.app. */
+.steps { list-style: none; margin: 0; padding: 0; }
+.steps .steps { margin-left: 15px; padding-left: 8px; border-left: 1px solid var(--border-3); }
+.step { display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 8px; border-radius: 6px; font-size: 13px; color: var(--text-1); }
+.step.here { background: var(--bg-raised); }
+.step-icon { display: inline-flex; flex: none; }
+.step-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step[data-state="todo"] .step-title { color: var(--text-2); }
+.step-note { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-3); }
 .tree .tree { margin-left: 30px; border-left: 1px solid var(--border-3); }
 .item { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px 0 24px; text-decoration: none; color: var(--text-1);
         border-radius: 6px; }
