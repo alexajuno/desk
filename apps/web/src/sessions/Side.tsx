@@ -27,8 +27,8 @@ function bring(a: Artifact) {
 
 // Where the side lies over its chat, on a phone or a narrow window, the message a row brings into view is under it
 // (27 Oct: "how can i see the plan and artifacts in phone"), so the row opens what it names where you are: a picture
-// in the viewer, the plan where the side draws it, a step's diagram opened under its row in the steps. False when there is nothing to open, and the card unfolds under its
-// row instead (ChatSide).
+// in the viewer, the plan where the side draws it, a step's diagram under its row in the steps. False when there is
+// nothing to open, and the card unfolds under its row instead (ChatSide).
 function openHere(a: Artifact): boolean {
   if (a.kind === "image") {
     const img = document.querySelectorAll(`.dock [data-at="${CSS.escape(a.at)}"] img`)[a.img ?? 0];
