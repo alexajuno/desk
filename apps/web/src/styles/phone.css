@@ -53,6 +53,10 @@
      would turn on nothing. */
   .notify-ask { display: none; }
 
+  /* The picture viewer's help line names a wheel, a mouse and keys, which a phone has not (27 Oct: "since it's
+     applicable on wide screen (desktop, laptop)"). */
+  .viewer-help { display: none; }
+
   /* An automation's row: its name on the first line, when it fires, its agent and when it fires next on the second. */
   .item.automation-row { flex-wrap: wrap; row-gap: 6px; height: auto; padding: 10px 16px; }
   .automation-row .title { flex: 1 1 calc(100% - 40px); }
