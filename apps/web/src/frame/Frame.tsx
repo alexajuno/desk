@@ -62,6 +62,9 @@ function chatOf(pathname: string): { session: string | null; slug: string | null
 const page = () => (document.querySelector(".issue") as HTMLElement | null)?.dataset;
 // The issue whose page this address is, which J and K step on from.
 const issueHere = () => { const m = /^\/issue\/([^/]+)$/.exec(location.pathname); return m ? decodeURIComponent(m[1]) : null; };
+// The chat the cursor is in, else the chat in the middle.
+const chatView = () =>
+  (document.activeElement?.closest(".session-view")?.querySelector<HTMLElement>(".dock-scroll") ?? document.querySelector<HTMLElement>(".chat-center .dock .dock-scroll"));
 // A row's key in ui.focused: an issue row's slug, or another row's own key (a team's, a session's).
 const keyOfRow = (row: HTMLElement) => row.dataset.slug ?? row.dataset.key ?? null;
 const focusedRow = () => ui.focused
@@ -99,6 +102,10 @@ function onKeyDown(e: KeyboardEvent) {
   // Ctrl+/ works from a text box too, and Esc closes the shortcuts from their own search box.
   if ((e.ctrlKey || e.metaKey) && e.key === "/") { ui.setKeys(!ui.keysOpen); e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyO") { newSession(); e.preventDefault(); return; }
+  // Ctrl End and Ctrl Home, as in Claude Code: the chat to its end or its start, from its composer too. At the end it
+  // follows the reply again, as the chat does while you stay at its bottom (Dock).
+  const view = e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && (e.key === "End" || e.key === "Home") && chatView();
+  if (view) { view.scrollTo({ top: e.key === "End" ? view.scrollHeight : 0 }); e.preventDefault(); return; }
   // Linear's Ctrl ⇧ 1-9: the team in that place under Your teams. The key, not the character, which Shift makes "!".
   const digit = (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && /^Digit([1-9])$/.exec(e.code);
   if (digit) {
