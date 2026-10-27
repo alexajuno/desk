@@ -1,6 +1,7 @@
 // The side of an issue's chat ("i feel like the plan should be on the sidebar i suppse? with all the artifacts
-// generated?", the user, 27 Oct): the plan as it stands, then what the chat made, its plans, cards and images, each a
-// row that brings its message into view. It stays put beside the chat, and ] hides it (store/dock.ts). The work as a
+// generated?", the user, 27 Oct), under its top bar's "Plan": the plan as it stands, then what the chat made, its plan,
+// its card and its images, each a row that brings its message into view. An earlier send of the plan or the card is
+// left out: desk keeps only the latest, so it is a line in the chat with nothing to see. It stays put beside the chat, and ] hides it (store/dock.ts). The work as a
 // tree comes once desk keeps the steps.
 import { observer } from "mobx-react-lite";
 import { useMemo } from "react";
@@ -23,12 +24,11 @@ function bring(a: Artifact) {
 export const ChatSide = observer(function ChatSide({ data }: { data: IssuePageData }) {
   const s = useLive(data.issue.session, false);
   const items = s?.items, sends = s?.results.size;
-  const made = useMemo(() => (s ? artifactsOf(s, data.issue.slug) : []), [items, sends, data.issue.slug]); // eslint-disable-line react-hooks/exhaustive-deps
+  const made = useMemo(() => (s ? artifactsOf(s, data.issue.slug).filter((a) => a.kind === "image" || a.latest) : []), [items, sends, data.issue.slug]); // eslint-disable-line react-hooks/exhaustive-deps
   const plan = data.plan_card;
   return (
     <div className="chat-side">
       <section className="side-part">
-        <div className="side-head">Plan</div>
         {plan ? (
           <>
             <div className="body side-plan" dangerouslySetInnerHTML={{ __html: plan[0] }} />
@@ -47,7 +47,7 @@ export const ChatSide = observer(function ChatSide({ data }: { data: IssuePageDa
           <button key={`${a.at}:${a.img ?? ""}:${n}`} type="button" className={`side-row${a.latest ? " latest" : ""}`} title="Show it in the chat" onClick={() => bring(a)}>
             {GLYPH.file}
             <span className="side-name">{a.name}</span>
-            {a.kind !== "image" && <span className="side-what">{a.latest ? "latest" : "an earlier version"}</span>}
+            {a.kind !== "image" && <span className="side-what">latest</span>}
           </button>
         )) : <p className="side-none">Nothing made in the chat yet.</p>}
       </section>

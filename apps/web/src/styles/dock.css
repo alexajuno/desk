@@ -170,7 +170,7 @@
 
 /* The side of an issue's chat (Side.tsx): the plan as it stands, then the chat's artifacts as quiet 32px rows, as
    Linear's sidebar rows are, each bringing its message into view with a moment's ring (.brought). */
-.chat-side { padding: 8px 16px 32px; }
+.chat-side { padding: 16px 16px 32px; }
 .side-part + .side-part { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-2); }
 .side-head { display: flex; align-items: center; justify-content: space-between; height: 28px; margin-bottom: 6px; font: 500 12px var(--font); color: var(--text-3); }
 .side-count { font-weight: 450; color: var(--text-4); font-variant-numeric: tabular-nums; }
@@ -183,7 +183,6 @@
 .side-row .glyph { flex: none; width: 14px; height: 14px; color: var(--text-3); }
 .side-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-what { flex: none; margin-left: auto; font-size: 12px; color: var(--text-4); }
-.side-row.latest .side-what { color: var(--text-3); }
 .side-switch { height: 24px; padding: 0 8px; font-size: 12px; }
 .brought { animation: brought 1.2s ease; border-radius: 8px; }
 @keyframes brought { 0%, 40% { box-shadow: 0 0 0 2px var(--accent); } 100% { box-shadow: 0 0 0 2px transparent; } }
