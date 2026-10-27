@@ -12,7 +12,7 @@ import { go } from "../app/nav";
 import { splashUp, useSplash } from "../app/splash";
 import { markdown } from "../lib/markdown";
 import { seenPage, usePage } from "../api/page";
-import { Lands, Title, useStep, type IssuePageData } from "../issues/IssueView";
+import { HeadChips, Lands, Title, useStep, type IssuePageData } from "../issues/IssueView";
 import { useLive as useIssueLive } from "../issues/useLive";
 import { folderMenu } from "../issues/menus";
 import { Walk } from "../issues/walk";
@@ -248,6 +248,7 @@ const ChatHead = observer(function ChatHead({ s }: { s: LiveSession }) {
           : <span>{m?.issue?.title ?? m?.title ?? ""}</span>}
         {startsIn(s) && <span className="dock-folder" title={startsIn(s)}>{startsIn(s)}</span>}
       </div>
+      {m?.issue && chatPage.get()?.issue.slug === m.issue.slug && <HeadChips issue={chatPage.get()!.issue} />}
       {dock.issue && m?.issue && !dock.sideShown && <Walk slug={m.issue.slug} />}
     </header>
   );
@@ -300,7 +301,31 @@ const IssueConversation = observer(function IssueConversation({ s, slug }: { s: 
     runInAction(() => chatPage.set(page));
     return () => runInAction(() => chatPage.set(null));
   }, [page]);
-  return <Conversation s={s} page={page} slug={slug} />;
+  return (
+    <>
+      <ContextFold page={page} />
+      <Conversation s={s} page={page} slug={slug} />
+    </>
+  );
+});
+
+// The issue's Context, what you asked, as the chat's first message, folded to its first line as the steps are: the chat
+// holds the whole flow from its start (27 Oct).
+const ContextFold = observer(function ContextFold({ page }: { page: IssuePageData | null }) {
+  const [open, setOpen] = useState(false);
+  const html = page?.context_html ?? "";
+  const first = useMemo(() => new DOMParser().parseFromString(html, "text/html").body.textContent?.trim().split("\n")[0] ?? "", [html]);
+  if (!html.trim()) return null;
+  return (
+    <div className={`steps context${open ? " open" : ""}`}>
+      <button className="steps-head" type="button" onClick={() => setOpen(!open)}>
+        <svg className="steps-caret" width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M3 1.5l4 3.5-4 3.5z" /></svg>
+        <span className="context-name">Context</span>
+        {!open && <span className="context-first">{first}</span>}
+      </button>
+      {open && <div className="reply body context-body" dangerouslySetInnerHTML={{ __html: html }} />}
+    </div>
+  );
 });
 
 // What a chat made, in order, for its side to list (Side.tsx): each send of the plan or the card, and each image in a

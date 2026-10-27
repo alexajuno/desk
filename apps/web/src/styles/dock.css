@@ -98,6 +98,11 @@
 .dock-title input.title:hover { background: var(--btn-ghost-hover); }
 .dock-title input.title:focus { background: var(--bg-hover); }
 /* the sidebar's toggle, while the sidebar is hidden, as a page's top bar has it */
+/* an issue's status, priority and team at the head's right end (IssueView, HeadChips): quiet chips, filled under the mouse */
+.head-chips { flex: none; display: flex; align-items: center; gap: 2px; }
+.head-chips .field-chip { border-color: transparent; background: transparent; color: var(--text-2); }
+.head-chips .field-chip:hover { background: var(--btn-ghost-hover); }
+.head-chips .field-chip .icon { display: inline-flex; }
 .dock-head .side-toggle { display: none; flex: none; margin-left: -6px; }
 .side-collapsed .dock-head .side-toggle { display: grid; }
 @media (max-width: 900px) { .dock-head .side-toggle { display: grid; } }
@@ -199,6 +204,11 @@
 .step-bar-steps.on { color: var(--text-1); }
 
 .steps { font-size: 13px; color: var(--text-3); }
+/* the Context the chat opens on (Dock.tsx, ContextFold): a fold as the steps are, its first line beside its name */
+.context .steps-head { width: 100%; }
+.context-name { flex: none; font-weight: 500; color: var(--text-2); }
+.context-first { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.context-body.reply.body { margin: 6px 0 0 20px; font-size: 14px; line-height: 22px; color: var(--text-2); }
 .steps-head { height: auto; min-height: 26px; max-width: 100%; padding: 3px 8px 3px 2px; gap: 6px; border-radius: 6px; background: transparent;
               font: 450 13px/20px var(--font); color: var(--text-3); white-space: normal; text-align: left; }
 .steps-head:hover { background: var(--btn-ghost-hover); color: var(--text-2); }

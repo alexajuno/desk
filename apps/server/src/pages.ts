@@ -428,6 +428,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     kids: treeJson(kidsOf(slug), kidsOf),
     progress: [direct.filter((k) => k.state === "done").length, direct.filter((k) => k.state !== "dropped").length],
     agent_files: agentFiles, plan, plan_card: plan ? split(plan) : null, result, card, reviewing,
+    context_html: toHtml(store.section(i, "Context"), `/issue/${slug}/f/`), // the chat's first message, folded
     session_kind: session.kind ?? null, live: talkOf(i),
     step: step(i, await asking(), store.hasPlan(i), Boolean(result)), landed: i.landed, trial: await tryButton(i),
     lands: reviewing ? land.landsOf(i) : null, // the steps Approve runs, which the review lists to untick
