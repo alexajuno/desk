@@ -167,8 +167,17 @@
 .sent .sent-body .d2 { margin-bottom: 12px; }
 .sent .reply.body { font-size: 14px; line-height: 22px; }
 .sent-details { margin: 10px 0 0; }
-.sent-foot { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-2); }
-.sent-acts { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* What the issue waits on from you, on top of the composer (Dock.tsx, StepBar): one row in the question card's box,
+   what it waits on at the left, the step's button at the right end; the steps Approve runs open above the row. */
+.step-bar { flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); margin: 0 auto 8px; padding: 6px 6px 6px 12px;
+            border: 1px solid var(--border-2); border-radius: 12px; background: var(--bg-raised); animation: dock-rise 0.18s ease; }
+.step-bar .review-lands { margin: 6px 0 8px; }
+.step-bar-row { display: flex; align-items: center; gap: 6px; min-height: 28px; }
+.step-bar-what { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px var(--font); color: var(--text-2); }
+.step-bar button { flex: none; }
+.step-bar-steps { font-size: 12px; color: var(--text-3); }
+.step-bar-steps.on { color: var(--text-1); }
 
 .steps { font-size: 13px; color: var(--text-3); }
 .steps-head { height: auto; min-height: 26px; max-width: 100%; padding: 3px 8px 3px 2px; gap: 6px; border-radius: 6px; background: transparent;

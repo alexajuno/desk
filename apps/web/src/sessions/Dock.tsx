@@ -57,6 +57,10 @@ export async function newSession(draft = "") {
   openSession(id);
 }
 
+// The issue page of the chat in the middle, as its conversation last fetched it, which the bar on top of the composer
+// reads too: one fetch for both.
+const chatPage = observable.box<IssuePageData | null>(null, { deep: false });
+
 // A change of layout moves as one piece, through the browser's view transitions: the issue page shrinks into the side
 // as its chat rises in the middle, and slides out when hidden (dock.css says how). Where the browser has none, or
 // motion is turned down, it changes at once, and so does the first one, under the splash, where nothing was seen to
@@ -227,6 +231,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
         <div className="dock-foot">
           <Running s={s} />
           {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
+          {m?.issue && <StepBar slug={m.issue.slug} />}
           <Composer s={s} />
         </div>
       </div>
@@ -297,7 +302,12 @@ function rowsOf(items: Item[], results: Map<string, Item>, slug: string | null):
 const IssueConversation = observer(function IssueConversation({ s, slug }: { s: LiveSession; slug: string }) {
   const { data, reload } = usePage<IssuePageData>(`/api/page/issue/${slug}`, `${issues.files.get(slug) ?? 0} ${lineKey()}`);
   useIssueLive(data, reload);
-  return <Conversation s={s} page={data?.issue.slug === slug ? data : null} slug={slug} />;
+  const page = data?.issue.slug === slug ? data : null;
+  useEffect(() => {
+    runInAction(() => chatPage.set(page));
+    return () => runInAction(() => chatPage.set(null));
+  }, [page]);
+  return <Conversation s={s} page={page} slug={slug} />;
 });
 
 const Conversation = observer(function Conversation({ s, page, slug }: { s: LiveSession; page: IssuePageData | null; slug: string | null }) {
@@ -342,8 +352,8 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
   );
 });
 
-// The plan or the card a session sent, where it sent it: the latest of each drawn, its text folded under Details, over
-// the step it waits on, Go under a plan and Approve under a card; an earlier one a line.
+// The plan or the card a session sent, where it sent it: the latest of each drawn, its text folded under Details; an
+// earlier one a line. What it waits on from you, Go or Approve, is on top of the composer (StepBar).
 const Sent = observer(function Sent({ page, section, latest }: { page: IssuePageData | null; section: Section; latest: boolean }) {
   const parts = !page ? null : section === "Plan" ? page.plan_card : page.card ?? (page.result ? [page.result_html, ""] : null);
   const name = section === "Plan" ? "Plan" : "Result";
@@ -360,24 +370,39 @@ const Sent = observer(function Sent({ page, section, latest }: { page: IssuePage
           <div className="reply body" dangerouslySetInnerHTML={{ __html: parts[1] }} />
         </details>
       )}
-      <SentStep page={page} section={section} />
     </div>
   );
 });
 
-// What the issue waits on under what was sent: Go under its plan, the landing steps, Try and Approve under its card.
-const SentStep = observer(function SentStep({ page, section }: { page: IssuePageData; section: Section }) {
+// What the issue waits on from you, on top of the composer, where you act ("user take action in the composer only", the
+// user, 27 Oct), as a question's buttons are: Go on a plan, Approve on a card, with Try beside it and the steps Approve
+// runs a click away, to untick. Ctrl Enter presses the step, as on the issue's page (Frame).
+const StepBar = observer(function StepBar({ slug }: { slug: string }) {
+  const page = chatPage.get();
+  return page?.issue.slug === slug ? <StepActs key={slug} page={page} /> : null;
+});
+
+const StepActs = observer(function StepActs({ page }: { page: IssuePageData }) {
   const { step, landing, steps, skip, setSkip, act } = useStep(page);
+  const [open, setOpen] = useState(false);
   const b = step.button;
-  if (!b?.action && !landing) return null;
-  if (section === "Plan" ? b?.action !== "go" : b?.action !== "approve" && !landing) return null;
-  const t = section === "Result" && !landing ? page.trial : null;
+  if (!landing && b?.action !== "go" && b?.action !== "approve") return null;
+  const approving = landing || b?.action === "approve";
+  const t = approving && !landing ? page.trial : null;
+  const n = steps?.length ?? 0, on = n - skip.filter((i) => i < n).length;
   return (
-    <div className="sent-foot">
-      {section === "Result" && steps && <Lands steps={steps} skip={skip} setSkip={setSkip} />}
-      <div className="sent-acts">
+    <div className="step-bar">
+      {open && steps && n > 0 && <Lands steps={steps} skip={skip} setSkip={setSkip} />}
+      <div className="step-bar-row">
+        <span className="step-bar-what">{approving ? "Its card waits for your review" : "Its plan waits for your go"}</span>
+        {approving && n > 0 && (
+          <button className={`ghost step-bar-steps${open ? " on" : ""}`} type="button" title={open ? "Hide the steps" : "The steps Approve runs, to untick"} onClick={() => setOpen(!open)}>
+            {on === n ? `Approve runs ${n} ${n === 1 ? "step" : "steps"}` : `${on} of ${n} steps`}
+          </button>
+        )}
         {t && <button type="button" title={t.title} disabled={t.disabled} onClick={() => act(t.action!)}>{t.label}</button>}
-        <button className="primary" type="button" disabled={b?.disabled} onClick={() => act(b!.action!)}>{b?.label}</button>
+        <button className="primary step" type="button" disabled={b?.disabled} title={b?.disabled ? undefined : `${b?.label}  Ctrl Enter`}
+          onClick={() => act(b!.action!)}>{b?.label}</button>
       </div>
     </div>
   );
