@@ -18,15 +18,16 @@ const PALETTES: Record<string, { ground: string; fills: [string, string, string]
 };
 
 // The look as one line of d2 put before each diagram, so an error's line number is off by one only. D2's colour codes:
-// N1 text, N2 an edge's label, N7 the ground, B1 every line, B2 a dashed line and a table's column names, B4 to B6 the
-// fills by depth, N4 a diamond's, B3 a person's, AA2 a table's constraint (its "+ new"), the other AA and AB codes the
-// other shapes'. A table's stroke fills its rows.
+// N1 text, N2 an edge's label, B1 every line, B2 a dashed line and a table's column names, B4 to B6 the fills by depth,
+// N7 the fill from depth 4 and the ground (so the ground is the root's own fill), N4 a diamond's, B3 a person's, AA2 a
+// table's constraint (its "+ new"), the other AA and AB codes the other shapes'. A table's stroke fills its rows.
 function look(name: string): string {
   const p = PALETTES[name], [b4, b5, b6] = p.fills;
-  const colours = { N1: p.text, N2: p.dim, N3: p.faint, N4: b6, N5: b5, N6: b4, N7: p.ground, B1: p.line, B2: p.dim, B3: b6,
+  const colours = { N1: p.text, N2: p.dim, N3: p.faint, N4: b6, N5: b5, N6: b4, N7: b6, B1: p.line, B2: p.dim, B3: b6,
     B4: b4, B5: b5, B6: b6, AA2: p.text, AA4: b6, AA5: b6, AB4: b6, AB5: b6 };
   return [
     `vars: {d2-config: {theme-overrides: {${Object.entries(colours).map(([code, hex]) => `${code}: "${hex}"`).join("; ")}}}}`,
+    `style.fill: "${p.ground}"`,
     "**.style: {border-radius: 4; font: mono; stroke-width: 1; bold: false}",
     ...["->", "<-", "<->", "--"].map((arrow) => `(** ${arrow} **)[*].style: {stroke-width: 1; italic: false; font: mono}`),
     `**: {&shape: sql_table; style: {fill: "${b6}"; font-color: "${p.text}"; stroke: "${b5}"}}`,
