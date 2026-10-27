@@ -15,7 +15,7 @@ import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as hosted from "./hosted.ts";
 import { run, sleep, which } from "./proc.ts";
-import { BRIEF_PROMPT, BRIEF_STEPS, CHAT_PLAN_PROMPT, fill, GO_PROMPT, LAND_PROMPT, PLAN_PROMPT, STEPS_FAILED, TOLD } from "./prompts.ts";
+import { BRIEF_PROMPT, BRIEF_STEPS, CHAT_PLAN_PROMPT, DESIGN_GO_PROMPT, fill, GO_PROMPT, LAND_PROMPT, PLAN_PROMPT, STEPS_FAILED, TOLD } from "./prompts.ts";
 import * as settings from "./settings.ts";
 
 export async function git(cwd: string, ...args: string[]): Promise<string | null> {
@@ -162,12 +162,14 @@ export function planPrompt(i: Issue, folder: string, chat = ""): string {
 
 // Plan, or Start: the issue's session plans it by its protocol; its session id.
 export const start = (i: Issue, folder: string) => newSession(i, planPrompt(i, folder));
+// Go, by the issue's protocol: a design issue is carried out one step at a time with the user.
+const goPrompt = (i: Issue, folder: string) => fill(store.runs(i) === "design" ? DESIGN_GO_PROMPT : GO_PROMPT, paths(i, folder));
 // Start the issue's session straight on its written plan, as the desk agent does; its session id.
-export const runPlan = (i: Issue, folder: string) => newSession(i, fill(GO_PROMPT, paths(i, folder)));
+export const runPlan = (i: Issue, folder: string) => newSession(i, goPrompt(i, folder));
 // Start the issue's session to plan from the Agent chat, then wait, or go on at once for a quick issue.
 export const planFromChat = (i: Issue, folder: string, chat: string) => newSession(i, planPrompt(i, folder, chat));
 // The desk agent starts an issue that already has a session: the same session carries out the plan.
-export const go = (i: Issue, folder: string) => tell(i.session!, fill(GO_PROMPT, paths(i, folder)));
+export const go = (i: Issue, folder: string) => tell(i.session!, goPrompt(i, folder));
 // Approve: the issue's own session lands its work by the repo's rules.
 export const land = (i: Issue, folder: string) => tell(i.session!, fill(LAND_PROMPT, paths(i, folder)));
 // Approve ran the steps the session gave, and one failed: the session lands the work itself, from there.
