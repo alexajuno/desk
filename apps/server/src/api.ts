@@ -74,7 +74,7 @@ export function asJson(i: Issue, full = false) {
   if (i.state === "review") Object.assign(data, { review_of: i.review_of ?? "result", review_since: i.review_since });
   if (i.state === "done" && i.landed) data.landed = i.landed;
   if (i.lands) data.lands = JSON.parse(i.lands);
-  if (i.plan_steps) data.plan_steps = JSON.parse(i.plan_steps);
+  if (i.plan_steps) data.plan_steps = briefSteps(JSON.parse(i.plan_steps));
   if (full) Object.assign(data, { file: join(store.folder(i.slug), store.MAIN), files: store.files(i.slug), body: i.body });
   return data;
 }
@@ -232,6 +232,12 @@ function applyPlanSteps(i: Issue, body: unknown) {
   const steps = planSteps(list);
   carry(steps);
   i.plan_steps = JSON.stringify(steps);
+}
+
+// The steps as an issue's JSON gives them, each one a session drew marked "drawn" rather than carrying its diagram and
+// decisions, which would fill every list of issues: GET /steps/<place> reads them.
+function briefSteps(steps: PlanStep[]): unknown[] {
+  return steps.map(({ diagram, said, kids, ...step }) => ({ ...step, ...(diagram || said ? { drawn: true } : {}), ...(kids ? { kids: briefSteps(kids) } : {}) }));
 }
 
 // A step by its place, as 1.2 names Design's second: its number among its siblings, from 1, down from the top.
