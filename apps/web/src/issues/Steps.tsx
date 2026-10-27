@@ -8,17 +8,17 @@ export type PlanStep = { title: string; state: "todo" | "running" | "done"; note
 
 export function Steps({ steps }: { steps: PlanStep[] }) {
   return (
-    <ul className="steps">
+    <ul className="plan-steps">
       {steps.map((s, n) => {
         const kids = s.kids ?? [];
         const end = kids.length ? `${kids.filter((k) => k.state === "done").length} of ${kids.length}` : s.note;
         const here = s.state === "running" && !kids.some((k) => k.state === "running"); // the one being worked on, not its parent
         return (
           <li key={n}>
-            <div className={`step${here ? " here" : ""}`} data-state={s.state}>
-              <span className="step-icon"><StateIcon state={s.state} /></span>
-              <span className="step-title">{s.title}</span>
-              {end && <span className="step-note">{end}</span>}
+            <div className={`plan-step${here ? " here" : ""}`} data-state={s.state}>
+              <span className="plan-step-icon"><StateIcon state={s.state} /></span>
+              <span className="plan-step-title">{s.title}</span>
+              {end && <span className="plan-step-note">{end}</span>}
             </div>
             {kids.length > 0 && <Steps steps={kids} />}
           </li>
