@@ -390,7 +390,7 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
 // earlier one a line. What it waits on from you, Go or Approve, is on top of the composer (StepBar).
 const Sent = observer(function Sent({ at, page, section, latest }: { at: string; page: IssuePageData | null; section: Section; latest: boolean }) {
   const parts = !page ? null : section === "Plan" ? page.plan_card : page.card ?? (page.result ? [page.result_html, ""] : null);
-  const name = section === "Plan" ? "Plan" : "Result";
+  const name = section === "Plan" ? "Plan" : "Card"; // as the bar and the side say it
   if (!latest || !page || !parts) {
     return <p className="sent-line" data-at={at}>{GLYPH.file}<span>{name}</span><span className="sent-when">{latest ? "sent" : "an earlier version, sent"}</span></p>;
   }
