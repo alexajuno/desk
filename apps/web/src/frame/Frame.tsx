@@ -21,7 +21,7 @@ import { unfoldTo, toggleSection } from "../ui/folds";
 import { MenuHost, menus } from "../ui/menu";
 import { datePicker } from "../ui/datepicker";
 import { ToastHost, toast } from "../ui/toast";
-import { closeViewer, openViewer, viewerOpen } from "../ui/viewer";
+import { closeViewer, openNearest, openPicture, stepViewer, viewerOpen } from "../ui/viewer";
 import { arrange, Dock, focusComposer, newSession, openSession, SideEdge, toggleIssue } from "../sessions/Dock";
 import { Catcher, catchKeys } from "../search/catcher";
 import { triageKey } from "../triage/TriagePage";
@@ -94,6 +94,7 @@ let gPressed = 0, nPressed = 0, oPressed = 0;
 
 function onKeyDown(e: KeyboardEvent) {
   if (e.key === "Escape" && viewerOpen()) { closeViewer(); return; }
+  if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && viewerOpen()) { stepViewer(e.key === "ArrowLeft" ? -1 : 1); e.preventDefault(); return; }
   if (menus.current || viewerOpen() || ui.editing || ui.creator || ui.teamCreator || ui.projectCreator !== null) return;
   // Ctrl+/ works from a text box too, and Esc closes the shortcuts from their own search box.
   if ((e.ctrlKey || e.metaKey) && e.key === "/") { ui.setKeys(!ui.keysOpen); e.preventDefault(); return; }
@@ -228,6 +229,8 @@ function onKeyDown(e: KeyboardEvent) {
     const group = document.querySelector<HTMLElement>(":is(.group, .projects-group)[data-group]:hover") ?? (focused && groups.find((g) => g.nextElementSibling?.contains(focused)));
     group?.querySelector<HTMLElement>(".group-toggle")?.click();
   }
+  // V: the diagram or image on screen, full screen; ← and → walk the rest (viewer.ts).
+  else if (key === "v" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && openNearest()) e.preventDefault();
   // I, as vim's insert: back into the chat's composer, or, where no chat is open, the issue's chat, opened to read as its
   // Open chat button opens it; an issue with no session says so. O is Linear's, the first key of O then T, P and I.
   else if (key === "i") {
@@ -326,10 +329,7 @@ function onClick(e: MouseEvent) {
   if (hash) unfoldTo(document.getElementById(decodeURIComponent(hash.hash.slice(1))));
   const head = t.closest(".sec-head");
   if (head && !t.closest("a, input, textarea, .add-sub") && !getSelection()?.toString()) { toggleSection(head.parentElement as HTMLElement, e.altKey); return; }
-  const shot = t.closest(".body img");
-  if (shot && !shot.closest("a")) { openViewer(shot); return; }
-  const d2 = t.closest(".d2");
-  if (d2) { const svg = d2.querySelector(`.for-${document.documentElement.dataset.theme} svg`) ?? d2.querySelector("svg"); if (svg) openViewer(svg); return; }
+  if (openPicture(t)) return;
   // A link in a document the server drew (a plan's /issue/x): inside the app when that page lives here.
   const link = t.closest<HTMLAnchorElement>("a[href]");
   if (link && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0 && !link.target && link.origin === location.origin && !link.hash) {
