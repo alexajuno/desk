@@ -210,7 +210,8 @@ export async function agentPrompt(chat: Chat, base: string): Promise<string> {
   const work = fill(WORK, { dir: folder, drafts: store.drafts(slug || "<slug>"), base, slug: slug || "<slug>" });
   const rules = Object.fromEntries(Object.entries(WINDOW_RULES).map(([k, v]) => [k, fill(v, { base })]));
   // A chat may run for days, and Claude Code gives it the date.
-  let prompt = fill(PROMPT, { today: "the date your environment gives", day: "15 Oct", reference, chat: chat.id, plan_rules: PLAN_RULES, work,
+  const plan_rules = fill(PLAN_RULES, { base, drafts: store.drafts(slug || "<slug>"), slug: slug || "<slug>" }); // its steps' call
+  let prompt = fill(PROMPT, { today: "the date your environment gives", day: "15 Oct", reference, chat: chat.id, plan_rules, work,
     protocols: PROTOCOLS, ...rules });
   if (slug) prompt += `\n\nThis chat works the issue /issue/${slug}, in ${chat.folder}.`;
   else if (chat.cwd && !same(chat.cwd, DATA_DIR))
