@@ -99,11 +99,17 @@ function open(pictures: Element[], picture: Element) {
   v.addEventListener("dblclick", fit);
 }
 
-// Esc: the viewer closes, and the chat or page shows the picture last seen, scrolled to only when it is out of sight.
+// Esc: the viewer closes, and the chat or page shows the picture last seen, in its middle when it was out of sight or
+// under the chat's composer.
 export function closeViewer() {
   viewer?.remove();
   viewer = null;
   show = null;
-  walk[at]?.scrollIntoView({ block: "nearest" });
+  const last = walk[at], view = last?.closest(".dock-scroll, .scroll");
+  if (last && view) {
+    const r = last.getBoundingClientRect(), box = view.getBoundingClientRect();
+    const bottom = view.querySelector(".dock-foot")?.getBoundingClientRect().top ?? box.bottom;
+    if (r.top < box.top || r.bottom > bottom) last.scrollIntoView({ block: "center" });
+  }
   walk = [];
 }
