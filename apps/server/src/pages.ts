@@ -432,8 +432,20 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     session_kind: session.kind ?? null, live: talkOf(i),
     step: step(i, await asking(), store.hasPlan(i), Boolean(result)), landed: i.landed, trial: await tryButton(i),
     lands: reviewing ? land.landsOf(i) : null, // the steps Approve runs, which the review lists to untick
-    plan_steps: i.plan_steps ? JSON.parse(i.plan_steps) : null, // a design issue's steps (api.ts, PlanStep)
+    plan_steps: i.plan_steps ? drawnSteps(JSON.parse(i.plan_steps), `/issue/${slug}/f/`) : null, // a design issue's steps (api.ts, PlanStep)
   };
+}
+
+// A design issue's steps for its page and its chat, each one's diagram and decisions drawn, as its session sent them
+// with PUT /steps/<place>.
+type Step = { title: string; state: string; note?: string; kids?: Step[]; diagram?: string; said?: string };
+function drawnSteps(steps: Step[], base: string): unknown[] {
+  return steps.map(({ diagram, said, kids, ...step }) => ({
+    ...step,
+    ...(diagram ? { diagram_html: toHtml(`\`\`\`d2\n${diagram}\n\`\`\``, base) } : {}),
+    ...(said ? { said_html: toHtml(said, base) } : {}),
+    ...(kids ? { kids: drawnSteps(kids, base) } : {}),
+  }));
 }
 
 // --- the pages ---------------------------------------------------------------------------------------------------------

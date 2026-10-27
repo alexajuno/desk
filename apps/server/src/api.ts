@@ -9,6 +9,8 @@
 //                                       land it (lands); a body sets the sections it holds
 //     GET    /api/issues/<slug>/sections/<name>   one section of the issue's document, as Markdown
 //     PUT    /api/issues/<slug>/sections/<name>   write it, the Markdown as the request's body; empty takes it out
+//     GET    /api/issues/<slug>/steps/<place>     one step's diagram and decisions, as Markdown; 1.2 is the first's second
+//     PUT    /api/issues/<slug>/steps/<place>     write them: its d2 block the diagram, the rest its decisions
 //     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
 //     POST   /api/issues/<slug>/work    the agent chat works it itself: the chat becomes the issue's session, taking
 //                                       over one that sits idle
@@ -192,7 +194,7 @@ function applyLands(i: Issue, body: unknown) {
 // A design issue's steps, which its session sends whole each time one changes, and desk draws as a tree with the
 // issues' own status circles: "ai has to gimme the plan, do each step", "i think we need database and new column here
 // rather than text rendering level only" (the user, 27 Oct). null takes them back.
-export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[] };
+export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[]; diagram?: string; said?: string };
 const STEP_STATES = ["todo", "running", "done"];
 const STEP_SHAPE = 'plan_steps is a list of {"title": "<a few words>", "state": "todo", "running" or "done", "note": "<optional, a few words>", "kids": [<its own steps, optional>]}, or null';
 
@@ -212,11 +214,47 @@ function planSteps(list: unknown, depth = 0): PlanStep[] {
   });
 }
 
+// The list comes whole with each tick, its diagrams and decisions not in it (PUT /steps/<place> sends those), so each
+// step keeps its own by its title: ticking a step never loses what it drew.
 function applyPlanSteps(i: Issue, body: unknown) {
   if (!body || typeof body !== "object" || !("plan_steps" in body)) return;
   const list = (body as { plan_steps: unknown }).plan_steps;
-  i.plan_steps = list === null ? null : JSON.stringify(planSteps(list));
+  if (list === null) return void (i.plan_steps = null);
+  const kept = new Map<string, PlanStep>();
+  const keep = (steps: PlanStep[]) => steps.forEach((s) => { if (s.diagram || s.said) kept.set(s.title, s); keep(s.kids ?? []); });
+  keep(i.plan_steps ? JSON.parse(i.plan_steps) : []);
+  const carry = (steps: PlanStep[]) => steps.forEach((s) => {
+    const was = kept.get(s.title);
+    if (was?.diagram) s.diagram = was.diagram;
+    if (was?.said) s.said = was.said;
+    carry(s.kids ?? []);
+  });
+  const steps = planSteps(list);
+  carry(steps);
+  i.plan_steps = JSON.stringify(steps);
 }
+
+// A step by its place, as 1.2 names Design's second: its number among its siblings, from 1, down from the top.
+const PLACE = /^[1-9]\d*(\.[1-9]\d*)*$/;
+function stepAt(i: Issue, place: string): { steps: PlanStep[]; step: PlanStep } {
+  if (!PLACE.test(place)) throw new HttpError(422, `${place} is no step's place: number it from 1 down the list, as 1.2 for the first step's second.`);
+  const steps: PlanStep[] = i.plan_steps ? JSON.parse(i.plan_steps) : [];
+  let level = steps, step: PlanStep | undefined;
+  for (const n of place.split(".").map(Number)) {
+    step = level[n - 1];
+    if (!step) throw new HttpError(404, `${i.slug} has no step ${place}. Its steps come with GET /api/issues/${i.slug}, as plan_steps.`);
+    level = step.kids ?? [];
+  }
+  return { steps, step: step! };
+}
+
+// A step's Markdown as a session sends it: its diagram, the first d2 block, and its decisions, the rest.
+const D2_BLOCK = /^```d2\n([\s\S]*?)^```[ \t]*$/m;
+function stepParts(text: string): { diagram: string; said: string } {
+  const m = D2_BLOCK.exec(text);
+  return m ? { diagram: m[1].trim(), said: (text.slice(0, m.index) + text.slice(m.index + m[0].length)).trim() } : { diagram: "", said: text.trim() };
+}
+const stepText = (s: PlanStep) => [s.diagram ? `\`\`\`d2\n${s.diagram}\n\`\`\`` : "", s.said ?? ""].filter(Boolean).join("\n\n");
 
 async function teamJson(t: Team, full = false) {
   const mine = teams.issuesOf(await store.loadAll(), t.slug);
@@ -325,6 +363,7 @@ export const baseOf = (req: FastifyRequest) => `${req.protocol}://${req.headers.
 
 type Req = FastifyRequest<{ Params: { slug: string }; Querystring: Record<string, string> }>;
 type SectionReq = FastifyRequest<{ Params: { slug: string; name: string } }>;
+type StepReq = FastifyRequest<{ Params: { slug: string; place: string } }>;
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 
 // The chat filing its own issue in Triage: the one whose id the call sends, or, when it sends none, the one whose
@@ -388,6 +427,16 @@ export function routes(app: FastifyInstance) {
     return reply.type("text/markdown; charset=utf-8").send(`${text}\n`);
   });
 
+  // One step's diagram and decisions, which its session draws as it works the step: only that step's diagram shows in
+  // the chat while it runs, never the whole plan ("diagrams and bla bla belongs to each step, and while working on a
+  // step, we just have diagram on that step", the user, 27 Oct).
+  app.get("/api/issues/:slug/steps/:place", async (req: StepReq, reply) => {
+    const { step } = stepAt(await loadIssue(req.params.slug), req.params.place);
+    const text = stepText(step);
+    if (!text) throw new HttpError(404, `Step ${req.params.place}, ${step.title}, has no diagram or decisions yet.`);
+    return reply.type("text/markdown; charset=utf-8").send(`${text}\n`);
+  });
+
   app.register(async (raw) => {
     // The Markdown comes as it is, whatever type curl gave it (--data-binary sends a form's), or as JSON's text.
     raw.removeContentTypeParser("application/x-www-form-urlencoded");
@@ -403,6 +452,23 @@ export function routes(app: FastifyInstance) {
       }
       await store.save(i);
       return { ...asJson(i), section: name, written: Boolean(sent.trim()) };
+    });
+
+    // Its d2 block is the step's diagram, the rest its decisions; empty takes both out. The reply names the step, which
+    // the chat draws where the session sent it, by its title, as the list's places move.
+    raw.put("/api/issues/:slug/steps/:place", async (req: StepReq) => {
+      const i = await loadIssue(req.params.slug);
+      const { steps, step } = stepAt(i, req.params.place);
+      const sent = typeof req.body === "string" ? req.body : str(((req.body ?? {}) as Record<string, unknown>).text);
+      const { diagram, said } = stepParts(sent);
+      if (/^##\s/m.test(said)) throw new HttpError(422, "A step's decisions are lines, not sections: start a heading at ### or leave it out.");
+      delete step.diagram;
+      delete step.said;
+      if (diagram) step.diagram = diagram;
+      if (said) step.said = said;
+      i.plan_steps = JSON.stringify(steps);
+      await store.save(i);
+      return { ...asJson(i), step: req.params.place, title: step.title, diagram: Boolean(diagram), said: Boolean(said) };
     });
   });
 
