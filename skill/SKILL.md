@@ -146,7 +146,7 @@ desk's own agent chat works an issue itself; it starts no other session. Bind th
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/work" --json '{"chat": "<chat id>"}'
 ```
 
-Then work it by its protocol, in the chat: send its Plan section, a three-line brief for quick and brief, and for design one diagram of the work's steps built with the user in short words, as the design-doc skill says, ending with Done when and Decide alone. Go straight on for quick; for the others, end your turn on `"review_of": "plan"` and wait for the user's "go". Carry the work out in the chat, a design issue one step at a time, each step reported and ending your turn, as desk's prompt says; send its Result section with the review card, and end your turn on `"review_of": "result"`, with the steps that land the work by the repo's rules, which the user's Approve runs with no turn of yours:
+Then work it by its protocol, in the chat: send its Plan section, a three-line brief for quick and brief, and for design the thing drawn Today and After, built with the user in short words, as the design-doc skill says, ending with Done when and Decide alone. Go straight on for quick; for the others, end your turn on `"review_of": "plan"` and wait for the user's "go". Carry the work out in the chat, a design issue one step at a time, each step reported and ending your turn, as desk's prompt says; send its Result section with the review card, and end your turn on `"review_of": "result"`, with the steps that land the work by the repo's rules, which the user's Approve runs with no turn of yours:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"state": "review", "review_of": "result", "lands": {"steps": ["~/projects/desk/bin/land feat/login-redirect"]}}'

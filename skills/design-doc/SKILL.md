@@ -1,6 +1,6 @@
 ---
 name: design-doc
-description: How Claude plans with the user - as a discussion partner, the way two engineers talk at a whiteboard - saying the idea in short words, one piece at a time, and drawing a sketch of only what has been said, never handing over a whole document to review. The plan it keeps (in desk, the issue's Plan section; elsewhere a plan.md) holds five things (a Now line, one d2 diagram of the work's steps with each step's own diagram inside, Said so far with one line per decision and the user's reason, Done when, Decide alone) and fits on one screen. Use whenever planning anything with the user before it is built - a plan.md, a design, a spec, an RFC or a proposal, weighing directions, or drawing how a workflow or system will work - including every desk issue on the design protocol, even when nobody says "design doc". Triggers include "let's plan this", "write the plan", "plan.md", "design doc", "design it", "let's discuss", "how should we build this", "what are our options", "draw the workflow".
+description: How Claude plans with the user - as a discussion partner, the way two engineers talk at a whiteboard - saying the idea in short words, one piece at a time, and drawing a sketch of only what has been said, never handing over a whole document to review. The plan it keeps (in desk, the issue's Plan section; elsewhere a plan.md) holds five things (a Now line, one d2 diagram of the thing itself with a part that changes as Today and After, Said so far with one line per decision and the user's reason, Done when, Decide alone) and fits on one screen. Use whenever planning anything with the user before it is built - a plan.md, a design, a spec, an RFC or a proposal, weighing directions, or drawing how a workflow or system will work - including every desk issue on the design protocol, even when nobody says "design doc". Triggers include "let's plan this", "write the plan", "plan.md", "design doc", "design it", "let's discuss", "how should we build this", "what are our options", "draw the workflow".
 ---
 
 # Planning with the user
@@ -22,25 +22,21 @@ Plan as a discussion partner, the way two engineers talk at a whiteboard: one sa
 The one diagram you both look at. In desk it is the Plan section of the issue's one document, which you send through desk's API as the desk skill says, and desk shows it on the issue's page and redraws it each time you send it. It holds five things and fits on one screen, under about 250 words outside the diagrams. The issue's title heads the page, so the plan has none, and its headings start at ###, since a ## would start another section of the document:
 
 ~~~markdown
-> **Now (<HH:MM>):** <where the talk stands, and what you need next>.
+> **Now (<HH:MM>):** <where the talk or the work stands, such as "Build, 2 of 3", and what you need next>.
 
 ```d2
-direction: down
-look: "1. Look into it · done" {
-  <what it found, a box or two>
+grid-columns: 2
+today: Today {
+  <what exists, read from the code>
 }
-design: "2. Design · here" {
-  style.double-border: true
-  <the sketch: only what has been said>
+after: After {
+  <the change: only what has been said, the part being worked on marked>
 }
-build: "3. Build" {
-  style.stroke-dash: 3
-  <its steps, a box each>
-}
-look -> design -> build
 ```
 
-### Said so far
+### Details
+
+#### Said so far
 
 - **<The decision, in a few words.>** "<the user's reason, in their words>" (<date>).
 - **Mine, yours to change: <your pick>.** <Why, in one line.>
@@ -51,14 +47,15 @@ look -> design -> build
 ~~~
 
 - **Now** changes on every rewrite.
-- **The diagram** is the plan's only one: the steps of the work, flowing down the page, each a container with its own small diagram inside ("it's best that there is a single diagram in the flow", 27 Oct). The step you are on has a double border and "· here", a finished one "· done", a later one a dashed border. The design step holds the sketch of only what has been said, about a dozen shapes at most; a part or a term the talk goes into opens inside the step it belongs to, once it is talked about, not before. In desk, a design issue's session redraws it as each step of the work ends, as desk's prompt says.
+- **The diagram** is the thing itself, not the progress: what exists and what changes, Today and After, a table as a table, the part being worked on with a double border. Where the work stands is a few words in the Now line ("maybe we don't even need progress diagram at all?", "i mean, there are in total 4 steps", 27 Oct). It holds only what has been said, about a dozen shapes at most; a part or a term the talk goes into opens inside the part it belongs to, once it is talked about, not before. A second diagram is for a second part that changes, never for the progress.
+- **Details** hold the text: Said so far, Done when and Decide alone, which you work from and the review card checks. The user reads the diagram, not these ("i don't read them at all", 27 Oct), so nothing the user must see lives only there.
 - **Said so far** is the record. One line per decision, with the user's reason in their words and dated; your own picks stay marked as yours until the user takes them. When the user decides without a reason, ask for one line. A decision that changes is rewritten in place.
 - **Done when** and **Decide alone** come once the shape is settled, before "go".
 - **Nothing else.** No context, goals, non-goals, alternatives, cross-cutting or build-plan sections: each of those is a question in the talk when it matters, and only its answer goes in Said so far. A fact the plan rests on carries its source inline: a link, a file path and line, or the user's words with a date.
 
 ## Writing it live
 
-- Write a first draft as soon as you understand the problem: the Now line, the diagram with a first sketch in its design step, and what the user has said. No more.
+- Write a first draft as soon as you understand the problem: the Now line, a first Today and After, and what the user has said. No more.
 - Rewrite it after each exchange that changes it, with the Write or Edit tool, in its draft, then send it again. In the chat, say the change in short words; don't paste the plan.
 - Something bigger than one plan, such as a whole system, is an overview sketch first, then a plan per part.
 - Outside desk, keep the plan in a plan.md in the folder you work in, with a `# <what we are solving>` title and `## Said so far`, or draw the sketch in the chat when there is no folder.
