@@ -5,13 +5,14 @@
 // deleted, and the counts in green and red.
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { usePage } from "../api/page";
 import type { PlanStep } from "../issues/Steps";
 import { dock } from "../store/dock";
 import { StateIcon, TRIANGLE } from "../ui/icons";
 import { toast } from "../ui/toast";
 import { toggleIssue } from "./Dock";
+import { live } from "./live";
 
 type Line = [kind: " " | "+" | "-", old: number | null, now: number | null, text: string];
 type FileDiff = { path: string; was?: string; added: number; deleted: number; binary?: true; cut?: true; hunks: { header: string; lines: Line[] }[] };
@@ -45,11 +46,22 @@ export const quote = observable.box<{ session: string; text: string } | null>(nu
 type Picked = { place: string; path: string; hunk: number; from: number; to: number; drag: boolean };
 export const picked = observable.box<Picked | null>(null, { deep: false });
 
-// Esc drops the pick (Frame.tsx).
+// What is typed in the box under the picked lines: kept while the pick grows, shrinks or moves, dropped with it.
+const words = observable.box("");
+
+// Esc drops the pick (Frame.tsx, and the box's own Esc), and what was typed for it.
 export function dropPick(): boolean {
   if (!picked.get()) return false;
-  runInAction(() => picked.set(null));
+  runInAction(() => { picked.set(null); words.set(""); });
   return true;
+}
+
+// Lines of a diff quoted for the chat, with their step, file and line numbers, as the steps rule tells a session to read
+// them (prompts.ts): "Step 2.1, apps/server/src/api.ts:222", then the lines in a diff block.
+function quoted(place: string, path: string, lines: Line[]) {
+  const no = ([kind, old, now]: Line) => (kind === "-" ? old : now);
+  const [from, to] = [no(lines[0]), no(lines[lines.length - 1])];
+  return `Step ${place}, ${path}:${from === to ? from : `${from}-${to}`}\n\`\`\`diff\n${lines.map((l) => l[0] + l[3]).join("\n")}\n\`\`\`\n`;
 }
 
 const rowAt = (target: EventTarget) => (target as Element).closest<HTMLTableRowElement>("tr[data-i]");
@@ -162,10 +174,13 @@ const FileCard = observer(function FileCard({ f, place }: { f: FileDiff; place: 
           <table className="diff" onMouseDown={(e) => pickDown(e, f.path)} onMouseOver={(e) => pickOver(e, f.path)}>
             <colgroup><col className="diff-no-col" /><col /></colgroup>
             <tbody>
-              {f.hunks.map((h, n) => (
-                <Hunk key={n} n={n} header={h.header} lines={h.lines}
-                  lit={mine?.hunk === n ? [Math.min(mine.from, mine.to), Math.max(mine.from, mine.to)] : null} />
-              ))}
+              {f.hunks.map((h, n) => {
+                const lit: [number, number] | null = mine?.hunk === n ? [Math.min(mine.from, mine.to), Math.max(mine.from, mine.to)] : null;
+                return (
+                  <Hunk key={n} n={n} header={h.header} lines={h.lines} lit={lit}
+                    box={lit && !mine!.drag ? <CommentBox quote={quoted(place, f.path, h.lines.slice(lit[0], lit[1] + 1))} /> : null} />
+                );
+              })}
             </tbody>
           </table>
         ))}
@@ -174,17 +189,58 @@ const FileCard = observer(function FileCard({ f, place }: { f: FileDiff; place: 
   );
 });
 
-function Hunk({ n: hunk, header, lines, lit }: { n: number; header: string; lines: Line[]; lit: [number, number] | null }) {
+// A hunk's lines, the picked ones lit, and the box under the last of them once the mouse lets go.
+function Hunk({ n: hunk, header, lines, lit, box }: { n: number; header: string; lines: Line[]; lit: [number, number] | null; box: React.ReactNode }) {
   return (
     <>
       <tr className="diff-hunk"><td colSpan={2}>{header || " "}</td></tr>
       {lines.map(([kind, old, now, text], i) => (
-        <tr key={i} className={`${kind === "+" ? "diff-add" : kind === "-" ? "diff-del" : ""}${lit && i >= lit[0] && i <= lit[1] ? " picked" : ""}`.trim() || undefined}
-          data-no={kind === "-" ? old! : now!} data-kind={kind} data-hunk={hunk} data-i={i}>
-          <td className="diff-no">{kind === "-" ? old : now}</td>
-          <td className="diff-code">{text || " "}</td>
-        </tr>
+        <Fragment key={i}>
+          <tr className={`${kind === "+" ? "diff-add" : kind === "-" ? "diff-del" : ""}${lit && i >= lit[0] && i <= lit[1] ? " picked" : ""}`.trim() || undefined}
+            data-no={kind === "-" ? old! : now!} data-kind={kind} data-hunk={hunk} data-i={i}>
+            <td className="diff-no">{kind === "-" ? old : now}</td>
+            <td className="diff-code">{text || " "}</td>
+          </tr>
+          {i === lit?.[1] && box}
+        </Fragment>
       ))}
     </>
   );
 }
+
+// The box under the picked lines: desk's own reply box, where GitHub opens its comment box (the user's pick of three
+// mockups, 28 Oct). Its send puts the lines, quoted, and the words under them into the chat in the middle, to the
+// issue's session, as any message: "whatever i comment in the code, i'll get a reply in the same chat" (28 Oct).
+const CommentBox = observer(function CommentBox({ quote }: { quote: string }) {
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => box.current?.focus({ preventScroll: true }), []);
+  const text = words.get();
+  async function send() {
+    if (!text.trim() || !dock.session) return;
+    if (!(await live(dock.session).send(quote + text.trim(), []))) return;
+    dropPick();
+    toast("Sent to the chat");
+  }
+  return (
+    <tr className="diff-comment">
+      <td colSpan={2}>
+        <div className="composer diff-comment-box">
+          <div className="composer-text">
+            <textarea ref={box} rows={1} spellCheck={false} placeholder="Leave a comment…" value={text}
+              onChange={(e) => runInAction(() => words.set(e.target.value))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); }
+                else if (e.key === "Escape") { e.stopPropagation(); dropPick(); } // before Frame's Esc, which only leaves the box
+              }} />
+          </div>
+          <div className="composer-foot">
+            <span className="spacer" />
+            <button className="send" type="button" title="Send  Enter" disabled={!text.trim()} onClick={() => void send()}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" /></svg>
+            </button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+});

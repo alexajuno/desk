@@ -214,6 +214,10 @@ table.diff tr[data-i]:hover > .diff-no::after { content: "+"; position: absolute
 /* the picked lines: the accent over their own tint, their number bright and their edge the accent */
 table.diff tr.picked > td { background-image: linear-gradient(var(--diff-pick-bg), var(--diff-pick-bg)); }
 table.diff tr.picked > .diff-no { color: var(--text-1); border-left-color: var(--accent); }
+/* the box under the picked lines: the chat's reply box, lined up with the code */
+table.diff tr.diff-comment > td { padding: 8px 12px 10px 48px; }
+.composer.diff-comment-box { width: auto; margin: 0; }
+.composer.diff-comment-box textarea { min-height: 40px; font: 450 13px/20px var(--font); }
 .changes-hint { margin: 0 0 4px; font-size: 12px; color: var(--text-3); }
 .diff-no { width: 48px; padding-right: 16px !important; box-sizing: border-box; text-align: right; color: var(--diff-line-no); user-select: none;
            border-left: 1px solid transparent; }
