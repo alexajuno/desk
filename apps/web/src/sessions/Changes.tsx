@@ -36,9 +36,6 @@ export function showChanges(slug: string, place: string) {
   if (dock.sheetShown) toggleIssue();
 }
 
-// Lines quoted from a diff for the reply box of the chat in the middle (Dock.tsx, Composer), which takes them in.
-export const quote = observable.box<{ session: string; text: string } | null>(null, { deep: false });
-
 // Lines picked in a step's diff to comment on, as GitHub's + picks them: a click on a line's number picks the line, and
 // a drag along the numbers or a shift-click picks a range, inside the hunk it started in ("line selection effect similar
 // to github's", the user, 28 Oct). from is where the pick started and to where it ends, either way round; drag holds
@@ -83,31 +80,17 @@ function pickOver(e: React.MouseEvent, path: string) {
   if (+row.dataset.i! !== p.to) runInAction(() => picked.set({ ...p, to: +row.dataset.i! }));
 }
 
-// C on a line of a diff, or on lines selected in one, quotes them into the chat's reply box, with their step, file and
-// line numbers, for you to write under: "whatever i comment in the code, i'll get a reply in the same chat" (the user,
-// 28 Oct). Anywhere else C files a new issue (Frame.tsx).
-export function quoteLines(): boolean {
-  const rowOf = (n: Node | null | undefined) =>
-    (n instanceof Element ? n : n?.parentElement)?.closest<HTMLTableRowElement>(".changes table.diff tr[data-no]") ?? null;
-  const sel = getSelection();
-  let first = sel && !sel.isCollapsed ? rowOf(sel.anchorNode) : null, last = sel && first ? rowOf(sel.focusNode) : null;
-  if (!first || !last || first.parentElement !== last.parentElement)
-    first = last = document.querySelector<HTMLTableRowElement>(".changes table.diff tr[data-no]:hover");
-  // C over Changes but off its lines says what it wants rather than filing a new issue.
-  if (!first || !last) return Boolean(document.querySelector(".changes:hover") && (toast("Point at a line, or select lines, to quote them"), true));
-  if (!dock.session) return false;
-  if (first.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_PRECEDING) [first, last] = [last, first];
-  const rows: HTMLTableRowElement[] = [];
-  for (let r: Element | null = first; r; r = r.nextElementSibling) {
-    if (r.matches("tr[data-no]")) rows.push(r as HTMLTableRowElement);
-    if (r === last) break;
-  }
-  const path = first.closest<HTMLElement>("[data-path]")!.dataset.path!, place = first.closest<HTMLElement>("[data-place]")!.dataset.place!;
-  const [from, to] = [rows[0].dataset.no, rows[rows.length - 1].dataset.no];
-  const lines = rows.map((r) => `${r.dataset.kind}${r.querySelector(".diff-code")!.textContent!.replace(/^ $/, "")}`);
-  const text = `Step ${place}, ${path}:${from === to ? from : `${from}-${to}`}\n\`\`\`diff\n${lines.join("\n")}\n\`\`\`\n`;
-  runInAction(() => quote.set({ session: dock.session!, text }));
-  sel?.removeAllRanges();
+// C on a line of a diff picks it and opens the box under it, as a click on its number does; on a line already picked it
+// goes back into the box. Over Changes but off its lines it says how, rather than filing a new issue, which C does
+// elsewhere (Frame.tsx). Selecting the code's text only copies it.
+export function commentKey(): boolean {
+  const row = document.querySelector<HTMLTableRowElement>(".changes table.diff tr[data-i]:hover");
+  if (!row) return Boolean(document.querySelector(".changes:hover") && (toast("Point at a line to comment on it, or click its number"), true));
+  const place = row.closest<HTMLElement>("[data-place]")!.dataset.place!, path = row.closest<HTMLElement>("[data-path]")!.dataset.path!;
+  const hunk = +row.dataset.hunk!, i = +row.dataset.i!, p = picked.get();
+  const inside = p && p.place === place && p.path === path && p.hunk === hunk && i >= Math.min(p.from, p.to) && i <= Math.max(p.from, p.to);
+  if (!inside) runInAction(() => picked.set({ place, path, hunk, from: i, to: i, drag: false }));
+  requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".diff-comment textarea")?.focus({ preventScroll: true }));
   return true;
 }
 
@@ -121,7 +104,7 @@ export const Changes = observer(function Changes({ steps }: { steps: StepDiff[] 
   const last = steps[steps.length - 1].place;
   return (
     <div className="changes">
-      <p className="changes-hint"><kbd>C</kbd> on a line, or on lines you select, quotes them into the reply box below.</p>
+      <p className="changes-hint">Click a line’s number to comment on it, or drag along the numbers for a range; <kbd>C</kbd> picks the line you point at.</p>
       {steps.map((s) => <StepCard key={s.place} s={s} open={s.place === last} />)}
     </div>
   );

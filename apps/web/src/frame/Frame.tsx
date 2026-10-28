@@ -22,7 +22,7 @@ import { MenuHost, menus } from "../ui/menu";
 import { datePicker } from "../ui/datepicker";
 import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openNearest, openPicture, stepViewer, viewerOpen } from "../ui/viewer";
-import { dropPick, quoteLines } from "../sessions/Changes";
+import { commentKey, dropPick } from "../sessions/Changes";
 import { arrange, Dock, focusComposer, newSession, openSession, toggleIssue } from "../sessions/Dock";
 import { dock } from "../store/dock";
 import { Catcher, catchKeys } from "../search/catcher";
@@ -209,8 +209,8 @@ function onKeyDown(e: KeyboardEvent) {
   }
   // Enter in a chat opened to read goes into its composer, as I does: the Inbox's Enter Enter types.
   else if (e.key === "Enter" && !e.shiftKey && focusComposer()) e.preventDefault(); // so the Enter is not typed in
-  // C on a line of a chat's Changes quotes it into the chat's reply box (Changes.tsx).
-  else if (key === "c" && !e.shiftKey && quoteLines()) e.preventDefault();
+  // C on a line of a chat's Changes picks it and opens the box under it, to comment on it in the chat (Changes.tsx).
+  else if (key === "c" && !e.shiftKey && commentKey()) e.preventDefault();
   // C files a new issue, in the team whose pages these are, as Linear's C does in a team's views.
   else if (key === "c") {
     const team = /^\/team\/([\w-]+)/.exec(location.pathname)?.[1];
