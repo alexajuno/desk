@@ -2,8 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- On a phone, the keyboard shrinks the page, so a chat's composer stays above it. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- The font starts loading with the page, not once the first text is laid out: the splash waits for it. -->
     <link rel="preload" href="/fonts/InterVariable.ttf" as="font" type="font/ttf" crossorigin />
@@ -20,6 +19,10 @@
         : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
       if (localStorage.readMode) document.documentElement.classList.add("read-mode");
       if (localStorage.sideCollapsed) document.documentElement.classList.add("side-collapsed");
+      // On a phone, the keyboard is drawn over the page, which learns its height from Chrome (the VirtualKeyboard API,
+      // as env(keyboard-inset-height) in phone.css): a chat sits on it, and the tabs under it come back as it closes,
+      // focused box or not (28 Oct). Shrinking the page for it told the page nothing of the keyboard.
+      if ("virtualKeyboard" in navigator) navigator.virtualKeyboard.overlaysContent = true;
     </script>
   </head>
   <body>

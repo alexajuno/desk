@@ -3,6 +3,9 @@
    corner keeps only the pill of a chat you left. Linear's phone app is native, so nothing here is measured on
    linear.app: it follows desk's heights and colours. */
 :root { --tabs-h: calc(56px + env(safe-area-inset-bottom)); }
+/* What the page keeps clear at the screen's bottom: the tabs, or the keyboard drawn over them while it is up, whose
+   height Chrome passes on (index.html turns that on). */
+:root { --floor: max(var(--tabs-h), env(keyboard-inset-height, 0px)); }
 .tabs { display: none; }
 
 @media (max-width: 640px) {
@@ -13,7 +16,7 @@
   .head-step-title { display: none; }
   .field-chip.head-step { margin-left: 0; padding: 0 6px 0 5px; }
   .panel, .side-collapsed .panel, .chat-center .panel, .dock, .side-collapsed .dock {
-    top: 0; left: 0; right: 0; bottom: var(--tabs-h); width: auto; border: 0; border-radius: 0; box-shadow: none;
+    top: 0; left: 0; right: 0; bottom: var(--floor); width: auto; border: 0; border-radius: 0; box-shadow: none;
   }
 
   /* An issue's sheet over its chat (dock.css) fills the screen above the tabs, as the page does, and comes up as it does
@@ -35,20 +38,15 @@
   .tabs .count { position: absolute; top: 5px; left: calc(50% + 6px); box-sizing: border-box; min-width: 16px; height: 16px; padding: 0 4px;
                  border-radius: 9999px; background: var(--accent); font: 500 10px/16px var(--font); color: var(--on-accent); }
 
-  /* Typing in a chat or a menu's filter, the keyboard takes the tabs' place (index.html's viewport resizes the page
-     for it, and the menu places itself again). */
-  html:has(.dock textarea:focus, .menu input:focus) .tabs { display: none; }
-  html:has(.dock textarea:focus, .menu input:focus) :is(.dock, .panel) { bottom: 0; }
-
   /* A menu's rows are tall enough for a finger. */
   .menu:not(.command) li:not(.heading, .divider) { height: 40px; }
 
-  .corner { left: 8px; right: 8px; bottom: calc(var(--tabs-h) + 8px); justify-content: center; pointer-events: none; }
+  .corner { left: 8px; right: 8px; bottom: calc(var(--floor) + 8px); justify-content: center; pointer-events: none; }
   .corner > * { pointer-events: auto; }
   .corner-new, .dock-history { display: none; }
   .dock-pill { max-width: 100%; box-shadow: var(--shadow-pop); }
   .corner .dock-pill .dock-pill-x { opacity: 1; } /* no mouse to show it */
-  .toast { left: 8px; right: 8px; bottom: calc(var(--tabs-h) + 8px); }
+  .toast { left: 8px; right: 8px; bottom: calc(var(--floor) + 8px); }
 
   .composer { width: calc(100% - 16px); margin-bottom: 8px; }
   /* A new chat's folder shows its end, where folders differ, as "…/projects/desk"; its effort makes room for it. */
