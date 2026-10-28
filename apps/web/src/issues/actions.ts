@@ -12,9 +12,22 @@ export async function setField(slug: string, field: Settable, value: string, bas
   if (field === "state" || field === "priority" || field === "protocol") ui.paint(slug, field, value);
   const res = await post(`/issue/${slug}/set`, { field, value, ...(base === undefined ? {} : { base }) });
   if (!res.ok) toast(await reason(res));
-  else autoClosed(await res.json());
+  else {
+    const answer = await res.json();
+    autoClosed(answer);
+    if (answer.moved?.[slug]) follow(slug, answer.moved[slug]);
+  }
   await reloadPages();
   ui.unpaint(slug);
+}
+
+// A new title gave the issue a new slug, and the old one leads nowhere: the page that shows it, as its own page or
+// opened beside a list (?i=), moves to the new one.
+function follow(from: string, to: string) {
+  const url = new URL(location.href);
+  url.pathname = url.pathname.replace(new RegExp(`^/issue/${from}$`), `/issue/${to}`);
+  if (url.searchParams.get("i") === from) url.searchParams.set("i", to);
+  if (url.href !== location.href) go(url.pathname + url.search + url.hash, { replace: true });
 }
 
 // The same field on every issue of a list's selection, saved whole or not at all.

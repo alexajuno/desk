@@ -14,6 +14,7 @@ import { ISSUES_DIR, TRASH_DIR } from "./config.ts";
 import * as db from "./db.ts";
 import { sql, type Db } from "./db.ts";
 import { asText, dump, split } from "./frontmatter.ts";
+import * as projects from "./projects.ts";
 import * as settings from "./settings.ts";
 import { slugify } from "./slug.ts";
 
@@ -264,8 +265,8 @@ export async function loadAll(q: Db = sql()): Promise<Map<string, Issue>> {
   return new Map(rows.map((r) => [r.slug, fromRow(r)]));
 }
 
-export async function exists(slug: string): Promise<boolean> {
-  return validSlug(slug) && (await sql().query("select 1 from issues where slug = $1", [slug])).rows.length > 0;
+export async function exists(slug: string, q: Db = sql()): Promise<boolean> {
+  return validSlug(slug) && (await q.query("select 1 from issues where slug = $1", [slug])).rows.length > 0;
 }
 
 export async function load(slug: string, q: Db = sql()): Promise<Issue> {
@@ -338,9 +339,10 @@ async function autoClose(tx: Db, i: Issue, was: string | undefined): Promise<str
 // Write the issue, then close what its new state closes by the automations; returns those slugs. Inside a write, for one
 // that saves more with it (chats.ts, bind).
 export async function saveIn(tx: Db, i: Issue): Promise<string[]> {
-  const was = (await tx.query<{ state: string }>("select state from issues where slug = $1", [i.slug])).rows[0]?.state;
+  const had = (await tx.query<{ state: string; title: string }>("select state, title from issues where slug = $1", [i.slug])).rows[0];
+  if (had && had.title !== i.title) await follow(tx, i);
   await put(tx, i);
-  return autoClose(tx, i, was);
+  return autoClose(tx, i, had?.state);
 }
 
 // Save the issue, and what the Workflow automations close with it, as one write; returns the slugs they closed.
@@ -406,13 +408,43 @@ export function result(i: Issue): string {
   }
 }
 
-export async function newSlug(title: string): Promise<string> {
+export async function newSlug(title: string, q: Db = sql()): Promise<string> {
   const base = slugify(title, "issue");
   let slug = base, n = 2;
   // A trashed slug stays taken, so restoring a deleted issue never collides with a new one.
   const trashed = (s: string) => existsSync(TRASH_DIR) && readdirSync(TRASH_DIR).some((d) => existsSync(join(TRASH_DIR, d, s)));
-  while (existsSync(folder(slug)) || (await exists(slug)) || trashed(slug)) slug = `${base}-${n++}`;
+  while (existsSync(folder(slug)) || (await exists(slug, q)) || trashed(slug)) slug = `${base}-${n++}`;
   return slug;
+}
+
+// What keeps an issue's slug in memory besides its row, told of a new one in the write that gives it: the chats.
+const renamed: ((tx: Db, from: string, to: string) => Promise<void>)[] = [];
+export const onRename = (told: (tx: Db, from: string, to: string) => Promise<void>) => renamed.push(told);
+
+// A new title gives the issue the slug a new issue of that title would get, as Linear's address follows its title:
+// "can't we have a better way to generate slug?" (the user, 28 Oct). No alias keeps the old one: "i'm the only user
+// here. no one is using it. we don't over engineer here right?". So in the write that saves it, all that names the
+// issue follows it: its row, its folder, its sub-issues, its chat, the line, the trash, and the links to it in every
+// issue's and project's document, its own screenshots' among them. The Inbox's rows follow on its next take.
+async function follow(tx: Db, i: Issue) {
+  const from = i.slug, want = slugify(i.title, "issue");
+  if (from === want || new RegExp(`^${escapeRe(want)}-\\d+$`).test(from)) return;
+  const to = await newSlug(i.title, tx);
+  const link = new RegExp(`/issue/${escapeRe(from)}(?![\\w-])`, "g"), relink = (text: string) => text.replace(link, `/issue/${to}`);
+  if (existsSync(folder(from))) renameSync(folder(from), folder(to));
+  await tx.query("delete from issues where slug = $1", [from]);
+  Object.assign(i, { slug: to, body: relink(i.body), link: i.link && relink(i.link) });
+  await tx.query("update issues set parent = $2 where parent = $1", [from, to]);
+  const linking = (table: string) => tx.query<{ slug: string; body: string; link?: string | null }>(
+    `select * from ${table} where body like $1${table === "issues" ? " or link like $1" : ""}`, [`%/issue/${from}%`]);
+  for (const r of (await linking("issues")).rows)
+    await tx.query("update issues set body = $2, link = $3 where slug = $1", [r.slug, relink(r.body), r.link && relink(r.link)]);
+  for (const r of (await linking("projects")).rows) await tx.query("update projects set body = $2 where slug = $1", [r.slug, relink(r.body)]);
+  for (const told of renamed) await told(tx, from, to);
+  for (const table of ["line", "tries", "trying"]) await tx.query(`update ${table} set slug = $2 where slug = $1`, [from, to]);
+  await tx.query("update trashed set row = jsonb_set(row, '{parent}', to_jsonb($2::text)) where row ->> 'parent' = $1", [from, to]);
+  await rewriteIn(tx);
+  await projects.rewriteIn(tx);
 }
 
 // Direct sub-issues of `parent` (top level when null), most urgent first. An issue whose parent is missing counts as

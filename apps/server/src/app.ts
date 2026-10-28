@@ -149,21 +149,22 @@ async function checked(i: store.Issue, name: string, given: string): Promise<str
 }
 
 // Set the field on each issue, all checked before any is saved, so a selection changes whole or not at all. Returns
-// the slugs the Workflow automations closed besides them.
-async function setFields(slugs: string[], name: string, given: string): Promise<string[]> {
+// the slugs the Workflow automations closed besides them, and the new slug of each that a new title gave one.
+async function setFields(slugs: string[], name: string, given: string): Promise<{ closed: string[]; moved?: Record<string, string> }> {
   for (const slug of slugs) {
     await mustExist(slug);
     await checked(await store.load(slug), name, given);
   }
-  const closed = new Set<string>();
+  const closed = new Set<string>(), moved: Record<string, string> = {};
   for (const slug of slugs) {
     const i = await store.load(slug); // as it is now: an earlier one's automations may have closed it
     (i as unknown as Record<string, string | null>)[name] = await checked(i, name, given);
     // An issue with no team takes its project's, as a Linear issue is in one of its project's teams.
     if (name === "project" && i.project && !i.team) i.team = (await projects.load(i.project)).team;
     for (const other of await store.save(i)) closed.add(other);
+    if (i.slug !== slug) moved[slug] = i.slug;
   }
-  return [...closed].filter((s) => !slugs.includes(s));
+  return { closed: [...closed].filter((s) => !slugs.includes(s)), ...(Object.keys(moved).length ? { moved } : {}) };
 }
 
 // --- Works in: your repos, and path completion ---------------------------------------------------------------------
@@ -470,7 +471,7 @@ export async function create(): Promise<FastifyInstance> {
       await mustExist(req.params.slug);
       value = store.merged((await store.load(req.params.slug)).body, value, base);
     }
-    return { closed: await setFields([req.params.slug], name, value) };
+    return setFields([req.params.slug], name, value);
   });
 
   app.post("/issues/set", async (req) => {
@@ -478,7 +479,7 @@ export async function create(): Promise<FastifyInstance> {
     const slugs = Array.isArray(body.slugs) ? body.slugs.filter((s): s is string => typeof s === "string") : [];
     if (!slugs.length) throw new HttpError(422, "slugs is required");
     if (typeof body.field !== "string") throw new HttpError(422, "field is required");
-    return { closed: await setFields(slugs, body.field, typeof body.value === "string" ? body.value : "") };
+    return setFields(slugs, body.field, typeof body.value === "string" ? body.value : "");
   });
 
   // Moves the issue and its sub-issues to the trash; POST /trash/<slug>/restore undoes it.

@@ -15,7 +15,7 @@ Every call is one line, `curl -s "<url>"`, with the URL in double quotes. A body
 
 An issue's fields:
 
-- `title`
+- `title`: a new one gives the issue a new slug, made from it as a new issue's is, which the reply holds; the old slug stops working, so use the new one from then on
 - `body`: the issue's document, Markdown under `##` headings: `## Context`, what the user asks in a line or two, in their words, quoted and dated, not their whole message (the user reads it at a glance; the talk stays in the chat), then `## Plan` and `## Result`. A body sent to an issue sets the sections it holds, and the others stay
 - `priority`: urgent, high, medium, low or none
 - `state`: triage (a desk chat's own issue, filed in its first reply, until the talk settles it; only desk's agent chat files one), backlog, running (shown as In progress: its session works on it, planning or carrying it out), waiting (someone else's move, such as QA's), review (shown as In review: the user's move, once its session's turn ends on a plan, a question or a result; the user's reply, or Go, moves it back to In progress), landing (approved: its session lands the work; only the user's Approve sets it), done or dropped

@@ -120,6 +120,16 @@ function chatOf(row: Record<string, unknown>): Chat {
 
 // Write the chat, and what more writes with it, as one write. The chat is kept before it commits, so the frame the apps
 // are sent once it does holds it.
+// An issue's new slug, which a new title gave it (issues.ts, follow): its chat follows, in the same write.
+store.onRename(async (tx, from, to) => {
+  const chats = all();
+  for (const chat of [...chats.values()].filter((c) => c.issue === from)) {
+    const copy = { ...structuredClone(chat), issue: to };
+    await put(tx, copy);
+    keep(chats, copy);
+  }
+});
+
 export async function save(chat: Chat, more?: (tx: Db) => Promise<unknown>) {
   const chats = all(), fresh = !chats.has(chat.id);
   chat.updated = now();
