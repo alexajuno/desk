@@ -194,18 +194,24 @@ function applyLands(i: Issue, body: unknown) {
 // A design issue's steps, which its session sends whole each time one changes, and desk draws as a tree with the
 // issues' own status circles: "ai has to gimme the plan, do each step", "i think we need database and new column here
 // rather than text rendering level only" (the user, 27 Oct). null takes them back.
-export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[]; diagram?: string; said?: string };
+// A build step also carries its commit, the one that ends it, from which desk draws the step's diff: "we have diff show
+// while coding, allowing user to catches the problem early" (the user, 28 Oct).
+export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[]; diagram?: string; said?: string; commit?: string };
 const STEP_STATES = ["todo", "running", "done"];
-const STEP_SHAPE = 'plan_steps is a list of {"title": "<a few words>", "state": "todo", "running" or "done", "note": "<optional, a few words>", "kids": [<its own steps, optional>]}, or null';
+const SHA = /^[0-9a-f]{4,40}$/i;
+const STEP_SHAPE = 'plan_steps is a list of {"title": "<a few words>", "state": "todo", "running" or "done", "note": "<optional, a few words>", "commit": "<optional: for a build step, the commit that ends it>", "kids": [<its own steps, optional>]}, or null';
 
 function planSteps(list: unknown, depth = 0): PlanStep[] {
   if (!Array.isArray(list) || depth > 3) throw new HttpError(422, STEP_SHAPE);
   return list.map((s) => {
-    const { title, state, note, kids } = (s ?? {}) as Record<string, unknown>;
+    const { title, state, note, kids, commit } = (s ?? {}) as Record<string, unknown>;
     if (typeof title !== "string" || !title.trim() || typeof state !== "string" || !STEP_STATES.includes(state) ||
       (note !== undefined && note !== null && typeof note !== "string")) throw new HttpError(422, STEP_SHAPE);
+    if (commit !== undefined && commit !== null && (typeof commit !== "string" || !SHA.test(commit.trim())))
+      throw new HttpError(422, `${JSON.stringify(commit)} is no commit: send its hash, as "commit": "e6beaae".`);
     const step: PlanStep = { title: title.trim(), state: state as PlanStep["state"] };
     if (typeof note === "string" && note.trim()) step.note = note.trim();
+    if (typeof commit === "string") step.commit = commit.trim();
     if (kids !== undefined && kids !== null) {
       const inner = planSteps(kids, depth + 1);
       if (inner.length) step.kids = inner;
@@ -215,29 +221,45 @@ function planSteps(list: unknown, depth = 0): PlanStep[] {
 }
 
 // The list comes whole with each tick, its diagrams and decisions not in it (PUT /steps/<place> sends those), so each
-// step keeps its own by its title: ticking a step never loses what it drew.
-function applyPlanSteps(i: Issue, body: unknown) {
+// step keeps its own by its title: ticking a step never loses what it drew, nor the commit it was sent once with.
+async function applyPlanSteps(i: Issue, body: unknown) {
   if (!body || typeof body !== "object" || !("plan_steps" in body)) return;
   const list = (body as { plan_steps: unknown }).plan_steps;
   if (list === null) return void (i.plan_steps = null);
   const kept = new Map<string, PlanStep>();
-  const keep = (steps: PlanStep[]) => steps.forEach((s) => { if (s.diagram || s.said) kept.set(s.title, s); keep(s.kids ?? []); });
+  const keep = (steps: PlanStep[]) => steps.forEach((s) => { if (s.diagram || s.said || s.commit) kept.set(s.title, s); keep(s.kids ?? []); });
   keep(i.plan_steps ? JSON.parse(i.plan_steps) : []);
   const carry = (steps: PlanStep[]) => steps.forEach((s) => {
     const was = kept.get(s.title);
     if (was?.diagram) s.diagram = was.diagram;
     if (was?.said) s.said = was.said;
+    if (was?.commit && !s.commit) s.commit = was.commit;
     carry(s.kids ?? []);
   });
   const steps = planSteps(list);
   carry(steps);
+  await fullCommits(i, steps);
   i.plan_steps = JSON.stringify(steps);
+}
+
+// Each step's commit as its whole hash, looked up in the issue's folder, so that a short one stays one commit as the repo
+// grows; one the folder's repo lacks is refused, with what to fix.
+async function fullCommits(i: Issue, steps: PlanStep[]) {
+  for (const s of steps) {
+    if (s.commit && s.commit.length < 40) {
+      const full = await agents.git(agents.workdir(i), "rev-parse", "--verify", "--quiet", `${s.commit}^{commit}`);
+      if (!full) throw new HttpError(422, `Step "${s.title}": ${s.commit} is no commit in ${i.folder ?? "the issue's folder"}. Commit the step's work first, then send its hash.`);
+      s.commit = full;
+    }
+    await fullCommits(i, s.kids ?? []);
+  }
 }
 
 // The steps as an issue's JSON gives them, each one a session drew marked "drawn" rather than carrying its diagram and
 // decisions, which would fill every list of issues: GET /steps/<place> reads them.
 function briefSteps(steps: PlanStep[]): unknown[] {
-  return steps.map(({ diagram, said, kids, ...step }) => ({ ...step, ...(diagram || said ? { drawn: true } : {}), ...(kids ? { kids: briefSteps(kids) } : {}) }));
+  return steps.map(({ diagram, said, kids, commit, ...step }) => ({ ...step, ...(commit ? { commit: commit.slice(0, 7) } : {}),
+    ...(diagram || said ? { drawn: true } : {}), ...(kids ? { kids: briefSteps(kids) } : {}) }));
 }
 
 // A step by its place, as 1.2 names Design's second: its number among its siblings, from 1, down from the top.
@@ -420,7 +442,7 @@ export function routes(app: FastifyInstance) {
     const i = await loadIssue(req.params.slug);
     await apply(i, given(req.body, FIELDS));
     applyLands(i, req.body);
-    applyPlanSteps(i, req.body);
+    await applyPlanSteps(i, req.body);
     const closed = await store.save(i);
     return { ...asJson(i, true), ...(closed.length ? { closed } : {}) };
   });
