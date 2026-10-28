@@ -66,7 +66,7 @@ export function actionsMenu(issue: ActionTarget, where: Where, here: string | nu
       if (to !== (issue.parent || "")) setField(issue.slug, "parent", to);
     }) },
     { group: 0, icon: GLYPH.plus, label: "Add sub-issue", run: () => ui.openCreator({ parent: issue.slug, parentTitle: issue.title }) },
-    // An issue's session, docked beside the page.
+    // An issue's session: its chat, in the middle.
     ...(issue.session ? [
       { group: 1, icon: GLYPH.chat, label: "Open chat", hint: "I", key: "i", run: () => openSession(issue.session!, issue.slug) },
     ] : []),

@@ -83,7 +83,7 @@
 @keyframes dock-rise-in { from { opacity: 0; transform: translateY(12px) scale(0.99); } }
 
 
-/* The issue beside its chat is narrow: its properties go under its title as chips, as in the Inbox. */
+/* An issue in a narrow page or sheet: its properties go under its title as chips, as in the Inbox. */
 @container (max-width: 819px) {
   .issue { grid-template-columns: minmax(0, 1fr); }
   .issue .props { display: none; }

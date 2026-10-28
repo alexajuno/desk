@@ -147,7 +147,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   const page = chatPage.get();
   const changes = m?.issue && page?.issue.slug === m.issue.slug && anyCommit(page.plan_steps) ? m.issue.slug : null;
   const shown = changes ? view : "chat";
-  // A click on a step's counts beside the chat turns it to Changes, where that step's card opens (Changes.tsx).
+  // A click on a step's counts in the sheet over the chat turns it to Changes, where that step's card opens (Changes.tsx).
   const asked = wanted.get();
   useEffect(() => {
     if (asked && asked.slug === changes) setView("changes");
@@ -436,12 +436,12 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
 
 // The card a session sent, where it sent it: the latest drawn, its text folded under Details; an earlier one a line. The
 // plan is always a line, never drawn: while a step runs the chat shows that step's diagram only, and the whole plan is
-// a click away in the side ("never go go all or anything. we had all diagrams on sidebar", the user, 27 Oct). Go and
+// a ] away in the sheet over the chat ("never go go all or anything. we had all diagrams on sidebar", the user, 27 Oct). Go and
 // Approve are typed in the composer, with no bar of buttons over it: "just let me type the message directly, it takes
 // no longer time" (the user, 28 Oct).
 const Sent = observer(function Sent({ at, page, section, latest }: { at: string; page: IssuePageData | null; section: Section; latest: boolean }) {
   const parts = !page || section === "Plan" ? null : page.card ?? (page.result ? [page.result_html, ""] : null);
-  const name = section === "Plan" ? "Plan" : "Card"; // as the bar and the side say it
+  const name = section === "Plan" ? "Plan" : "Card"; // as the sheet's Artifacts say it
   if (!latest || !page || !parts) {
     return <p className="sent-line" data-at={at}>{GLYPH.file}<span>{name}</span><span className="sent-when">{latest ? "sent" : "an earlier version, sent"}</span></p>;
   }
