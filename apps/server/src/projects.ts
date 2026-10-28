@@ -12,6 +12,7 @@ import * as db from "./db.ts";
 import { sql, type Db } from "./db.ts";
 import { asText, dump, split } from "./frontmatter.ts";
 import { byRank, listingOrder, loadAll as loadIssues, now, saveIn as saveIssue, type Issue } from "./issues.ts";
+import { slugify } from "./slug.ts";
 
 export const MAIN = "project.md";
 // Linear's project statuses, by their category in its API (ProjectStatusType), in the order its menu lists them; the
@@ -104,7 +105,7 @@ export async function saveIn(tx: Db, p: Project) {
 export const save = (p: Project): Promise<void> => db.write((tx) => saveIn(tx, p));
 
 export async function newSlug(title: string): Promise<string> {
-  const base = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "project";
+  const base = slugify(title, "project");
   let slug = base, n = 2;
   while (existsSync(folder(slug)) || (await exists(slug))) slug = `${base}-${n++}`;
   return slug;
@@ -164,7 +165,7 @@ async function putMilestone(tx: Db, m: Milestone) {
 // A new milestone, last in the project's order.
 export function addMilestone(project: string, title: string, target: string | null, body = ""): Promise<Milestone> {
   return db.write(async (tx) => {
-    const base = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "milestone";
+    const base = slugify(title, "milestone", 40);
     let id = base, n = 2;
     while ((await tx.query("select 1 from milestones where id = $1", [id])).rows.length) id = `${base}-${n++}`;
     const last = (await tx.query<{ sort: number | null }>("select max(sort) as sort from milestones where project = $1", [project])).rows[0].sort;

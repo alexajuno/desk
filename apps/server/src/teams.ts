@@ -13,6 +13,7 @@ import { asText, dump, split } from "./frontmatter.ts";
 import * as issues from "./issues.ts";
 import { byRank, listingOrder, now, type Issue } from "./issues.ts";
 import * as projects from "./projects.ts";
+import { slugify } from "./slug.ts";
 
 export const MAIN = "team.md";
 export const STATES = ["active", "archived"];
@@ -128,7 +129,7 @@ export function rename(from: string, to: string): Promise<Team> {
 }
 
 export function newSlug(title: string): string {
-  const base = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "team";
+  const base = slugify(title, "team");
   let slug = base, n = 2;
   while (existsSync(folder(slug))) slug = `${base}-${n++}`;
   return slug;

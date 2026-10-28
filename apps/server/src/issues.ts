@@ -15,6 +15,7 @@ import * as db from "./db.ts";
 import { sql, type Db } from "./db.ts";
 import { asText, dump, split } from "./frontmatter.ts";
 import * as settings from "./settings.ts";
+import { slugify } from "./slug.ts";
 
 export const MAIN = "issue.md";
 // Where a session kept its plan and its result until 19 Oct, beside issue.md: an older issue still shows them.
@@ -406,7 +407,7 @@ export function result(i: Issue): string {
 }
 
 export async function newSlug(title: string): Promise<string> {
-  const base = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "issue";
+  const base = slugify(title, "issue");
   let slug = base, n = 2;
   // A trashed slug stays taken, so restoring a deleted issue never collides with a new one.
   const trashed = (s: string) => existsSync(TRASH_DIR) && readdirSync(TRASH_DIR).some((d) => existsSync(join(TRASH_DIR, d, s)));

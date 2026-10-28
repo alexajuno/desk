@@ -28,6 +28,7 @@ import { asText, dump, split } from "./frontmatter.ts";
 import { now } from "./issues.ts";
 import { run, Timeout } from "./proc.ts";
 import * as roster from "./roster.ts";
+import { slugify } from "./slug.ts";
 import { parseLocal } from "./when.ts";
 
 export const STATES = ["active", "paused"];
@@ -92,7 +93,7 @@ export async function remove(slug: string) {
 }
 
 export function newSlug(title: string): string {
-  const base = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "automation";
+  const base = slugify(title, "automation");
   let slug = base, n = 2;
   while (existsSync(file(slug))) slug = `${base}-${n++}`;
   return slug;
