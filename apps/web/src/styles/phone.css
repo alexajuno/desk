@@ -6,8 +6,9 @@
 .tabs { display: none; }
 
 @media (max-width: 640px) {
-  /* a chat's head keeps room for its title: a chat with no issue leaves its folder out (Dock.tsx, ChatHead) */
-  .dock-head .dock-folder { display: none; }
+  /* a chat's head keeps room for its title: a chat with no issue leaves its folder out, and Changes its counts
+     (Dock.tsx, ChatHead and ViewTabs) */
+  .dock-head .dock-folder, .dock-tabs .diff-counts { display: none; }
   /* and the step the work stands at as its circle and its place alone, "3 of 4" (Dock.tsx, HeadStep) */
   .head-step-title { display: none; }
   .field-chip.head-step { margin-left: 0; padding: 0 6px 0 5px; }
