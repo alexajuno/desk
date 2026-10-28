@@ -1,19 +1,17 @@
 // Where a session's chat stands (the plan of "Chat in the center, the issue on the side"): whatever you work on takes
-// the middle of the screen. An issue with a chat opens as that chat, alone in the middle; ] or the issue's title in the
-// chat's head brings its issue over it as a sheet, on Plan (its steps, each one's diagram and decisions) or on Issue
-// (its page), and Esc puts it away with the chat where it was ("plan and issue stuff should be showned in the central
-// of the screen with certain shortcut", the user, 28 Oct: the plan of "Drop the right sidebar"). Any other page takes
-// the middle, and the chat you left waits as a pill at the bottom right.
+// the middle of the screen. An issue with a chat opens as that chat, alone in the middle, on Chat; the tabs in its
+// head, or Tab and ], show its issue's Plan (its steps, each one's diagram and decisions), Issue (its page) or Changes
+// in the chat's place, the reply box staying under each ("all could be on a single screen. just that we need a way to
+// switching between those views", the user, 28 Oct: the plan of "Chat, plan and issue on one screen", which took the
+// sheet over the chat away). Any other page takes the middle, and the chat you left waits as a pill at the bottom right.
 //
-//   issue page, no chat ── Plan · Start · O ──▶ chat ── ] ──▶ chat under its sheet ── Esc ──▶ chat
+//   issue page, no chat ── Plan · Start · O ──▶ chat ◀── Tab · ] · Esc ──▶ Plan · Issue · Changes
 //
-// The chat you left is remembered in this browser; the sheet is not, since it is a look and back.
+// The chat you left is remembered in this browser; its view is not, and each chat comes on Chat.
 import { action, computed, makeObservable, observable } from "mobx";
 
-export type Layout = "page" | "chat" | "both";
-export type SheetTab = "plan" | "issue";
-// What the chat in the middle shows under its head: the chat, or its issue's plan, page or changes ("all could be on a
-// single screen. just that we need a way to switching between those views", the user, 28 Oct).
+export type Layout = "page" | "chat";
+// What the chat in the middle shows under its head: the chat, or its issue's plan, page or changes.
 export type View = "chat" | "plan" | "issue" | "changes";
 
 const saved = (() => {
@@ -27,18 +25,14 @@ const saved = (() => {
 class Dock {
   session: string | null = saved.session ?? null; // the chat in the middle, or the one you left
   center = false; // a chat holds the middle now
-  issue = false; // its issue is the page under it (an /issue/ page, not /sessions/<id>)
-  sheet = false; // the issue over its chat
-  tab: SheetTab = "plan"; // what the sheet shows
   pick: string | null = null; // the step its Plan opens on, by its place, or null for the one being worked on
   view: View = "chat"; // what the chat in the middle shows; each chat comes on Chat
   pill = saved.pill ?? false; // the chat you left, at the bottom right
 
   constructor() {
     makeObservable(this, {
-      session: observable, center: observable, issue: observable, sheet: observable, tab: observable, pick: observable, view: observable,
-      pill: observable, sheetShown: computed, layout: computed, arrange: action, toggleSheet: action, setTab: action, setView: action,
-      dismiss: action,
+      session: observable, center: observable, pick: observable, view: observable, pill: observable,
+      layout: computed, arrange: action, setView: action, dismiss: action,
     });
   }
 
@@ -46,44 +40,24 @@ class Dock {
     localStorage.dock = JSON.stringify({ session: this.session, pill: this.pill });
   }
 
-  get sheetShown() {
-    return this.center && this.issue && this.sheet;
-  }
-
   get layout(): Layout {
-    return !this.center ? "page" : this.sheetShown ? "both" : "chat";
+    return this.center ? "chat" : "page";
   }
 
-  // What the page now on screen asks for: its chat in the middle, or none. `issue` says whether the page is that
-  // chat's issue, which its sheet then shows. Any move away puts the sheet away.
-  arrange(session: string | null, issue: boolean) {
-    if (this.layoutAfter(session, issue) !== "both") { this.sheet = false; this.tab = "plan"; }
+  // What the page now on screen asks for: its chat in the middle, or none. A chat that comes to the middle comes on Chat.
+  arrange(session: string | null) {
     if (!session || !this.center || session !== this.session) this.view = "chat";
     if (session) {
       this.session = session;
       this.pill = true;
     }
     this.center = Boolean(session);
-    this.issue = Boolean(session) && issue;
     this.save();
   }
 
   // The layout arrange would give, so that only a change of layout gets its move (Dock.tsx, move).
-  layoutAfter(session: string | null, issue: boolean): Layout {
-    if (!session) return "page";
-    return issue && this.sheetShown && session === this.session ? "both" : "chat";
-  }
-
-  // ] or the title: the sheet over the chat, or away; with a tab, the sheet open on it, and on Plan, a step to open on.
-  toggleSheet(tab?: SheetTab, pick: string | null = null) {
-    if (!this.center || !this.issue) return;
-    if (tab && this.sheet && this.tab !== tab) { this.tab = tab; return; }
-    this.sheet = !this.sheet;
-    if (this.sheet) { this.tab = tab ?? "plan"; this.pick = pick; }
-  }
-
-  setTab(tab: SheetTab) {
-    this.tab = tab;
+  layoutAfter(session: string | null): Layout {
+    return session ? "chat" : "page";
   }
 
   // The chat in the middle on a view, and on Plan, a step to open on.

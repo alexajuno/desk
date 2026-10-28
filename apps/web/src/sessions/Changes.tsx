@@ -11,7 +11,6 @@ import type { PlanStep } from "../issues/Steps";
 import { dock } from "../store/dock";
 import { StateIcon, TRIANGLE } from "../ui/icons";
 import { toast } from "../ui/toast";
-import { toggleIssue } from "./Dock";
 import { live } from "./live";
 
 type Line = [kind: " " | "+" | "-", old: number | null, now: number | null, text: string];
@@ -27,13 +26,11 @@ export const useChanges = (slug: string) => usePage<{ steps: StepDiff[] }>(`/api
 export const anyCommit = (steps: (PlanStep & { commit?: string })[] | null | undefined): boolean =>
   Boolean(steps?.some((s) => s.commit || anyCommit(s.kids)));
 
-// A step to show in its chat's Changes, asked for by a click on its counts in the steps over the chat (Steps.tsx): the
-// chat turns to Changes, and that step's card opens and comes into view.
+// A step to show in its chat's Changes, asked for by a click on its counts in its Plan (Steps.tsx): the chat turns to
+// Changes, and that step's card opens and comes into view.
 export const wanted = observable.box<{ slug: string; place: string } | null>(null, { deep: false });
-// The sheet the steps are on lies over the chat, so it steps aside for it.
 export function showChanges(slug: string, place: string) {
   runInAction(() => wanted.set({ slug, place }));
-  if (dock.sheetShown) toggleIssue();
 }
 
 // Lines picked in a step's diff to comment on, as GitHub's + picks them: a click on a line's number picks the line, and

@@ -1,8 +1,8 @@
-// The sheet's Plan, over an issue's chat ("plan and issue stuff should be showned in the central of the screen with
-// certain shortcut", the user, 28 Oct): a design issue's steps down the left, which desk keeps (issues/Steps.tsx), and
-// the picked one's diagram and decisions beside them, J and K walking the drawn ones; under the steps, the Plan's Done
-// when and Decide alone, folded, and what the chat made, each a row that puts the sheet away and brings its message
-// into view in the chat, or picks its step. An issue with no steps, a quick or brief one, has its plan in one column,
+// An issue's Plan, in its chat's place on the Plan tab (Dock.tsx, SessionView; "all could be on a single screen. just
+// that we need a way to switching between those views", the user, 28 Oct): a design issue's steps down the left, which
+// desk keeps (issues/Steps.tsx), and the picked one's diagram and decisions beside them, J and K walking the drawn ones;
+// under the steps, the Plan's Done when and Decide alone, folded, and what the chat made, each a row that turns back to
+// Chat and brings its message into view there, or picks its step. An issue with no steps, a quick or brief one, has its plan in one column,
 // and so does a phone, whose steps open their diagram under their row ("go", the user, 28 Oct, on its mockup).
 // An earlier send of the plan or the card is left out: desk keeps only the latest, so it is a line in the chat with
 // nothing to see.
@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { dock } from "../store/dock";
 import type { IssuePageData } from "../issues/IssueView";
 import { GLYPH, StateIcon } from "../ui/icons";
-import { artifactsOf, toggleIssue, type Artifact } from "./Dock";
+import { artifactsOf, type Artifact } from "./Dock";
 import { isDrawn, isHere, placed, Steps, type PlanStep } from "../issues/Steps";
 import { anyCommit, useChanges } from "./Changes";
 import { useLive } from "./live";
@@ -27,7 +27,7 @@ function bring(a: Artifact) {
   target.classList.add("brought");
 }
 
-// A phone's width, where the sheet fills the screen (phone.css) and has no room for the steps and a diagram side by side.
+// A phone's width, where the chat fills the screen (phone.css) and has no room for the steps and a diagram side by side.
 const phoneQuery = matchMedia("(max-width: 640px)");
 const onPhone = (change: () => void) => { phoneQuery.addEventListener("change", change); return () => phoneQuery.removeEventListener("change", change); };
 const usePhone = () => useSyncExternalStore(onPhone, () => phoneQuery.matches);
@@ -40,29 +40,28 @@ const ChangedSteps = observer(function ChangedSteps({ slug, ...props }: { slug: 
   return <Steps {...props} changes={changes} />;
 });
 
-// The step the sheet opens on: the one being worked on when it is drawn, else the last drawn.
+// The step the Plan opens on: the one being worked on when it is drawn, else the last drawn.
 function firstPick(steps: PlanStep[]): string | null {
   const all = placed(steps).filter(({ step }) => isDrawn(step));
   return (all.find(({ step }) => isHere(step)) ?? all[all.length - 1])?.place ?? null;
 }
 
-export const SheetPlan = observer(function SheetPlan({ data }: { data: IssuePageData }) {
+export const PlanView = observer(function PlanView({ data }: { data: IssuePageData }) {
   const s = useLive(data.issue.session, false);
   const phone = usePhone();
   const items = s?.items, sends = s?.results.size;
   const steps = data.plan_steps ?? [];
   const made = useMemo(() => (s ? artifactsOf(s, data.issue.slug, steps).filter((a) => a.kind === "image" || a.latest) : []), [items, sends, data.issue.slug, data.plan_steps]); // eslint-disable-line react-hooks/exhaustive-deps
   const plan = data.plan_card;
-  // Each time the sheet comes, it opens on the step asked for (the chat's head, HeadStep), else on firstPick; a step
-  // drawn while none was, the first one, is picked as it comes in.
+  // Each time the Plan comes, it opens on the step asked for (the chat's head, HeadStep), else on firstPick, and the
+  // head's step picks its step while it is shown; a step drawn while none was, the first one, is picked as it comes in.
   const [pick, setPick] = useState<string | null>(() => dock.pick ?? firstPick(steps));
-  useEffect(() => { if (dock.sheet) setPick(dock.pick ?? firstPick(steps)); }, [dock.sheet]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (dock.pick) setPick(dock.pick); }, [dock.pick]);
   useEffect(() => { if (pick === null) setPick(firstPick(steps)); }, [data.plan_steps]); // eslint-disable-line react-hooks/exhaustive-deps
   const picked = pick ? placed(steps).find((p) => p.place === pick) : undefined;
   const tap = (a: Artifact) => {
     const step = a.kind === "step" && (placed(steps).find(({ step }) => step.title === a.name)?.place ?? a.place);
     if (step) return setPick(step);
-    if (dock.sheetShown) toggleIssue();
     dock.setView("chat");
     requestAnimationFrame(() => bring(a));
   };
@@ -76,7 +75,7 @@ export const SheetPlan = observer(function SheetPlan({ data }: { data: IssuePage
           <div className="side-head">Steps</div>
           {(() => {
             const props: Omit<StepsProps, "changes"> = phone ? { steps, opened: dock.pick } : { steps, pick: { place: pick, to: setPick } };
-            const key = phone ? String(dock.sheet) : "list"; // on a phone, each opening starts its rows afresh
+            const key = phone ? `opened ${dock.pick}` : "list"; // on a phone, the step asked for opens afresh
             return anyCommit(steps) ? <ChangedSteps key={key} slug={data.issue.slug} {...props} /> : <Steps key={key} {...props} />;
           })()}
         </section>
@@ -114,13 +113,13 @@ export const SheetPlan = observer(function SheetPlan({ data }: { data: IssuePage
   );
   if (!steps.length || phone) return <div className="chat-side">{list}</div>;
   return (
-    <div className="chat-side sheet-plan">
-      <div className="sheet-list">{list}</div>
+    <div className="chat-side plan-view">
+      <div className="plan-view-list">{list}</div>
       {/* keyed by the step, so a step picked opens at its top, wherever the last one was scrolled to */}
-      <div className="sheet-step" key={pick ?? ""}>
+      <div className="plan-view-step" key={pick ?? ""}>
         {picked ? (
           <>
-            <h3 className="sheet-step-title">
+            <h3 className="plan-view-title">
               <StateIcon state={picked.step.state} />
               <span>{picked.step.title}</span>
               <span className="side-what">step {picked.place}</span>

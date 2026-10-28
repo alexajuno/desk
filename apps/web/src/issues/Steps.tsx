@@ -1,10 +1,10 @@
 // A design issue's steps, which its session sets and ticks (api.ts, PlanStep), drawn as Linear draws an issue's
 // sub-issues: a row each with the issues' own status circle, its own steps under it on a thin line, a parent's count
 // and a step's note in the quiet grey at its end, and the one being worked on filled ("similar statuses for issues i
-// suppose?", the user, 27 Oct). The issue's page and the sheet over its chat both show it. A step its session drew
+// suppose?", the user, 27 Oct). The issue's page and its chat's Plan both show it. A step its session drew
 // opens under its row, a click away, with its diagram and its decisions: the chat shows only the diagram where it was
 // sent ("we had all diagrams on sidebar and it can easily be viewed through artifact view already", 27 Oct). The step
-// being worked on starts open. In the sheet over its chat (sessions/Sheet.tsx) a drawn step is picked instead, and its
+// being worked on starts open. On its chat's Plan (sessions/PlanView.tsx) a drawn step is picked instead, and its
 // diagram shows beside the list.
 import { useState } from "react";
 import { Counts, showChanges, type StepDiff } from "../sessions/Changes";

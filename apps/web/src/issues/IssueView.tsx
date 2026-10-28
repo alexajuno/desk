@@ -257,7 +257,7 @@ function Pick({ className, slug, field, value, title, children }: { className: s
 
 // An issue's status at the head of its chat, before its title, as an issue's row in a list starts with it: its icon
 // alone, a quiet chip filled only under the mouse, that opens the menu it opens on the issue's page. Its priority and
-// team live in the sheet's Properties, with P and Ctrl ⇧ M ("looks valid", the user, 28 Oct).
+// team live in the Properties of its Issue tab, with P and Ctrl ⇧ M ("looks valid", the user, 28 Oct).
 export const HeadStatus = observer(function HeadStatus({ issue }: { issue: IssueRow }) {
   const p = painted(issue);
   return (

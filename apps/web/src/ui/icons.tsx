@@ -230,3 +230,8 @@ export const PLUS = (
 export const SIDE_ICON = (
   <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.3"><rect x="2" y="2.75" width="12" height="10.5" rx="2.5" /><path d="M6.25 2.75v10.5" /></svg>
 );
+
+// The … of an issue's Actions, in its page's top bar and in its chat's head on Issue.
+export const MORE_ICON = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25" /><circle cx="8" cy="8" r="1.25" /><circle cx="12.5" cy="8" r="1.25" /></svg>
+);

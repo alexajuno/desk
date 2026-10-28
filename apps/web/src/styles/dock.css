@@ -1,6 +1,6 @@
-/* A session's chat (sessions/Dock.tsx), in the middle of the screen, drawn the way claude.ai draws a chat, with its issue
-   a ] away, as a sheet over it in the frame's panel. Opening it, the issue page gives way as the chat rises in the
-   middle. Colours are desk's variables. */
+/* A session's chat (sessions/Dock.tsx), in the middle of the screen, drawn the way claude.ai draws a chat, with its
+   issue's Plan, page and Changes on tabs in its head, in its place. Opening it, the issue page gives way as the chat
+   rises in the middle. Colours are desk's variables. */
 
 :root { --dock-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
         --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace; }
@@ -15,54 +15,32 @@
 .dock { transition: left 0.2s ease; } /* as the panel follows the sidebar */
 .side-collapsed .dock { left: 8px; }
 .chat-center .dock { display: flex; }
-/* The issue over its chat, as a sheet (store/dock.ts), in the look of Linear's Create project modal, measured on
-   linear.app on 2026-10-18 (desk.css, .project-panel): centred, 21px corners, its palette and shadow, over --overlay,
-   which covers the sidebar too. Larger than that modal's 920px and 6vh, since it is read, its diagrams at their size
-   ("why do i feel like the panel could be ... larger?", the user, 28 Oct): most of the window, 48px from its sides at
-   most 1280px wide, 32px from its top and bottom. It comes in a moment, from 98%, as Linear's modals do, with no glide
-   from where the page was. */
-.chat-center .panel { top: 32px; bottom: 32px; left: 50%; right: auto; z-index: 7; width: min(1280px, calc(100vw - 96px)); transform: translateX(-50%);
-                      background: var(--bg-modal); border-color: var(--border-modal); border-radius: 21px; box-shadow: var(--shadow-modal);
-                      transition: none; animation: sheet-in 0.12s var(--dock-ease); }
-.chat-center.sheet-off .panel { display: none; }
+/* With a chat in the middle, its issue's page stays under it, hidden: the chat shows the issue on its Issue tab. */
+.chat-center .panel { display: none; }
 .chat-center .corner { display: none; }
-.chat-center .panel .open-chat { display: none; } /* the chat is open under it */
-.chat-center .panel .bar { border-bottom-color: var(--border-2); }
-.chat-center .panel .bar .side-toggle { display: none; } /* the chat's head has it */
-.sheet-dim { position: fixed; inset: 0; z-index: 6; background: var(--overlay); animation: dim-in 0.12s ease; }
-@keyframes sheet-in { from { opacity: 0; transform: translateX(-50%) scale(0.98); } }
-@keyframes dim-in { from { opacity: 0; } }
-/* Its tabs, Plan and Issue, in its top bar: Linear's view tabs (desk.css, .view-bar a.tab). */
-.sheet-tabs { display: flex; gap: 4px; margin-left: -6px; }
-.sheet-tab { display: flex; align-items: center; height: 28px; padding: 0 10px; border: 0; border-radius: 9999px; font: 500 12px var(--font);
-             background: transparent; color: var(--text-3); transition: background-color 0.1s, color 0.1s; }
-.sheet-tab:hover { background: var(--btn-ghost-hover); color: var(--text-2); }
-.sheet-tab.here { background: var(--bg-tab-on); color: var(--text-1); box-shadow: 0 0 0 0.5px var(--ring-btn); }
-/* Its Plan: the steps down the left, the picked one's diagram and decisions beside them (sessions/Sheet.tsx), each
-   scrolling on its own under the bar, as the Inbox's list and its open row do ("the scrolling part should only be the
-   steps side", the user, 28 Oct), with the sidebar's thin scrollbar, the step's at the sheet's edge. A narrow sheet,
+/* Its Plan: the steps down the left, the picked one's diagram and decisions beside them (sessions/PlanView.tsx), each
+   scrolling on its own under the head, as the Inbox's list and its open row do ("the scrolling part should only be the
+   steps side", the user, 28 Oct), with the sidebar's thin scrollbar, the step's at the chat's edge. A narrow chat,
    one column, scrolls whole. */
-.chat-side.sheet-plan { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 28px; padding: 20px 24px 32px; }
-.sheet-list { min-width: 0; }
-.sheet-step { min-width: 0; }
+.chat-side.plan-view { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 28px; padding: 20px 24px 32px; }
+.plan-view-list { min-width: 0; }
+.plan-view-step { min-width: 0; }
 @container (min-width: 881px) {
-  .scroll:has(> .sheet-plan) { overflow: hidden; }
-  .chat-side.sheet-plan { box-sizing: border-box; height: 100%; padding: 0 0 0 24px; }
-  .sheet-list, .sheet-step { overflow: auto; scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
-  .sheet-list { padding: 20px 0 32px; }
-  .sheet-step { padding: 20px 24px 32px 0; }
+  .chat-side.plan-view { box-sizing: border-box; height: 100%; padding: 0 0 0 24px; }
+  .plan-view-list, .plan-view-step { overflow: auto; scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
+  .plan-view-list { padding: 20px 0 32px; }
+  .plan-view-step { padding: 20px 24px 32px 0; }
 }
-.sheet-step-title { display: flex; align-items: center; gap: 9px; height: 28px; margin: 0 0 12px; font: 500 15px var(--font); color: var(--text-1); }
-.sheet-step-title .side-what { margin-left: 0; }
-.sheet-step .plan-step-said { margin-top: 12px; }
-.sheet-list .plan-step.on { background: var(--bg-active); }
-/* A narrow window keeps 16px round the sheet, and a narrow sheet puts the picked step under the list. */
-@media (max-width: 900px) { .chat-center .panel { top: 16px; bottom: 16px; width: calc(100vw - 32px); } }
-@container (max-width: 880px) { .chat-side.sheet-plan { grid-template-columns: minmax(0, 1fr); } }
+.plan-view-title { display: flex; align-items: center; gap: 9px; height: 28px; margin: 0 0 12px; font: 500 15px var(--font); color: var(--text-1); }
+.plan-view-title .side-what { margin-left: 0; }
+.plan-view-step .plan-step-said { margin-top: 12px; }
+.plan-view-list .plan-step.on { background: var(--bg-active); }
+/* A narrow chat puts the picked step under the list. */
+@container (max-width: 880px) { .chat-side.plan-view { grid-template-columns: minmax(0, 1fr); } }
 /* In its list a step's name comes first and its note takes what room is left; its decisions read at the text's size. */
-.sheet-list .plan-step-title { flex: 0 1 auto; }
-.sheet-list .plan-step-note { flex: 1 1 0; min-width: 0; max-width: none; text-align: right; }
-.sheet-step .body.plan-step-said { padding: 0; border-top: 0; font-size: 14px; line-height: 22px; color: var(--text-2); }
+.plan-view-list .plan-step-title { flex: 0 1 auto; }
+.plan-view-list .plan-step-note { flex: 1 1 0; min-width: 0; max-width: none; text-align: right; }
+.plan-view-step .body.plan-step-said { padding: 0; border-top: 0; font-size: 14px; line-height: 22px; color: var(--text-2); }
 @media (max-width: 900px) { .dock { left: 8px; } }
 
 /* The move between layouts (Dock.tsx, move), one view transition: the issue's panel and the chat each carry a name, and
@@ -93,7 +71,7 @@
 @keyframes dock-rise-in { from { opacity: 0; transform: translateY(12px) scale(0.99); } }
 
 
-/* An issue in a narrow page or sheet: its properties go under its title as chips, as in the Inbox. */
+/* An issue in a narrow page or chat: its properties go under its title as chips, as in the Inbox. */
 @container (max-width: 819px) {
   .issue { grid-template-columns: minmax(0, 1fr); }
   .issue .props { display: none; }
@@ -114,11 +92,7 @@
              border-bottom: 1px solid var(--border-1); }
 .dock-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; font: 500 13px var(--font); }
 .dock-title > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); text-decoration: none; }
-/* its issue's title, a chip that brings the issue's sheet over the chat */
-.dock-issue { display: block; min-width: 0; height: 26px; padding: 0 8px; overflow: hidden; text-overflow: ellipsis;
-              border-color: var(--border-2); border-radius: 6px; background: var(--bg-raised); font: 500 13px/26px var(--font); color: var(--text-1); }
-.dock-issue:hover { background: var(--bg-hover); }
-/* a chat's own title, renamed where it is: quiet until the mouse is on it, as the issue's chip */
+/* a chat's own title, renamed where it is: quiet until the mouse is on it */
 .dock-title input.title { field-sizing: content; max-width: 100%; height: 26px; margin-left: -8px; padding: 0 8px; border: 0; border-radius: 6px;
                           background: transparent; font: 500 13px/26px var(--font); color: var(--text-1); outline: none; }
 .dock-title input.title:hover { background: var(--btn-ghost-hover); }
@@ -184,8 +158,7 @@
    staying put; its Open chat is this chat. */
 .dock-view { box-sizing: border-box; width: 100%; container-type: inline-size; }
 .dock-plan { flex: 1 1 0; min-height: 0; overflow-y: auto; }
-.dock-plan > .chat-side:not(.sheet-plan) { max-width: 808px; margin: 0 auto; padding: 32px 24px var(--foot-fade); }
-@container (min-width: 881px) { .dock-plan > .sheet-plan { height: 100%; } }
+.dock-plan > .chat-side:not(.plan-view) { max-width: 808px; margin: 0 auto; padding: 32px 24px var(--foot-fade); }
 .dock-page { flex: 1 0 auto; padding-bottom: var(--foot-fade); }
 .dock .open-chat { display: none; }
 
@@ -285,7 +258,7 @@ table.diff .diff-hunk td { padding: 4px 12px 4px 48px; font: 400 11px var(--mono
 .sent .reply.body { font-size: 14px; line-height: 22px; }
 .sent-details { margin: 10px 0 0; }
 
-/* The sheet's Plan (Sheet.tsx): the plan as it stands, then the chat's artifacts as quiet 32px rows, as Linear's
+/* An issue's Plan (PlanView.tsx): the plan as it stands, then the chat's artifacts as quiet 32px rows, as Linear's
    sidebar rows are, each bringing its message into view with a moment's ring (.brought). */
 .chat-side { padding: 16px 16px 32px; }
 .side-part + .side-part { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-2); }

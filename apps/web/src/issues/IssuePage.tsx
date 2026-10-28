@@ -8,10 +8,7 @@ import { Bar } from "../frame/Bar";
 import { lineKey } from "../store/frame";
 import { issues } from "../store/issues";
 import { toggled } from "../ui/menu";
-import { GLYPH } from "../ui/icons";
-import { dock } from "../store/dock";
-import { toggleIssue } from "../sessions/Dock";
-import { SheetPlan } from "../sessions/Sheet";
+import { MORE_ICON } from "../ui/icons";
 import { painted } from "./painted";
 import { IssueView, type IssuePageData } from "./IssueView";
 import { actionsMenu } from "./menus";
@@ -30,22 +27,12 @@ export const IssuePage = observer(function IssuePage() {
   useEffect(() => { scroll.current?.scrollTo(0, 0); }, [shownSlug]);
   useEffect(() => { if (shown) document.title = `${shown.issue.title} · desk`; }, [shown]);
   useLive(shown, reload);
-  // Over its chat the issue is a sheet (store/dock.ts): on Plan, its steps and what the chat made; on Issue, its page.
-  const chatHere = dock.center && dock.issue && shown?.issue.slug === slug && shown.issue.session === dock.session;
-  const plan = Boolean(chatHere) && dock.tab === "plan";
 
   const p = shown && painted(shown.issue);
   return (
     <>
       <Bar
-        crumb={chatHere ? (
-          <span className="sheet-tabs">
-            {(["plan", "issue"] as const).map((t) => (
-              <button key={t} type="button" className={`sheet-tab${dock.tab === t ? " here" : ""}`} title={`${t === "plan" ? "Its steps and what the chat made" : "Its page"}  Tab`}
-                onClick={() => dock.setTab(t)}>{t === "plan" ? "Plan" : "Issue"}</button>
-            ))}
-          </span>
-        ) : shown && p ? (
+        crumb={shown && p ? (
           <>
             {shown.team ? <Go className="crumb" to={`/team/${shown.team.slug}`}>{shown.team.title}</Go> : <Go className="crumb" to="/issues">Issues</Go>}
             {shown.trail.map((a) => (<Fragment key={a.slug}><span className="sep">›</span><Go className="crumb" to={`/issue/${a.slug}`}>{a.title}</Go></Fragment>))}
@@ -53,18 +40,12 @@ export const IssuePage = observer(function IssuePage() {
           </>
         ) : null}
         tools={
-          <>
-            {!plan && <button className="more" type="button" title="Actions"
-              onClick={(e) => { if (shown && p && !toggled(e.currentTarget)) actionsMenu(p, { anchor: e.currentTarget }, p.slug); }}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25" /><circle cx="8" cy="8" r="1.25" /><circle cx="12.5" cy="8" r="1.25" /></svg>
-            </button>}
-            {/* Over its chat, × puts the sheet away; ] or the issue's title in the chat's head brings it back. */}
-            {dock.sheetShown && <button className="more" type="button" title="Back to the chat  Esc" onClick={() => toggleIssue()}>{GLYPH.close}</button>}
-          </>
+          <button className="more" type="button" title="Actions"
+            onClick={(e) => { if (shown && p && !toggled(e.currentTarget)) actionsMenu(p, { anchor: e.currentTarget }, p.slug); }}>{MORE_ICON}</button>
         }
       />
       <div className="scroll" ref={scroll}>
-        {shown ? plan ? <SheetPlan data={shown} /> : <IssueView data={shown} /> : error ? <p className="muted" style={{ padding: 24 }}>{error}</p> : null}
+        {shown ? <IssueView data={shown} /> : error ? <p className="muted" style={{ padding: 24 }}>{error}</p> : null}
       </div>
     </>
   );
