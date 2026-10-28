@@ -24,7 +24,7 @@ import { GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
 import type { PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
-import { anyCommit, Changes, Counts, useChanges, wanted } from "./Changes";
+import { anyCommit, Changes, Counts, quote, useChanges, wanted } from "./Changes";
 import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
 import { EFFORTS, effortName, loadModels, runsMenu, warm, type Runs as RunsShown } from "./models";
 
@@ -945,6 +945,17 @@ interface Stash { text: string; attached: Attachment[]; caret: number }
 const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   const [text, setText] = useState(() => drafts()[s.id] ?? "");
   useEffect(() => keepDraft(s.id, text), [s.id, text]);
+  // Lines quoted from Changes with C (Changes.tsx) join what is typed, and the cursor goes under them for your words.
+  const quoted = quote.get();
+  useEffect(() => {
+    if (quoted?.session !== s.id) return;
+    setText((t) => (t.trim() ? `${t.replace(/\s*$/, "")}\n\n` : "") + quoted.text);
+    runInAction(() => quote.set(null));
+    requestAnimationFrame(() => {
+      const el = box.current;
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    });
+  }, [quoted, s.id]);
   const [attached, setAttached] = useState<Attachment[]>([]);
   const [stash, setStash] = useState<Stash | null>(() => {
     const t = kept("composerStashes")[s.id];

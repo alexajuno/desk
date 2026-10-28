@@ -10,6 +10,7 @@ import { usePage } from "../api/page";
 import type { PlanStep } from "../issues/Steps";
 import { dock } from "../store/dock";
 import { StateIcon, TRIANGLE } from "../ui/icons";
+import { toast } from "../ui/toast";
 import { toggleIssue } from "./Dock";
 
 type Line = [kind: " " | "+" | "-", old: number | null, now: number | null, text: string];
@@ -34,6 +35,37 @@ export function showChanges(slug: string, place: string) {
   if (dock.narrow && dock.sideShown) toggleIssue();
 }
 
+// Lines quoted from a diff for the reply box of the chat in the middle (Dock.tsx, Composer), which takes them in.
+export const quote = observable.box<{ session: string; text: string } | null>(null, { deep: false });
+
+// C on a line of a diff, or on lines selected in one, quotes them into the chat's reply box, with their step, file and
+// line numbers, for you to write under: "whatever i comment in the code, i'll get a reply in the same chat" (the user,
+// 28 Oct). Anywhere else C files a new issue (Frame.tsx).
+export function quoteLines(): boolean {
+  const rowOf = (n: Node | null | undefined) =>
+    (n instanceof Element ? n : n?.parentElement)?.closest<HTMLTableRowElement>(".changes table.diff tr[data-no]") ?? null;
+  const sel = getSelection();
+  let first = sel && !sel.isCollapsed ? rowOf(sel.anchorNode) : null, last = sel && first ? rowOf(sel.focusNode) : null;
+  if (!first || !last || first.parentElement !== last.parentElement)
+    first = last = document.querySelector<HTMLTableRowElement>(".changes table.diff tr[data-no]:hover");
+  // C over Changes but off its lines says what it wants rather than filing a new issue.
+  if (!first || !last) return Boolean(document.querySelector(".changes:hover") && (toast("Point at a line, or select lines, to quote them"), true));
+  if (!dock.session) return false;
+  if (first.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_PRECEDING) [first, last] = [last, first];
+  const rows: HTMLTableRowElement[] = [];
+  for (let r: Element | null = first; r; r = r.nextElementSibling) {
+    if (r.matches("tr[data-no]")) rows.push(r as HTMLTableRowElement);
+    if (r === last) break;
+  }
+  const path = first.closest<HTMLElement>("[data-path]")!.dataset.path!, place = first.closest<HTMLElement>("[data-place]")!.dataset.place!;
+  const [from, to] = [rows[0].dataset.no, rows[rows.length - 1].dataset.no];
+  const lines = rows.map((r) => `${r.dataset.kind}${r.querySelector(".diff-code")!.textContent!.replace(/^ $/, "")}`);
+  const text = `Step ${place}, ${path}:${from === to ? from : `${from}-${to}`}\n\`\`\`diff\n${lines.join("\n")}\n\`\`\`\n`;
+  runInAction(() => quote.set({ session: dock.session!, text }));
+  sel?.removeAllRanges();
+  return true;
+}
+
 export function Counts({ added, deleted }: { added: number; deleted: number }) {
   return <span className="diff-counts"><span className="diff-added">+{added}</span><span className="diff-deleted">−{deleted}</span></span>;
 }
@@ -44,6 +76,7 @@ export const Changes = observer(function Changes({ steps }: { steps: StepDiff[] 
   const last = steps[steps.length - 1].place;
   return (
     <div className="changes">
+      <p className="changes-hint"><kbd>C</kbd> on a line, or on lines you select, quotes them into the reply box below.</p>
       {steps.map((s) => <StepCard key={s.place} s={s} open={s.place === last} />)}
     </div>
   );
@@ -82,7 +115,7 @@ function FileCard({ f }: { f: FileDiff }) {
   const [open, setOpen] = useState(f.added + f.deleted <= OPEN_LINES);
   const slash = f.path.lastIndexOf("/");
   return (
-    <div className="change-file">
+    <div className="change-file" data-path={f.path}>
       <button type="button" className="change-file-head" aria-expanded={open} onClick={() => setOpen(!open)}>
         <span className="change-fold">{TRIANGLE}</span>
         <span className="change-file-name">{f.path.slice(slash + 1)}</span>
@@ -109,7 +142,7 @@ function Hunk({ header, lines }: { header: string; lines: Line[] }) {
     <>
       <tr className="diff-hunk"><td colSpan={2}>{header || " "}</td></tr>
       {lines.map(([kind, old, now, text], n) => (
-        <tr key={n} className={kind === "+" ? "diff-add" : kind === "-" ? "diff-del" : undefined}>
+        <tr key={n} className={kind === "+" ? "diff-add" : kind === "-" ? "diff-del" : undefined} data-no={kind === "-" ? old! : now!} data-kind={kind}>
           <td className="diff-no">{kind === "-" ? old : now}</td>
           <td className="diff-code">{text || " "}</td>
         </tr>
