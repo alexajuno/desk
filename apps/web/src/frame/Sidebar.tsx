@@ -10,7 +10,7 @@ import { useState, type ReactNode } from "react";
 import { useLocation } from "react-router";
 import { deskPath, go, Go } from "../app/nav";
 import type { State } from "../lib/desk";
-import { frame, talkOf, type ChatRow } from "../store/frame";
+import { frame, talkOf, type ChatRow, type FrameData } from "../store/frame";
 import { issues } from "../store/issues";
 import { ui } from "../store/ui";
 import { deleteChat, pinChat, renameChat } from "../sessions/live";
@@ -38,7 +38,6 @@ function teamMenu(slug: string, at: { x: number; y: number }) {
     { icon: GLYPH.team, label: "All teams", run: () => go("/teams") },
   ] });
 }
-const WHY = "desk runs this branch instead of main: a session's test, or your Try";
 
 // The states of an issue being worked, whose chat has no Delete: the server's chats.ts, AT_WORK.
 const AT_WORK = new Set<State>(["running", "waiting", "review", "landing"]);
@@ -121,12 +120,29 @@ function Fold({ name, folded, toggle, children }: { name: string; folded: Set<st
   );
 }
 
+// An issue's title as the rows say it, which a change brings before the frame that follows it.
+const held = (i: { slug: string; title: string }) => issues.bySlug.get(i.slug) ?? i;
+const NotMain = observer(function NotMain({ trying, line }: { trying: NonNullable<FrameData["trying"]>; line: FrameData["line"] }) {
+  const waits = line.map((w, i) => `${i === 0 ? "Next" : i + 1}: ${held(w.issue).title}, to ${w.for === "review" ? "try" : "test"} ${w.branch}`);
+  const title = [`desk runs ${trying.branch}, not main: a session's test, or your Try`, ...waits].join("\n");
+  const body = (
+    <>
+      {GLYPH.branch}
+      <span className="not-main-text">
+        <span className="not-main-lead">Not on main{line.length > 0 && <span> · {line.length} waiting</span>}</span>
+        <span className="nav-title">{trying.issue ? held(trying.issue).title : trying.branch}</span>
+      </span>
+    </>
+  );
+  return trying.issue
+    ? <Go className="not-main" to={`/issue/${trying.slug}`} title={title}>{body}</Go>
+    : <div className="not-main" title={title}>{body}</div>;
+});
+
 export const Sidebar = observer(function Sidebar() {
   const here = deskPath(useLocation().pathname);
   const d = frame.data, triage = issues.triage;
   const at = (path: string) => (here === path ? " here" : "");
-  // An issue's title and state as the rows say them, which a change brings before the frame that follows it.
-  const held = (i: { slug: string; title: string; state: State }) => issues.bySlug.get(i.slug) ?? i;
   const [folded, toggle] = useFolded();
   // A session's row: its issue's state, or a ring for a chat with no issue, then on the right the Inbox's dot while its
   // row there is unread and the chat is not working. It shows no dot of its own while it works: its issue's In progress
@@ -204,27 +220,13 @@ export const Sidebar = observer(function Sidebar() {
           chatsNow). Older ones are in the corner's history. */}
       {d && d.pinned.length > 0 && <Fold name="Pinned" folded={folded} toggle={toggle}>{d.pinned.map((c) => chatRow(c, true))}</Fold>}
       {d && d.chats.length > 0 && <Fold name="Chats" folded={folded} toggle={toggle}>{d.chats.map((c) => chatRow(c, false))}</Fold>}
-      {/* desk's own checkout on no branch: a session testing its branch, or your Try, and under it the line of who
-          waits for it. Read only: desk moves the line on its own. */}
-      {d && (d.trying || d.line.length > 0) && (
-        <>
-          <div className="nav-label" title={WHY}>Trying</div>
-          {d.trying && (d.trying.issue ? (
-            <Go className={`nav-item${at(`/issue/${d.trying.slug}`)}`} to={`/issue/${d.trying.slug}`} title={`${WHY} (${d.trying.branch})`}>
-              <StateIcon state={held(d.trying.issue).state} /><span className="nav-title">{held(d.trying.issue).title}</span>
-            </Go>
-          ) : (
-            <div className="nav-item static" title={WHY}><StateIcon state="review" /><span className="nav-title">{d.trying.branch}</span></div>
-          ))}
-          {d.line.map((w, i) => (
-            <Go key={w.slug} className={`nav-item${at(`/issue/${w.slug}`)}`} to={`/issue/${w.slug}`} title={`In line for 8790, to ${w.for === "review" ? "try" : "test"} ${w.branch}`}>
-              <StateIcon state={held(w.issue).state} /><span className="nav-title">{held(w.issue).title}</span><span className="count">{i === 0 ? "next" : i + 1}</span>
-            </Go>
-          ))}
-        </>
-      )}
-      {/* Linear's Help button, measured 2026-10-15: a 24px circle at the sidebar's foot. */}
+      {/* The foot stays at the sidebar's bottom while the chats scroll under it ("sticky to the bottom", the user, 28
+          Oct). Over Linear's Help button, measured 2026-10-15 as a 24px circle, a card says while desk's checkout runs
+          a branch, not main: a session's test or your Try. It informs, it is no chat ("it's just a way of informing
+          that we are running a version that's not on desk's main yet", "so don't build it like a chat", the user, 28
+          Oct), and says who waits in line for 8790 only as a count; its tooltip names them. */}
       <div className="side-foot">
+        {d?.trying && <NotMain trying={d.trying} line={d.line} />}
         <button className="side-icon help-open" type="button" title="Help, shortcuts and settings"
           onClick={(e) => { if (!toggled(e.currentTarget)) helpMenu(e.currentTarget); }}>
           <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M7.569 9.75c-.332 0-.614-.27-.578-.6.021-.188.061-.372.136-.62q.158-.51.447-.82a3.4 3.4 0 0 1 .703-.577q.284-.182.507-.396.229-.219.358-.486a1.4 1.4 0 0 0 .13-.606 1.2 1.2 0 0 0-.171-.653 1.2 1.2 0 0 0-.466-.429 1.36 1.36 0 0 0-.647-.152q-.33 0-.628.148a1.23 1.23 0 0 0-.587.622c-.123.295-.367.555-.686.555h-.472c-.337 0-.616-.28-.55-.611q.103-.513.363-.905a2.55 2.55 0 0 1 1.08-.915A3.6 3.6 0 0 1 7.998 3q.888 0 1.563.32.68.319 1.057.91.382.586.382 1.392 0 .543-.172.972a2.4 2.4 0 0 1-.48.763 3.5 3.5 0 0 1-.74.595 3.2 3.2 0 0 0-.62.496 1.7 1.7 0 0 0-.353.605l-.034.106c-.1.316-.35.591-.682.591zM8.75 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0" /></svg>
