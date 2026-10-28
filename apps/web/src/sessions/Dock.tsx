@@ -24,7 +24,7 @@ import { GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
 import type { PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
-import { anyCommit, Changes, Counts, useChanges } from "./Changes";
+import { anyCommit, Changes, Counts, useChanges, wanted } from "./Changes";
 import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
 import { EFFORTS, effortName, loadModels, runsMenu, warm, type Runs as RunsShown } from "./models";
 
@@ -179,6 +179,11 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   const page = chatPage.get();
   const changes = m?.issue && page?.issue.slug === m.issue.slug && anyCommit(page.plan_steps) ? m.issue.slug : null;
   const shown = changes ? view : "chat";
+  // A click on a step's counts beside the chat turns it to Changes, where that step's card opens (Changes.tsx).
+  const asked = wanted.get();
+  useEffect(() => {
+    if (asked && asked.slug === changes) setView("changes");
+  }, [asked, changes]);
   // Changes opens at its top, and the chat again at its end, where its words keep coming.
   useLayoutEffect(() => {
     const el = scroller.current!;

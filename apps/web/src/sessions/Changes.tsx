@@ -3,11 +3,14 @@
 // problem early" (the user, 28 Oct). The lines are drawn as Linear Diffs draws them, measured on the demo on
 // linear.app's Reviews page on 28 Oct: one number column, a tinted line with a coloured edge for what was added or
 // deleted, and the counts in green and red.
+import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePage } from "../api/page";
 import type { PlanStep } from "../issues/Steps";
+import { dock } from "../store/dock";
 import { StateIcon, TRIANGLE } from "../ui/icons";
+import { toggleIssue } from "./Dock";
 
 type Line = [kind: " " | "+" | "-", old: number | null, now: number | null, text: string];
 type FileDiff = { path: string; was?: string; added: number; deleted: number; binary?: true; cut?: true; hunks: { header: string; lines: Line[] }[] };
@@ -21,6 +24,15 @@ export const useChanges = (slug: string) => usePage<{ steps: StepDiff[] }>(`/api
 // Whether any of the steps carries a commit, so has a diff to show.
 export const anyCommit = (steps: (PlanStep & { commit?: string })[] | null | undefined): boolean =>
   Boolean(steps?.some((s) => s.commit || anyCommit(s.kids)));
+
+// A step to show in its chat's Changes, asked for by a click on its counts in the steps beside the chat (Steps.tsx):
+// the chat turns to Changes, and that step's card opens and comes into view.
+export const wanted = observable.box<{ slug: string; place: string } | null>(null, { deep: false });
+// On a phone the steps lie over the chat, so they step aside for it.
+export function showChanges(slug: string, place: string) {
+  runInAction(() => wanted.set({ slug, place }));
+  if (dock.narrow && dock.sideShown) toggleIssue();
+}
 
 export function Counts({ added, deleted }: { added: number; deleted: number }) {
   return <span className="diff-counts"><span className="diff-added">+{added}</span><span className="diff-deleted">−{deleted}</span></span>;
@@ -39,10 +51,18 @@ export const Changes = observer(function Changes({ steps }: { steps: StepDiff[] 
 
 // A step's card: its place, title and note, how much it changed, then its files. The latest step starts open, as the
 // one to look at before saying "next".
-function StepCard({ s, open: first }: { s: StepDiff; open: boolean }) {
+const StepCard = observer(function StepCard({ s, open: first }: { s: StepDiff; open: boolean }) {
   const [open, setOpen] = useState(first);
+  const card = useRef<HTMLElement>(null);
+  const asked = wanted.get()?.place === s.place;
+  useEffect(() => {
+    if (!asked) return;
+    setOpen(true);
+    card.current?.scrollIntoView({ block: "start" });
+    runInAction(() => wanted.set(null));
+  }, [asked]);
   return (
-    <section className={`change-step${open ? " open" : ""}`} data-place={s.place}>
+    <section ref={card} className={`change-step${open ? " open" : ""}`} data-place={s.place}>
       <button type="button" className="change-step-head" aria-expanded={open} onClick={() => setOpen(!open)}
         title={`${open ? "Fold" : "Open"} step ${s.place}, ${s.commit.slice(0, 7)}`}>
         <span className="change-fold">{TRIANGLE}</span>
@@ -56,7 +76,7 @@ function StepCard({ s, open: first }: { s: StepDiff; open: boolean }) {
       {open && s.files.map((f) => <FileCard key={f.path} f={f} />)}
     </section>
   );
-}
+});
 
 function FileCard({ f }: { f: FileDiff }) {
   const [open, setOpen] = useState(f.added + f.deleted <= OPEN_LINES);

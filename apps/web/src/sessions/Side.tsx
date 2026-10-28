@@ -11,7 +11,8 @@ import { dock } from "../store/dock";
 import { GLYPH } from "../ui/icons";
 import { openPicture } from "../ui/viewer";
 import { artifactsOf, type Artifact } from "./Dock";
-import { Steps } from "../issues/Steps";
+import { Steps, type PlanStep } from "../issues/Steps";
+import { anyCommit, useChanges } from "./Changes";
 import { useLive } from "./live";
 
 // A row's message, in the middle of the chat, and a moment's ring round it so the eye finds it.
@@ -47,6 +48,13 @@ function openHere(a: Artifact): boolean {
   return true;
 }
 
+// The steps with how much each one changed, from its chat's Changes (Changes.tsx).
+const ChangedSteps = observer(function ChangedSteps({ slug, steps }: { slug: string; steps: PlanStep[] }) {
+  const diffs = useChanges(slug);
+  const changes = useMemo(() => ({ slug, diffs: new Map((diffs ?? []).map((d) => [d.place, d])) }), [slug, diffs]);
+  return <Steps steps={steps} changes={changes} />;
+});
+
 export const ChatSide = observer(function ChatSide({ data }: { data: IssuePageData }) {
   const s = useLive(data.issue.session, false);
   const items = s?.items, sends = s?.results.size;
@@ -67,7 +75,7 @@ export const ChatSide = observer(function ChatSide({ data }: { data: IssuePageDa
       {data.plan_steps && data.plan_steps.length > 0 && (
         <section className="side-part">
           <div className="side-head">Steps</div>
-          <Steps steps={data.plan_steps} />
+          {anyCommit(data.plan_steps) ? <ChangedSteps slug={data.issue.slug} steps={data.plan_steps} /> : <Steps steps={data.plan_steps} />}
         </section>
       )}
       <section className="side-part">
