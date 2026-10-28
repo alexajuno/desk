@@ -340,8 +340,9 @@ async function autoClose(tx: Db, i: Issue, was: string | undefined): Promise<str
 // that saves more with it (chats.ts, bind).
 export async function saveIn(tx: Db, i: Issue): Promise<string[]> {
   const had = (await tx.query<{ state: string; title: string }>("select state, title from issues where slug = $1", [i.slug])).rows[0];
-  if (had && had.title !== i.title) await follow(tx, i);
+  const moved = had && had.title !== i.title && (await follow(tx, i));
   await put(tx, i);
+  if (moved) await rewriteAll(tx);
   return autoClose(tx, i, had?.state);
 }
 
@@ -425,26 +426,55 @@ export const onRename = (told: (tx: Db, from: string, to: string) => Promise<voi
 // "can't we have a better way to generate slug?" (the user, 28 Oct). No alias keeps the old one: "i'm the only user
 // here. no one is using it. we don't over engineer here right?". So in the write that saves it, all that names the
 // issue follows it: its row, its folder, its sub-issues, its chat, the line, the trash, and the links to it in every
-// issue's and project's document, its own screenshots' among them. The Inbox's rows follow on its next take.
-async function follow(tx: Db, i: Issue) {
+// issue's and project's document, its own screenshots' among them. The Inbox's rows follow on its next take. Whether
+// it moved; the caller saves the issue, then writes out the files of the others it changed (rewriteAll).
+async function follow(tx: Db, i: Issue): Promise<boolean> {
   const from = i.slug, want = slugify(i.title, "issue");
-  if (from === want || new RegExp(`^${escapeRe(want)}-\\d+$`).test(from)) return;
+  if (from === want || new RegExp(`^${escapeRe(want)}-\\d+$`).test(from)) return false;
   const to = await newSlug(i.title, tx);
   const link = new RegExp(`/issue/${escapeRe(from)}(?![\\w-])`, "g"), relink = (text: string) => text.replace(link, `/issue/${to}`);
   if (existsSync(folder(from))) renameSync(folder(from), folder(to));
   await tx.query("delete from issues where slug = $1", [from]);
-  Object.assign(i, { slug: to, body: relink(i.body), link: i.link && relink(i.link) });
+  // A link sits in a document, in a duplicate's pointer to the issue it duplicates, or in a step's diagram or decisions.
+  const linked = (r: Pick<Issue, "body" | "link" | "plan_steps">) =>
+    ({ body: relink(r.body), link: r.link && relink(r.link), plan_steps: r.plan_steps && relink(r.plan_steps) });
+  Object.assign(i, { slug: to, ...linked(i) });
   await tx.query("update issues set parent = $2 where parent = $1", [from, to]);
-  const linking = (table: string) => tx.query<{ slug: string; body: string; link?: string | null }>(
-    `select * from ${table} where body like $1${table === "issues" ? " or link like $1" : ""}`, [`%/issue/${from}%`]);
-  for (const r of (await linking("issues")).rows)
-    await tx.query("update issues set body = $2, link = $3 where slug = $1", [r.slug, relink(r.body), r.link && relink(r.link)]);
+  const linking = (table: string) => tx.query<Issue>(
+    `select * from ${table} where body like $1${table === "issues" ? " or link like $1 or plan_steps like $1" : ""}`, [`%/issue/${from}%`]);
+  for (const r of (await linking("issues")).rows) {
+    const { body, link, plan_steps } = linked(r);
+    await tx.query("update issues set body = $2, link = $3, plan_steps = $4 where slug = $1", [r.slug, body, link, plan_steps]);
+  }
   for (const r of (await linking("projects")).rows) await tx.query("update projects set body = $2 where slug = $1", [r.slug, relink(r.body)]);
   for (const told of renamed) await told(tx, from, to);
   for (const table of ["line", "tries", "trying"]) await tx.query(`update ${table} set slug = $2 where slug = $1`, [from, to]);
   await tx.query("update trashed set row = jsonb_set(row, '{parent}', to_jsonb($2::text)) where row ->> 'parent' = $1", [from, to]);
+  return true;
+}
+
+const rewriteAll = async (tx: Db) => {
   await rewriteIn(tx);
   await projects.rewriteIn(tx);
+};
+
+// Until 28 Oct a slug was cut at 50 characters, mid-word or on a dash, and never followed a new title. Each issue's is
+// made once, at the first start that knows the new cut, as a new title makes it: "yeah, just rename all" (the user, 28
+// Oct). Returns how many moved.
+export function renameAll(): Promise<number> {
+  return db.write(async (tx) => {
+    if ((await tx.query("select 1 from meta where name = 'slugs cut'")).rows.length) return 0;
+    let moved = 0;
+    for (const { slug } of (await tx.query<{ slug: string }>('select slug from issues order by created, slug collate "C"')).rows) {
+      const i = await load(slug, tx); // as it is now: an earlier rename may have changed its parent or its links
+      if (!(await follow(tx, i))) continue;
+      await put(tx, i);
+      moved++;
+    }
+    if (moved) await rewriteAll(tx);
+    await tx.query("insert into meta values ('slugs cut', now()::text)");
+    return moved;
+  });
 }
 
 // Direct sub-issues of `parent` (top level when null), most urgent first. An issue whose parent is missing counts as
