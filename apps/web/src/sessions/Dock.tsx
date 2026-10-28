@@ -1,8 +1,8 @@
 // A session's chat, in the middle of the screen, drawn as claude.ai draws a chat: replies stream in as Markdown, tool
 // steps fold under one line, questions come as buttons, and the composer queues a message while Claude works (Enter)
 // or stops it (Ctrl C). A chat opens to read, with desk's keys, unless nothing is said in it yet; I or Enter goes into
-// the composer and Esc leaves it, as vim's modes. Its issue sits beside it on the right, in the frame's panel
-// (store/dock.ts says where each stands).
+// the composer and Esc leaves it, as vim's modes. ] brings its issue over it as a sheet, the frame's panel (store/dock.ts
+// says where each stands).
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -16,12 +16,12 @@ import { HeadChips, Title, type IssuePageData } from "../issues/IssueView";
 import { useLive as useIssueLive } from "../issues/useLive";
 import { folderMenu } from "../issues/menus";
 import { Walk } from "../issues/walk";
-import { dock, SIDE_WIDTH, type Layout, type Reading } from "../store/dock";
+import { dock, type Layout, type SheetTab } from "../store/dock";
 import { issues } from "../store/issues";
 import { lineKey } from "../store/frame";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
-import type { PlanStep } from "../issues/Steps";
+import { stepNow, type PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { anyCommit, Changes, Counts, quote, useChanges, wanted } from "./Changes";
@@ -32,7 +32,7 @@ import { EFFORTS, effortName, loadModels, runsMenu, warm, type Runs as RunsShown
 // can make a frame or more after the address changes, or at once when it is there already (SessionView says where).
 const wantsFocus = observable.box<string | null>(null);
 
-// Open a session's chat in the middle: its issue's page when it has one, which shows the chat with the issue beside it.
+// Open a session's chat in the middle: its issue's page when it has one, which shows the chat with the issue a ] away.
 // It opens to read, unless nothing is said in it yet ("unless i open an empty chat, don't focus on composer", the user,
 // 21 Oct).
 export function openSession(id: string, slug?: string | null) {
@@ -49,7 +49,7 @@ export function focusComposer() {
   return Boolean(box);
 }
 
-// New session: an agent chat, in the middle. Its issue comes beside it once the agent files one (SessionFullRoute).
+// New session: an agent chat, in the middle. Its issue is a ] away once the agent files one (SessionFullRoute).
 // A draft, such as New automation's, waits typed in its composer.
 export async function newSession(draft = "") {
   const res = await postJson("/sessions/new");
@@ -63,10 +63,10 @@ export async function newSession(draft = "") {
 // reads too: one fetch for both.
 const chatPage = observable.box<IssuePageData | null>(null, { deep: false });
 
-// A change of layout moves as one piece, through the browser's view transitions: the issue page shrinks into the side
-// as its chat rises in the middle, and slides out when hidden (dock.css says how). Where the browser has none, or
-// motion is turned down, it changes at once, and so does the first one, under the splash, where nothing was seen to
-// move from: the page then drew whole only after a third of a second's glide (25 Oct).
+// A change of layout moves as one piece, through the browser's view transitions: the issue page shrinks away as its
+// chat rises in the middle (dock.css says how). Where the browser has none, or motion is turned down, it changes at
+// once, and so does the first one, under the splash, where nothing was seen to move from: the page then drew whole only
+// after a third of a second's glide (25 Oct). The sheet comes and goes on its own, with no move (toggleIssue).
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 let moving: Promise<void> | null = null; // the move on screen, which the issue's own slide in waits for
 let drawing: Promise<void> = Promise.resolve(); // its change to the page, which a text box to focus waits for
@@ -81,33 +81,17 @@ function move(next: Layout, change: () => void) {
 // panel stays hidden until the move's next frame, and a hidden box ignores focus() (23 Oct: / from such an issue).
 export const drawn = () => drawing;
 
-// What an issue's page has beside its chat: always its side, the plan as it stands and what the chat made (Side.tsx),
-// which stays put, while its plan and its card show in the chat where its session sent them (Sent) ("i don't like the
-// issue as right sidebar anymore. i think the whole flow has to be on the main chat", the user, 27 Oct). Its mark never
-// changes, so your ] holds until you press it again, whatever the agent writes.
-export function readingOf(_data: IssuePageData): Reading {
-  return { want: true, has: true, mark: "side" };
-}
-
-// What the page on screen asks for (the frame calls it as the address changes): an issue page's chat comes with its
-// issue beside it when the page, as its route's loader just fetched it, has something to read.
+// What the page on screen asks for (the frame calls it as the address changes): an issue page's chat comes alone, its
+// sheet put away.
 export function arrange(session: string | null, slug: string | null) {
-  const page = slug ? seenPage<IssuePageData>(`/api/page/issue/${slug}`) : null;
-  const reading = page && page.issue.session === session ? readingOf(page) : null;
-  move(dock.layoutAfter(session, Boolean(slug), reading), () => dock.arrange(session, Boolean(slug), reading));
+  move(dock.layoutAfter(session, Boolean(slug)), () => dock.arrange(session, Boolean(slug)));
 }
 
-// The issue's page came in, or in again: a plan or card the agent just wrote slides in beside its chat, once the
-// chat's own move is over.
-export async function offerIssue(session: string, reading: Reading) {
-  while (moving) await moving;
-  move(dock.layoutOffered(session, reading), () => dock.offer(session, reading));
-}
-
-// ] or the issue's title in the chat's head: the issue beside its chat, or the chat alone.
-export function toggleIssue() {
-  if (!dock.center || !dock.issue) return;
-  move(dock.layout === "both" ? "chat" : "both", () => dock.toggleSide());
+// ] or the issue's title in the chat's head: the issue as a sheet over its chat, or put away; with a tab, the sheet on
+// that tab, and on Plan, a step to open on (HeadStep). The sheet comes as a modal does, with no glide from where the
+// page was (dock.css, .sheet).
+export function toggleIssue(tab?: SheetTab, pick?: string) {
+  dock.toggleSheet(tab, pick);
 }
 
 export const Dock = observer(function Dock() {
@@ -115,33 +99,17 @@ export const Dock = observer(function Dock() {
   useLayoutEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("chat-center", Boolean(id));
-    root.classList.toggle("side-off", Boolean(id) && !dock.sideShown);
-    root.style.setProperty("--side-w", `${dock.width}px`);
-  }, [id, dock.sideShown, dock.width]);
+    root.classList.toggle("sheet-off", Boolean(id) && !dock.sheetShown);
+  }, [id, dock.sheetShown]);
   return (
-    <aside className="dock" aria-hidden={!id}>
-      {id ? <SessionView key={id} id={id} /> : null}
-    </aside>
+    <>
+      <aside className="dock" aria-hidden={!id}>
+        {id ? <SessionView key={id} id={id} /> : null}
+      </aside>
+      {/* Behind the sheet, over the chat and the sidebar: a click on it puts the sheet away, as on Linear's modals. */}
+      {dock.sheetShown && <div className="sheet-dim" onClick={() => toggleIssue()} />}
+    </>
   );
-});
-
-// The left edge of the issue beside its chat: drag it to make the issue wider or narrower, as Linear's panels are; a
-// double-click gives back the width it opens at.
-export const SideEdge = observer(function SideEdge() {
-  if (!dock.sideShown || dock.narrow) return null;
-  const drag = (e: React.PointerEvent<HTMLDivElement>) => {
-    const edge = e.currentTarget, root = document.documentElement, from = e.clientX, width = dock.width;
-    const left = document.querySelector(".dock")!.getBoundingClientRect().left;
-    const resize = (m: PointerEvent) => dock.setWidth(width + from - m.clientX, left);
-    edge.setPointerCapture(e.pointerId);
-    root.classList.add("side-resizing");
-    edge.addEventListener("pointermove", resize);
-    edge.addEventListener("lostpointercapture", () => {
-      edge.removeEventListener("pointermove", resize);
-      root.classList.remove("side-resizing");
-    }, { once: true });
-  };
-  return <div className="side-edge" title="Drag to resize" onPointerDown={drag} onDoubleClick={() => dock.setWidth(SIDE_WIDTH, 0)} />;
 });
 
 // The pill the chat you left waits as, at the bottom right: its title and whether it works. A click takes you back to it.
@@ -250,8 +218,8 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
 });
 
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, whether it works, its issue's
-// title, and its folder. The title shows or hides the issue beside it; a chat with no issue is renamed there. While
-// the issue is hidden, its place in the list it was opened from shows at the right end, as the issue's top bar does.
+// title, and its folder. The title brings the issue's sheet over the chat; a chat with no issue is renamed there. The
+// issue's place in the list it was opened from shows at the right end, as the issue's top bar does.
 const ChatHead = observer(function ChatHead({ s, view, setView }: { s: LiveSession; view: View | null; setView: (v: View) => void }) {
   const m = s.meta;
   return (
@@ -260,14 +228,15 @@ const ChatHead = observer(function ChatHead({ s, view, setView }: { s: LiveSessi
       <Dot s={s} />
       <div className="dock-title">
         {dock.issue && m?.issue
-          ? <button type="button" className={`dock-issue${dock.sideShown ? " on" : ""}`} title={`${dock.sideShown ? "Hide" : "Show"} the issue  ]`} onClick={toggleIssue}>{m.issue.title}</button>
+          ? <button type="button" className="dock-issue" title="Its plan and its page  ]" onClick={() => toggleIssue()}>{m.issue.title}</button>
           : m?.chat && !m.issue ? <Title line title={m.title} save={(t) => renameChat(s.id, t)} />
           : <span>{m?.issue?.title ?? m?.title ?? ""}</span>}
         {startsIn(s) && <span className="dock-folder" title={startsIn(s)}>{startsIn(s)}</span>}
       </div>
       {view && m?.issue && <ViewTabs slug={m.issue.slug} view={view} setView={setView} />}
       {m?.issue && chatPage.get()?.issue.slug === m.issue.slug && <HeadChips issue={chatPage.get()!.issue} />}
-      {dock.issue && m?.issue && !dock.sideShown && <Walk slug={m.issue.slug} />}
+      {dock.issue && m?.issue && chatPage.get()?.issue.slug === m.issue.slug && <HeadStep steps={chatPage.get()!.plan_steps ?? []} />}
+      {dock.issue && m?.issue && !dock.sheetShown && <Walk slug={m.issue.slug} />}
     </header>
   );
 });
@@ -289,6 +258,21 @@ const ViewTabs = observer(function ViewTabs({ slug, view, setView }: { slug: str
 
 const ChangesOf = observer(function ChangesOf({ slug }: { slug: string }) {
   return <Changes steps={useChanges(slug)} />;
+});
+
+// Where the issue's work stands, at the head's right end ("looks just good", the user, 28 Oct, on its mockup): the step
+// being worked on, else the next to do, its circle, its place in its part and its name. A click opens the sheet on it.
+// An issue with no steps, or with all of them done, shows none.
+const HeadStep = observer(function HeadStep({ steps }: { steps: PlanStep[] }) {
+  const now = stepNow(steps);
+  if (!now) return null;
+  return (
+    <button type="button" className="field-chip head-step" title="Open the plan on this step  ]" onClick={() => toggleIssue("plan", now.place)}>
+      <span className="icon"><StateIcon state={now.step.state} /></span>
+      <span className="head-step-at">{now.part && <span className="head-step-part">{now.part}, </span>}{now.n} of {now.of}</span>
+      <span className="head-step-title">{now.step.title}</span>
+    </button>
+  );
 });
 
 // --- the conversation ------------------------------------------------------------------------------------------------
@@ -380,7 +364,7 @@ const ContextFold = observer(function ContextFold({ page }: { page: IssuePageDat
   );
 });
 
-// What a chat made, in order, for its side to list (Side.tsx): each send of the plan, the card or a step's diagram, and
+// What a chat made, in order, for its sheet to list (Sheet.tsx): each send of the plan, the card or a step's diagram, and
 // each image in a reply, with where it is in the chat (its data-at, and which image there) to bring it into view.
 export interface Artifact { at: string; img?: number; kind: "plan" | "card" | "step" | "image"; name: string; latest: boolean; place?: string }
 const IMAGE = /!\[([^\]]*)\]\(([^)\s]+)/g;

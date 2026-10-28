@@ -26,13 +26,13 @@ export const useChanges = (slug: string) => usePage<{ steps: StepDiff[] }>(`/api
 export const anyCommit = (steps: (PlanStep & { commit?: string })[] | null | undefined): boolean =>
   Boolean(steps?.some((s) => s.commit || anyCommit(s.kids)));
 
-// A step to show in its chat's Changes, asked for by a click on its counts in the steps beside the chat (Steps.tsx):
-// the chat turns to Changes, and that step's card opens and comes into view.
+// A step to show in its chat's Changes, asked for by a click on its counts in the steps over the chat (Steps.tsx): the
+// chat turns to Changes, and that step's card opens and comes into view.
 export const wanted = observable.box<{ slug: string; place: string } | null>(null, { deep: false });
-// On a phone the steps lie over the chat, so they step aside for it.
+// The sheet the steps are on lies over the chat, so it steps aside for it.
 export function showChanges(slug: string, place: string) {
   runInAction(() => wanted.set({ slug, place }));
-  if (dock.narrow && dock.sideShown) toggleIssue();
+  if (dock.sheetShown) toggleIssue();
 }
 
 // Lines quoted from a diff for the reply box of the chat in the middle (Dock.tsx, Composer), which takes them in.

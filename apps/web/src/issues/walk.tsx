@@ -35,8 +35,8 @@ export function stepFrom(slug: string, by: number): string | null {
 const ARROW = <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.48 10.326a.75.75 0 0 0-.96-1.152l-1.77 1.475V3.75a.75.75 0 0 0-1.5 0v6.899L5.48 9.174a.75.75 0 0 0-.96 1.152l3 2.5a.75.75 0 0 0 .96 0l3-2.5Z" /></svg>;
 
 // Where the issue stands in the list it was opened from, and the next and previous issue in it, as J and K open them:
-// Linear's "7 / 187" and its ↓ ↑ at the right end of the issue's top bar, or of its chat's head while the issue beside it
-// is hidden. An issue opened from no list has none.
+// Linear's "7 / 187" and its ↓ ↑ at the right end of the issue's top bar, or of its chat's head. An issue opened from no
+// list has none.
 export const Walk = observer(function Walk({ slug }: { slug: string }) {
   const place = placeOf(slug);
   if (!place) return null;

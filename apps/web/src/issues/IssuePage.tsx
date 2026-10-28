@@ -1,6 +1,6 @@
 // An issue's page (templates/issue.html): the top bar's crumb and its … button, then the issue (IssueView).
 import { observer } from "mobx-react-lite";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import { useParams } from "react-router";
 import { usePage } from "../api/page";
 import { Go } from "../app/nav";
@@ -10,8 +10,8 @@ import { issues } from "../store/issues";
 import { toggled } from "../ui/menu";
 import { GLYPH } from "../ui/icons";
 import { dock } from "../store/dock";
-import { offerIssue, readingOf, toggleIssue } from "../sessions/Dock";
-import { ChatSide } from "../sessions/Side";
+import { toggleIssue } from "../sessions/Dock";
+import { SheetPlan } from "../sessions/Sheet";
 import { painted } from "./painted";
 import { IssueView, type IssuePageData } from "./IssueView";
 import { actionsMenu } from "./menus";
@@ -31,20 +31,22 @@ export const IssuePage = observer(function IssuePage() {
   useEffect(() => { scroll.current?.scrollTo(0, 0); }, [shownSlug]);
   useEffect(() => { if (shown) document.title = `${shown.issue.title} · desk`; }, [shown]);
   useLive(shown, reload);
-  // Beside its chat, the issue comes in when the agent writes it something new to read (store/dock.ts).
+  // Over its chat the issue is a sheet (store/dock.ts): on Plan, its steps and what the chat made; on Issue, its page.
   const chatHere = dock.center && dock.issue && shown?.issue.slug === slug && shown.issue.session === dock.session;
-  const reading = chatHere ? readingOf(shown) : null;
-  useEffect(() => { if (reading) void offerIssue(shown!.issue.session!, reading); }, [chatHere, reading?.mark, reading?.want]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Beside its chat the issue shows its side, the plan and what the chat made; Issue brings its page itself there.
-  const [whole, setWhole] = useState(false);
-  useEffect(() => setWhole(false), [slug]);
-  const side = Boolean(chatHere) && !whole;
+  const plan = Boolean(chatHere) && dock.tab === "plan";
 
   const p = shown && painted(shown.issue);
   return (
     <>
       <Bar
-        crumb={side ? <span className="crumb">Plan</span> : shown && p ? (
+        crumb={chatHere ? (
+          <span className="sheet-tabs">
+            {(["plan", "issue"] as const).map((t) => (
+              <button key={t} type="button" className={`sheet-tab${dock.tab === t ? " here" : ""}`} title={`${t === "plan" ? "Its steps and what the chat made" : "Its page"}  Tab`}
+                onClick={() => dock.setTab(t)}>{t === "plan" ? "Plan" : "Issue"}</button>
+            ))}
+          </span>
+        ) : shown && p ? (
           <>
             {shown.team ? <Go className="crumb" to={`/team/${shown.team.slug}`}>{shown.team.title}</Go> : <Go className="crumb" to="/issues">Issues</Go>}
             {shown.trail.map((a) => (<Fragment key={a.slug}><span className="sep">›</span><Go className="crumb" to={`/issue/${a.slug}`}>{a.title}</Go></Fragment>))}
@@ -53,23 +55,18 @@ export const IssuePage = observer(function IssuePage() {
         ) : null}
         tools={
           <>
-            {chatHere && (
-              <button className="ghost side-switch" type="button" title={whole ? "The plan and what the chat made" : "The issue's page"} onClick={() => setWhole(!whole)}>
-                {whole ? "Plan" : "Issue"}
-              </button>
-            )}
-            {!side && <button className="more" type="button" title="Actions"
+            {!plan && <button className="more" type="button" title="Actions"
               onClick={(e) => { if (shown && p && !toggled(e.currentTarget)) actionsMenu(p, { anchor: e.currentTarget }, p.slug); }}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25" /><circle cx="8" cy="8" r="1.25" /><circle cx="12.5" cy="8" r="1.25" /></svg>
             </button>}
-            {/* Beside its chat, × leaves the chat alone; the issue's title in the chat's head brings it back. */}
-            {dock.sideShown && <button className="more" type="button" title="Hide the issue  ]" onClick={toggleIssue}>{GLYPH.close}</button>}
-            {!side && <Walk slug={slug} />}
+            {/* Over its chat, × puts the sheet away; ] or the issue's title in the chat's head brings it back. */}
+            {dock.sheetShown && <button className="more" type="button" title="Back to the chat  Esc" onClick={() => toggleIssue()}>{GLYPH.close}</button>}
+            {!chatHere && <Walk slug={slug} />}
           </>
         }
       />
       <div className="scroll" ref={scroll}>
-        {shown ? side ? <ChatSide data={shown} /> : <IssueView data={shown} /> : error ? <p className="muted" style={{ padding: 24 }}>{error}</p> : null}
+        {shown ? plan ? <SheetPlan data={shown} /> : <IssueView data={shown} /> : error ? <p className="muted" style={{ padding: 24 }}>{error}</p> : null}
       </div>
     </>
   );

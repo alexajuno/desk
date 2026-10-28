@@ -1,5 +1,5 @@
 // Every page's frame (templates/base.html): the sidebar, the panel the page draws into, the chat that takes the middle
-// on a page that is one (an issue with a chat beside its issue, or /sessions/<id>), the corner's session buttons,
+// on a page that is one (an issue with a chat, its issue a sheet over it, or /sessions/<id>), the corner's session buttons,
 // the shortcuts panel, the new issue panel, and the menus and toasts over them. desk's keys and the clicks that act
 // across the page live here, as desk.js read them on the document.
 import { observer } from "mobx-react-lite";
@@ -23,7 +23,8 @@ import { datePicker } from "../ui/datepicker";
 import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openNearest, openPicture, stepViewer, viewerOpen } from "../ui/viewer";
 import { quoteLines } from "../sessions/Changes";
-import { arrange, Dock, focusComposer, newSession, openSession, SideEdge, toggleIssue } from "../sessions/Dock";
+import { arrange, Dock, focusComposer, newSession, openSession, toggleIssue } from "../sessions/Dock";
+import { dock } from "../store/dock";
 import { Catcher, catchKeys } from "../search/catcher";
 import { triageKey } from "../triage/TriagePage";
 import { deleteReadKey, deleteRow, markAllKey, toggleRead } from "../inbox/actions";
@@ -47,8 +48,7 @@ function openIssueSession(slug: string) {
   else say("This issue has no session yet.");
 }
 
-// The chat the page at this address is: an issue's, its issue beside it when it has something to read, or a
-// session's own page.
+// The chat the page at this address is: an issue's, its issue a ] away as a sheet over it, or a session's own page.
 function chatOf(pathname: string): { session: string | null; slug: string | null } {
   const issue = /^\/issue\/([^/]+)$/.exec(pathname);
   if (issue) {
@@ -187,6 +187,8 @@ function onKeyDown(e: KeyboardEvent) {
   // P, R and Delete on the sidebar's chat under the mouse pin, rename and delete it, before any row in focus.
   if (chatKey(e)) { e.preventDefault(); return; }
 
+  if (dock.sheetShown && sheetKey(e, key)) { e.preventDefault(); return; }
+
   const focused = focusedRow();
   // Linear's Shift ↑ ↓: the selection grows from the row in focus, a row at a time.
   if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp") && selectable(ui.focused)) {
@@ -323,6 +325,23 @@ function onKeyDown(e: KeyboardEvent) {
   }
 }
 
+// The sheet over an issue's chat (store/dock.ts): Tab switches Plan and Issue, J and K walk the drawn steps on Plan, I
+// puts it away into the chat's reply box, and Esc or ] puts it away with the chat where it was.
+function sheetKey(e: KeyboardEvent, key: string): boolean {
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (e.key === "Tab") { dock.setTab(dock.tab === "plan" ? "issue" : "plan"); return true; }
+  if (e.key === "Escape" || e.key === "]") { toggleIssue(); return true; }
+  if (key === "i" && !e.shiftKey) { toggleIssue(); focusComposer(); return true; }
+  if ((key === "j" || key === "k") && !e.shiftKey && dock.tab === "plan") {
+    const rows = [...document.querySelectorAll<HTMLElement>(".sheet-list .plan-step.drawn")];
+    if (!rows.length) return false;
+    const at = rows.findIndex((r) => r.classList.contains("on"));
+    rows[Math.max(0, Math.min(rows.length - 1, at + (key === "j" ? 1 : -1)))].click();
+    return true;
+  }
+  return false;
+}
+
 // A click on a row that opens its issue notes the list it is in, before the page leaves it (React draws the issue's
 // page within the click, so this listens in the capture phase). The Inbox's and Triage's rows step with J and K.
 function onClickFirst(e: MouseEvent) {
@@ -383,7 +402,7 @@ export const Frame = observer(function Frame() {
     <>
       {/* Settings has its own sidebar, as Linear's. */}
       {pathname.startsWith("/settings") ? <SettingsNav /> : <Sidebar />}
-      <div className="panel"><SideEdge /><Outlet /></div>
+      <div className="panel"><Outlet /></div>
       <Dock />
       <Catcher />
       <Corner />

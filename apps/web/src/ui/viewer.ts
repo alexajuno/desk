@@ -37,7 +37,8 @@ export function openPicture(target: Element): boolean {
 
 // V: the picture nearest the middle of the chat in the middle, or of the page, as you see it. False when there is none.
 export function openNearest(): boolean {
-  const view = document.querySelector(".chat-center .dock .dock-scroll") ?? document.querySelector(".panel .scroll");
+  // The sheet over a chat when it is up, else the chat, else the page.
+  const view = document.querySelector(".chat-center:not(.sheet-off) .panel .scroll") ?? document.querySelector(".chat-center .dock .dock-scroll") ?? document.querySelector(".panel .scroll");
   if (!view) return false;
   const pictures = [...view.querySelectorAll(PICTURES)].filter((el) => isPicture(el) && drawingOf(el) && el.checkVisibility());
   if (!pictures.length) return false;
