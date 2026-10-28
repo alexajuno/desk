@@ -1,22 +1,40 @@
 #!/usr/bin/env bash
 # Land a branch on main, as Approve's step: a session gives `~/projects/desk/bin/land feat/<name>` with its Result, and
-# desk runs it from the issue's folder when the user approves (apps/server/src/land.ts, runSteps). It lands the branch
-# on main only by a fast-forward, so a main that moved since the branch began makes it fail, and desk then wakes the
-# session to rebase. It runs in whichever repo its folder is in; desk restarts itself after, when its own checkout moved.
+# desk runs it from the issue's folder when the user approves (apps/server/src/land.ts, runSteps). It runs in whichever
+# repo its folder is in, any repo whose work lands straight on main; desk restarts itself after, when its own checkout moved.
+#
+# When main moved since the branch began, the branch is rebased onto it in its worktree first, with no check after: a
+# repo that lands straight on main rarely breaks there ("usually they don't crash. and if they do, costing more token is
+# valid", the user, 28 Oct). Only a rebase that conflicts fails, and desk then wakes the session to land it by hand.
 #
 # The checkout on main: merge --ff-only there. On no branch, while Try runs another branch: fetch . <branch>:main moves
 # main where it is checked out nowhere, and only as a fast-forward. Then the branch's worktree and the branch go.
-# Its last line says where it landed, which desk keeps as the issue's landed.
+# Its last line says where it landed, which desk keeps as the issue's landed. desk puts a step's stderr after its stdout,
+# and git's rebase and fetch talk on stderr, so all of it goes to stdout, in order.
+exec 2>&1
 set -euo pipefail
 branch=${1:?usage: bin/land <branch>}
 top=$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)
 git -C "$top" rev-parse --verify --quiet "refs/heads/$branch" >/dev/null || { echo "$top has no branch $branch." >&2; exit 1; }
 
 tree=$(git -C "$top" worktree list --porcelain | awk -v want="branch refs/heads/$branch" '/^worktree /{w=substr($0, 10)} $0 == want {print w}')
+if [ "$tree" = "$top" ]; then
+  echo "$branch is checked out in $top itself, so it cannot go: land it by hand." >&2
+  exit 1
+fi
 if [ -n "$tree" ] && [ -n "$(git -C "$tree" status --porcelain)" ]; then
   echo "$branch has uncommitted changes in $tree: commit them or clean them up first." >&2
   git -C "$tree" status --short >&2
   exit 1
+fi
+
+if ! git -C "$top" merge-base --is-ancestor main "$branch"; then
+  [ -n "$tree" ] || { echo "main moved since $branch began, and $branch has no worktree to rebase it in." >&2; exit 1; }
+  if ! git -C "$tree" rebase main; then
+    git -C "$tree" rebase --abort
+    echo "main moved since $branch began, and $branch does not rebase onto it cleanly: rebase it by hand." >&2
+    exit 1
+  fi
 fi
 
 if [ "$(git -C "$top" branch --show-current)" = main ]; then

@@ -160,7 +160,7 @@ Then work it by its protocol, in the chat: send its Plan section, a three-line b
 curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"state": "review", "review_of": "result", "lands": {"steps": ["~/projects/desk/bin/land feat/login-redirect"]}}'
 ```
 
-When a step fails, desk sends the chat its output, to land the work itself; then say where it landed, which moves the issue to Done, or to Waiting on its sub-issues while one is still open. If it cannot land, say why in the chat and end your turn on `"review_of": "question"` instead:
+`bin/land` lands a branch on main in any repo, rebasing it onto main first when main moved since it began. When a step fails, such as a rebase that conflicts, desk sends the chat its output, to land the work itself; then say where it landed, which moves the issue to Done, or to Waiting on its sub-issues while one is still open. If it cannot land, say why in the chat and end your turn on `"review_of": "question"` instead:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>" -X PATCH --json '{"state": "done", "landed": "fe1aca7 on main"}'

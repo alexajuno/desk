@@ -574,11 +574,11 @@ export async function create(): Promise<FastifyInstance> {
   // Approve, the gate. When the issue's session said how its work lands (land.ts, Lands), desk runs those steps itself,
   // the ones you left ticked, and the issue is done with no turn of the session's: "approve means just mark the issue
   // done instead of another round of agent" (the user, 22 Oct). A step that fails wakes the session with its output, to
-  // land the work itself, such as by rebasing onto a main that moved. A session that never said lands the work by its
-  // repo's rules, and the issue shows Landing until the session says, through the API, that it landed. With nothing to
-  // land, no repo or no session, it is done at once. A session in a worktree desk made cannot merge, so desk merges for
-  // it. Either way, an issue with a sub-issue still open waits on it instead of Done (issues.ts, landedState). From the
-  // Inbox you stay in the Inbox: the next notification opens.
+  // land the work itself, such as by resolving a rebase onto main that conflicts. A session that never said lands the
+  // work by its repo's rules, and the issue shows Landing until the session says, through the API, that it landed. With
+  // nothing to land, no repo or no session, it is done at once. A session in a worktree desk made cannot merge, so desk
+  // merges for it. Either way, an issue with a sub-issue still open waits on it instead of Done (issues.ts,
+  // landedState). From the Inbox you stay in the Inbox: the next notification opens.
   app.post("/issue/:slug/approve", async (req: Req, reply) => {
     const slug = req.params.slug, i = await store.load(slug);
     const fromInbox = field(req, "src") === "inbox";
