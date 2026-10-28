@@ -49,7 +49,8 @@ function fillTip(el: HTMLElement) {
     const rows = Object.assign(document.createElement("div"), { className: "rows" });
     for (const line of lines) {
       const [label, keys] = line.split(/\s{2,}/);
-      rows.append(Object.assign(document.createElement("span"), { textContent: label }), keys ? keyCaps(keys) : "");
+      // A line with no keys still fills the keys' column, or the lines after it slip a cell in the grid (28 Oct).
+      rows.append(Object.assign(document.createElement("span"), { textContent: label }), keys ? keyCaps(keys) : document.createElement("span"));
     }
     tip.replaceChildren(rows);
     return;

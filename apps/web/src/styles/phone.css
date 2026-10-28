@@ -9,7 +9,7 @@
   /* a chat's head keeps room for its title: a chat with no issue leaves its folder out (Dock.tsx, ChatHead) */
   .dock-head .dock-folder { display: none; }
   /* and the step the work stands at as its circle and its place alone, "3 of 4" (Dock.tsx, HeadStep) */
-  .head-step-part, .head-step-title { display: none; }
+  .head-step-title { display: none; }
   .field-chip.head-step { margin-left: 0; padding: 0 6px 0 5px; }
   .panel, .side-collapsed .panel, .chat-center .panel, .dock, .side-collapsed .dock {
     top: 0; left: 0; right: 0; bottom: var(--tabs-h); width: auto; border: 0; border-radius: 0; box-shadow: none;

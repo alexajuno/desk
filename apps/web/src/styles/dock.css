@@ -129,8 +129,9 @@
 .field-chip.head-status { flex: none; margin-left: -5px; padding: 0 5px; border-color: transparent; background: transparent; }
 .field-chip.head-status:hover { background: var(--btn-ghost-hover); }
 .head-status .icon { display: inline-flex; }
-/* The step the work stands at (Dock.tsx, HeadStep), a quiet chip as the head's others: its place, then its name. */
-.field-chip.head-step { flex: 0 1 auto; min-width: 0; max-width: 360px; margin-left: 4px; border-color: transparent; background: transparent; color: var(--text-1); }
+/* The step the work stands at (Dock.tsx, HeadStep), a quiet chip as the head's others: its place, then its name, with
+   the room its part's name and the head's chips left (28 Oct). */
+.field-chip.head-step { flex: 0 1 auto; min-width: 0; max-width: 440px; margin-left: 4px; border-color: transparent; background: transparent; color: var(--text-1); }
 .field-chip.head-step:hover { background: var(--btn-ghost-hover); }
 .head-step .icon { display: inline-flex; flex: none; }
 .field-chip .head-step-at { flex: none; color: var(--text-3); }

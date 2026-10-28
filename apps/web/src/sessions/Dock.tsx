@@ -261,15 +261,17 @@ const ChangesOf = observer(function ChangesOf({ slug }: { slug: string }) {
 });
 
 // Where the issue's work stands, at the head's right end ("looks just good", the user, 28 Oct, on its mockup): the step
-// being worked on, else the next to do, its circle, its place in its part and its name. A click opens the sheet on it.
-// An issue with no steps, or with all of them done, shows none.
+// being worked on, else the next to do, its circle, its place in its part and its name. Its part's name, which can run
+// long ("Part 4: the portal, #754 and portal #399"), is in its tooltip with its whole name. A click opens the sheet on
+// it. An issue with no steps, or with all of them done, shows none.
 const HeadStep = observer(function HeadStep({ steps }: { steps: PlanStep[] }) {
   const now = stepNow(steps);
   if (!now) return null;
+  const tip = [now.part, now.step.title, "Open the plan on this step  ]"].filter(Boolean).join("\n");
   return (
-    <button type="button" className="field-chip head-step" title="Open the plan on this step  ]" onClick={() => toggleIssue("plan", now.place)}>
+    <button type="button" className="field-chip head-step" title={tip} onClick={() => toggleIssue("plan", now.place)}>
       <span className="icon"><StateIcon state={now.step.state} /></span>
-      <span className="head-step-at">{now.part && <span className="head-step-part">{now.part}, </span>}{now.n} of {now.of}</span>
+      <span className="head-step-at">{now.n} of {now.of}</span>
       <span className="head-step-title">{now.step.title}</span>
     </button>
   );
