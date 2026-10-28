@@ -99,11 +99,10 @@
   --border-tip-key-raised: lch(23.992% 2.38 272);
   --text-tip-key-raised: lch(66.215% 1.65 272);
   /* Linear's command menu (O then T, P, I) is in the tooltip's palette, with these: the row in focus, its text, the
-     placeholder; and the fill under the mouse of an issue's ↓ ↑ (the .command and .walk blocks below) */
+     placeholder (the .command block below) */
   --bg-cmd-on: lch(20.82% 1.3 272);
   --text-cmd-on: lch(100% 0 272);
   --text-cmd-hint: lch(41.778% 1.425 272);
-  --bg-walk-hover: lch(20.418% 1.429 272);
   /* Display options' controls (.dp-layout and .dp-select below): the layout picked, the other one and the selects, at
      rest and under the mouse. A strong ring rounds the layout picked, and any of them under the mouse. */
   --bg-dp-on: lch(23.906% 1.429 272);
@@ -229,7 +228,6 @@
   --bg-cmd-on: lch(95% 0 282);
   --text-cmd-on: lch(10% 0 282);
   --text-cmd-hint: lch(66% 1 282);
-  --bg-walk-hover: lch(92.44% 0.5 282);
   --bg-dp-on: lch(95.543% 0 282);
   --text-dp-on: lch(10% 0 282);
   --bg-dp-layout: lch(100% 0 282);
@@ -736,20 +734,6 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .menu-foot button:hover { background: var(--bg-cmd-on); }
 .menu.command .menu-foot kbd { height: auto; min-width: 0; padding: 2px; border-radius: 4px; font-weight: 500; }
 
-/* Where an issue stands in the list it was opened from, and its ↓ ↑, at the top bar's right end, measured on linear.app
-   on 2026-10-21 (an issue page opened from Issues, dark and light): "7" in --text-3 and "/ 187" in --text-5, 13px/450 in
-   tabular figures, 8px before two 28px buttons 1px apart, each half a pill, a 14px arrow in --text-3, filled under the
-   mouse. At either end, the button that has nowhere to go is not measured: dimmed. */
-/* It never wraps nor shrinks: in a narrow bar "4 / 9" broke onto three lines (27 Oct); the title shortens instead. */
-.walk { flex: none; display: flex; align-items: center; gap: 8px; }
-.walk-at { font: 450 13px var(--font); font-variant-numeric: tabular-nums; color: var(--text-3); white-space: nowrap; }
-.walk-at span { color: var(--text-5); }
-.walk-steps { display: flex; gap: 1px; }
-.walk-steps button { justify-content: center; width: 28px; padding: 0 2px; border: 0; border-radius: 9999px 0 0 9999px; background: none; color: var(--text-3); }
-.walk-steps button + button { border-radius: 0 9999px 9999px 0; }
-.walk-steps button + button svg { transform: rotate(180deg); }
-.walk-steps button:hover:not(:disabled) { background: var(--bg-walk-hover); }
-.walk-steps button:disabled { color: var(--text-5); cursor: default; }
 /* the S and P menus filter from keys read on the window, so their box is text, with a drawn caret */
 div.menu-filter { flex: 1; line-height: 38px; color: var(--text-1); white-space: nowrap; overflow: hidden; }
 div.menu-filter:empty::before, div.menu-filter:not(:empty)::after { content: ""; display: inline-block; width: 1px; height: 15px;

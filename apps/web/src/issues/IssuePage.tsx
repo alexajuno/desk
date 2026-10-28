@@ -16,7 +16,6 @@ import { painted } from "./painted";
 import { IssueView, type IssuePageData } from "./IssueView";
 import { actionsMenu } from "./menus";
 import { useLive } from "./useLive";
-import { Walk } from "./walk";
 
 export const IssuePage = observer(function IssuePage() {
   const { slug = "" } = useParams();
@@ -61,7 +60,6 @@ export const IssuePage = observer(function IssuePage() {
             </button>}
             {/* Over its chat, × puts the sheet away; ] or the issue's title in the chat's head brings it back. */}
             {dock.sheetShown && <button className="more" type="button" title="Back to the chat  Esc" onClick={() => toggleIssue()}>{GLYPH.close}</button>}
-            {!chatHere && <Walk slug={slug} />}
           </>
         }
       />

@@ -33,7 +33,6 @@ import { ProjectCreatorHost } from "./ProjectCreator";
 import { TeamCreatorHost } from "./TeamCreator";
 import { KeysPanel } from "./KeysPanel";
 import { noteVisit, openIssue, openProject, openTeam, teamPath } from "./open";
-import { noteWalk, placeOf, stepFrom } from "../issues/walk";
 import { chatKey, Sidebar } from "./Sidebar";
 import { Tabs } from "./Tabs";
 import { closeSide, sideOpen, toggleSide } from "./side";
@@ -60,8 +59,6 @@ function chatOf(pathname: string): { session: string | null; slug: string | null
 
 // The issue this page shows, on an issue page.
 const page = () => (document.querySelector(".issue") as HTMLElement | null)?.dataset;
-// The issue whose page this address is, which J and K step on from.
-const issueHere = () => { const m = /^\/issue\/([^/]+)$/.exec(location.pathname); return m ? decodeURIComponent(m[1]) : null; };
 // The chat the cursor is in, else the chat in the middle.
 const chatView = () =>
   (document.activeElement?.closest(".session-view")?.querySelector<HTMLElement>(".dock-scroll") ?? document.querySelector<HTMLElement>(".chat-center .dock .dock-scroll"));
@@ -195,12 +192,6 @@ function onKeyDown(e: KeyboardEvent) {
     if (selectable(ui.focused)) ui.select([ui.focused!]);
     e.preventDefault();
   }
-  // On an issue opened from a list, J and K open the next and the previous issue in it, as Linear's issue view does.
-  else if ((key === "j" || key === "k") && !e.shiftKey && issueHere() && placeOf(issueHere()!) && !document.querySelector(".inbox")) {
-    const to = stepFrom(issueHere()!, key === "j" ? 1 : -1);
-    if (to) go(`/issue/${to}`);
-    e.preventDefault();
-  }
   else if (key === "j" || e.key === "ArrowDown" || key === "k" || e.key === "ArrowUp") {
     moveFocus(key === "j" || e.key === "ArrowDown" ? 1 : -1);
     const now = focusedRow();
@@ -213,10 +204,7 @@ function onKeyDown(e: KeyboardEvent) {
     // directly", the user, 28 Oct). An issue with no chat yet opens beside the list, and once open says it has none.
     else if (focused.matches(".inbox-row[data-slug]") && (focused.matches(".selected") || issues.bySlug.get(focused.dataset.slug!)?.session))
       openIssueSession(focused.dataset.slug!);
-    else {
-      if (focused.dataset.slug && !focused.matches(".inbox-row")) noteWalk(focused);
-      go(focused.getAttribute("href")!);
-    }
+    else go(focused.getAttribute("href")!);
   }
   // Enter in a chat opened to read goes into its composer, as I does: the Inbox's Enter Enter types.
   else if (e.key === "Enter" && !e.shiftKey && focusComposer()) e.preventDefault(); // so the Enter is not typed in
@@ -337,13 +325,6 @@ function sheetKey(e: KeyboardEvent, key: string): boolean {
   return false;
 }
 
-// A click on a row that opens its issue notes the list it is in, before the page leaves it (React draws the issue's
-// page within the click, so this listens in the capture phase). The Inbox's rows step with J and K.
-function onClickFirst(e: MouseEvent) {
-  const row = (e.target as Element).closest?.<HTMLElement>(".item[data-slug]");
-  if (row && !row.matches(".inbox-row") && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) noteWalk(row);
-}
-
 function onClick(e: MouseEvent) {
   const t = e.target as Element;
   if (t.closest(".menu")) return;
@@ -383,12 +364,10 @@ export const Frame = observer(function Frame() {
   useEffect(() => firstDrawn(), []); // the splash goes once the parts drawn are whole
   useEffect(() => {
     document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("click", onClickFirst, true);
     document.addEventListener("click", onClick);
     document.addEventListener("mousemove", onMouseMove);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("click", onClickFirst, true);
       document.removeEventListener("click", onClick);
       document.removeEventListener("mousemove", onMouseMove);
     };
