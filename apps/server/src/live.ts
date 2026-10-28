@@ -270,6 +270,22 @@ function content(m: Sent): hosted.Content {
     ...(m.text.trim() ? [{ type: "text", text: m.text }] : [])];
 }
 
+// Coming back to a long chat compacts it before your message, so that your message and every reply after it re-read a
+// short context rather than the whole conversation: "1h idle + 300k, whenever i get back to the chat" (the user, 28 Oct,
+// on the issue "Compact a desk chat when you come back after an hour or it passes 300k"). After an hour away the prompt
+// cache, which desk's sessions keep for an hour, has expired, and the whole context would be written to it again anyway.
+const AWAY = 3600; // seconds since the chat's last turn ended
+const AWAY_OVER = 100_000; // tokens a chat holds for coming back after AWAY to compact it
+const OVER = 300_000; // tokens a chat holds for any message of yours to compact it
+
+// Only a message you type, between turns: not a command of your own, nor one sent to the turn running now.
+function compactsFirst(id: string, m: Sent): boolean {
+  if (m.now || turns.working(id) || /^\/[\w:-]+(\s|$)/.test(m.text.trim())) return false;
+  const tokens = models.context(id)?.tokens ?? 0, ended = turns.ended(id);
+  const away = ended !== null && Date.now() / 1000 - ended > AWAY;
+  return tokens > OVER || (away && tokens > AWAY_OVER);
+}
+
 // Send the user's message. A session still at work in Claude Code's daemon, from before the panel, takes no message
 // mid-turn: the message waits here until its turn ends, then the host takes the session in with it.
 export async function send(id: string, sent: Sent): Promise<{ queued: boolean }> {
@@ -289,6 +305,13 @@ export async function send(id: string, sent: Sent): Promise<{ queued: boolean }>
     await chats.becomeBare(chat!, content(m));
     moved([id]);
     return { queued: false };
+  }
+  if (compactsFirst(id, m)) {
+    try {
+      await agents.tell(id, "/compact"); // the host's inbox reads it first, then the message below
+    } catch (error) {
+      if (!(error instanceof agents.Busy)) throw error; // still busy in the daemon: the message waits below, uncompacted
+    }
   }
   try {
     await agents.tell(id, content(m), m.uuid, m.now);
