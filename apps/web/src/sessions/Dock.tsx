@@ -24,6 +24,7 @@ import { GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
 import type { PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
+import { anyCommit, Changes, Counts, useChanges } from "./Changes";
 import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
 import { EFFORTS, effortName, loadModels, runsMenu, warm, type Runs as RunsShown } from "./models";
 
@@ -174,6 +175,16 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   const scroller = useRef<HTMLDivElement>(null);
   const stuck = useRef(true); // following the bottom, as new words come
   const m = s.meta;
+  const [view, setView] = useState<View>("chat");
+  const page = chatPage.get();
+  const changes = m?.issue && page?.issue.slug === m.issue.slug && anyCommit(page.plan_steps) ? m.issue.slug : null;
+  const shown = changes ? view : "chat";
+  // Changes opens at its top, and the chat again at its end, where its words keep coming.
+  useLayoutEffect(() => {
+    const el = scroller.current!;
+    stuck.current = shown === "chat";
+    el.scrollTo({ top: shown === "chat" ? el.scrollHeight : 0 });
+  }, [shown]);
 
   const onScroll = () => {
     const el = scroller.current!;
@@ -211,9 +222,10 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   // the conversation runs on behind it (dock.css).
   return (
     <div className="session-view">
-      <ChatHead s={s} />
+      <ChatHead s={s} view={changes ? shown : null} setView={setView} />
       <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>
-        <div className="convo">
+        {shown === "changes" && changes && <ChangesOf slug={changes} />}
+        <div className="convo" hidden={shown === "changes"}>
           {!s.loaded ? <p className="convo-empty">Connecting…</p>
             : quiet(s) ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
               : m?.bare || (m?.chat && s.startAs === "chat") ? `Just Claude, as claude runs in a terminal ${startsIn(s) === "~" ? "from your home folder" : `in ${startsIn(s)}`}: no issue and no desk instructions.`
@@ -235,7 +247,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, whether it works, its issue's
 // title, and its folder. The title shows or hides the issue beside it; a chat with no issue is renamed there. While
 // the issue is hidden, its place in the list it was opened from shows at the right end, as the issue's top bar does.
-const ChatHead = observer(function ChatHead({ s }: { s: LiveSession }) {
+const ChatHead = observer(function ChatHead({ s, view, setView }: { s: LiveSession; view: View | null; setView: (v: View) => void }) {
   const m = s.meta;
   return (
     <header className="dock-head">
@@ -248,10 +260,30 @@ const ChatHead = observer(function ChatHead({ s }: { s: LiveSession }) {
           : <span>{m?.issue?.title ?? m?.title ?? ""}</span>}
         {startsIn(s) && <span className="dock-folder" title={startsIn(s)}>{startsIn(s)}</span>}
       </div>
+      {view && m?.issue && <ViewTabs slug={m.issue.slug} view={view} setView={setView} />}
       {m?.issue && chatPage.get()?.issue.slug === m.issue.slug && <HeadChips issue={chatPage.get()!.issue} />}
       {dock.issue && m?.issue && !dock.sideShown && <Walk slug={m.issue.slug} />}
     </header>
   );
+});
+
+// The chat, or its issue's Changes: each build step's diff (Changes.tsx), in the view tabs' pills, the Changes tab with
+// how much the steps changed. The reply box stays under either.
+type View = "chat" | "changes";
+const ViewTabs = observer(function ViewTabs({ slug, view, setView }: { slug: string; view: View; setView: (v: View) => void }) {
+  const steps = useChanges(slug);
+  const sum = (key: "added" | "deleted") => (steps ?? []).reduce((n, st) => n + st[key], 0);
+  return (
+    <div className="dock-tabs" role="tablist">
+      <button type="button" role="tab" aria-selected={view === "chat"} className={view === "chat" ? "here" : undefined} onClick={() => setView("chat")}>Chat</button>
+      <button type="button" role="tab" aria-selected={view === "changes"} className={view === "changes" ? "here" : undefined} onClick={() => setView("changes")}
+        title="Each build step's diff, from its commit">Changes{steps && <Counts added={sum("added")} deleted={sum("deleted")} />}</button>
+    </div>
+  );
+});
+
+const ChangesOf = observer(function ChangesOf({ slug }: { slug: string }) {
+  return <Changes steps={useChanges(slug)} />;
 });
 
 // --- the conversation ------------------------------------------------------------------------------------------------

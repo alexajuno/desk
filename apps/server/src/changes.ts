@@ -9,7 +9,7 @@ import type { Issue } from "./issues.ts";
 export type Line = [kind: " " | "+" | "-", old: number | null, now: number | null, text: string];
 export type Hunk = { header: string; lines: Line[] };
 export type FileDiff = { path: string; was?: string; added: number; deleted: number; binary?: true; cut?: true; hunks: Hunk[] };
-export type StepDiff = { place: string; title: string; note?: string; commit: string; added: number; deleted: number; files: FileDiff[] };
+export type StepDiff = { place: string; title: string; state: PlanStep["state"]; note?: string; commit: string; added: number; deleted: number; files: FileDiff[] };
 
 // A file's hunks stop past this many lines, marked cut, so one generated file can't swamp the page.
 const MOST_LINES = 3000;
@@ -26,7 +26,7 @@ export async function ofIssue(i: Issue): Promise<StepDiff[]> {
       const place = at ? `${at}.${n + 1}` : `${n + 1}`;
       if (s.commit) {
         const files = await between(agents.workdir(i), before ?? s.base ?? `${s.commit}^`, s.commit);
-        out.push({ place, title: s.title, ...(s.note ? { note: s.note } : {}), commit: s.commit,
+        out.push({ place, title: s.title, state: s.state, ...(s.note ? { note: s.note } : {}), commit: s.commit,
           added: sum(files, "added"), deleted: sum(files, "deleted"), files });
         before = s.commit;
       }

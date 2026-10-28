@@ -147,6 +147,14 @@
   --text-error: #f2994a;
   --font: "Inter Variable", "Inter", "SF Pro Display", -apple-system, system-ui, sans-serif;
   color-scheme: dark;
+  /* a diff's lines and counts, from the Linear Diffs demo on linear.app's Reviews page on 2026-10-28, dark (Changes.tsx) */
+  --diff-add-bg: lch(14.102% 7.717 153.557);
+  --diff-add-edge: lch(67.2% 64.37 141.95);
+  --diff-add-text: lch(80% 80 141.95);
+  --diff-del-bg: lch(13.958% 8.596 15.613);
+  --diff-del-edge: lch(65.2% 73 29);
+  --diff-del-text: lch(80% 80 29);
+  --diff-line-no: lch(39.452% 1.425 272);
 }
 
 :root[data-theme=light] {
@@ -248,6 +256,14 @@
   --text-blocked: lch(50% 80 48);
   --text-error: lch(50% 80 48);
   color-scheme: light;
+  /* a diff's lines and counts, light (the same demo) */
+  --diff-add-bg: lch(97.94% 3.829 148.469);
+  --diff-add-edge: lch(60% 64.37 141.95);
+  --diff-add-text: lch(50% 80 141.95);
+  --diff-del-bg: lch(97.112% 3.635 17.957);
+  --diff-del-edge: lch(50% 73 29);
+  --diff-del-text: lch(50% 80 29);
+  --diff-line-no: lch(66% 1 282);
 }
 
 html { background: var(--bg-app); scroll-behavior: smooth; }
