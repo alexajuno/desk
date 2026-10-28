@@ -12,6 +12,9 @@ import { action, computed, makeObservable, observable } from "mobx";
 
 export type Layout = "page" | "chat" | "both";
 export type SheetTab = "plan" | "issue";
+// What the chat in the middle shows under its head: the chat, or its issue's plan, page or changes ("all could be on a
+// single screen. just that we need a way to switching between those views", the user, 28 Oct).
+export type View = "chat" | "plan" | "issue" | "changes";
 
 const saved = (() => {
   try {
@@ -28,12 +31,14 @@ class Dock {
   sheet = false; // the issue over its chat
   tab: SheetTab = "plan"; // what the sheet shows
   pick: string | null = null; // the step its Plan opens on, by its place, or null for the one being worked on
+  view: View = "chat"; // what the chat in the middle shows; each chat comes on Chat
   pill = saved.pill ?? false; // the chat you left, at the bottom right
 
   constructor() {
     makeObservable(this, {
-      session: observable, center: observable, issue: observable, sheet: observable, tab: observable, pick: observable, pill: observable,
-      sheetShown: computed, layout: computed, arrange: action, toggleSheet: action, setTab: action, dismiss: action,
+      session: observable, center: observable, issue: observable, sheet: observable, tab: observable, pick: observable, view: observable,
+      pill: observable, sheetShown: computed, layout: computed, arrange: action, toggleSheet: action, setTab: action, setView: action,
+      dismiss: action,
     });
   }
 
@@ -53,6 +58,7 @@ class Dock {
   // chat's issue, which its sheet then shows. Any move away puts the sheet away.
   arrange(session: string | null, issue: boolean) {
     if (this.layoutAfter(session, issue) !== "both") { this.sheet = false; this.tab = "plan"; }
+    if (!session || !this.center || session !== this.session) this.view = "chat";
     if (session) {
       this.session = session;
       this.pill = true;
@@ -78,6 +84,12 @@ class Dock {
 
   setTab(tab: SheetTab) {
     this.tab = tab;
+  }
+
+  // The chat in the middle on a view, and on Plan, a step to open on.
+  setView(view: View, pick: string | null = null) {
+    this.view = view;
+    this.pick = pick;
   }
 
   // × on the pill: the chat you left stops waiting there.

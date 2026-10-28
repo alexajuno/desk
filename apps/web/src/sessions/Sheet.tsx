@@ -62,7 +62,8 @@ export const SheetPlan = observer(function SheetPlan({ data }: { data: IssuePage
   const tap = (a: Artifact) => {
     const step = a.kind === "step" && (placed(steps).find(({ step }) => step.title === a.name)?.place ?? a.place);
     if (step) return setPick(step);
-    toggleIssue();
+    if (dock.sheetShown) toggleIssue();
+    dock.setView("chat");
     requestAnimationFrame(() => bring(a));
   };
   // With its diagrams on its steps, a plan holds only Done when and Decide alone, folded: the steps are what you read.

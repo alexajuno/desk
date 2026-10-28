@@ -12,10 +12,10 @@ import { go } from "../app/nav";
 import { splashUp, useSplash } from "../app/splash";
 import { markdown } from "../lib/markdown";
 import { seenPage, usePage } from "../api/page";
-import { HeadStatus, Title, type IssuePageData } from "../issues/IssueView";
+import { HeadStatus, IssueView, Title, type IssuePageData } from "../issues/IssueView";
 import { useLive as useIssueLive } from "../issues/useLive";
 import { folderMenu } from "../issues/menus";
-import { dock, type Layout, type SheetTab } from "../store/dock";
+import { dock, type Layout, type SheetTab, type View } from "../store/dock";
 import { issues } from "../store/issues";
 import { lineKey } from "../store/frame";
 import { toggleSide as toggleSidebar } from "../frame/side";
@@ -24,6 +24,7 @@ import { stepNow, type PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { anyCommit, Changes, Counts, useChanges, wanted } from "./Changes";
+import { SheetPlan } from "./Sheet";
 import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
 import { EFFORTS, effortName, loadModels, runsMenu, warm, type Runs as RunsShown } from "./models";
 
@@ -142,16 +143,23 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   const scroller = useRef<HTMLDivElement>(null);
   const stuck = useRef(true); // following the bottom, as new words come
   const m = s.meta;
-  const [view, setView] = useState<View>("chat");
-  const page = chatPage.get();
-  const changes = m?.issue && page?.issue.slug === m.issue.slug && anyCommit(page.plan_steps) ? m.issue.slug : null;
-  const shown = changes ? view : "chat";
-  // A click on a step's counts in the sheet over the chat turns it to Changes, where that step's card opens (Changes.tsx).
+  // The chat in the middle keeps its view in the store, where the keys reach it; the Inbox's pane keeps its own, and
+  // shows only the chat and its Changes.
+  const docked = dock.center && dock.session === id;
+  const [own, setOwn] = useState<View>("chat");
+  const page = chatPage.get(), here = m?.issue && page?.issue.slug === m.issue.slug ? page : null;
+  const views: View[] = ["chat"];
+  if (here && docked) views.push("plan", "issue");
+  if (here && anyCommit(here.plan_steps)) views.push("changes");
+  const want = docked ? dock.view : own;
+  const shown = views.includes(want) ? want : "chat";
+  const setView = (v: View) => (docked ? dock.setView(v) : setOwn(v));
+  // A click on a step's counts in its plan turns the chat to Changes, where that step's card opens (Changes.tsx).
   const asked = wanted.get();
   useEffect(() => {
-    if (asked && asked.slug === changes) setView("changes");
-  }, [asked, changes]);
-  // Changes opens at its top, and the chat again at its end, where its words keep coming.
+    if (asked && here && asked.slug === here.issue.slug && views.includes("changes")) setView("changes");
+  }, [asked, here]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A view opens at its top, and the chat again at its end, where its words keep coming.
   useLayoutEffect(() => {
     const el = scroller.current!;
     stuck.current = shown === "chat";
@@ -194,10 +202,12 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   // the conversation runs on behind it (dock.css).
   return (
     <div className="session-view">
-      <ChatHead s={s} view={changes ? shown : null} setView={setView} />
+      <ChatHead s={s} views={views} view={shown} setView={setView} />
       <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>
-        {shown === "changes" && changes && <ChangesOf slug={changes} />}
-        <div className="convo" hidden={shown === "changes"}>
+        {here && shown === "plan" && <div className="dock-view dock-plan"><SheetPlan data={here} /></div>}
+        {here && shown === "issue" && <div className="dock-view dock-page"><IssueView data={here} /></div>}
+        {here && shown === "changes" && <ChangesOf slug={here.issue.slug} />}
+        <div className="convo" hidden={shown !== "chat"}>
           {!s.loaded ? <p className="convo-empty">Connecting…</p>
             : quiet(s) ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
               : m?.bare || (m?.chat && s.startAs === "chat") ? `Just Claude, as claude runs in a terminal ${startsIn(s) === "~" ? "from your home folder" : `in ${startsIn(s)}`}: no issue and no desk instructions.`
@@ -217,11 +227,11 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
 });
 
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, then its issue's status and
-// title, its Chat and Changes, and the step its work stands at. The title brings the issue's sheet over the chat; a chat
+// title, its views (Chat, Plan, Issue, Changes), and the step its work stands at. The title brings the issue's sheet over the chat; a chat
 // with no issue is renamed there, and shows its folder, which only an issue's Properties would show otherwise. Whether
 // the chat works shows in the chat itself, its Working… line and its stop button (28 Oct: "the header in chat interface
 // looks kinda tight").
-const ChatHead = observer(function ChatHead({ s, view, setView }: { s: LiveSession; view: View | null; setView: (v: View) => void }) {
+const ChatHead = observer(function ChatHead({ s, views, view, setView }: { s: LiveSession; views: View[]; view: View; setView: (v: View) => void }) {
   const m = s.meta;
   const page = chatPage.get(), here = m?.issue && page?.issue.slug === m.issue.slug ? page : null;
   return (
@@ -235,25 +245,36 @@ const ChatHead = observer(function ChatHead({ s, view, setView }: { s: LiveSessi
           : <span>{m?.issue?.title ?? m?.title ?? ""}</span>}
         {!m?.issue && startsIn(s) && <span className="dock-folder" title={startsIn(s)}>{startsIn(s)}</span>}
       </div>
-      {view && m?.issue && <ViewTabs slug={m.issue.slug} view={view} setView={setView} />}
+      {views.length > 1 && m?.issue && <ViewTabs slug={m.issue.slug} views={views} view={view} setView={setView} />}
       {dock.issue && here && <HeadStep steps={here.plan_steps ?? []} />}
     </header>
   );
 });
 
-// The chat, or its issue's Changes: each build step's diff (Changes.tsx), in the view tabs' pills, the Changes tab with
-// how much the steps changed. The reply box stays under either.
-type View = "chat" | "changes";
-const ViewTabs = observer(function ViewTabs({ slug, view, setView }: { slug: string; view: View; setView: (v: View) => void }) {
-  const steps = useChanges(slug);
-  const sum = (key: "added" | "deleted") => (steps ?? []).reduce((n, st) => n + st[key], 0);
+// The chat, or its issue's Plan (its steps, each one's diagram and decisions, Sheet.tsx), its page, or its Changes, each
+// build step's diff (Changes.tsx), in the view tabs' pills, the Changes tab with how much the steps changed. The reply
+// box stays under each ("A", the user, 28 Oct, picking the tabs in the head over a row of their own).
+const VIEW_TAB: Record<View, [string, string]> = {
+  chat: ["Chat", "The conversation"],
+  plan: ["Plan", "Its steps, each one's diagram and decisions"],
+  issue: ["Issue", "Its page"],
+  changes: ["Changes", "Each build step's diff, from its commit"],
+};
+const ViewTabs = observer(function ViewTabs({ slug, views, view, setView }: { slug: string; views: View[]; view: View; setView: (v: View) => void }) {
   return (
     <div className="dock-tabs" role="tablist">
-      <button type="button" role="tab" aria-selected={view === "chat"} className={view === "chat" ? "here" : undefined} onClick={() => setView("chat")}>Chat</button>
-      <button type="button" role="tab" aria-selected={view === "changes"} className={view === "changes" ? "here" : undefined} onClick={() => setView("changes")}
-        title="Each build step's diff, from its commit">Changes{steps && <Counts added={sum("added")} deleted={sum("deleted")} />}</button>
+      {views.map((v) => (
+        <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "here" : undefined} title={VIEW_TAB[v][1]}
+          onClick={() => setView(v)}>{VIEW_TAB[v][0]}{v === "changes" && <ChangesCounts slug={slug} />}</button>
+      ))}
     </div>
   );
+});
+
+const ChangesCounts = observer(function ChangesCounts({ slug }: { slug: string }) {
+  const steps = useChanges(slug);
+  const sum = (key: "added" | "deleted") => (steps ?? []).reduce((n, st) => n + st[key], 0);
+  return steps && <Counts added={sum("added")} deleted={sum("deleted")} />;
 });
 
 const ChangesOf = observer(function ChangesOf({ slug }: { slug: string }) {

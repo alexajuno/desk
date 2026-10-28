@@ -177,6 +177,18 @@
 .diff-added { color: var(--diff-add-text); }
 .diff-deleted { color: var(--diff-del-text); }
 
+/* Plan and Issue, under the head in the conversation's place (Dock.tsx, SessionView). Each is a container, as the
+   panel is, so the issue lays itself out by its width and the plan puts its steps beside the picked one when there is
+   room. Plan fills what the foot leaves, its steps and the picked step each scrolling on their own; a plan with no
+   steps is one column, as wide as the conversation. The issue's page scrolls as the conversation does, its Properties
+   staying put; its Open chat is this chat. */
+.dock-view { box-sizing: border-box; width: 100%; container-type: inline-size; }
+.dock-plan { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+.dock-plan > .chat-side:not(.sheet-plan) { max-width: 808px; margin: 0 auto; padding: 32px 24px var(--foot-fade); }
+@container (min-width: 881px) { .dock-plan > .sheet-plan { height: 100%; } }
+.dock-page { flex: 1 0 auto; padding-bottom: var(--foot-fade); }
+.dock .open-chat { display: none; }
+
 /* A card per build step, its files under it, as wide as the conversation. */
 .changes { flex: 1 0 auto; box-sizing: border-box; width: 100%; max-width: 808px; margin: 0 auto; padding: 20px 24px var(--foot-fade);
            display: flex; flex-direction: column; gap: 8px; }
