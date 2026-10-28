@@ -196,7 +196,9 @@ function applyLands(i: Issue, body: unknown) {
 // rather than text rendering level only" (the user, 27 Oct). null takes them back.
 // A build step also carries its commit, the one that ends it, from which desk draws the step's diff: "we have diff show
 // while coding, allowing user to catches the problem early" (the user, 28 Oct).
-export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[]; diagram?: string; said?: string; commit?: string };
+export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[]; diagram?: string; said?: string; commit?: string;
+  base?: string; // desk's own, on the first step with a commit: where its branch left main (firstBase)
+};
 const STEP_STATES = ["todo", "running", "done"];
 const SHA = /^[0-9a-f]{4,40}$/i;
 const STEP_SHAPE = 'plan_steps is a list of {"title": "<a few words>", "state": "todo", "running" or "done", "note": "<optional, a few words>", "commit": "<optional: for a build step, the commit that ends it>", "kids": [<its own steps, optional>]}, or null';
@@ -239,7 +241,28 @@ async function applyPlanSteps(i: Issue, body: unknown) {
   const steps = planSteps(list);
   carry(steps);
   await fullCommits(i, steps);
+  await firstBase(i, steps, kept);
   i.plan_steps = JSON.stringify(steps);
+}
+
+// The first step with a commit starts its diff where its branch left main, which desk finds as the commit comes, and
+// keeps while that step's commit stays: once the work lands, main holds the commit and can't say where it began. Each
+// later step starts at the commit of the one before it (changes.ts).
+async function firstBase(i: Issue, steps: PlanStep[], kept: Map<string, PlanStep>) {
+  const all: PlanStep[] = [];
+  const flat = (list: PlanStep[]) => list.forEach((s) => { if (s.commit) all.push(s); flat(s.kids ?? []); });
+  flat(steps);
+  const [first] = all;
+  if (!first) return;
+  const was = kept.get(first.title);
+  if (was?.base && was.commit === first.commit) return void (first.base = was.base);
+  const cwd = agents.workdir(i);
+  const mains = [];
+  for (const ref of ["main", "master", "origin/HEAD", "origin/main", "origin/master"])
+    if (await agents.git(cwd, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`)) mains.push(ref);
+  // With main and origin's main, the fork point is the newer of the two, as git merge-base finds against both at once.
+  const fork = mains.length ? await agents.git(cwd, "merge-base", first.commit!, ...mains) : null;
+  first.base = (fork && fork !== first.commit ? fork : await agents.git(cwd, "rev-parse", `${first.commit}^`)) ?? undefined;
 }
 
 // Each step's commit as its whole hash, looked up in the issue's folder, so that a short one stays one commit as the repo
@@ -258,7 +281,7 @@ async function fullCommits(i: Issue, steps: PlanStep[]) {
 // The steps as an issue's JSON gives them, each one a session drew marked "drawn" rather than carrying its diagram and
 // decisions, which would fill every list of issues: GET /steps/<place> reads them.
 function briefSteps(steps: PlanStep[]): unknown[] {
-  return steps.map(({ diagram, said, kids, commit, ...step }) => ({ ...step, ...(commit ? { commit: commit.slice(0, 7) } : {}),
+  return steps.map(({ diagram, said, kids, commit, base: _, ...step }) => ({ ...step, ...(commit ? { commit: commit.slice(0, 7) } : {}),
     ...(diagram || said ? { drawn: true } : {}), ...(kids ? { kids: briefSteps(kids) } : {}) }));
 }
 

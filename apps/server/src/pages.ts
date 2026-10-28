@@ -5,6 +5,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import * as agents from "./agents.ts";
 import * as automations from "./automations.ts";
+import * as changes from "./changes.ts";
 import * as chats from "./chats.ts";
 import { ISSUES_DIR, TEAMS_DIR } from "./config.ts";
 import * as store from "./issues.ts";
@@ -482,6 +483,12 @@ export async function issuePage(slug: string) {
   if (!all.has(slug)) throw new HttpError(404, "That issue is gone.");
   await advance(all); // moves it on first, as the page does
   return issuePageJson(all, slug);
+}
+
+// The issue's Changes: each build step's diff, from its commit (changes.ts).
+export async function changesPage(slug: string) {
+  if (!(await store.exists(slug))) throw new HttpError(404, "That issue is gone.");
+  return { steps: await changes.ofIssue(await store.load(slug)) };
 }
 
 // A list's groups, chips and view. A group's + opens the new issue panel with what the group says, where the panel can
