@@ -115,7 +115,8 @@ export const SheetPlan = observer(function SheetPlan({ data }: { data: IssuePage
   return (
     <div className="chat-side sheet-plan">
       <div className="sheet-list">{list}</div>
-      <div className="sheet-step">
+      {/* keyed by the step, so a step picked opens at its top, wherever the last one was scrolled to */}
+      <div className="sheet-step" key={pick ?? ""}>
         {picked ? (
           <>
             <h3 className="sheet-step-title">

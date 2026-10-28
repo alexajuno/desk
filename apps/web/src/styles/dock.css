@@ -38,10 +38,20 @@
              background: transparent; color: var(--text-3); transition: background-color 0.1s, color 0.1s; }
 .sheet-tab:hover { background: var(--btn-ghost-hover); color: var(--text-2); }
 .sheet-tab.here { background: var(--bg-tab-on); color: var(--text-1); box-shadow: 0 0 0 0.5px var(--ring-btn); }
-/* Its Plan: the steps down the left, the picked one's diagram and decisions beside them (sessions/Sheet.tsx). */
+/* Its Plan: the steps down the left, the picked one's diagram and decisions beside them (sessions/Sheet.tsx), each
+   scrolling on its own under the bar, as the Inbox's list and its open row do ("the scrolling part should only be the
+   steps side", the user, 28 Oct), with the sidebar's thin scrollbar, the step's at the sheet's edge. A narrow sheet,
+   one column, scrolls whole. */
 .chat-side.sheet-plan { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 28px; padding: 20px 24px 32px; }
 .sheet-list { min-width: 0; }
 .sheet-step { min-width: 0; }
+@container (min-width: 881px) {
+  .scroll:has(> .sheet-plan) { overflow: hidden; }
+  .chat-side.sheet-plan { box-sizing: border-box; height: 100%; padding: 0 0 0 24px; }
+  .sheet-list, .sheet-step { overflow: auto; scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
+  .sheet-list { padding: 20px 0 32px; }
+  .sheet-step { padding: 20px 24px 32px 0; }
+}
 .sheet-step-title { display: flex; align-items: center; gap: 9px; height: 28px; margin: 0 0 12px; font: 500 15px var(--font); color: var(--text-1); }
 .sheet-step-title .side-what { margin-left: 0; }
 .sheet-step .plan-step-said { margin-top: 12px; }

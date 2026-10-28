@@ -338,7 +338,9 @@ function sheetKey(e: KeyboardEvent, key: string): boolean {
     const rows = [...document.querySelectorAll<HTMLElement>(".sheet-list .plan-step.drawn")];
     if (!rows.length) return false;
     const at = rows.findIndex((r) => r.classList.contains("on"));
-    rows[Math.max(0, Math.min(rows.length - 1, at + (key === "j" ? 1 : -1)))].click();
+    const row = rows[Math.max(0, Math.min(rows.length - 1, at + (key === "j" ? 1 : -1)))];
+    row.click();
+    row.scrollIntoView({ block: "nearest" }); // the list scrolls on its own, and may hold the row out of sight
     return true;
   }
   return false;
