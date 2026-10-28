@@ -87,28 +87,34 @@ export const closeMenu = () => menus.close();
 // Whether a click on this anchor only closed its own menu, so it must not open it again.
 export const toggled = (anchor: Element | null) => anchor !== null && anchor === menus.justClosed;
 
-// Placed under its anchor, or above it when the window has no room below, and kept 8px inside the window.
+// A phone's keyboard, which Chrome draws over the page (index.html) and whose box it passes on: the window keeps its
+// height under it.
+const keyboard = (navigator as Navigator & { virtualKeyboard?: EventTarget & { boundingRect: DOMRect } }).virtualKeyboard;
+
+// Placed under its anchor, or above it when the window has no room below, and kept 8px inside the window, above the
+// keyboard while it is up.
 function place(box: HTMLElement, o: MenuOptions) {
-  const w = box.offsetWidth, h = box.offsetHeight;
+  const w = box.offsetWidth, h = box.offsetHeight, bottom = innerHeight - (keyboard?.boundingRect.height ?? 0);
   let x = o.x ?? 0, y = o.y ?? 0;
   if (o.anchor?.isConnected) {
     const r = o.anchor.getBoundingClientRect();
     x = r.left;
     y = r.bottom + 4;
-    if (y + h > innerHeight - 8) y = Math.max(8, r.top - 4 - h);
-  } else if (y + h > innerHeight - 8) y = Math.max(8, innerHeight - 8 - h);
+    if (y + h > bottom - 8) y = Math.max(8, r.top - 4 - h);
+  } else if (y + h > bottom - 8) y = Math.max(8, bottom - 8 - h);
   box.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`;
   box.style.top = `${y}px`;
 }
 
-// And placed again when the window resizes, as a phone's does when its keyboard comes up for the filter: left where
-// it opened, the menu ran under the keyboard (25 Oct).
+// And placed again when the window resizes, or a phone's keyboard comes up for the filter: left where it opened, the
+// menu ran under the keyboard (25 Oct).
 function usePlacedOnResize(el: RefObject<HTMLDivElement | null>, o: MenuOptions) {
   useEffect(() => {
     if (o.center) return;
     const again = () => { if (el.current) place(el.current, o); };
     addEventListener("resize", again);
-    return () => removeEventListener("resize", again);
+    keyboard?.addEventListener("geometrychange", again);
+    return () => { removeEventListener("resize", again); keyboard?.removeEventListener("geometrychange", again); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
