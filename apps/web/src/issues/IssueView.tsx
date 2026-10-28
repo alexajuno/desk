@@ -255,24 +255,15 @@ function Pick({ className, slug, field, value, title, children }: { className: s
   );
 }
 
-// An issue's status, priority and team in its chat's head, as Linear's quiet chips, filled only under the mouse; each
-// opens the menu it opens on the issue's page.
-export const HeadChips = observer(function HeadChips({ issue }: { issue: IssueRow }) {
-  const p = painted(issue), team = p.team ? issues.teams.get(p.team) : null;
+// An issue's status at the head of its chat, before its title, as an issue's row in a list starts with it: its icon
+// alone, a quiet chip filled only under the mouse, that opens the menu it opens on the issue's page. Its priority and
+// team live in the sheet's Properties, with P and Ctrl ⇧ M ("looks valid", the user, 28 Oct).
+export const HeadStatus = observer(function HeadStatus({ issue }: { issue: IssueRow }) {
+  const p = painted(issue);
   return (
-    <div className="head-chips">
-      <Pick className="field-chip pick" slug={p.slug} field="state" value={p.state} title="Change status  S">
-        <span className="icon" data-field="state"><StateIcon state={p.state} /></span><span className="field-label" data-field="state">{STATE_NAMES[p.state]}</span>
-      </Pick>
-      <Pick className={`field-chip pick${p.priority === "none" ? " unset" : ""}`} slug={p.slug} field="priority" value={p.priority} title="Change priority  P">
-        <span className="icon" data-field="priority"><PrioIcon level={p.priority} /></span><span className="field-label" data-field="priority">{p.priority === "none" ? "Priority" : PRIORITY_NAMES[p.priority]}</span>
-      </Pick>
-      <button className={`field-chip team-pick${p.team ? "" : " unset"}`} type="button" data-slug={p.slug} data-value={p.team ?? ""} title="Move to a different team  Ctrl ⇧ M"
-        onClick={(e) => { if (!toggled(e.currentTarget)) teamPicker(p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "team", value)); }}>
-        {GLYPH.team}
-        <span>{team ? team.title : "Team"}</span>
-      </button>
-    </div>
+    <Pick className="field-chip pick head-status" slug={p.slug} field="state" value={p.state} title={`${STATE_NAMES[p.state]}: change status  S`}>
+      <span className="icon" data-field="state"><StateIcon state={p.state} /></span>
+    </Pick>
   );
 });
 

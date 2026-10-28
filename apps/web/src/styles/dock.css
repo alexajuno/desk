@@ -109,7 +109,7 @@
 @keyframes dock-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
 @keyframes dock-blink { 50% { opacity: 0; } }
 
-/* its head: the live dot, the issue's title and folder, then hide, whole page and close */
+/* its head: an issue's status and title, or a chat's title and folder, then Chat and Changes and the step (Dock.tsx, ChatHead) */
 .dock-head { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px 0 14px;
              border-bottom: 1px solid var(--border-1); }
 .dock-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; font: 500 13px var(--font); }
@@ -124,11 +124,11 @@
 .dock-title input.title:hover { background: var(--btn-ghost-hover); }
 .dock-title input.title:focus { background: var(--bg-hover); }
 /* the sidebar's toggle, while the sidebar is hidden, as a page's top bar has it */
-/* an issue's status, priority and team at the head's right end (IssueView, HeadChips): quiet chips, filled under the mouse */
-.head-chips { flex: none; display: flex; align-items: center; gap: 2px; }
-.head-chips .field-chip { border-color: transparent; background: transparent; color: var(--text-2); }
-.head-chips .field-chip:hover { background: var(--btn-ghost-hover); }
-.head-chips .field-chip .icon { display: inline-flex; }
+/* an issue's status before its title (IssueView, HeadStatus): its icon alone, in a quiet chip filled under the mouse,
+   the icon where an issue row's starts */
+.field-chip.head-status { flex: none; margin-left: -5px; padding: 0 5px; border-color: transparent; background: transparent; }
+.field-chip.head-status:hover { background: var(--btn-ghost-hover); }
+.head-status .icon { display: inline-flex; }
 /* The step the work stands at (Dock.tsx, HeadStep), a quiet chip as the head's others: its place, then its name. */
 .field-chip.head-step { flex: 0 1 auto; min-width: 0; max-width: 360px; margin-left: 4px; border-color: transparent; background: transparent; color: var(--text-1); }
 .field-chip.head-step:hover { background: var(--btn-ghost-hover); }

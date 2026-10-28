@@ -12,10 +12,9 @@ import { go } from "../app/nav";
 import { splashUp, useSplash } from "../app/splash";
 import { markdown } from "../lib/markdown";
 import { seenPage, usePage } from "../api/page";
-import { HeadChips, Title, type IssuePageData } from "../issues/IssueView";
+import { HeadStatus, Title, type IssuePageData } from "../issues/IssueView";
 import { useLive as useIssueLive } from "../issues/useLive";
 import { folderMenu } from "../issues/menus";
-import { Walk } from "../issues/walk";
 import { dock, type Layout, type SheetTab } from "../store/dock";
 import { issues } from "../store/issues";
 import { lineKey } from "../store/frame";
@@ -217,26 +216,27 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   );
 });
 
-// The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, whether it works, its issue's
-// title, and its folder. The title brings the issue's sheet over the chat; a chat with no issue is renamed there. The
-// issue's place in the list it was opened from shows at the right end, as the issue's top bar does.
+// The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, then its issue's status and
+// title, its Chat and Changes, and the step its work stands at. The title brings the issue's sheet over the chat; a chat
+// with no issue is renamed there, and shows its folder, which only an issue's Properties would show otherwise. Whether
+// the chat works shows in the chat itself, its Working… line and its stop button (28 Oct: "the header in chat interface
+// looks kinda tight").
 const ChatHead = observer(function ChatHead({ s, view, setView }: { s: LiveSession; view: View | null; setView: (v: View) => void }) {
   const m = s.meta;
+  const page = chatPage.get(), here = m?.issue && page?.issue.slug === m.issue.slug ? page : null;
   return (
     <header className="dock-head">
       <button className="side-icon side-toggle" type="button" title="Show sidebar  [" onClick={toggleSidebar}>{SIDE_ICON}</button>
-      <Dot s={s} />
+      {here && <HeadStatus issue={here.issue} />}
       <div className="dock-title">
         {dock.issue && m?.issue
           ? <button type="button" className="dock-issue" title="Its plan and its page  ]" onClick={() => toggleIssue()}>{m.issue.title}</button>
           : m?.chat && !m.issue ? <Title line title={m.title} save={(t) => renameChat(s.id, t)} />
           : <span>{m?.issue?.title ?? m?.title ?? ""}</span>}
-        {startsIn(s) && <span className="dock-folder" title={startsIn(s)}>{startsIn(s)}</span>}
+        {!m?.issue && startsIn(s) && <span className="dock-folder" title={startsIn(s)}>{startsIn(s)}</span>}
       </div>
       {view && m?.issue && <ViewTabs slug={m.issue.slug} view={view} setView={setView} />}
-      {m?.issue && chatPage.get()?.issue.slug === m.issue.slug && <HeadChips issue={chatPage.get()!.issue} />}
-      {dock.issue && m?.issue && chatPage.get()?.issue.slug === m.issue.slug && <HeadStep steps={chatPage.get()!.plan_steps ?? []} />}
-      {dock.issue && m?.issue && !dock.sheetShown && <Walk slug={m.issue.slug} />}
+      {dock.issue && here && <HeadStep steps={here.plan_steps ?? []} />}
     </header>
   );
 });

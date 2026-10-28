@@ -6,10 +6,8 @@
 .tabs { display: none; }
 
 @media (max-width: 640px) {
-  /* an issue's chat's head keeps room for its title: its status and priority as icons alone, its team and folder left
-     out (Dock.tsx, HeadChips) */
-  .head-chips .field-label, .head-chips .team-pick, .dock-head .dock-folder { display: none; }
-  .head-chips .field-chip { padding: 0 5px; }
+  /* a chat's head keeps room for its title: a chat with no issue leaves its folder out (Dock.tsx, ChatHead) */
+  .dock-head .dock-folder { display: none; }
   /* and the step the work stands at as its circle and its place alone, "3 of 4" (Dock.tsx, HeadStep) */
   .head-step-part, .head-step-title { display: none; }
   .field-chip.head-step { margin-left: 0; padding: 0 6px 0 5px; }
