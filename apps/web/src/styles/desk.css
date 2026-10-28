@@ -441,9 +441,12 @@ button.plan-step:hover, button.plan-step.open { background: var(--bg-hover); }
 .pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 48px; border: 1px solid var(--border-3);
         background: var(--bg-panel); color: var(--text-3); font-size: 12px; white-space: nowrap; }
 
-/* search: the query box fills the top bar; a row shows the description where it matched */
+/* search: the query box fills the top bar; a row shows the description where it matched.
+   The box measured on linear.app's search page on 28 Oct, dark and light, at 2x: 13px/22px at 450 in --text-2,
+   its placeholder at 500 in --text-5, the icon in --text-3 */
 .search-box { display: flex; align-items: center; gap: 8px; flex: 1; margin: 0; color: var(--text-3); }
-.search-box input[type=text] { height: 42px; padding: 0; border: 0; background: transparent; font-size: 14px; }
+.search-box input[type=text] { height: 42px; padding: 0; border: 0; background: transparent; font: 450 13px/22px var(--font); color: var(--text-2); }
+.search-box input[type=text]::placeholder { font-weight: 500; color: var(--text-5); }
 /* where the keys typed after / wait for the search page (search/catcher.tsx): out of sight, yet able to take the focus */
 .search-catch { position: fixed; top: -100px; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .results .item .title { flex: none; max-width: 60%; }
