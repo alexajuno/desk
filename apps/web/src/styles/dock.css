@@ -198,17 +198,6 @@
 .brought { animation: brought 1.2s ease; border-radius: 8px; }
 @keyframes brought { 0%, 40% { box-shadow: 0 0 0 2px var(--accent); } 100% { box-shadow: 0 0 0 2px transparent; } }
 
-/* What the issue waits on from you, on top of the composer (Dock.tsx, StepBar): one row in the question card's box,
-   what it waits on at the left, the step's button at the right end; the steps Approve runs open above the row. */
-.step-bar { flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); margin: 0 auto 8px; padding: 6px 6px 6px 12px;
-            border: 1px solid var(--border-2); border-radius: 12px; background: var(--bg-raised); animation: dock-rise 0.18s ease; }
-.step-bar .review-lands { margin: 6px 0 8px; }
-.step-bar-row { display: flex; align-items: center; gap: 6px; min-height: 28px; }
-.step-bar-what { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px var(--font); color: var(--text-2); }
-.step-bar button { flex: none; }
-.step-bar-steps { font-size: 12px; color: var(--text-3); }
-.step-bar-steps.on { color: var(--text-1); }
-
 .steps { font-size: 13px; color: var(--text-3); }
 /* the Context the chat opens on (Dock.tsx, ContextFold): a fold as the steps are, its first line beside its name */
 .context .steps-head { width: 100%; }

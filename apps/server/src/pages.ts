@@ -182,7 +182,7 @@ function replyWhy(i: Issue, result: boolean): string {
       const of = reviewOf(i);
       if (of === "plan") return "plan ready";
       if (of === "question") return "asks you";
-      if (of === "reply" && !result) return "chat replied";
+      if (of === "reply") return "chat replied";
       return result ? "result ready" : "check it";
     }
     case "done": return i.landed ? "landed" : "done";
@@ -361,11 +361,13 @@ export function step(i: Issue, asks: Set<string>, hasPlan: boolean, hasResult: b
     return { text: `Waiting on ${i.waiting_on || "someone"} since ${since}`, button: i.session ? chat : start };
   }
   if (i.state === "review") {
-    // Approve lands a result, and only a result: on a plan the button says go.
+    // Approve lands a result, and only a result: on a plan the button says go, and on a reply, such as a design step
+    // reported, it opens the chat, even when the issue holds a card from before (28 Oct: a step's Approve told the
+    // session to land its work mid-step).
     const of = reviewOf(i);
     if (of === "plan") return { text: "Plan ready: press Go, or reply in its chat", button: { label: "Go", action: "go" } };
     if (of === "question") return { text: "Asks you something: answer in its chat", button: chat };
-    if (of === "reply" && !hasResult) return { text: "Replied: your turn in its chat", button: chat };
+    if (of === "reply") return { text: "Replied: your turn in its chat", button: chat };
     return { text: hasResult ? "In review" : "In review, no card", button: { label: "Approve", action: "approve" } };
   }
   if (i.state === "done" && i.landed) {
@@ -415,7 +417,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
   // chat shows the card wherever the session sent it, in review or after, and the plan the same way, its text folded
   // under Details as the card's write-up is.
   const of = i.state === "review" ? reviewOf(i) : null;
-  const reviewing = of === "result" || (of === "reply" && Boolean(result));
+  const reviewing = of === "result";
   const split = (text: string) => (splitResult(text) ?? [text, ""]).map((part) => toHtml(part, `/issue/${slug}/f/`));
   const card = result && splitResult(result) ? split(result) : null;
   const plan = store.section(i, "Plan") || readOr(join(store.folder(slug), store.PLAN));

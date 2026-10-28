@@ -12,7 +12,7 @@ import { go } from "../app/nav";
 import { splashUp, useSplash } from "../app/splash";
 import { markdown } from "../lib/markdown";
 import { seenPage, usePage } from "../api/page";
-import { HeadChips, Lands, Title, useStep, type IssuePageData } from "../issues/IssueView";
+import { HeadChips, Title, type IssuePageData } from "../issues/IssueView";
 import { useLive as useIssueLive } from "../issues/useLive";
 import { folderMenu } from "../issues/menus";
 import { Walk } from "../issues/walk";
@@ -225,7 +225,6 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
         <div className="dock-foot">
           <Running s={s} />
           {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
-          {m?.issue && <StepBar slug={m.issue.slug} />}
           <Composer s={s} />
         </div>
       </div>
@@ -416,8 +415,9 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
 
 // The card a session sent, where it sent it: the latest drawn, its text folded under Details; an earlier one a line. The
 // plan is always a line, never drawn: while a step runs the chat shows that step's diagram only, and the whole plan is
-// a click away in the side ("never go go all or anything. we had all diagrams on sidebar", the user, 27 Oct). What it
-// waits on from you, Go or Approve, is on top of the composer (StepBar).
+// a click away in the side ("never go go all or anything. we had all diagrams on sidebar", the user, 27 Oct). Go and
+// Approve are typed in the composer, with no bar of buttons over it: "just let me type the message directly, it takes
+// no longer time" (the user, 28 Oct).
 const Sent = observer(function Sent({ at, page, section, latest }: { at: string; page: IssuePageData | null; section: Section; latest: boolean }) {
   const parts = !page || section === "Plan" ? null : page.card ?? (page.result ? [page.result_html, ""] : null);
   const name = section === "Plan" ? "Plan" : "Card"; // as the bar and the side say it
@@ -475,40 +475,6 @@ const StepSent = function StepSent({ at, step, top, latest }: { at: string; step
     </div>
   );
 };
-
-// What the issue waits on from you, on top of the composer, where you act ("user take action in the composer only", the
-// user, 27 Oct), as a question's buttons are: Go on a plan, Approve on a card, with Try beside it and the steps Approve
-// runs a click away, to untick. Ctrl Enter presses the step, as on the issue's page (Frame).
-const StepBar = observer(function StepBar({ slug }: { slug: string }) {
-  const page = chatPage.get();
-  return page?.issue.slug === slug ? <StepActs key={slug} page={page} /> : null;
-});
-
-const StepActs = observer(function StepActs({ page }: { page: IssuePageData }) {
-  const { step, landing, steps, skip, setSkip, act } = useStep(page);
-  const [open, setOpen] = useState(false);
-  const b = step.button;
-  if (!landing && b?.action !== "go" && b?.action !== "approve") return null;
-  const approving = landing || b?.action === "approve";
-  const t = approving && !landing ? page.trial : null;
-  const n = steps?.length ?? 0, on = n - skip.filter((i) => i < n).length;
-  return (
-    <div className="step-bar">
-      {open && steps && n > 0 && <Lands steps={steps} skip={skip} setSkip={setSkip} />}
-      <div className="step-bar-row">
-        <span className="step-bar-what">{approving ? "Its card waits for your review" : "Its plan waits for your go"}</span>
-        {approving && n > 0 && (
-          <button className={`ghost step-bar-steps${open ? " on" : ""}`} type="button" title={open ? "Hide the steps" : "The steps Approve runs, to untick"} onClick={() => setOpen(!open)}>
-            {on === n ? `Approve runs ${n} ${n === 1 ? "step" : "steps"}` : `${on} of ${n} steps`}
-          </button>
-        )}
-        {t && <button type="button" title={t.title} disabled={t.disabled} onClick={() => act(t.action!)}>{t.label}</button>}
-        <button className="primary step" type="button" disabled={b?.disabled} title={b?.disabled ? undefined : `${b?.label}  Ctrl Enter`}
-          onClick={() => act(b!.action!)}>{b?.label}</button>
-      </div>
-    </div>
-  );
-});
 
 const LONG = 600; // characters past which a message shows its first lines only, as claude.ai shows a long paste
 
