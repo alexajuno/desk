@@ -89,6 +89,15 @@ export function arrange(session: string | null) {
   move(dock.layoutAfter(session), () => dock.arrange(session));
 }
 
+// The views a chat has, in its head's order: Chat; for an issue's chat in the middle, its Plan and its page; and for an
+// issue's, its Changes once a step has sent its commit.
+function viewsOf(here: IssuePageData | null, docked: boolean): View[] {
+  const views: View[] = ["chat"];
+  if (here && docked) views.push("plan", "issue");
+  if (here && anyCommit(here.plan_steps)) views.push("changes");
+  return views;
+}
+
 // Whether the chat in the middle is an issue's, whose Plan and page it can show.
 const hasIssue = () => dock.center && chatPage.get()?.issue.session === dock.session;
 
@@ -97,6 +106,26 @@ export function togglePlan(): boolean {
   if (!hasIssue()) return false;
   dock.setView(dock.view === "plan" ? "chat" : "plan");
   return true;
+}
+
+// The keys of an issue's chat in the middle while you read it, the reply box keeping its own Tab: Tab and Shift Tab walk
+// its views, Esc goes back to Chat from another one, and on Plan, J and K walk its drawn steps ("looks valid", the
+// user, 28 Oct, on its sketch). I goes into the reply box on any view, and V opens the diagram on screen (Frame.tsx).
+export function viewKey(e: KeyboardEvent, key: string): boolean {
+  if (e.ctrlKey || e.metaKey || e.altKey || !hasIssue()) return false;
+  const views = viewsOf(chatPage.get(), true), at = Math.max(0, views.indexOf(dock.view));
+  if (e.key === "Tab") { dock.setView(views[(at + (e.shiftKey ? views.length - 1 : 1)) % views.length]); return true; }
+  if (e.key === "Escape" && views[at] !== "chat") { dock.setView("chat"); return true; }
+  if ((key === "j" || key === "k") && !e.shiftKey && views[at] === "plan") {
+    const rows = [...document.querySelectorAll<HTMLElement>(".plan-view-list .plan-step.drawn")];
+    if (!rows.length) return false;
+    const now = rows.findIndex((r) => r.classList.contains("on"));
+    const row = rows[Math.max(0, Math.min(rows.length - 1, now + (key === "j" ? 1 : -1)))];
+    row.click();
+    row.scrollIntoView({ block: "nearest" }); // the list scrolls on its own, and may hold the row out of sight
+    return true;
+  }
+  return false;
 }
 
 export const Dock = observer(function Dock() {
@@ -147,9 +176,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   const docked = dock.center && dock.session === id;
   const [own, setOwn] = useState<View>("chat");
   const page = chatPage.get(), here = m?.issue && page?.issue.slug === m.issue.slug ? page : null;
-  const views: View[] = ["chat"];
-  if (here && docked) views.push("plan", "issue");
-  if (here && anyCommit(here.plan_steps)) views.push("changes");
+  const views = viewsOf(here, docked);
   const want = docked ? dock.view : own;
   const shown = views.includes(want) ? want : "chat";
   const setView = (v: View) => (docked ? dock.setView(v) : setOwn(v));
@@ -255,8 +282,8 @@ const ChatHead = observer(function ChatHead({ s, views, view, setView }: { s: Li
 // build step's diff (Changes.tsx), in the view tabs' pills, the Changes tab with how much the steps changed. The reply
 // box stays under each ("A", the user, 28 Oct, picking the tabs in the head over a row of their own).
 const VIEW_TAB: Record<View, [string, string]> = {
-  chat: ["Chat", "The conversation"],
-  plan: ["Plan", "Its steps, each one's diagram and decisions"],
+  chat: ["Chat", "The conversation  Esc"],
+  plan: ["Plan", "Its steps, each one's diagram and decisions  ]"],
   issue: ["Issue", "Its page"],
   changes: ["Changes", "Each build step's diff, from its commit"],
 };

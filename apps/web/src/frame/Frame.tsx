@@ -23,7 +23,7 @@ import { datePicker } from "../ui/datepicker";
 import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openNearest, openPicture, stepViewer, viewerOpen } from "../ui/viewer";
 import { commentKey, dropPick } from "../sessions/Changes";
-import { arrange, Dock, focusComposer, newSession, openSession, togglePlan } from "../sessions/Dock";
+import { arrange, Dock, focusComposer, newSession, openSession, togglePlan, viewKey } from "../sessions/Dock";
 import { Catcher, catchKeys } from "../search/catcher";
 import { deleteReadKey, deleteRow, markAllKey, toggleRead } from "../inbox/actions";
 import { Corner } from "./Corner";
@@ -181,6 +181,8 @@ function onKeyDown(e: KeyboardEvent) {
   if (key === "o" && !e.shiftKey) { oPressed = Date.now(); return; }
   // P, R and Delete on the sidebar's chat under the mouse pin, rename and delete it, before any row in focus.
   if (chatKey(e)) { e.preventDefault(); return; }
+  // Tab, Esc and J and K on an issue's chat in the middle: its views, and its Plan's steps.
+  if (viewKey(e, key)) { e.preventDefault(); return; }
 
   const focused = focusedRow();
   // Linear's Shift ↑ ↓: the selection grows from the row in focus, a row at a time.
