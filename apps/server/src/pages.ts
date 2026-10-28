@@ -72,7 +72,7 @@ const iso = (t: string) => parseLocal(t).getTime() / 1000;
 // never started, is not working, and its next message resumes it.
 const working = (i: Issue) => Boolean(i.session && turns.working(i.session));
 
-// Where the issue's chat stands, for its Properties, the sidebar and Triage: working, idle (your move), or none, with no chat.
+// Where the issue's chat stands, for its Properties and the sidebar: working, idle (your move), or none, with no chat.
 const talkOf = (i: Issue) => (!i.session ? "none" : working(i) ? "working" : "idle");
 
 // The sessions asking you to allow a tool now. Only a running session can ask, and the host is the one that knows.
@@ -197,7 +197,7 @@ function replyWhy(i: Issue, result: boolean): string {
 // What each reason for being in the Inbox reads as, in a row's second line, after "Session".
 const NOTICES: Record<string, string> = {
   "chat replied": "replied: your turn in its chat", "waiting for you": "is waiting for you", "plan ready": "wrote its plan: read it, then press Go",
-  "no chat": "has no chat: settle it in Triage",
+  "no chat": "has no chat: set its status on its page",
   "asks you": "asks you something: answer in its chat", "landing stuck": "stopped before the work landed",
   "result ready": "finished: the result is ready", "check it": "finished, with no result",
   landed: "landed the work: the issue is done", done: "replied: the issue is done", dropped: "replied: the issue was dropped",
@@ -550,8 +550,8 @@ async function loadTeam(slug: string) {
 const named = async (milestones: projects.Milestone[] = []): Promise<views.Named> =>
   ({ team: await teams.loadAll(), project: await projects.loadAll(), milestone: new Map(milestones.map((m) => [m.id, m])) });
 
-// A team's own page, its settings as Linear keeps them: its name, its description and whether it is archived. Its issues,
-// its Triage and its projects have pages of their own under it, as Linear's team has.
+// A team's own page, its settings as Linear keeps them: its name, its description and whether it is archived. Its issues
+// and its projects have pages of their own under it, as Linear's team has.
 export async function teamPage(slug: string) {
   const t = await loadTeam(slug);
   return { team: { slug: t.slug, title: t.title, state: t.state, body: t.body, body_html: toHtml(t.body) } };

@@ -254,7 +254,7 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
   const days = DONE_DAYS[view.done ?? "none"];
   const now = Date.now() / 1000;
   // Done and dropped issues come back by Completed issues, or when a status filter asks for them by name. A chat's
-  // issue in Triage shows in the sidebar's Triage list, as Linear keeps Triage apart, unless a filter asks for it.
+  // issue in Triage stays out, as Linear keeps Triage apart: its chat comes up in the Inbox. A filter may ask for it.
   const [negate, wanted] = view.filters.get("status") ?? [true, []];
   const asked = new Set(negate ? [] : ["done", "dropped", "triage"].filter((s) => wanted.includes(s)));
   const base = pageIssues.filter((i) => (i.state !== "triage" || asked.has("triage"))
@@ -308,7 +308,7 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
   } else if (view.group === "folder") {
     order = [...[...new Set(pageIssues.map((i) => value(i, "folder")))].filter((v) => v !== "none").sort(), "none"];
   } else if (view.group === "none") order = [""];
-  // Triage has its own page, so its group shows only when a filter asks for it.
+  // Triage's group shows only when a filter asks for it, as its issues do.
   else order = ({ status: (holds ?? store.STATES).filter((s) => s !== "triage" || asked.has("triage")), priority: store.PRIORITIES, protocol: store.PROTOCOLS } as Record<string, string[]>)[view.group];
 
   const count = (rows: Issue[]): number => rows.reduce((n, i) => n + 1 + count(kids.get(i.slug) ?? []), 0);
