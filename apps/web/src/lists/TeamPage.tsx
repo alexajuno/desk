@@ -1,7 +1,7 @@
 // A team's own page, its settings as Linear's team General settings keep them (measured 25 Oct): a card with its name and
 // its identifier, the slug in its address, each a field that saves as it loses focus; then its description, and whether
-// it is archived. Its issues, its Triage and its projects are pages of their own under it (/team/<slug>/all, triage and
-// projects), as Linear's team has them in the sidebar. Until 20 Oct this was a desk project's page, with its issues on a
+// it is archived. Its issues and its projects are pages of their own under it (/team/<slug>/all and projects), as
+// Linear's team has them in the sidebar. Until 20 Oct this was a desk project's page, with its issues on a
 // tab; until 25 Oct its name was edited as its title, as a project's is.
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
@@ -21,7 +21,7 @@ interface TeamData {
 }
 
 // Its sidebar's pages, as links under the name.
-const PAGES: [string, string][] = [["triage", "Triage"], ["all", "Issues"], ["projects", "Projects"]];
+const PAGES: [string, string][] = [["all", "Issues"], ["projects", "Projects"]];
 
 async function setTeam(slug: string, field: string, value: string): Promise<boolean> {
   const res = await post(`/team/${slug}/set`, { field, value });

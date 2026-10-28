@@ -1,5 +1,5 @@
 // The sidebar on every page (templates/base.html's aside.side), Linear's (measured on linear.app on 20 Oct): Inbox, My
-// issues and Triage; Your teams, each team folding open to its own Triage, Issues and Projects, as Linear's team does;
+// issues; Your teams, each team folding open to its own Issues and Projects, as Linear's team does;
 // then the sessions you pinned and those still in hand, as claude.ai's Starred and Recents, then what desk's checkout
 // runs. Linear's Workspace section is left out ("projects are under teams already. and automations... honestly i
 // seldomly get into there", the user, 23 Oct): Projects stays on G then P, and Automations on its address.
@@ -10,7 +10,7 @@ import { useState, type ReactNode } from "react";
 import { useLocation } from "react-router";
 import { deskPath, go, Go } from "../app/nav";
 import type { State } from "../lib/desk";
-import { frame, talkOf, type ChatRow, type FrameData } from "../store/frame";
+import { frame, type ChatRow, type FrameData } from "../store/frame";
 import { issues } from "../store/issues";
 import { ui } from "../store/ui";
 import { deleteChat, pinChat, renameChat } from "../sessions/live";
@@ -21,15 +21,10 @@ import { toast } from "../ui/toast";
 import { helpMenu } from "./help";
 import { toggleSide } from "./side";
 
-// Triage's hover: how many of its chats wait for you, and its keys. The other links' say where they go and their keys,
-// as Linear's sidebar does; Issues' lists its tabs, as Linear's team Issues does.
-function triageTip(triage: { slug: string; session: string | null }[]) {
-  const waits = triage.filter((p) => talkOf(p) === "idle").length;
-  return `${triage.length ? `${triage.length} not settled yet${waits ? `, ${waits} waiting for you` : ""}` : "Nothing to settle"}  G then T`;
-}
+// The links' hovers say where they go and their keys, as Linear's sidebar does; Issues' lists its tabs, as Linear's
+// team Issues does.
 const ISSUES_TIP = "All issues  G then E\nActive  G then A\nBacklog  G then B";
 export const ISSUES_ICON = <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"><rect x="2.25" y="4.75" width="9" height="9" rx="2" /><path d="M4.75 2.25h7c1.1 0 2 .9 2 2v7" strokeLinecap="round" /></svg>;
-const TRIAGE_ICON = <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 9.5h3.25l1 1.75h3.5l1-1.75H14" /><path d="M2 9.5l1.6-5.1c.13-.42.52-.65.95-.65h6.9c.43 0 .82.23.95.65L14 9.5v2.75c0 .55-.45 1-1 1H3c-.55 0-1-.45-1-1z" /><path d="M8 4.5v3.25M6.6 6.4 8 7.75 9.4 6.4" /></svg>;
 
 // A team's right-click: its settings page, and every team.
 function teamMenu(slug: string, at: { x: number; y: number }) {
@@ -141,7 +136,7 @@ const NotMain = observer(function NotMain({ trying, line }: { trying: NonNullabl
 
 export const Sidebar = observer(function Sidebar() {
   const here = deskPath(useLocation().pathname);
-  const d = frame.data, triage = issues.triage;
+  const d = frame.data;
   const at = (path: string) => (here === path ? " here" : "");
   const [folded, toggle] = useFolded();
   // A session's row: its issue's state, or a ring for a chat with no issue, then on the right the Inbox's dot while its
@@ -182,15 +177,9 @@ export const Sidebar = observer(function Sidebar() {
         {ISSUES_ICON}
         My issues
       </Go>
-      {/* Every chat's issue not settled yet, with how many. A chat files its issue with no team, so desk's Triage stays
-          here, beside each team's own below. */}
-      <Go className={`nav-item${at("/triage")}`} to="/triage" title={triageTip(triage)}>
-        {TRIAGE_ICON}
-        Triage{triage.length > 0 && <span className="count">{triage.length}</span>}
-      </Go>
       <Fold name="Your teams" folded={folded} toggle={toggle}>
         {issues.activeTeams.map((t) => {
-          const open = !folded.has(`team:${t.slug}`), mine = triage.filter((i) => i.team === t.slug).length;
+          const open = !folded.has(`team:${t.slug}`);
           const under = (page: string) => (here === `/team/${t.slug}/${page}` ? " here" : "");
           return (
             <div key={t.slug} className="nav-team-group">
@@ -201,9 +190,6 @@ export const Sidebar = observer(function Sidebar() {
               </button>
               {open && (
                 <>
-                  <Go className={`nav-item nav-sub${under("triage")}`} to={`/team/${t.slug}/triage`} title={`${t.title}'s issues not settled yet`}>
-                    {TRIAGE_ICON}Triage{mine > 0 && <span className="count">{mine}</span>}
-                  </Go>
                   <Go className={`nav-item nav-sub${["all", "active", "backlog"].some((p) => under(p)) ? " here" : ""}`} to={`/team/${t.slug}/all`} title={`${t.title}'s issues`}>
                     {ISSUES_ICON}Issues
                   </Go>

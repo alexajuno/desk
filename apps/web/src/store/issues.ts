@@ -155,11 +155,6 @@ export class IssueStore {
     this.connected = connected;
   }
 
-  // Triage: the issues whose chat has not settled them yet, the newest first, as chats come in.
-  get triage(): Issue[] {
-    return [...this.bySlug.values()].filter((i) => i.state === "triage").sort(newestFirst);
-  }
-
   // The Inbox's unread rows, which the sidebar counts and the Inbox marks with a dot.
   get unread(): InboxRow[] {
     return [...this.inbox.values()].filter((r) => r.read === null);
