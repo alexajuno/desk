@@ -853,7 +853,7 @@ button.inbox-tool.on { background: var(--btn-ghost-on); color: var(--text-1); }
                      border-radius: 50%; background: var(--avatar-session); color: var(--on-accent); }
 .inbox-row .avatar.agent { font: 500 13px var(--font); } /* an agent's initial, as a person's avatar has */
 .inbox-row .avatar.status { background: none; }
-.inbox-row .avatar.status > svg, .triage-now > svg { width: 32px; height: 32px; }
+.inbox-row .avatar.status > svg { width: 32px; height: 32px; }
 .inbox-row .badge { position: absolute; left: 19.5px; top: 17.5px; display: grid; place-items: center; width: 16px; height: 16px;
                     border-radius: 50%; background: var(--bg-panel); color: var(--text-3); }
 .inbox-row .lines { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 10px 0; }
@@ -1195,18 +1195,9 @@ button.set-pick svg { color: var(--text-3); }
 .dp-layout button.on { background: var(--bg-dp-on); box-shadow: 0 0 0 0.5px var(--ring-dp-strong); color: var(--text-dp-on); }
 .dp-layout svg { width: 14px; height: 14px; flex: none; }
 
-/* Triage (triage/TriagePage.tsx): the Inbox's split, its rows the chats not settled yet, and on the right the one picked
-   as its chat under Linear's bar of triage actions. The chat's own head goes: the top bar names it. */
-.triage-now { flex: none; display: grid; place-items: center; width: 32px; height: 32px; }
-.triage-open { display: flex; flex-direction: column; overflow: hidden; }
-.triage-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.triage-pane .session-view { flex: 1; min-height: 0; height: auto; }
-.triage-open .dock-head { display: none; }
-.triage-actions { flex: none; display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 12px; border-bottom: 1px solid var(--border-1); }
-.triage-actions button { height: 28px; gap: 8px; padding: 0 10px; font-size: 12px; }
-.triage-actions kbd { font: 500 11px var(--font); color: inherit; opacity: 0.6; }
-.triage-actions .triage-issue { margin-left: auto; font-size: 12px; color: var(--text-3); text-decoration: none; }
-.triage-actions .triage-issue:hover { color: var(--text-1); }
+/* A chat the Inbox opens on the right (inbox/InboxPage.tsx). The chat's own head goes: the top bar names it. */
+.chat-open { display: flex; flex-direction: column; overflow: hidden; }
+.chat-open .dock-head { display: none; }
 .inbox-row .from { flex: none; font-size: 12px; }
 
 /* The date picker (ui/datepicker.tsx), Linear's, measured on linear.app on 2026-10-20 at 2x, dark, from a project's

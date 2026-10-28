@@ -18,7 +18,6 @@ import { SearchPage } from "../search/SearchPage";
 import { SettingsPage } from "../settings/SettingsPage";
 import { SessionFullRoute } from "../sessions/SessionFullRoute";
 import { issues } from "../store/issues";
-import { TriagePage } from "../triage/TriagePage";
 import { Crashed } from "./Crashed";
 import { rowsIn } from "./splash";
 
@@ -49,14 +48,10 @@ const Moved = observer(function Moved({ children }: { children: ReactNode }) {
   return now ? <Navigate to={`/team/${now.slug}${pathname.slice(`/team/${slug}`.length)}${search}`} replace /> : children;
 });
 
-// A team's Issues tabs, Triage and Projects, Linear's team pages: the same pages as desk's own, on the team alone.
+// A team's Issues tabs and Projects, Linear's team pages: the same pages as desk's own, on the team alone.
 function TeamIssues({ tab }: { tab: string }) {
   const { slug = "" } = useParams();
   return <IssuesPage key={`${slug} ${tab}`} tab={tab} team={slug} />;
-}
-function TeamTriage() {
-  const { slug = "" } = useParams();
-  return <TriagePage key={slug} team={slug} />;
 }
 function TeamProjects() {
   const { slug = "" } = useParams();
@@ -74,7 +69,8 @@ export const router = createBrowserRouter(
     { path: "/", element: <Navigate to="/issues" replace /> },
     ...["", ...TABS].map(tabRoute),
     { path: "/backlog", element: <ToIssues /> },
-    { path: "/triage", element: <TriagePage /> },
+    // Triage left on 28 Oct, its chats settled in their talk and come up in the Inbox: a link to it, or to a team's, goes there.
+    { path: "/triage", element: <Navigate to="/inbox" replace /> },
     { path: "/projects", element: <ProjectsPage />, loader: at(() => "/api/page/projects") },
     { path: "/project/:slug", element: <ProjectPage tab="" />, loader: at(({ params }) => `/api/page/project/${params.slug}`) },
     { path: "/project/:slug/activity", element: <ProjectPage tab="activity" />, loader: at(({ params }) => `/api/page/project/${params.slug}`) },
@@ -85,7 +81,7 @@ export const router = createBrowserRouter(
     ...["", ...TABS].map((tab) => ({ path: `/team/:slug/${tab || "all"}`, element: <Moved><TeamIssues tab={tab} /></Moved>,
       loader: at(({ params, request }) => listUrl(issuesPath(tab, params.slug), issuesApi(tab, params.slug), search(request))) })),
     { path: "/team/:slug/issues", element: <ToTeamIssues /> },
-    { path: "/team/:slug/triage", element: <Moved><TeamTriage /></Moved> },
+    { path: "/team/:slug/triage", element: <Navigate to="/inbox" replace /> },
     { path: "/team/:slug/projects", element: <Moved><TeamProjects /></Moved>, loader: at(({ params }) => `/api/page/team/${params.slug}/projects`) },
     { path: "/automations", element: <AutomationsPage />, loader: at(() => "/api/page/automations") },
     { path: "/automation/:slug", element: <AutomationPage />, loader: at(({ params }) => `/api/page/automation/${params.slug}`) },

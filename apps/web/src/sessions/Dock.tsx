@@ -40,10 +40,10 @@ export function openSession(id: string, slug?: string | null) {
   runInAction(() => wantsFocus.set(id));
 }
 
-// I, as vim's insert: the cursor back into the composer of the chat in the middle, or of the one Triage shows. False
+// I, as vim's insert: the cursor back into the composer of the chat in the middle, or of the one the Inbox shows. False
 // when no chat is there.
 export function focusComposer() {
-  const box = document.querySelector<HTMLTextAreaElement>(".dock .composer textarea, .triage-open .composer textarea");
+  const box = document.querySelector<HTMLTextAreaElement>(".dock .composer textarea, .chat-open .composer textarea");
   box?.focus();
   return Boolean(box);
 }
@@ -135,7 +135,7 @@ const Dot = observer(function Dot({ s }: { s: LiveSession }) {
 // Nothing said in the chat yet, by either side.
 const quiet = (s: LiveSession) => !s.items.length && !s.pending.length && !s.working;
 
-// A chat as the middle shows it; the Triage page draws one in its right pane too.
+// A chat as the middle shows it; the Inbox draws one in its right pane too.
 export const SessionView = observer(function SessionView({ id }: { id: string }) {
   const s = useLive(id)!;
   useSplash(!s.loaded); // desk opening on a chat shows it with its conversation, never "Connecting…"

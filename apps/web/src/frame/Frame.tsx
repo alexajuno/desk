@@ -26,7 +26,6 @@ import { quoteLines } from "../sessions/Changes";
 import { arrange, Dock, focusComposer, newSession, openSession, toggleIssue } from "../sessions/Dock";
 import { dock } from "../store/dock";
 import { Catcher, catchKeys } from "../search/catcher";
-import { triageKey } from "../triage/TriagePage";
 import { deleteReadKey, deleteRow, markAllKey, toggleRead } from "../inbox/actions";
 import { Corner } from "./Corner";
 import { CreatorHost } from "./Creator";
@@ -162,9 +161,8 @@ function onKeyDown(e: KeyboardEvent) {
 
   if (gPressed && Date.now() - gPressed < 1500) {
     gPressed = 0;
-    // Linear's G E, G A and G B for its Issues tabs, and G P for Projects; desk's teams have no Triage of their own, so
-    // G T is Triage's.
-    const to = { e: "/issues", a: "/issues/active", b: "/issues/backlog", t: "/triage", i: "/inbox", p: "/projects" }[key];
+    // Linear's G E, G A and G B for its Issues tabs, and G P for Projects.
+    const to = { e: "/issues", a: "/issues/active", b: "/issues/backlog", i: "/inbox", p: "/projects" }[key];
     if (to) go(to);
     return;
   }
@@ -253,13 +251,6 @@ function onKeyDown(e: KeyboardEvent) {
     if (!focusComposer() && target()) openIssueSession(target()!);
     e.preventDefault(); // so the i is not typed into the composer it lands in
   }
-  // Linear's Triage keys on the Triage page: 1 accepts, 2 declines, 3 marks a duplicate, and desk's 4 parks.
-  else if (["1", "2", "3", "4"].includes(key) && triageKey(key)) e.preventDefault();
-  // Linear's Triage key: 2 declines a chat's issue that came to nothing, as Dropped. The chat itself stays open.
-  else if (key === "2" && (focused ?? document.querySelector<HTMLElement>(".issue"))?.dataset.state === "triage") {
-    setField(target()!, "state", "dropped").then(() => toast("Declined: nothing to do."));
-    e.preventDefault();
-  }
   // Linear's Shift P: the project of the issue in focus or open, or of every one selected.
   else if (key === "p" && e.shiftKey && !ofProjects() && (ui.selected.size || target())) {
     const slugs = ui.selected.size ? selection() : [target()!], one = slugs.length === 1 ? issues.bySlug.get(slugs[0]) : undefined;
@@ -347,7 +338,7 @@ function sheetKey(e: KeyboardEvent, key: string): boolean {
 }
 
 // A click on a row that opens its issue notes the list it is in, before the page leaves it (React draws the issue's
-// page within the click, so this listens in the capture phase). The Inbox's and Triage's rows step with J and K.
+// page within the click, so this listens in the capture phase). The Inbox's rows step with J and K.
 function onClickFirst(e: MouseEvent) {
   const row = (e.target as Element).closest?.<HTMLElement>(".item[data-slug]");
   if (row && !row.matches(".inbox-row") && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) noteWalk(row);

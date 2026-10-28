@@ -262,12 +262,14 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/version", async (_req, reply) => reply.type("text/plain; charset=utf-8").send(pages.version()));
 
   // desk's pages are the app's: each address answers with it, and the app asks /api/page/... for the data.
-  for (const path of ["/issues", "/issues/:tab", "/triage", "/teams", "/team/:slug", "/team/:slug/all", "/team/:slug/active", "/team/:slug/backlog", "/team/:slug/triage", "/team/:slug/projects", "/projects", "/project/:slug/issues", "/project/:slug/activity", "/automations", "/automation/:slug", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
+  for (const path of ["/issues", "/issues/:tab", "/teams", "/team/:slug", "/team/:slug/all", "/team/:slug/active", "/team/:slug/backlog", "/team/:slug/projects", "/projects", "/project/:slug/issues", "/project/:slug/activity", "/automations", "/automation/:slug", "/inbox", "/search", "/issue/:slug", "/sessions/:id", "/settings", "/settings/:section"])
     app.get(path, async (req, reply) => {
       const moved = await teamMoved(req.url);
       return moved ? reply.redirect(moved, 302) : web.index(reply);
     });
   app.get("/", async (_req, reply) => reply.redirect("/issues", 307));
+  // Triage left on 28 Oct, its chats settled in their talk and come up in the Inbox: a link to it, or to a team's, goes there.
+  for (const path of ["/triage", "/team/:slug/triage"]) app.get(path, async (_req, reply) => reply.redirect("/inbox", 302));
   // A team's Issues is Linear's /team/<slug>/all now, with its Active and Backlog beside it.
   app.get("/team/:slug/issues", async (req: Req, reply) => reply.redirect(`/team/${req.params.slug}/all`, 301));
   // A project's page; until 20 Oct /project/<slug> was a team's, whose links in issues and chats go on to it.

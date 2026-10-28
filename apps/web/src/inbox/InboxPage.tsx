@@ -8,7 +8,7 @@
 // nobody"), then a dot while unread, the issue's title, then what the session did and how long ago. Opening a row
 // reads it, for every tab, and so does anything new on it while it is open. With Show unreads only, a row you read
 // stays until you leave the Inbox, so that reading never moves the list. A row may instead be a chat with no issue,
-// one of the user's agents or a bare one (?i=<chat id>), whose chat opens on the right, as Triage shows one. The top
+// one of the user's agents or a bare one (?i=<chat id>), whose chat opens on the right. The top
 // bar splits at the list's edge: over the list, "Inbox" with its ⋯ menu, and at the list's right edge Show unreads
 // only, Filter and Display options, as Linear's (measured on linear.app on 19 Oct), their keys in actions.ts; the open
 // notification's title over the rest.
@@ -149,7 +149,7 @@ export const InboxPage = observer(function InboxPage() {
                 return issue && <IssueNotice key={n.id} n={n} issue={issue} open={i} query={query} />;
               })}
             </div>
-            <div className={`inbox-open${chat ? " triage-open" : ""}`} data-keep-scroll="same" ref={pane}>
+            <div className={`inbox-open${chat ? " chat-open" : ""}`} data-keep-scroll="same" ref={pane}>
               {chat ? <SessionView key={chat.session} id={chat.session!} /> : open ? <IssueView data={open} inInbox /> : !waiting && (
                 <div className="inbox-empty">
                   {/* Linear's empty Inbox drawing, its strokes in desk's own text colours */}
