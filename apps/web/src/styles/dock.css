@@ -205,8 +205,15 @@
 table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; font: 400 13px/20.8px var(--mono); font-variant-ligatures: none; }
 table.diff td { padding: 0; vertical-align: top; }
 table.diff .diff-no-col { width: 48px; }
-/* the line under the mouse, which C quotes into the reply box: its number brightens */
+/* the line under the mouse, which C quotes into the reply box: its number brightens, and a + stands on its number's edge,
+   as GitHub's does, to pick it by a click or a range by a drag (Changes.tsx) */
 table.diff tr[data-no]:hover .diff-no { color: var(--text-1); }
+table.diff .diff-no { position: relative; cursor: pointer; }
+table.diff tr[data-i]:hover > .diff-no::after { content: "+"; position: absolute; top: 1px; right: -9px; z-index: 1; width: 18px; height: 18px;
+  border-radius: 4px; background: var(--accent); box-shadow: var(--shadow-panel); font: 500 14px/18px var(--font); text-align: center; color: var(--on-accent); }
+/* the picked lines: the accent over their own tint, their number bright and their edge the accent */
+table.diff tr.picked > td { background-image: linear-gradient(var(--diff-pick-bg), var(--diff-pick-bg)); }
+table.diff tr.picked > .diff-no { color: var(--text-1); border-left-color: var(--accent); }
 .changes-hint { margin: 0 0 4px; font-size: 12px; color: var(--text-3); }
 .diff-no { width: 48px; padding-right: 16px !important; box-sizing: border-box; text-align: right; color: var(--diff-line-no); user-select: none;
            border-left: 1px solid transparent; }

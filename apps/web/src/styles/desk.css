@@ -154,6 +154,7 @@
   --diff-del-edge: lch(65.2% 73 29);
   --diff-del-text: lch(80% 80 29);
   --diff-line-no: lch(39.452% 1.425 272);
+  --diff-pick-bg: rgb(94 105 209 / 0.22);  /* lines picked to comment on: the accent over the line's own tint, desk's own */
 }
 
 :root[data-theme=light] {
@@ -262,6 +263,7 @@
   --diff-del-edge: lch(50% 73 29);
   --diff-del-text: lch(50% 80 29);
   --diff-line-no: lch(66% 1 282);
+  --diff-pick-bg: lch(53% 52.26 286.91 / 0.14);
 }
 
 html { background: var(--bg-app); scroll-behavior: smooth; }

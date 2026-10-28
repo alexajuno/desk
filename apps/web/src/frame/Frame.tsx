@@ -22,7 +22,7 @@ import { MenuHost, menus } from "../ui/menu";
 import { datePicker } from "../ui/datepicker";
 import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openNearest, openPicture, stepViewer, viewerOpen } from "../ui/viewer";
-import { quoteLines } from "../sessions/Changes";
+import { dropPick, quoteLines } from "../sessions/Changes";
 import { arrange, Dock, focusComposer, newSession, openSession, toggleIssue } from "../sessions/Dock";
 import { dock } from "../store/dock";
 import { Catcher, catchKeys } from "../search/catcher";
@@ -117,6 +117,7 @@ function onKeyDown(e: KeyboardEvent) {
   if (e.key === "Escape" && sideOpen()) { closeSide(); return; } // before an issue's Esc goes back
   if (e.key === "Escape" && listView.displayOpen) { listView.setDisplay(false); return; }
   if (e.key === "Escape" && ui.selected.size && !typing(e.target)) { ui.clearSelection(); return; } // before Esc goes back
+  if (e.key === "Escape" && !typing(e.target) && dropPick()) return; // lines picked in a diff, before Esc goes back
   if (typing(e.target)) { if (e.key === "Escape") (e.target as HTMLElement).blur(); return; }
   const key = e.key.toLowerCase();
 

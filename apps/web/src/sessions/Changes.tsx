@@ -38,6 +38,39 @@ export function showChanges(slug: string, place: string) {
 // Lines quoted from a diff for the reply box of the chat in the middle (Dock.tsx, Composer), which takes them in.
 export const quote = observable.box<{ session: string; text: string } | null>(null, { deep: false });
 
+// Lines picked in a step's diff to comment on, as GitHub's + picks them: a click on a line's number picks the line, and
+// a drag along the numbers or a shift-click picks a range, inside the hunk it started in ("line selection effect similar
+// to github's", the user, 28 Oct). from is where the pick started and to where it ends, either way round; drag holds
+// while the mouse is down.
+type Picked = { place: string; path: string; hunk: number; from: number; to: number; drag: boolean };
+export const picked = observable.box<Picked | null>(null, { deep: false });
+
+// Esc drops the pick (Frame.tsx).
+export function dropPick(): boolean {
+  if (!picked.get()) return false;
+  runInAction(() => picked.set(null));
+  return true;
+}
+
+const rowAt = (target: EventTarget) => (target as Element).closest<HTMLTableRowElement>("tr[data-i]");
+
+function pickDown(e: React.MouseEvent, path: string) {
+  const row = rowAt(e.target);
+  if (e.button !== 0 || !row || !(e.target as Element).closest(".diff-no")) return;
+  e.preventDefault(); // no text selection from the numbers
+  const place = row.closest<HTMLElement>("[data-place]")!.dataset.place!, hunk = +row.dataset.hunk!, i = +row.dataset.i!;
+  const p = picked.get();
+  const extend = e.shiftKey && p && p.place === place && p.path === path && p.hunk === hunk;
+  runInAction(() => picked.set(extend ? { ...p, to: i, drag: true } : { place, path, hunk, from: i, to: i, drag: true }));
+  addEventListener("mouseup", () => runInAction(() => { const q = picked.get(); if (q) picked.set({ ...q, drag: false }); }), { once: true });
+}
+
+function pickOver(e: React.MouseEvent, path: string) {
+  const p = picked.get(), row = rowAt(e.target);
+  if (!p?.drag || !row || p.path !== path || +row.dataset.hunk! !== p.hunk || row.closest<HTMLElement>("[data-place]")!.dataset.place !== p.place) return;
+  if (+row.dataset.i! !== p.to) runInAction(() => picked.set({ ...p, to: +row.dataset.i! }));
+}
+
 // C on a line of a diff, or on lines selected in one, quotes them into the chat's reply box, with their step, file and
 // line numbers, for you to write under: "whatever i comment in the code, i'll get a reply in the same chat" (the user,
 // 28 Oct). Anywhere else C files a new issue (Frame.tsx).
@@ -106,14 +139,15 @@ const StepCard = observer(function StepCard({ s, open: first }: { s: StepDiff; o
         <span className="change-files">{s.files.length} {s.files.length === 1 ? "file" : "files"}</span>
         <Counts added={s.added} deleted={s.deleted} />
       </button>
-      {open && s.files.map((f) => <FileCard key={f.path} f={f} />)}
+      {open && s.files.map((f) => <FileCard key={f.path} f={f} place={s.place} />)}
     </section>
   );
 });
 
-function FileCard({ f }: { f: FileDiff }) {
+const FileCard = observer(function FileCard({ f, place }: { f: FileDiff; place: string }) {
   const [open, setOpen] = useState(f.added + f.deleted <= OPEN_LINES);
   const slash = f.path.lastIndexOf("/");
+  const p = picked.get(), mine = p && p.place === place && p.path === f.path ? p : null;
   return (
     <div className="change-file" data-path={f.path}>
       <button type="button" className="change-file-head" aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -125,24 +159,28 @@ function FileCard({ f }: { f: FileDiff }) {
       {open && (f.binary ? <p className="change-quiet">A binary file: no lines to show.</p>
         : !f.hunks.length ? <p className="change-quiet">{f.was ? "Moved, unchanged." : "No lines changed."}</p>
         : (
-          <table className="diff">
+          <table className="diff" onMouseDown={(e) => pickDown(e, f.path)} onMouseOver={(e) => pickOver(e, f.path)}>
             <colgroup><col className="diff-no-col" /><col /></colgroup>
             <tbody>
-              {f.hunks.map((h, n) => <Hunk key={n} header={h.header} lines={h.lines} />)}
+              {f.hunks.map((h, n) => (
+                <Hunk key={n} n={n} header={h.header} lines={h.lines}
+                  lit={mine?.hunk === n ? [Math.min(mine.from, mine.to), Math.max(mine.from, mine.to)] : null} />
+              ))}
             </tbody>
           </table>
         ))}
       {open && f.cut && <p className="change-quiet">The rest of this file is cut: it changed too many lines to draw.</p>}
     </div>
   );
-}
+});
 
-function Hunk({ header, lines }: { header: string; lines: Line[] }) {
+function Hunk({ n: hunk, header, lines, lit }: { n: number; header: string; lines: Line[]; lit: [number, number] | null }) {
   return (
     <>
       <tr className="diff-hunk"><td colSpan={2}>{header || " "}</td></tr>
-      {lines.map(([kind, old, now, text], n) => (
-        <tr key={n} className={kind === "+" ? "diff-add" : kind === "-" ? "diff-del" : undefined} data-no={kind === "-" ? old! : now!} data-kind={kind}>
+      {lines.map(([kind, old, now, text], i) => (
+        <tr key={i} className={`${kind === "+" ? "diff-add" : kind === "-" ? "diff-del" : ""}${lit && i >= lit[0] && i <= lit[1] ? " picked" : ""}`.trim() || undefined}
+          data-no={kind === "-" ? old! : now!} data-kind={kind} data-hunk={hunk} data-i={i}>
           <td className="diff-no">{kind === "-" ? old : now}</td>
           <td className="diff-code">{text || " "}</td>
         </tr>
