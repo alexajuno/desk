@@ -25,11 +25,9 @@ async function load() {
   return (held = new Map<string, Held>(rows.map((r) => [r.session, { read_to: Number(r.read_to), title: r.title }])));
 }
 
-// One at a time, so two looks never read the same lines twice.
-function queued(fn: () => Promise<void>): Promise<void> {
-  const run = queue.then(fn, fn);
-  queue = run.catch((error) => console.error("session search", error));
-  return run;
+// One at a time, so two looks never read the same lines twice. A look that fails is told in the log, and the next goes on.
+function queued(fn: () => Promise<void>): Promise<unknown> {
+  return (queue = queue.then(fn).catch((error) => console.error("session search", error)));
 }
 
 // Bring the prompts up to date with the transcripts.
@@ -107,4 +105,46 @@ function promptsIn(path: string, from: number, to: number): string[] {
     if (text) found.push(text);
   }
   return found;
+}
+
+// --- the search ------------------------------------------------------------------------------------------------------
+
+// A word the way it is kept: one lexeme of desk_words, lowercased with its accents folded.
+const WORD = /[\p{L}\p{N}]+/gu;
+
+// Each word of the query, as a tsquery that finds it: where a word starts, in that form or another (searching finds
+// search, as its English stem search finds searched); one of 4 letters or more that finds nothing so also finds its near
+// words (serch finds search), from pg_trgm's similarity of 0.3 or more, its default.
+async function wordsOf(query: string): Promise<string[]> {
+  const found: string[] = [];
+  for (const word of query.toLowerCase().match(WORD) ?? []) {
+    const { rows } = await sql().query<{ typed: string; simple: string }>(
+      `select (to_tsquery('simple', quote_literal(simple) || ':*') || to_tsquery('simple', quote_literal(coalesce(stem, simple)) || ':*'))::text as typed, simple
+       from (select simple, (ts_lexize('english_stem', simple))[1] as stem
+             from (select (select lexeme from unnest(to_tsvector('desk_words', $1)) limit 1) as simple) w) s
+       where simple is not null`,
+      [word],
+    );
+    if (!rows.length) continue;
+    const { typed, simple } = rows[0];
+    if ([...simple].length < 4 || (await sql().query("select 1 from session_text where words @@ $1::tsquery limit 1", [typed])).rows.length) {
+      found.push(typed);
+      continue;
+    }
+    const near = await sql().query<{ word: string }>(
+      "select word from session_words where word % $1 and length(word) >= 4 order by similarity(word, $1) desc, word limit 3",
+      [simple],
+    );
+    found.push([typed, ...near.rows.map((r) => `'${r.word.replaceAll("'", "''")}'`)].join(" | "));
+  }
+  return found;
+}
+
+// The sessions a query finds, each word of it in one of them, or null for a query with no word in it.
+export async function find(query: string): Promise<{ sessions: Set<string>; words: string[] } | null> {
+  await queue; // the prompts and titles asked for before
+  const words = await wordsOf(query);
+  if (!words.length) return null;
+  const { rows } = await sql().query<{ session: string }>("select session from session_text where words @@ $1::tsquery", [words.map((w) => `(${w})`).join(" & ")]);
+  return { sessions: new Set(rows.map((r) => r.session)), words };
 }

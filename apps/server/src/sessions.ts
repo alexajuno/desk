@@ -12,7 +12,6 @@ import * as chats from "./chats.ts";
 import { HOME } from "./config.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
-import { patternOf } from "./search.ts";
 import * as sessiontext from "./sessiontext.ts";
 import * as transcripts from "./transcript.ts";
 import * as uploads from "./uploads.ts";
@@ -262,24 +261,29 @@ async function issuesBySession(): Promise<Map<string, Issue>> {
 // Every prompt of every session into the search's table (sessiontext.ts), from where the last look stopped.
 export const index = () => sessiontext.readIn([...refresh().values()]);
 
-// The sessions, the one that moved last first; with a query, only those whose title, folder, issue or prompts hold
-// every word of it, where a word starts. A chat the user deleted is left out.
+// The sessions, those in progress first, then the one that moved last first ("we should prioritize latest and in
+// progress chats/issues", the user, 29 Oct): in progress while a reply is being written, a question waits on you, or its
+// issue is In progress. With a query, only those it finds (sessiontext.ts). A chat the user deleted is left out.
 export async function rows(query = "") {
   const t = refresh(), issues = await issuesBySession(), live = await agents.live();
   const desks = new Set(chats.agentChats().map((c) => c.session));
   const deleted = new Set(chats.agentChats().filter((c) => c.deleted).map((c) => c.session)); // out of sight (chats.ts, remove)
-  const patterns = query.split(/\s+/).filter(Boolean).map((w) => patternOf([w]));
-  const found: { id: string; title: string; folder: string; moved: Date; state: string }[] = [];
-  for (const row of [...t.values()].sort((a, b) => (b.moved ?? 0) - (a.moved ?? 0))) {
+  let found: { id: string; title: string; folder: string; moved: Date; state: string; busy: boolean; issue: Issue | null }[] = [];
+  for (const row of t.values()) {
     if (deleted.has(row.id)) continue;
-    const sid = row.id, i = issues.get(sid) ?? null, name = shown(row, i, desks.has(sid));
-    if (patterns.length) {
-      const text = [name, row.cwd, i && `${i.slug} ${i.title}`, row.first_prompt, row.last_prompt].filter(Boolean).join(" ");
-      if (!patterns.every((p) => { p.lastIndex = 0; return p.test(text); })) continue;
-    }
-    found.push({ id: sid, title: name, folder: folder(row.cwd), moved: new Date((row.moved ?? 0) * 1000), state: state(live.get(sid) ?? {}) });
+    const sid = row.id, i = issues.get(sid) ?? null, now = state(live.get(sid) ?? {});
+    found.push({ id: sid, title: shown(row, i, desks.has(sid)), folder: folder(row.cwd), moved: new Date((row.moved ?? 0) * 1000), state: now,
+      busy: now === "working" || now === "waiting" || i?.state === "running", issue: i });
   }
-  return found;
+  // A search finds a session by what the menu shows of it, its issue too, and by its prompts: both kept up to date here.
+  const titled = sessiontext.titled(found.map((r) => [r.id, [r.title, r.issue && `${r.issue.slug} ${r.issue.title}`, r.folder].filter(Boolean).join(" ")]));
+  const read = sessiontext.readIn([...t.values()]);
+  if (query.trim()) {
+    await Promise.all([titled, read]);
+    const hit = await sessiontext.find(query);
+    if (hit) found = found.filter((r) => hit.sessions.has(r.id));
+  }
+  return found.sort((a, b) => Number(b.busy) - Number(a.busy) || b.moved.getTime() - a.moved.getTime());
 }
 
 // --- opening one -----------------------------------------------------------------------------------------------------
