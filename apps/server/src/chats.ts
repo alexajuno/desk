@@ -232,6 +232,30 @@ export async function adoptSessions(): Promise<number> {
 
 const CLOSED = new Set(["done", "dropped"]);
 
+// Once, after adoptSessions: each open issue whose chat went on to another issue before 29 Oct gets a chat of its own,
+// idle until you write in it, which knows the chat it takes over from (agentPrompt). "a chat keeps its one issue"
+// (the user's pick, 29 Oct). Returns how many it made.
+export async function adoptLeft(): Promise<number> {
+  return db.write(async (tx) => {
+    if ((await tx.query("select 1 from meta where name = 'left issues chatted'")).rows.length) return 0;
+    const rows = (await tx.query<{ slug: string; title: string; state: string; folder: string | null; session: string }>(
+      "select slug, title, state, folder, session from issues where coalesce(session, '') <> '' order by created")).rows;
+    let made = 0;
+    for (const r of rows) {
+      if (CLOSED.has(r.state) || chatsByIssue().has(r.slug)) continue;
+      const folder = r.folder ? resolve(agents.workdir({ folder: r.folder } as Issue)) : DATA_DIR, from = ofSession(r.session)?.id;
+      const chat: Chat = { id: newId(), kind: "panel", title: r.title, created: now(), updated: now(), session: randomUUID(), issue: r.slug,
+        folder, cwd: existsSync(folder) ? folder : DATA_DIR, ...(from ? { from } : {}) };
+      await put(tx, chat);
+      keep(all(), chat);
+      lastMoved.set(chat.id, 0);
+      made++;
+    }
+    await tx.query("insert into meta values ('left issues chatted', now()::text)");
+    return made;
+  });
+}
+
 // The chat as plain text, the user's words and the agent's replies in order, for a session's first prompt.
 export function transcript(id: string): string {
   const names: Record<string, string> = { user: "The user", assistant: "desk's agent" };
@@ -277,6 +301,12 @@ export async function agentPrompt(chat: Chat, base: string): Promise<string> {
   let prompt = fill(PROMPT, { today: "the date your environment gives", day: "15 Oct", reference, chat: chat.id, plan_rules, work,
     protocols: PROTOCOLS, ...rules });
   if (slug) prompt += `\n\nThis chat works the issue /issue/${slug}, in ${chat.folder}.`;
+  // The chat it took the issue on from, by a handoff or when that chat went on to other work: its conversation is there.
+  const before = chat.from && exists(chat.from) ? all().get(chat.from)! : null, path = before && transcripts.pathOf(before.session);
+  if (before && path) {
+    const on = before.issue && (await store.exists(before.issue)) ? `the chat on “${(await store.load(before.issue)).title}”` : `the chat “${before.named || before.title}”`;
+    prompt += ` It took the issue on from ${on}, whose whole conversation is in ${path}, for what the issue's document and your first message leave out.`;
+  }
   else if (chat.cwd && !same(chat.cwd, DATA_DIR))
     prompt += `\n\nThe user started this chat in ${chat.cwd}, picked in its composer: when you accept its issue, that is its folder, unless the talk names another.`;
   return prompt;

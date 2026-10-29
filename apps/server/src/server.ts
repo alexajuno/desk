@@ -31,6 +31,8 @@ await store.readLanded();
 await chats.readIn();
 const adopted = await chats.adoptSessions(); // once: the sessions no chat held become chats on their issues
 if (adopted) console.log(`desk made ${adopted} sessions with no chat into chats on their issues`);
+const left = await chats.adoptLeft(); // once: an open issue whose chat went on to another gets a chat of its own
+if (left) console.log(`desk gave ${left} open issues whose chat had moved on a chat of their own`);
 const renamed = await store.renameAll(); // once: after the chats, which follow their issues
 if (renamed) console.log(`desk gave ${renamed} issues the slug their title makes now`);
 // What a desk of an older branch changed in the files desk kept its state in before Postgres, while it ran (copies.ts).
