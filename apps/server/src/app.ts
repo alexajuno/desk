@@ -756,6 +756,19 @@ export async function create(): Promise<FastifyInstance> {
     }
     return { ok: true };
   });
+  // The chip by the model's: Manual, or Auto, in which desk says next for the user as a turn ends (chats.ts, setAuto).
+  app.post("/api/live/:id/auto", async (req: Req) => {
+    mustBePage(req);
+    const { auto } = (req.body ?? {}) as unknown as { auto?: unknown };
+    if (typeof auto !== "boolean") throw new HttpError(422, 'Send "auto": true or false.');
+    try {
+      await chats.setAuto(sessionOf(req), auto);
+    } catch (error) {
+      if (!(error instanceof chats.NoChat)) throw error;
+      throw new HttpError(422, error.message);
+    }
+    return { ok: true }; // the write tells the apps
+  });
   // A chat's own title, typed in its head or in the sidebar's menu; an empty one gives it back Claude Code's.
   app.post("/api/live/:id/title", async (req: Req) => {
     mustBePage(req);

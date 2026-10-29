@@ -62,6 +62,7 @@ interface Meta {
   chat: boolean;
   agent: string | null; // the agent a chat is with
   bare: boolean; // a chat with no agent and no desk prompt (chats.ts)
+  auto: boolean; // Auto in its composer, rather than Manual (chats.ts, setAuto)
   picked: boolean; // a new chat's folder, picked in its composer (chats.ts, startIn)
   runs: models.Shown; // the model and effort, for the composer's chip
 }
@@ -79,7 +80,7 @@ export async function meta(id: string): Promise<Meta> {
   const cwd = (chat && (!row.cwd || row.kind === "host") ? chats.runsIn(chat) : row.cwd ?? transcript.cwdOf(id)) ?? "";
   const { chatTitleOf, titleOf } = await import("./sessions.ts");
   return {
-    id, cwd, folder: tilde(cwd), chat: Boolean(chat), agent: chat?.agent ?? null, bare: Boolean(chat?.bare),
+    id, cwd, folder: tilde(cwd), chat: Boolean(chat), agent: chat?.agent ?? null, bare: Boolean(chat?.bare), auto: Boolean(chat?.auto),
     picked: Boolean(chat?.cwd && !chat.issue && !chat.agent && !chat.bare), // a bound chat's cwd is its issue's folder
     // A bare chat by the title the sidebar's Chats give it, not by the name desk started its session with; any chat by
     // the user's own title.

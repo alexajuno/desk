@@ -44,6 +44,7 @@ export interface Chat {
   cwd?: string;
   agent?: string; // the agent the chat is with, by name; none for desk's own
   bare?: boolean; // a Chat: no agent and no desk prompt
+  auto?: boolean; // Auto in its composer: desk says next for the user as a turn ends (auto.ts)
   named?: string; // the title the user gave it, or its automation's, over Claude Code's
   from?: string; // the script whose message started it (push)
   automation?: string; // the automation whose run it is, by slug (automations.ts)
@@ -123,7 +124,7 @@ const now = () => store.now();
 
 // --- the table -------------------------------------------------------------------------------------------------------
 
-const COLUMNS = ["id", "kind", "title", "created", "updated", "session", "issue", "folder", "cwd", "agent", "bare", "named", "from", "automation", "seen", "deleted"];
+const COLUMNS = ["id", "kind", "title", "created", "updated", "session", "issue", "folder", "cwd", "agent", "bare", "auto", "named", "from", "automation", "seen", "deleted"];
 
 const UPSERT = `insert into chats (${[...COLUMNS, "extra"].map((c) => `"${c}"`).join(", ")})
   values (${[...COLUMNS, "extra"].map((_, n) => `$${n + 1}`).join(", ")})
@@ -131,14 +132,14 @@ const UPSERT = `insert into chats (${[...COLUMNS, "extra"].map((c) => `"${c}"`).
 
 async function put(tx: Db, chat: Chat) {
   const extra = Object.fromEntries(Object.entries(chat).filter(([k]) => !COLUMNS.includes(k)));
-  await tx.query(UPSERT, [...COLUMNS.map((c) => (c === "bare" ? Boolean(chat.bare) : (chat[c] ?? null))), extra]);
+  await tx.query(UPSERT, [...COLUMNS.map((c) => (c === "bare" || c === "auto" ? Boolean(chat[c]) : (chat[c] ?? null))), extra]);
 }
 
 // The chat a row holds, with the fields it leaves empty left out, as its file did.
 function chatOf(row: Record<string, unknown>): Chat {
-  const { extra, bare, ...columns } = row;
+  const { extra, bare, auto, ...columns } = row;
   const chat = Object.fromEntries(Object.entries(columns).filter(([, v]) => v !== null)) as Chat;
-  return { ...(extra as object), ...chat, ...(bare ? { bare: true } : {}) };
+  return { ...(extra as object), ...chat, ...(bare ? { bare: true } : {}), ...(auto ? { auto: true } : {}) };
 }
 
 // Write the chat, and what more writes with it, as one write. The chat is kept before it commits, so the frame the apps
@@ -479,6 +480,18 @@ export async function rename(session: string, title: string) {
   if (!chat) throw new NoChat("No such chat");
   if (title) chat.named = title;
   else delete chat.named;
+  await save(chat);
+}
+
+// Manual or Auto, the chip in the composer of desk's own chat: in Auto desk says next for the user as a turn ends on a
+// step, and go on a plan (auto.ts). "sometimes i want the agent to just keep going completely automated" (the user,
+// 29 Oct). A chat with an agent, or a bare one, works no issue, so it has no mode.
+export async function setAuto(session: string, auto: boolean) {
+  const chat = agentChatOf(session);
+  if (!chat) throw new NoChat("No such chat");
+  if (chat.agent || chat.bare) throw new NoChat("Only desk's own chat runs Manual or Auto: this one works no issue.");
+  if (auto) chat.auto = true;
+  else delete chat.auto;
   await save(chat);
 }
 
