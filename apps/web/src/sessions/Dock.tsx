@@ -108,13 +108,20 @@ export function togglePlan(): boolean {
   return true;
 }
 
+// The view each of 1 to 4 opens, in the head's order whichever views the chat has, so a key always means one view.
+const BY_DIGIT: View[] = ["chat", "plan", "issue", "changes"];
+
 // The keys of an issue's chat in the middle while you read it, the reply box keeping its own Tab: Tab and Shift Tab walk
-// its views, Esc goes back to Chat from another one, and on Plan, J and K walk its drawn steps ("looks valid", the
-// user, 28 Oct, on its sketch). I goes into the reply box on any view, and V opens the diagram on screen (Frame.tsx).
+// its views, 1 to 4 open one of them and again go back to Chat (two Tabs to its page and three to its Changes were "too
+// long", the user, 29 Oct), Esc goes back to Chat from another one, and on Plan, J and K walk its drawn steps ("looks
+// valid", the user, 28 Oct, on its sketch). I goes into the reply box on any view, and V opens the diagram on screen
+// (Frame.tsx).
 export function viewKey(e: KeyboardEvent, key: string): boolean {
   if (e.ctrlKey || e.metaKey || e.altKey || !hasIssue()) return false;
   const views = viewsOf(chatPage.get(), true), at = Math.max(0, views.indexOf(dock.view));
   if (e.key === "Tab") { dock.setView(views[(at + (e.shiftKey ? views.length - 1 : 1)) % views.length]); return true; }
+  const to = BY_DIGIT[["1", "2", "3", "4"].indexOf(e.key)];
+  if (to && views.includes(to)) { dock.setView(to === views[at] ? "chat" : to); return true; }
   if (e.key === "Escape" && views[at] !== "chat") { dock.setView("chat"); return true; }
   if ((key === "j" || key === "k") && !e.shiftKey && views[at] === "plan") {
     const rows = [...document.querySelectorAll<HTMLElement>(".plan-view-list .plan-step.drawn")];
