@@ -38,7 +38,7 @@ const wantsFocus = observable.box<string | null>(null);
 // It opens to read, unless nothing is said in it yet ("unless i open an empty chat, don't focus on composer", the user,
 // 21 Oct).
 export function openSession(id: string, slug?: string | null) {
-  slug ??= [...issues.bySlug.values()].find((i) => i.session === id)?.slug;
+  slug ??= issues.issueOf(id);
   go(slug ? `/issue/${slug}` : `/sessions/${id}`);
   runInAction(() => wantsFocus.set(id));
 }

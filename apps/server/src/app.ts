@@ -523,10 +523,10 @@ export async function create(): Promise<FastifyInstance> {
   // desk's page in a folder Claude Code does not trust yet, desk trusts it and starts again, so one press does it.
   app.post("/issue/:slug/start", async (req: Req, reply) => {
     const slug = req.params.slug, i = await store.load(slug);
-    if (i.session) return back(reply, slug);
+    if (chats.sessionOfIssue(slug)) return back(reply, slug);
     try {
       try {
-        i.session = await agents.start(i, store.folder(slug));
+        await agents.start(i, store.folder(slug));
       } catch (error) {
         if (!(error instanceof agents.TrustError) || !fromPage(req)) throw error;
         try {
@@ -534,7 +534,7 @@ export async function create(): Promise<FastifyInstance> {
         } catch (failed) {
           return back(reply, slug, (failed as Error).message, true);
         }
-        i.session = await agents.start(i, store.folder(slug));
+        await agents.start(i, store.folder(slug));
       }
     } catch (error) {
       return back(reply, slug, (error as Error).message, error instanceof agents.TrustError);
@@ -563,7 +563,7 @@ export async function create(): Promise<FastifyInstance> {
     const fromInbox = field(req, "src") === "inbox";
     const before = fromInbox ? (await pages.notifications(await store.loadAll(), slug)).map((n) => n.slug) : []; // with the one open
     const stay = (message: string | null = null) => back(reply, slug, message, false, fromInbox);
-    if (i.state !== "review" || !i.session) return stay("Only a plan in review can be told to go.");
+    if (i.state !== "review" || !chats.sessionOfIssue(slug)) return stay("Only a plan in review can be told to go.");
     try {
       await agents.say(i, "go");
     } catch (error) {
@@ -600,7 +600,7 @@ export async function create(): Promise<FastifyInstance> {
         const pr = landed.match(api.PULL);
         await store.move(i, { ...(await store.landedState(i)), landed, ...(pr && !i.link && { link: pr[0] }) });
         message = `Landed: ${i.title}` + restart();
-      } else if (i.session) {
+      } else if (chats.sessionOfIssue(slug)) {
         try {
           await agents.landFailed(i, store.folder(slug), land.told(ran));
           message = `A step failed, so the session lands it: ${i.title}` + restart();
@@ -614,11 +614,12 @@ export async function create(): Promise<FastifyInstance> {
       }
       return fromInbox ? onward(reply, before, slug, message) : back(reply, slug);
     }
+    const chatted = Boolean(chats.sessionOfIssue(slug));
     try {
-      if (i.session && (await land.worktree(i))) {
+      if (chatted && (await land.worktree(i))) {
         message = await land.merge(i);
         Object.assign(i, await store.landedState(i));
-      } else if (i.session && (await land.repo(i))) {
+      } else if (chatted && (await land.repo(i))) {
         await agents.land(i, store.folder(slug));
         i.state = "landing";
         i.landing = store.now();

@@ -165,14 +165,21 @@ export const runPlan = (i: Issue, folder: string) => {
 };
 // Start the issue's chat to plan from the agent chat, then wait, or go on at once for a quick issue.
 export const planFromChat = (i: Issue, folder: string, chat: string) => newSession(i, planPrompt(i, folder, chat));
-// The desk agent starts an issue that already has a session: the same session carries out the plan.
-export const go = (i: Issue, folder: string) => tell(i.session!, goPrompt(i, folder));
-// Approve: the issue's own session lands its work by the repo's rules.
-export const land = (i: Issue, folder: string) => tell(i.session!, fill(LAND_PROMPT, paths(i, folder)));
-// Approve ran the steps the session gave, and one failed: the session lands the work itself, from there.
-export const landFailed = (i: Issue, folder: string, ran: string) => tell(i.session!, fill(STEPS_FAILED, { ...paths(i, folder), ran }));
-// Give the issue's session one message, as the user would in its chat.
-export const say = (i: Issue, message: string) => tell(i.session!, message);
+// The session of the issue's chat, which takes the issue's messages: an issue holds none of its own since 29 Oct.
+async function chatOf(i: Issue): Promise<string> {
+  const session = (await import("./chats.ts")).sessionOfIssue(i.slug);
+  if (!session) throw new Error(`${i.title} has no chat to tell.`);
+  return session;
+}
+
+// The desk agent starts an issue that already has a chat: the same chat carries out the plan.
+export const go = async (i: Issue, folder: string) => tell(await chatOf(i), goPrompt(i, folder));
+// Approve: the issue's own chat lands its work by the repo's rules.
+export const land = async (i: Issue, folder: string) => tell(await chatOf(i), fill(LAND_PROMPT, paths(i, folder)));
+// Approve ran the steps the chat gave, and one failed: the chat lands the work itself, from there.
+export const landFailed = async (i: Issue, folder: string, ran: string) => tell(await chatOf(i), fill(STEPS_FAILED, { ...paths(i, folder), ran }));
+// Give the issue's chat one message, as the user would.
+export const say = async (i: Issue, message: string) => tell(await chatOf(i), message);
 
 // Give a session its next message, as the user would in its panel. The host holds it, or takes it in: from the folder
 // it runs in, and from Claude Code's daemon when it ran in the background before. A message to a session at work waits
@@ -206,8 +213,6 @@ export async function resumeOptions(session: string): Promise<hosted.StartOption
   const chat = chats.agentChatOf(session);
   if (chat) return chats.hostOptions(chat);
   const picked = (await import("./models.ts")).pickOf(session); // the model and effort picked in its panel, if any
-  const i = [...(await store.loadAll()).values()].find((x) => x.session === session);
-  if (i) return { id: session, resume: true, cwd: await resumeDir(i), ...picked };
   const { cwdOf } = await import("./transcript.ts");
   const cwd = cwdOf(session);
   if (!cwd || !existsSync(cwd)) throw new Error(`Its folder${cwd ? `, ${cwd},` : ""} is gone, and Claude Code resumes a session only from the folder it ran in.`);
@@ -225,12 +230,4 @@ export async function exited(pid: number, seconds = 15) {
     }
     await sleep(100);
   }
-}
-
-// Where to resume the issue's session: the folder an agent chat's runs in, the worktree desk made with `claude -w` for
-// an old one's, else the issue's folder.
-export async function resumeDir(i: Issue): Promise<string> {
-  const { sessionRunsIn } = await import("./chats.ts");
-  const worktree = join(workdir(i), ".claude", "worktrees", `desk-${i.slug.slice(0, 40)}`);
-  return (await sessionRunsIn(i.session)) ?? (existsSync(worktree) ? worktree : workdir(i));
 }

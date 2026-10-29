@@ -40,7 +40,7 @@ import { toast as say } from "../ui/toast";
 
 // The issue's chat, in the middle; an issue with none yet says so.
 function openIssueSession(slug: string) {
-  const session = issues.bySlug.get(slug)?.session;
+  const session = issues.sessionOf(slug);
   if (session) openSession(session, slug);
   else say("This issue has no session yet.");
 }
@@ -50,7 +50,7 @@ function chatOf(pathname: string): { session: string | null; slug: string | null
   const issue = /^\/issue\/([^/]+)$/.exec(pathname);
   if (issue) {
     const slug = decodeURIComponent(issue[1]);
-    return { session: issues.bySlug.get(slug)?.session ?? null, slug };
+    return { session: issues.sessionOf(slug), slug };
   }
   const session = /^\/sessions\/([^/]+)$/.exec(pathname);
   return { session: session?.[1] ?? null, slug: null };
@@ -202,7 +202,7 @@ function onKeyDown(e: KeyboardEvent) {
     if (focused.dataset.session) openSession(focused.dataset.session);
     // In the Inbox, Enter goes into the issue's chat at once, open beside the list or not ("enter open the chat
     // directly", the user, 28 Oct). An issue with no chat yet opens beside the list, and once open says it has none.
-    else if (focused.matches(".inbox-row[data-slug]") && (focused.matches(".selected") || issues.bySlug.get(focused.dataset.slug!)?.session))
+    else if (focused.matches(".inbox-row[data-slug]") && (focused.matches(".selected") || issues.sessionOf(focused.dataset.slug!)))
       openIssueSession(focused.dataset.slug!);
     else go(focused.getAttribute("href")!);
   }

@@ -68,7 +68,7 @@ const OPEN = store.STATES.filter((s) => s !== "done" && s !== "dropped");
 export function asJson(i: Issue, full = false) {
   const data: Record<string, unknown> = {
     slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, project: i.project, milestone: i.milestone, due: i.due, folder: i.folder,
-    protocol: store.runs(i), session: i.session, created: i.created, url: `/issue/${i.slug}`,
+    protocol: store.runs(i), session: chats.sessionOfIssue(i.slug), created: i.created, url: `/issue/${i.slug}`, // its chat's session
   };
   if (i.state === "waiting") Object.assign(data, { waiting_on: i.waiting_on, waiting_since: i.waiting_since });
   if (i.state === "review") Object.assign(data, { review_of: i.review_of ?? "result", review_since: i.review_since });
@@ -464,7 +464,6 @@ export function routes(app: FastifyInstance) {
     const i = store.blank(await store.newSlug(fields.title!), fields.title!);
     await apply(i, fields);
     if (chat) {
-      i.session = chat.session;
       await chats.bind(chat, i, baseOf(req)); // the issue and its chat, as one write
     } else await store.save(i);
     return reply.code(201).send(asJson(i, true));
@@ -700,26 +699,26 @@ export function routes(app: FastifyInstance) {
   app.post("/api/issues/:slug/start", async (req: Req) => {
     const slug = req.params.slug, i = await loadIssue(slug);
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const plan = str(body.plan), chat = str(body.chat);
+    const plan = str(body.plan), chat = str(body.chat), had = chats.sessionOfIssue(slug);
     // A session that has only planned it shows In review, holding the plan, once its turn ended.
     const planned = i.state === "running" || (i.state === "review" && (i.review_of ?? "result") !== "result");
-    if (!(i.state === "backlog" || (i.state === "waiting" && !i.session) || (planned && i.session)))
+    if (!(i.state === "backlog" || (i.state === "waiting" && !had) || (planned && had)))
       throw new HttpError(409, `${slug} is ${i.state}; only a backlog issue, a waiting one with no session, or one in progress or in review that its session has only planned, can start.`);
     if (plan.trim()) {
       store.setSection(i, "Plan", plan);
       await store.save(i);
     }
     // A quick or brief issue's session writes its own brief, so it may start with no plan and no chat.
-    const planning = !store.hasPlan(i) && !i.session && (chats.exists(chat) || store.runs(i) !== "design");
+    const planning = !store.hasPlan(i) && !had && (chats.exists(chat) || store.runs(i) !== "design");
     if (!store.hasPlan(i) && !planning)
       throw new HttpError(422, "Write the plan first: send it as plan, in three parts: Direction, Done when, What you may decide alone. " +
         "Or send chat, the id of this chat, and the issue's session writes the plan. A quick or brief issue needs neither.");
     const folder = store.folder(slug);
     try {
-      if (planning && chats.exists(chat)) i.session = await agents.planFromChat(i, folder, chats.transcript(chat));
-      else if (planning) i.session = await agents.start(i, folder);
-      else if (i.session) await agents.go(i, folder);
-      else i.session = await agents.runPlan(i, folder);
+      if (planning && chats.exists(chat)) await agents.planFromChat(i, folder, chats.transcript(chat));
+      else if (planning) await agents.start(i, folder);
+      else if (had) await agents.go(i, folder);
+      else await agents.runPlan(i, folder);
     } catch (error) {
       if (error instanceof agents.TrustError)
         throw new HttpError(409, `Workspace not trusted. The plan is saved; tell the user to open /issue/${slug} and press Trust folder, then start again.`);
@@ -748,7 +747,7 @@ export function routes(app: FastifyInstance) {
     if ((await holds(chat, slug)) && (await store.load(chat.issue!)).state !== "triage")
       throw new HttpError(409, `${id} works ${chat.issue}, and a chat works one issue. Hand ${slug} its work instead: POST ` +
         `/api/issues/${slug}/chat with {"message": "<what its chat should know and do>", "from": "${id}"}.`);
-    const previous = i.session && i.session !== chat.session ? i.session : null;
+    const had = chats.sessionOfIssue(slug), previous = had && had !== chat.session ? had : null;
     if (previous) {
       const row = await agents.liveRow(previous, true);
       if (row.status === "busy" || row.status === "waiting" || row.state === "blocked")
@@ -757,7 +756,6 @@ export function routes(app: FastifyInstance) {
     const triage = i.state === "triage" && !i.folder;
     if (!triage && (!i.folder || !isDir(agents.workdir(i))))
       throw new HttpError(422, "Set the issue's folder first (PATCH folder; find it with /api/folders?q=<name>).");
-    i.session = chat.session;
     i.state = triage ? "triage" : "running";
     const was = chat.issue;
     await chats.bind(chat, i, baseOf(req), previous); // the issue, its chat and the chat it had, as one write
@@ -790,9 +788,8 @@ export function routes(app: FastifyInstance) {
     } catch (error) {
       throw new HttpError(error instanceof agents.Busy ? 409 : 502, `The message did not reach ${slug}'s chat: ${(error as Error).message}`);
     }
-    if (handed.started) {
-      i.session = handed.chat.session;
-      if (i.state === "backlog") i.state = "running";
+    if (handed.started && i.state === "backlog") {
+      i.state = "running";
       await store.save(i);
     }
     return { chat: handed.chat.id, session: handed.chat.session, started: handed.started, url: `/issue/${slug}` };

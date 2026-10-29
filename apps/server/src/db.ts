@@ -26,7 +26,7 @@ export type Db = Pick<Transaction, "query">;
 // The tables the app holds, each with its key and the columns it is not sent: a description, and the text desk last
 // wrote, stay on the server.
 const HELD: Record<string, { key: string; hidden: string[] }> = {
-  issues: { key: "slug", hidden: ["body", "written"] },
+  issues: { key: "slug", hidden: ["body", "written", "session"] }, // session: unread since 29 Oct (chats.issue)
   teams: { key: "slug", hidden: ["body", "written"] },
   projects: { key: "slug", hidden: ["body", "written"] },
   milestones: { key: "id", hidden: [] },
@@ -56,7 +56,7 @@ create table if not exists issues (
   landed text,
   lands text, -- JSON: the steps Approve runs to land the work, which its session gave with its Result (land.ts, Lands)
   plan_steps text, -- JSON: a design issue's steps, which its session sets and ticks as it goes (api.ts, PlanStep)
-  session text,
+  session text, -- unread since 29 Oct: an issue's chat holds its session (chats.issue); kept for older branches on Try
   waiting_on text,
   waiting_since text,
   review_of text,

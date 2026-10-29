@@ -8,7 +8,7 @@ import { issues } from "../store/issues";
 
 export const SessionFullRoute = observer(function SessionFullRoute() {
   const { id = "" } = useParams();
-  const slug = [...issues.bySlug.values()].find((i) => i.session === id)?.slug;
+  const slug = issues.issueOf(id);
   useEffect(() => { if (slug) go(`/issue/${slug}`, { replace: true }); }, [slug]);
   return null;
 });

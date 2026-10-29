@@ -71,7 +71,8 @@ const tilde = (path: string) => (path.startsWith(HOME) ? `~${path.slice(HOME.len
 export async function meta(id: string): Promise<Meta> {
   const chat = chats.agentChatOf(id);
   const all = await store.loadAll();
-  const issue = [...all.values()].find((i) => i.session === id) ?? (chat?.issue ? all.get(chat.issue) : undefined) ?? null;
+  // The chat's own issue: the first issue naming the session took a done issue a chat had left for its next (29 Oct).
+  const issue = (chat?.issue && all.get(chat.issue)) || null;
   const row = await agents.shownRow(id);
   // A chat the host runs is where desk last started it: a listing from before its composer picked a folder still names
   // the old one (26 Oct). A process of the user's own, such as one resumed in a terminal, is where it runs.

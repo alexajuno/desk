@@ -21,7 +21,6 @@ export interface Issue {
   link: string | null;
   landing: string | null;
   landed: string | null; // in done, where its session said the work landed
-  session: string | null;
   waiting_on: string | null;
   waiting_since: string | null;
   review_of: string | null;
@@ -153,6 +152,29 @@ export class IssueStore {
 
   setConnected(connected: boolean) {
     this.connected = connected;
+  }
+
+  // Each issue's chat, by slug: the newest agent chat on it, as the server's chats.ts picks it. An issue holds no session
+  // of its own since 29 Oct: its chat holds it, and says which issue it works.
+  get chatOfIssue(): Map<string, Chat> {
+    const made = new Map<string, Chat>();
+    for (const c of this.chats.values()) {
+      if (!c.issue || !(c.kind === "panel" || c.kind === "window")) continue;
+      const had = made.get(c.issue);
+      if (!had || had.created < c.created) made.set(c.issue, c);
+    }
+    return made;
+  }
+
+  // The session of the issue's chat, or null when it has none.
+  sessionOf(slug: string): string | null {
+    return this.chatOfIssue.get(slug)?.session ?? null;
+  }
+
+  // The issue whose chat the session is, or null.
+  issueOf(session: string): string | null {
+    for (const [slug, chat] of this.chatOfIssue) if (chat.session === session) return slug;
+    return null;
   }
 
   // The Inbox's unread rows, which the sidebar counts and the Inbox marks with a dot.

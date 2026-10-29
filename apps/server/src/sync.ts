@@ -169,10 +169,9 @@ function tellAgain() {
   void pagesJob();
 }
 
-// The issues whose files a session may have written, now that its turn ended: its own, and a chat's.
+// The issues whose files a session may have written, now that its turn ended: its chat's.
 async function wroteIn(sessions: string[]): Promise<string[]> {
   const ended = new Set(sessions), slugs = new Set<string>();
-  for (const i of (await store.loadAll()).values()) if (i.session && ended.has(i.session)) slugs.add(i.slug);
   for (const chat of chats.agentChats()) if (chat.issue && ended.has(chat.session)) slugs.add(chat.issue);
   return [...slugs];
 }

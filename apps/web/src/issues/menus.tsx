@@ -52,11 +52,11 @@ export interface ActionTarget {
   state: string;
   priority: string;
   parent: string | null;
-  session: string | null;
 }
 
 // The actions on one issue: a row's right-click menu, and the issue page's "…" button.
 export function actionsMenu(issue: ActionTarget, where: Where, here: string | null) {
+  const session = issues.sessionOf(issue.slug);
   const items: MenuItem[] = [
     { group: 0, icon: fieldIcon("state", issue.state), label: "Status", hint: "S", key: "s", more: true,
       run: () => fieldMenu(issue.slug, "state", issue.state, where) },
@@ -67,8 +67,8 @@ export function actionsMenu(issue: ActionTarget, where: Where, here: string | nu
     }) },
     { group: 0, icon: GLYPH.plus, label: "Add sub-issue", run: () => ui.openCreator({ parent: issue.slug, parentTitle: issue.title }) },
     // An issue's session: its chat, in the middle.
-    ...(issue.session ? [
-      { group: 1, icon: GLYPH.chat, label: "Open chat", hint: "I", key: "i", run: () => openSession(issue.session!, issue.slug) },
+    ...(session ? [
+      { group: 1, icon: GLYPH.chat, label: "Open chat", hint: "I", key: "i", run: () => openSession(session, issue.slug) },
     ] : []),
     { group: 1, icon: GLYPH.link, label: "Copy link", run: () => copy(`${location.origin}/issue/${issue.slug}`, "Link copied") },
     { group: 1, icon: GLYPH.id, label: "Copy ID", run: () => copy(issue.slug, "ID copied") },

@@ -14,6 +14,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import * as agents from "./agents.ts";
+import * as chats from "./chats.ts";
 import { REPO } from "./config.ts";
 import * as copies from "./copies.ts";
 import * as db from "./db.ts";
@@ -51,7 +52,7 @@ export const repo = (i: Issue) => git(agents.workdir(i), "rev-parse", "--show-to
 
 // The worktree desk made for the issue's session with `claude -w`, and its branch, if it has one.
 export async function worktree(i: Issue): Promise<[string, string] | null> {
-  const row = await agents.liveRow(i.session);
+  const row = await agents.liveRow(chats.sessionOfIssue(i.slug));
   const guesses = [row.cwd, resolve(agents.workdir(i), ".claude", "worktrees", `desk-${i.slug.slice(0, 40)}`)];
   for (const guess of guesses) {
     if (guess && existsSync(guess) && guess.includes("/.claude/worktrees/")) {
@@ -386,7 +387,7 @@ export async function tick(top: string = DESK_REPO): Promise<number | null> {
   // Told by the desk that switched, about to restart, a quick session could test the old code; in desk's own repo the
   // desk that restarted on the branch tells it.
   const restarted = !isDesk(top) || now.pid !== process.pid;
-  if (i && i.session && !now.told && restarted) {
+  if (i && chats.sessionOfIssue(i.slug) && !now.told && restarted) {
     let told = true;
     try {
       await agents.say(i, WAKE.replace("{branch}", now.branch).replace("{slug}", i.slug));
@@ -402,7 +403,8 @@ export async function tick(top: string = DESK_REPO): Promise<number | null> {
     }
   }
   if (Date.now() / 1000 - now.since < LINE_GRACE) return now.since + LINE_GRACE;
-  if (i?.session && turns.working(i.session)) return null; // its turn's end looks again
+  const session = i && chats.sessionOfIssue(i.slug);
+  if (session && turns.working(session)) return null; // its turn's end looks again
   await locked(async () => {
     if (sameNote(await trying(top), now)) {
       await putBack(top, now);
@@ -494,7 +496,7 @@ export async function merge(i: Issue): Promise<string> {
     if (now) restartIfDesk(top);
     throw new Blocked((r.stderr || r.stdout).trim() || "git merge failed");
   }
-  const row = await agents.liveRow(i.session);
+  const row = await agents.liveRow(chats.sessionOfIssue(i.slug));
   if (row.id) await run(["claude", "stop", row.id], { timeout: 30 }).catch(() => {});
   // Claude Code locks the worktree while its session lives, and a stopped session may leave the lock: -f -f.
   await run(["git", "worktree", "remove", "-f", "-f", tree], { cwd: top });

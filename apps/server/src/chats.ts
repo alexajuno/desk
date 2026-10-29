@@ -67,6 +67,7 @@ const bySession = new Map<string, Chat>();
 const lastMoved = new Map<string, number>(); // by id, in ms
 
 function keep(chats: Map<string, Chat>, chat: Chat) {
+  byIssue = null;
   const was = chats.get(chat.id);
   if (was && was.session !== chat.session) bySession.delete(was.session);
   chats.set(chat.id, chat);
@@ -79,6 +80,28 @@ function all(): Map<string, Chat> {
 }
 
 const ofSession = (session: string) => (all(), bySession.get(session));
+
+// Each issue's chat, by slug: the newest agent chat on it, out of sight or not, since a chat that takes an issue over
+// from one sitting idle is newer. An issue holds no session of its own since 29 Oct: its chat does, and says which
+// issue it works ("many chats to one issue. so... read chat's issue is correct?", the user). Made again after a change.
+let byIssue: Map<string, Chat> | null = null;
+
+function chatsByIssue(): Map<string, Chat> {
+  if (byIssue) return byIssue;
+  const made = new Map<string, Chat>();
+  for (const chat of all().values()) {
+    if (!chat.issue || !KINDS.has(chat.kind ?? "")) continue;
+    const had = made.get(chat.issue);
+    if (!had || had.created < chat.created) made.set(chat.issue, chat);
+  }
+  return (byIssue = made);
+}
+
+// The session of the issue's chat, or null when it has none.
+export const sessionOfIssue = (slug: string): string | null => chatsByIssue().get(slug)?.session ?? null;
+
+// The issue the session's chat works, or null.
+export const issueOfSession = (session: string | null | undefined): string | null => (session ? ofSession(session)?.issue ?? null : null);
 
 // A copy to change and save(): the kept one changes only by save.
 export function load(id: string): Chat {
@@ -315,10 +338,10 @@ export async function onIssue(i: Issue, message: string, more: Partial<Chat> = {
   return chat;
 }
 
-// The issue's chat: the newest on it, since a chat that takes an issue over from one sitting idle is newer.
+// The issue's chat, as a copy to change.
 export function ofIssue(slug: string): Chat | null {
-  const on = agentChats().filter((c) => c.issue === slug && !c.deleted).sort((a, b) => b.created.localeCompare(a.created));
-  return on[0] ? structuredClone(on[0]) : null;
+  const chat = chatsByIssue().get(slug);
+  return chat ? structuredClone(chat) : null;
 }
 
 // Work handed on to the issue's chat, by the chat that found it (sender) or by whoever calls: the issue's chat takes it

@@ -23,7 +23,6 @@ import type { WebSocket } from "ws";
 import * as chats from "./chats.ts";
 import * as db from "./db.ts";
 import * as hosted from "./hosted.ts";
-import * as store from "./issues.ts";
 import * as sessions from "./sessions.ts";
 import * as transcript from "./transcript.ts";
 
@@ -165,7 +164,7 @@ function kept(written: Row[]) {
 // before it gave way, or a terminal: their prompts and replies are read in from their transcripts, which changed since
 // the table last heard of them. On a fresh table, that is every one, once.
 async function catchUp() {
-  const ids = new Set([...(await store.loadAll()).values()].map((i) => i.session).filter((s): s is string => Boolean(s)));
+  const ids = new Set<string>();
   for (const chat of chats.agentChats()) if (chat.session) ids.add(chat.session);
   const behind: State[] = [];
   for (const id of ids) {

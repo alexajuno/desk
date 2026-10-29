@@ -247,11 +247,10 @@ export function state(live: agents.Row): string {
   return "closed";
 }
 
-// The issue each session works, by session id: an issue's own session, or an agent chat bound to an issue.
+// The issue each session works, by session id: its chat's.
 async function issuesBySession(): Promise<Map<string, Issue>> {
   const everything = await store.loadAll();
   const found = new Map<string, Issue>();
-  for (const i of everything.values()) if (i.session) found.set(i.session, i);
   for (const chat of chats.agentChats()) if (chat.issue && everything.has(chat.issue)) found.set(chat.session, everything.get(chat.issue)!);
   return found;
 }
