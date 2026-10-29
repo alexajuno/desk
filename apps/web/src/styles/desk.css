@@ -959,6 +959,10 @@ button.inbox-tool.on { background: var(--btn-ghost-on); color: var(--text-1); }
 .field-chip svg { width: 14px; height: 14px; }
 .field-chip .glyph { color: var(--text-3); }
 .field-chip span { overflow: hidden; text-overflow: ellipsis; }
+/* An issue's set project or milestone is a link to it (IssueView), drawn as the chip or the row it was. */
+a.field-chip { display: inline-flex; align-items: center; white-space: nowrap; text-decoration: none; transition: background-color 0.1s, color 0.1s; }
+a.prop { text-decoration: none; }
+a.prop > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .create-panel footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 24px; }
 .create-panel button.primary { height: 28px; padding: 0 10px; border-radius: 9999px; }
 .switch { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); cursor: pointer; user-select: none; }

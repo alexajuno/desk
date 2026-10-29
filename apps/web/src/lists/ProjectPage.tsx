@@ -369,6 +369,14 @@ function Milestones({ slug, list }: { slug: string; list: MilestoneData[] }) {
 
 const ProjectIssues = observer(function ProjectIssues({ slug }: { slug: string }) {
   const { data, error } = useList<ProjectData>(`/project/${slug}/issues`, `/api/page/project/${slug}`, (d) => d.list.view);
+  // An issue's milestone opens here grouped by milestone, at #<its id> (IssueView): once the list is in, that group
+  // comes to the top. The hash is read as the page opens, since useList may write the address again without it.
+  const at = useRef(decodeURIComponent(location.hash.slice(1)));
+  useEffect(() => {
+    if (!data || !at.current) return;
+    document.querySelector(`.group[data-group="${CSS.escape(at.current)}"]`)?.scrollIntoView({ block: "start" });
+    at.current = "";
+  }, [data]);
   return (
     <>
       <Head slug={slug} title={data?.project.title} tab="issues" tools={data && <Tools view={data.list.view} />} />

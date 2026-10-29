@@ -131,7 +131,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
         {...(p.session ? { "data-session": p.session.slice(0, 8) } : {})}>
         <div>
           <Title title={p.title} save={(t) => setField(p.slug, "title", t)} />
-          <Chips p={p} team={data.team} project={data.project} />
+          <Chips p={p} team={data.team} project={data.project} milestone={data.milestone} />
           {/* In review the card comes first, right under the title, beside the Approve that decides on it. A plan to
               say go to shows as the plan, below. */}
           {p.state === "review" && data.reviewing && (
@@ -267,9 +267,16 @@ export const HeadStatus = observer(function HeadStatus({ issue }: { issue: Issue
   );
 });
 
+// A set project or milestone opens where it lives rather than its picker, since one is seldom changed once set ("honestly
+// i never edit project", the user, 29 Oct): Shift P and Shift M change it, as their tooltips say. A milestone opens on its
+// project's Issues, grouped by milestone, at its group (ProjectPage's ProjectIssues). An empty one opens its picker.
+const projectPath = (slug: string) => `/project/${slug}`;
+const milestonePath = (project: string, id: string) => `/project/${project}/issues?group=milestone#${encodeURIComponent(id)}`;
+const OPEN_PROJECT = "Open the project\nChange project  Shift P", OPEN_MILESTONE = "Open the milestone\nChange milestone  Shift M";
+
 // Linear's Inbox has no room for the Properties column in a pane under 820px, so it shows them as chips here
-// instead (desk.css); each opens the same picker as its row in the column.
-const Chips = observer(function Chips({ p, team, project }: { p: IssueRow; team: { slug: string; title: string } | null; project: { slug: string; title: string } | null }) {
+// instead (desk.css); each does what its row in the column does.
+const Chips = observer(function Chips({ p, team, project, milestone }: { p: IssueRow; team: { slug: string; title: string } | null; project: { slug: string; title: string } | null; milestone: string | null }) {
   return (
     <div className="chips">
       <Pick className="field-chip pick" slug={p.slug} field="state" value={p.state} title="Change status  S">
@@ -293,11 +300,30 @@ const Chips = observer(function Chips({ p, team, project }: { p: IssueRow; team:
           <span>{p.waiting_on || "Waiting on"}</span>
         </button>
       )}
-      <button className={`field-chip project-chip${p.project ? "" : " unset"}`} type="button" data-slug={p.slug} data-value={p.project ?? ""} title="Set project  Shift P"
-        onClick={(e) => { if (!toggled(e.currentTarget)) projectPicker(p.project, p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "project", value)); }}>
-        {GLYPH.project}
-        <span>{project ? project.title : p.project || "Project"}</span>
-      </button>
+      {p.project ? (
+        <Go className="field-chip project-chip" to={projectPath(p.project)} data-slug={p.slug} data-value={p.project} title={OPEN_PROJECT}>
+          {GLYPH.project}
+          <span>{project ? project.title : p.project}</span>
+        </Go>
+      ) : (
+        <button className="field-chip project-chip unset" type="button" data-slug={p.slug} data-value="" title="Set project  Shift P"
+          onClick={(e) => { if (!toggled(e.currentTarget)) projectPicker(null, p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "project", value)); }}>
+          {GLYPH.project}
+          <span>Project</span>
+        </button>
+      )}
+      {p.project && (p.milestone ? (
+        <Go className="field-chip milestone-pick" to={milestonePath(p.project, p.milestone)} data-slug={p.slug} title={OPEN_MILESTONE}>
+          {GLYPH.milestone}
+          <span>{milestone ?? "Milestone"}</span>
+        </Go>
+      ) : (
+        <button className="field-chip milestone-pick unset" type="button" data-slug={p.slug} title="Set milestone  Shift M"
+          onClick={(e) => { if (!toggled(e.currentTarget)) milestoneMenu(p.project, null, { anchor: e.currentTarget }, (id) => setField(p.slug, "milestone", id)); }}>
+          {GLYPH.milestone}
+          <span>Milestone</span>
+        </button>
+      ))}
       <button className={`field-chip folder-pick${p.folder ? "" : " unset"}`} type="button" data-slug={p.slug} data-value={p.folder ?? ""} title="Pick the folder the issue's session starts in; ~ until you pick one"
         onClick={(e) => { if (!toggled(e.currentTarget)) folderMenu(p.folder ?? "", e.currentTarget, (f) => setFolder(p.slug, f)); }}>
         <svg className="glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z" /></svg>
@@ -348,18 +374,30 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
         <span className="icon" data-field="protocol">{fieldIcon("protocol", p.protocol)}</span><span className="field-label" data-field="protocol">{PROTOCOL_NAMES[p.protocol as Protocol]}</span>
       </Pick>
       <div className="label">Project</div>
-      <button className="prop project-pick-menu" type="button" data-slug={p.slug} data-value={p.project ?? ""} title="Set project  Shift P"
-        onClick={(e) => { if (!toggled(e.currentTarget)) projectPicker(p.project, p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "project", value)); }}>
-        <span className="muted-icon">{GLYPH.project}</span>
-        <span className={data.project ? undefined : "muted"}>{data.project?.title ?? "Add to project"}</span>
-      </button>
-      {p.project && (
-        <button className="prop milestone-pick" type="button" data-slug={p.slug} title="Set milestone  Shift M"
-          onClick={(e) => { if (!toggled(e.currentTarget)) milestoneMenu(p.project, p.milestone, { anchor: e.currentTarget }, (id) => setField(p.slug, "milestone", id)); }}>
-          <span className="muted-icon">{GLYPH.milestone}</span>
-          <span className={data.milestone ? undefined : "muted"}>{data.milestone ?? "Add to milestone"}</span>
+      {p.project ? (
+        <Go className="prop project-pick-menu" to={projectPath(p.project)} data-slug={p.slug} data-value={p.project} title={OPEN_PROJECT}>
+          <span className="muted-icon">{GLYPH.project}</span>
+          <span>{data.project?.title ?? p.project}</span>
+        </Go>
+      ) : (
+        <button className="prop project-pick-menu" type="button" data-slug={p.slug} data-value="" title="Set project  Shift P"
+          onClick={(e) => { if (!toggled(e.currentTarget)) projectPicker(null, p.team, { anchor: e.currentTarget }, (value) => setField(p.slug, "project", value)); }}>
+          <span className="muted-icon">{GLYPH.project}</span>
+          <span className="muted">Add to project</span>
         </button>
       )}
+      {p.project && (p.milestone ? (
+        <Go className="prop milestone-pick" to={milestonePath(p.project, p.milestone)} data-slug={p.slug} title={OPEN_MILESTONE}>
+          <span className="muted-icon">{GLYPH.milestone}</span>
+          <span>{data.milestone ?? "Milestone"}</span>
+        </Go>
+      ) : (
+        <button className="prop milestone-pick" type="button" data-slug={p.slug} title="Set milestone  Shift M"
+          onClick={(e) => { if (!toggled(e.currentTarget)) milestoneMenu(p.project, null, { anchor: e.currentTarget }, (id) => setField(p.slug, "milestone", id)); }}>
+          <span className="muted-icon">{GLYPH.milestone}</span>
+          <span className="muted">Add to milestone</span>
+        </button>
+      ))}
       <div className="label">Due date</div>
       <button className="prop due-pick" type="button" data-slug={p.slug} title="Set due date  Shift D"
         onClick={(e) => { if (!toggled(e.currentTarget)) datePicker({ anchor: e.currentTarget, title: "Due date", current: p.due, kinds: ["day"], set: (t) => setField(p.slug, "due", t ?? "") }); }}>
