@@ -243,6 +243,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
         <div className="convo" hidden={shown !== "chat"}>
           {!s.loaded ? <p className="convo-empty">Connecting…</p>
             : quiet(s) ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
+              : m?.chat && m.issue ? "This issue's chat. Write to carry the issue on: it starts from the issue's document."
               : m?.bare || (m?.chat && s.startAs === "chat") ? `Just Claude, as claude runs in a terminal ${startsIn(s) === "~" ? "from your home folder" : `in ${startsIn(s)}`}: no issue and no desk instructions.`
               : m?.chat ? "Ask desk's agent anything: it files the work and does it here. Start with @ and a name to talk to one of your agents."
               : "Nothing said yet."}</p>
