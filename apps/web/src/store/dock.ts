@@ -1,11 +1,12 @@
 // Where a session's chat stands (the plan of "Chat in the center, the issue on the side"): whatever you work on takes
 // the middle of the screen. An issue with a chat opens as that chat, alone in the middle, on Chat; the tabs in its
-// head, or Tab and ], show its issue's Plan (its steps, each one's diagram and decisions), Issue (its page) or Changes
-// in the chat's place, the reply box staying under each ("all could be on a single screen. just that we need a way to
-// switching between those views", the user, 28 Oct: the plan of "Chat, plan and issue on one screen", which took the
-// sheet over the chat away). Any other page takes the middle, and the chat you left waits as a pill at the bottom right.
+// head, or Tab, ] and 1 to 4, show its issue's Plan (its steps, each one's diagram and decisions), Issue (its page) or
+// Changes in the chat's place, the reply box staying under each ("all could be on a single screen. just that we need a
+// way to switching between those views", the user, 28 Oct: the plan of "Chat, plan and issue on one screen", which took
+// the sheet over the chat away). Any other page takes the middle, and the chat you left waits as a pill at the bottom
+// right.
 //
-//   issue page, no chat ── Plan · Start · O ──▶ chat ◀── Tab · ] · Esc ──▶ Plan · Issue · Changes
+//   issue page, no chat ── Plan · Start · O ──▶ chat ◀── Tab · ] · 1-4 · Esc ──▶ Plan · Issue · Changes
 //
 // The chat you left is remembered in this browser; its view is not, and each chat comes on Chat.
 import { action, computed, makeObservable, observable } from "mobx";

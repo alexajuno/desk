@@ -289,10 +289,10 @@ const ChatHead = observer(function ChatHead({ s, views, view, setView }: { s: Li
 // build step's diff (Changes.tsx), in the view tabs' pills, the Changes tab with how much the steps changed. The reply
 // box stays under each ("A", the user, 28 Oct, picking the tabs in the head over a row of their own).
 const VIEW_TAB: Record<View, [string, string]> = {
-  chat: ["Chat", "The conversation  Esc"],
-  plan: ["Plan", "Its steps, each one's diagram and decisions  ]"],
-  issue: ["Issue", "Its page"],
-  changes: ["Changes", "Each build step's diff, from its commit"],
+  chat: ["Chat", "The conversation  1 or Esc"],
+  plan: ["Plan", "Its steps, each one's diagram and decisions  2 or ]"],
+  issue: ["Issue", "Its page  3"],
+  changes: ["Changes", "Each build step's diff, from its commit  4"],
 };
 const ViewTabs = observer(function ViewTabs({ slug, views, view, setView }: { slug: string; views: View[]; view: View; setView: (v: View) => void }) {
   return (
