@@ -3,7 +3,7 @@
 // opens the issue as its chat, in the middle, its issue a ] away, and hides once the chat is open. Ctrl+Enter
 // presses the step and I opens the chat, as the buttons' tooltips say.
 import { observer } from "mobx-react-lite";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { post, said } from "../api/http";
 import { go, Go } from "../app/nav";
 import { PRIORITY_NAMES, PROTOCOL_NAMES, STATE_NAMES, type Field, type IssueRow, type Priority, type Protocol, type State, type TreeRow } from "../lib/desk";
@@ -120,7 +120,8 @@ export function useStep(data: IssuePageData, inInbox = false) {
   return { p, step, landing, steps, skip, setSkip, trust: trustFor === p.slug, act };
 }
 
-export const IssueView = observer(function IssueView({ data, inInbox = false }: { data: IssuePageData; inInbox?: boolean }) {
+// parents: the line of its parents over its title, where no top bar names them, as the issue's page does (IssuePage).
+export const IssueView = observer(function IssueView({ data, inInbox = false, parents = true }: { data: IssuePageData; inInbox?: boolean; parents?: boolean }) {
   const { p, step, landing, steps, skip, setSkip, trust, act } = useStep(data, inInbox);
 
   useLayoutEffect(() => showFolded());
@@ -130,6 +131,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false }: 
       <div className="issue" data-slug={p.slug} data-state={p.state} data-priority={p.priority} data-parent={p.parent ?? ""}
         {...(p.session ? { "data-session": p.session.slice(0, 8) } : {})}>
         <div>
+          {parents && data.trail.length > 0 && <Parents trail={data.trail} />}
           <Title title={p.title} save={(t) => setField(p.slug, "title", t)} />
           <Chips p={p} team={data.team} project={data.project} milestone={data.milestone} />
           {/* In review the card comes first, right under the title, beside the Approve that decides on it. A plan to
@@ -266,6 +268,16 @@ export const HeadStatus = observer(function HeadStatus({ issue }: { issue: Issue
     </Pick>
   );
 });
+
+// Its parents, the farthest first, each a link, as the issue page's crumb has them without its team and its title: the
+// user's pick from three mockups, on 29 Oct ("yep A").
+function Parents({ trail }: { trail: IssuePageData["trail"] }) {
+  return (
+    <div className="issue-parents">
+      {trail.map((a) => (<Fragment key={a.slug}><Go to={`/issue/${a.slug}`}>{a.title}</Go><span className="sep">›</span></Fragment>))}
+    </div>
+  );
+}
 
 // A set project or milestone opens where it lives rather than its picker, since one is seldom changed once set ("honestly
 // i never edit project", the user, 29 Oct): Shift P and Shift M change it, as their tooltips say. A milestone opens on its

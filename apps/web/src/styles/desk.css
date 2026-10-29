@@ -525,6 +525,12 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 /* problem page: content on the left, properties and agents on the right, as Linear's issue page */
 .issue { display: grid; grid-template-columns: minmax(0, 1fr) 272px; gap: 48px; max-width: 1040px; margin: 0 auto; padding: 32px 24px 0; }
 .issue h1, .issue textarea.title { font: 600 24px/1.3 var(--font); margin: 0 0 16px; letter-spacing: -0.2px; }
+/* its parents over its title, where no top bar names them (a chat's Issue tab, the Inbox): the bar's crumb in its colours,
+   one line, each title cut short rather than wrapped */
+.issue-parents { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0 0 6px; font: 450 13px/20px var(--font); color: var(--text-3); }
+.issue-parents a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; color: var(--text-3); }
+.issue-parents a:hover { color: var(--text-1); }
+.issue-parents .sep { flex: none; color: var(--text-4); }
 
 /* An issue's actions (IssueView.tsx, Actions), as Linear's issue page has Copy issue URL, Copy issue ID, Copy branch
    name and Copy as prompt, measured on linear.app on 2026-10-20 at 2x, dark and light: a row of 28px circles 6px

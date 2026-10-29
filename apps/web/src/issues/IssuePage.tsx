@@ -45,7 +45,7 @@ export const IssuePage = observer(function IssuePage() {
         }
       />
       <div className="scroll" ref={scroll}>
-        {shown ? <IssueView data={shown} /> : error ? <p className="muted" style={{ padding: 24 }}>{error}</p> : null}
+        {shown ? <IssueView data={shown} parents={false} /> : error ? <p className="muted" style={{ padding: 24 }}>{error}</p> : null}
       </div>
     </>
   );
