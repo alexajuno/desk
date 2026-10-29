@@ -743,8 +743,9 @@ div.menu-filter:empty::before, div.menu-filter:not(:empty)::after { content: "";
 div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--text-3); }
 @keyframes caret { 50% { opacity: 0; } }
 
-/* a Linear-style toast, bottom left */
-.toast { position: fixed; left: 16px; bottom: 16px; z-index: 40; display: flex; align-items: center; gap: 8px; height: 40px;
+/* a Linear-style toast, bottom right ("bottom right corner", the user, 29 Oct), above the corner's buttons
+   (sessions.css .corner, which end 32px up) */
+.toast { position: fixed; right: 16px; bottom: 40px; z-index: 40; display: flex; align-items: center; gap: 8px; height: 40px;
          padding: 0 8px 0 14px; background: var(--bg-pop); border: 0.5px solid var(--border-pop); border-radius: 8px;
          box-shadow: var(--shadow-pop); font-size: 13px; color: var(--text-1); }
 .toast:not(:has(button)) { padding-right: 14px; }
