@@ -22,7 +22,7 @@ import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as models from "./models.ts";
 import { run, sleep } from "./proc.ts";
-import { fill, MOVED, NOT_MOVED, PLAN_RULES, PROMPT, PROTOCOLS, WINDOW_RULES, WORK } from "./prompts.ts";
+import { fill, HANDED, HANDED_ON, HANDED_TODO, HANDED_TOLD, HANDED_WHERE, MOVED, NOT_MOVED, ON_ISSUE, PLAN_RULES, PROMPT, PROTOCOLS, WINDOW_RULES, WORK } from "./prompts.ts";
 import type { Agent } from "./roster.ts";
 import * as settings from "./settings.ts";
 import type { Effort } from "./settings.ts";
@@ -283,6 +283,31 @@ export async function onIssue(i: Issue, message: string, more: Partial<Chat> = {
   await hosted.start({ ...(await hostOptions(chat)), title: `desk chat ${stamp()}`, message });
   await save(chat);
   return chat;
+}
+
+// The issue's chat: the newest on it, since a chat that takes an issue over from one sitting idle is newer.
+export function ofIssue(slug: string): Chat | null {
+  const on = agentChats().filter((c) => c.issue === slug && !c.deleted).sort((a, b) => b.created.localeCompare(a.created));
+  return on[0] ? structuredClone(on[0]) : null;
+}
+
+// Work handed on to the issue's chat, by the chat that found it (sender) or by whoever calls: the issue's chat takes it
+// at once, or after its turn, and an issue with no chat gets one in its folder. The message says who sent it, and where
+// that chat's whole conversation is, for what the note leaves out ("start a new chat with additional context if needed",
+// the user, 29 Oct).
+export async function handOn(i: Issue, note: string, sender: Chat | null): Promise<{ chat: Chat; started: boolean }> {
+  const of = sender?.issue && (await store.exists(sender.issue)) ? (await store.load(sender.issue)).title : sender?.named || sender?.title;
+  const who = (sender ? `the chat on “${of}”` : "another session").replace(/["<>\n]/g, " ");
+  const path = sender ? transcripts.pathOf(sender.session) : null;
+  const where = path ? fill(HANDED_WHERE, { path }) : "", Who = who[0].toUpperCase() + who.slice(1);
+  const chat = ofIssue(i.slug);
+  if (chat) {
+    await agents.tell(chat.session, fill(HANDED_ON, { who, Who, note: note.trim(), where }));
+    return { chat, started: false };
+  }
+  const p = { title: i.title, base: BASE, slug: i.slug, file: join(store.folder(i.slug), store.MAIN) };
+  const start = fill(ON_ISSUE, { ...p, told: fill(HANDED_TOLD, { Who, where }), todo: HANDED_TODO });
+  return { chat: await onIssue(i, fill(HANDED, { who, note: note.trim(), start }), sender ? { from: sender.id } : {}), started: true };
 }
 
 // "17 Oct 19:24", for the name desk gives the session it starts. strftime's %b in the C locale: Sep, never Sept.

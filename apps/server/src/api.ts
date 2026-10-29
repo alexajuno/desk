@@ -424,9 +424,19 @@ async function filer(body: unknown, title: string): Promise<chats.Chat | null> {
   if (!id) return chats.filing(title);
   if (!chats.exists(id)) throw new HttpError(404, "No such chat");
   const chat = chats.load(id);
-  if (chat.issue && (await store.exists(chat.issue)) && OPEN.includes((await store.load(chat.issue)).state))
-    throw new HttpError(409, `${id} already has its own issue, ${chat.issue}: file this one in the backlog, or bind the chat to it with /work.`);
+  if (await holds(chat))
+    throw new HttpError(409, `${id} already works its own issue, ${chat.issue}, and a chat works one issue: file this one in the backlog, ` +
+      `then hand it to a chat of its own with POST /api/issues/<its slug>/chat.`);
   return chat;
+}
+
+// A chat works its one issue: it leaves that issue only while it is in Triage, the chat's own until the talk settles it,
+// or dropped, with nothing left in it ("each guy handles one thing and communicate and tell the others to handle the
+// rest", the user, 29 Oct). Until then one chat worked issue after issue, and each it left still named it (29 Oct:
+// IGH-314's portal issue, In review, showed the done cap issue in its chat's head).
+async function holds(chat: chats.Chat, other = ""): Promise<boolean> {
+  if (!chat.issue || chat.issue === other || !(await store.exists(chat.issue))) return false;
+  return (await store.load(chat.issue)).state !== "dropped";
 }
 
 export function routes(app: FastifyInstance) {
@@ -726,6 +736,7 @@ export function routes(app: FastifyInstance) {
   // one behind as a duplicate of it, dropped. An issue whose session sits idle or stopped is taken over, and the reply
   // names that session and its transcript, for what the document lacks; only one working or asking now keeps it (26
   // Oct: "we should allowing new session to be binded", after a brief written on 22 Oct held one).
+  // A chat that works another issue, past Triage, is refused: it hands the work on instead (POST .../chat, 29 Oct).
   app.post("/api/issues/:slug/work", async (req: Req) => {
     const slug = req.params.slug, i = await loadIssue(slug);
     const id = str(((req.body ?? {}) as Record<string, unknown>).chat);
@@ -734,6 +745,9 @@ export function routes(app: FastifyInstance) {
       throw new HttpError(409, `${slug} is ${i.state}; only an issue in triage, the backlog, in progress, waiting or in review can be worked.`);
     if (!chats.exists(id)) throw new HttpError(404, "No such chat");
     const chat = chats.load(id);
+    if ((await holds(chat, slug)) && (await store.load(chat.issue!)).state !== "triage")
+      throw new HttpError(409, `${id} works ${chat.issue}, and a chat works one issue. Hand ${slug} its work instead: POST ` +
+        `/api/issues/${slug}/chat with {"message": "<what its chat should know and do>", "from": "${id}"}.`);
     const previous = i.session && i.session !== chat.session ? i.session : null;
     if (previous) {
       const row = await agents.liveRow(previous, true);
@@ -753,6 +767,35 @@ export function routes(app: FastifyInstance) {
     }
     if (!previous) return asJson(i);
     return { ...asJson(i), previous: { session: previous, transcript: transcripts.pathOf(previous) } };
+  });
+
+  // Hand work on to the issue's chat: a chat that finds work in another issue tells that issue's chat, rather than
+  // working it itself ("each guy handles one thing and communicate and tell the others to handle the rest", the user,
+  // 29 Oct). The issue's chat takes the message at once, or after its turn; an issue with no chat gets one, in its
+  // folder, In progress. from is the chat handing it on, whose conversation the message points to.
+  app.post("/api/issues/:slug/chat", async (req: Req) => {
+    const slug = req.params.slug, i = await loadIssue(slug);
+    const body = (req.body ?? {}) as Record<string, unknown>, message = str(body.message).trim(), from = str(body.from);
+    if (!message) throw new HttpError(422, "message is required: what the issue's chat should know and do", [{ type: "missing", loc: ["body", "message"], msg: "Field required", input: req.body ?? null }]);
+    if (!["triage", "backlog", "running", "waiting", "review"].includes(i.state))
+      throw new HttpError(409, `${slug} is ${i.state}; only an issue in triage, the backlog, in progress, waiting or in review takes work.`);
+    if (from && !chats.exists(from)) throw new HttpError(404, `No such chat: ${from}`);
+    const sender = from ? chats.load(from) : null;
+    if (sender?.issue === slug) throw new HttpError(409, `${from} works ${slug} itself: carry on there.`);
+    if (!chats.ofIssue(slug) && (!i.folder || !isDir(agents.workdir(i))))
+      throw new HttpError(422, "Set the issue's folder first (PATCH folder; find it with /api/folders?q=<name>).");
+    let handed;
+    try {
+      handed = await chats.handOn(i, message, sender);
+    } catch (error) {
+      throw new HttpError(error instanceof agents.Busy ? 409 : 502, `The message did not reach ${slug}'s chat: ${(error as Error).message}`);
+    }
+    if (handed.started) {
+      i.session = handed.chat.session;
+      if (i.state === "backlog") i.state = "running";
+      await store.save(i);
+    }
+    return { chat: handed.chat.id, session: handed.chat.session, started: handed.started, url: `/issue/${slug}` };
   });
 
   // Switch the issue's folder checkout to its branch, to test it in the one running app; in desk's own repo, while

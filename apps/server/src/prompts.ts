@@ -50,6 +50,14 @@ export const BRIEF_FIRST = "It runs the {protocol} protocol: {how}\n\nFirst gath
 
 export const TOLD = "\nThe user was talking to desk's agent about this work, and it filed the issue and started this chat on it. That chat, which is all the context the user gave:\n\n{chat}\n";
 
+// Work one chat hands on to another issue's (chats.ts, handOn): the note, which the chat shows only as who sent it
+// (transcript.ts, PUSH), then where it came from. HANDED starts a chat on the issue; HANDED_ON reaches the one it has.
+export const HANDED = "<desk-push from=\"{who}\">\n{note}\n</desk-push>\n\n{start}";
+export const HANDED_TOLD = "\n{Who} handed this issue on to this chat, with the note above{where}.\n";
+export const HANDED_TODO = "Work it by its protocol, as the rules above say, from where its document and steps stand.";
+export const HANDED_ON = "<desk-push from=\"{who}\">\n{note}\n</desk-push>\n\n{Who} handed this on to you, for this chat's issue{where}. Carry on with it by the issue's protocol, as the rules above say, and tell the user in a line what it changes.";
+export const HANDED_WHERE = ", and its whole conversation is in {path}, for what the note leaves out";
+
 // A plan written by whoever started the chat, carried out at once (api.ts, /start with a plan).
 export const GO_FIRST: Record<string, string> = {
   design: "Carry out its plan now, one step at a time with the user, as the rules above say: do its first step, report it, and end your turn.",
