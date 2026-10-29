@@ -25,6 +25,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { WebSocket } from "ws";
 import * as agents from "./agents.ts";
+import * as auto from "./auto.ts";
 import * as chats from "./chats.ts";
 import { HOME } from "./config.ts";
 import * as hosted from "./hosted.ts";
@@ -356,6 +357,7 @@ export async function withdraw(id: string, uuid: string): Promise<boolean> {
 }
 
 export async function interrupt(id: string) {
+  auto.stop(id); // Stop stops Auto too: the turn waits for the user
   if (await hosted.holds(id)) return void (await hosted.interrupt(id));
   const row = await agents.liveRow(id, true);
   if (row.status === "busy") throw new Error("This turn runs outside desk's panel, so stop it where it runs.");

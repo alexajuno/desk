@@ -44,6 +44,7 @@ import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import * as agents from "./agents.ts";
+import * as auto from "./auto.ts";
 import * as automations from "./automations.ts";
 import type { Automation } from "./automations.ts";
 import * as chats from "./chats.ts";
@@ -128,6 +129,7 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
   if (fields.state === "review" || fields.review_of) {
     i.review_since = null;
     if (!fields.review_of) fields.review_of = "reply";
+    auto.called(i.slug); // the session's own call, which Auto answers as its turn ends
   }
   // A session that landed its work says where, which Done shows: the commit, or the pull request, which becomes the
   // issue's link.

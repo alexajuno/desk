@@ -2,6 +2,7 @@
 // DESK_DATA the data folder (default ~/.local/share/desk), and DESK_CLOCK=0 leaves the line, the automations'
 // clock off, as a second desk for testing should.
 import { create } from "./app.ts";
+import * as auto from "./auto.ts";
 import * as automations from "./automations.ts";
 import * as chats from "./chats.ts";
 import { PORT } from "./config.ts";
@@ -45,6 +46,7 @@ await inbox.load();
 await web.build();
 const app = await create();
 await sync.start();
+auto.start(); // Auto says next for the user as a turn ends
 // A session host left from older code gives way to one of this code once none of its sessions works.
 setInterval(() => void hosted.keepCurrent().catch(() => {}), 60_000);
 setInterval(() => void db.prune().catch((error) => console.error("pruning the log", error)), 3600_000);
