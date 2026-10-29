@@ -29,6 +29,8 @@ const rewritten = await store.rewrite();
 if (rewritten) console.log(`desk wrote ${rewritten} issue.md out again, as their rows now hold them`);
 await store.readLanded();
 await chats.readIn();
+const adopted = await chats.adoptSessions(); // once: the sessions no chat held become chats on their issues
+if (adopted) console.log(`desk made ${adopted} sessions with no chat into chats on their issues`);
 const renamed = await store.renameAll(); // once: after the chats, which follow their issues
 if (renamed) console.log(`desk gave ${renamed} issues the slug their title makes now`);
 // What a desk of an older branch changed in the files desk kept its state in before Postgres, while it ran (copies.ts).

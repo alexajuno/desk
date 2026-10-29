@@ -179,6 +179,36 @@ export async function readIn() {
 
 export const exists = (id: string) => CHAT_ID.test(id) && all().has(id);
 
+// Once: each session Plan, Start or /start began before 29 Oct, which no chat held, becomes a chat on its issue, in the
+// folder it ran in, so that every issue finds its chat the same way, by the chat's issue. Of the issues one such session
+// worked, the chat takes an open one, else the newest. Returns how many it made.
+export async function adoptSessions(): Promise<number> {
+  return db.write(async (tx) => {
+    if ((await tx.query("select 1 from meta where name = 'sessions adopted'")).rows.length) return 0;
+    const rows = (await tx.query<{ slug: string; title: string; state: string; created: string; folder: string | null; session: string }>(
+      "select slug, title, state, created, folder, session from issues where coalesce(session, '') <> '' order by created")).rows;
+    const bySession = new Map<string, (typeof rows)[number]>();
+    for (const r of rows) {
+      if (ofSession(r.session)) continue;
+      const had = bySession.get(r.session);
+      if (!had || CLOSED.has(had.state) || !CLOSED.has(r.state)) bySession.set(r.session, r);
+    }
+    for (const [session, r] of bySession) {
+      const folder = resolve(agents.workdir({ folder: r.folder } as Issue));
+      const chat: Chat = { id: newId(), kind: "panel", title: r.title, created: r.created, updated: now(), session, issue: r.slug, folder,
+        cwd: transcripts.cwdOf(session) ?? folder };
+      await put(tx, chat);
+      keep(all(), chat);
+      const file = transcripts.pathOf(session);
+      lastMoved.set(chat.id, file ? statSync(file).mtimeMs : Date.parse(r.created));
+    }
+    await tx.query("insert into meta values ('sessions adopted', now()::text)");
+    return bySession.size;
+  });
+}
+
+const CLOSED = new Set(["done", "dropped"]);
+
 // The chat as plain text, the user's words and the agent's replies in order, for a session's first prompt.
 export function transcript(id: string): string {
   const names: Record<string, string> = { user: "The user", assistant: "desk's agent" };
