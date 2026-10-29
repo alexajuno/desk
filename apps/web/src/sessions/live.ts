@@ -62,6 +62,7 @@ export interface Meta {
   agent: string | null; // the agent a chat is with
   bare: boolean; // a chat with no agent and no desk prompt
   picked: boolean; // a new chat's folder, picked in its composer
+  auto: boolean; // Auto in its composer: desk says next for the user as a turn ends
   runs: { model: string; name: string; effort: string }; // for the composer's chip
 }
 
@@ -357,6 +358,17 @@ export class LiveSession {
       if (was) this.shows(was);
       toast(await reason(res));
     });
+  }
+
+  // The composer's Manual or Auto: the chip shows it at once, and the server's next meta, in every tab, confirms it.
+  async setAuto(auto: boolean) {
+    const was = this.meta;
+    if (was) this.shows({ ...was, auto });
+    const res = await postJson(`/api/live/${this.id}/auto`, { auto });
+    if (!res.ok) {
+      if (was) this.shows(was);
+      toast(await reason(res));
+    }
   }
 
   shows(meta: Meta) {

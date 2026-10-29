@@ -1211,6 +1211,9 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
             if (e.key === "Tab" && e.shiftKey && fresh(s)) {
               e.preventDefault(); // Claude Code's key for its modes, here the chip's two
               flipStartAs(s);
+            } else if (e.key === "Tab" && e.shiftKey && moded(s)) {
+              e.preventDefault(); // once the chat has begun, Manual or Auto
+              void s.setAuto(!s.meta?.auto);
             } else if (picks.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
               e.preventDefault();
               setAt(e.key === "ArrowDown" ? (at + 1) % picks.length : (at <= 0 ? picks.length : at) - 1);
@@ -1261,6 +1264,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           </button>
         )}
         <span className="spacer" />
+        {moded(s) && <Mode s={s} />}
         <Runs s={s} />
         {s.working && (
           <button className="stop" type="button" title="Stop  Ctrl C" onClick={() => void s.interrupt()}>
@@ -1317,6 +1321,31 @@ const StartIn = observer(function StartIn({ s }: { s: LiveSession }) {
         requestAnimationFrame(focusComposer); // back to typing the first message
       }); }}>
       {GLYPH.folder}<span><bdi>{now}</bdi></span>
+      <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
+    </button>
+  );
+});
+
+// desk's own chat, which works an issue or files one: the chats with an agent, and bare ones, have no mode.
+const moded = (s: LiveSession) => Boolean(s.meta?.chat && !s.meta.agent && !s.meta.bare && (s.meta.issue || (fresh(s) && s.startAs === "issue")));
+
+// The chip by the model's: Manual stops after each step for the user, and in Auto desk says next for them as a turn
+// ends on a step, and go on a plan (the server's auto.ts). "i want modes, adjustable in composer, similar to claude
+// code's modes" (the user, 29 Oct); the user picked this chip, always there, from three mockups. Shift Tab flips it
+// once the chat has begun: before, it flips Issue and Chat.
+const MODES = {
+  manual: { label: "Manual", icon: GLYPH.manual, sub: "stops after each step for you" },
+  auto: { label: "Auto", icon: GLYPH.auto, sub: "desk says next and go for you" },
+} as const;
+
+const Mode = observer(function Mode({ s }: { s: LiveSession }) {
+  const now = s.meta?.auto ? "auto" : "manual";
+  const items = () => (["manual", "auto"] as const).map((k) => ({ ...MODES[k], group: 1, heading: "Between steps", current: k === now,
+    run: () => void s.setAuto(k === "auto") }));
+  return (
+    <button className={`runs mode${now === "auto" ? " on" : ""}`} type="button" title={fresh(s) ? "Manual or Auto" : "Manual or Auto  Shift Tab"}
+      onClick={(e) => { if (!toggled(e.currentTarget)) openMenu({ anchor: e.currentTarget, items }); }}>
+      {MODES[now].icon}{MODES[now].label}
       <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
     </button>
   );

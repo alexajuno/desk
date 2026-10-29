@@ -199,6 +199,9 @@ export const GLYPH = {
   pin: glyph(<path d="M9.75 2.25l4 4-1.6.55-2.65 2.65.45 3.05-1.1 1.1L2.4 7.15l1.1-1.1 3.05.45L9.2 3.85zM5.35 10.65 2.25 13.75" />),
   clock: glyph(<><circle cx="8" cy="8" r="5.75" /><path d="M8 5v3.25l2 1.25" /></>),
   circle: glyph(<circle cx="8" cy="8" r="5.75" />), // an issue, before Open issue…'s box
+  // The composer's Manual and Auto (sessions/Dock.tsx, Mode): a play that stops at a bar, and a fast-forward, desk's own.
+  manual: glyph(<><path d="M4 3.5v9l6-4.5z" /><path d="M12.5 3.5v9" /></>),
+  auto: glyph(<><path d="M2 3.5v9l6-4.5z" /><path d="M8 3.5v9l6-4.5z" /></>),
 };
 
 export const TICK = (
