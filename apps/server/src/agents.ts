@@ -15,8 +15,7 @@ import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as hosted from "./hosted.ts";
 import { run, sleep, which } from "./proc.ts";
-import { BRIEF_PROMPT, BRIEF_STEPS, CHAT_PLAN_PROMPT, DESIGN_GO_PROMPT, fill, GO_PROMPT, LAND_PROMPT, PLAN_PROMPT, STEPS_FAILED, TOLD } from "./prompts.ts";
-import * as settings from "./settings.ts";
+import { BRIEF_FIRST, BRIEF_STEPS, DESIGN_GO_PROMPT, fill, GO_FIRST, GO_PROMPT, LAND_PROMPT, ON_ISSUE, PLAN_FIRST, PLAN_OF, STEPS_FAILED, TOLD } from "./prompts.ts";
 
 export async function git(cwd: string, ...args: string[]): Promise<string | null> {
   try {
@@ -138,35 +137,33 @@ export function trust(folder: string) {
     throw new Error("Claude Code rewrote its settings at the same moment and dropped the change. Press Trust folder again.");
 }
 
-// Start the issue's session in the host, in its folder, whose repo's rules say where to work; its session id. It runs on
-// the model and effort of Settings > Preferences, as a desk chat does, and keeps them as its pick (models.ts): Claude
-// Code's own default is whatever /model a terminal last saved to ~/.claude/settings.json, which put issue sessions on
-// Sonnet at medium while desk's chats ran on Opus (the user, 22 Oct: "it's back on sonnet medium effort").
-async function newSession(i: Issue, prompt: string): Promise<string> {
-  const s = settings.load(), runs = { model: s.chat_model, effort: s.chat_effort };
-  const { id } = await hosted.start({ cwd: workdir(i), title: [...i.title].slice(0, 40).join(""), message: prompt, ...runs });
-  await (await import("./models.ts")).keep(id, runs);
-  return id;
+// Start the issue's chat: a desk chat on it, in its folder, which works on the message at once (chats.ts, onIssue); its
+// session id. Plan and Start started a session of their own until 29 Oct, which no chat held and only the issue pointed
+// at.
+async function newSession(i: Issue, message: string): Promise<string> {
+  const chats = await import("./chats.ts");
+  return (await chats.onIssue(i, message)).session;
 }
 
-// The session's first prompt, by the issue's protocol: a sketch planned with the user, or a brief, after which it
-// waits for "go" or goes on at once. chat is the Agent chat it came from, if any.
+// The chat's first message, by the issue's protocol: a sketch planned with the user, or a brief, after which it waits
+// for "go" or goes on at once. chat is the agent chat it came from, if any.
 export function planPrompt(i: Issue, folder: string, chat = ""): string {
-  const p = paths(i, folder);
-  const runs = store.runs(i);
-  if (runs === "design") return chat ? fill(CHAT_PLAN_PROMPT, { chat, ...p }) : fill(PLAN_PROMPT, p);
+  const p = paths(i, folder), runs = store.runs(i), told = chat ? fill(TOLD, { chat }) : "";
+  if (runs === "design") return fill(ON_ISSUE, { ...p, told, todo: PLAN_FIRST });
   const [how, then] = BRIEF_STEPS[runs];
-  const told = chat ? fill(TOLD, { chat }) : "";
-  return fill(BRIEF_PROMPT, { protocol: runs, how, then, told, ...p });
+  return fill(ON_ISSUE, { ...p, told, todo: fill(BRIEF_FIRST, { protocol: runs, how, then }) });
 }
 
-// Plan, or Start: the issue's session plans it by its protocol; its session id.
+// Plan, or Start: the issue's chat plans it by its protocol; its session id.
 export const start = (i: Issue, folder: string) => newSession(i, planPrompt(i, folder));
 // Go, by the issue's protocol: a design issue is carried out one step at a time with the user.
 const goPrompt = (i: Issue, folder: string) => fill(store.runs(i) === "design" ? DESIGN_GO_PROMPT : GO_PROMPT, paths(i, folder));
-// Start the issue's session straight on its written plan, as the desk agent does; its session id.
-export const runPlan = (i: Issue, folder: string) => newSession(i, goPrompt(i, folder));
-// Start the issue's session to plan from the Agent chat, then wait, or go on at once for a quick issue.
+// Start the issue's chat straight on its written plan; its session id.
+export const runPlan = (i: Issue, folder: string) => {
+  const p = paths(i, folder), todo = `${GO_FIRST[store.runs(i) === "design" ? "design" : "other"]} ${fill(PLAN_OF, p)}`;
+  return newSession(i, fill(ON_ISSUE, { ...p, told: "", todo }));
+};
+// Start the issue's chat to plan from the agent chat, then wait, or go on at once for a quick issue.
 export const planFromChat = (i: Issue, folder: string, chat: string) => newSession(i, planPrompt(i, folder, chat));
 // The desk agent starts an issue that already has a session: the same session carries out the plan.
 export const go = (i: Issue, folder: string) => tell(i.session!, goPrompt(i, folder));

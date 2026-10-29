@@ -519,7 +519,7 @@ export async function create(): Promise<FastifyInstance> {
 
   // --- the issue's one session
 
-  // Plan, or Start for a quick issue: the issue's session starts in its folder and plans it by its protocol. Pressed on
+  // Plan, or Start for a quick issue: a chat starts on the issue, in its folder, and plans it by its protocol. Pressed on
   // desk's page in a folder Claude Code does not trust yet, desk trusts it and starts again, so one press does it.
   app.post("/issue/:slug/start", async (req: Req, reply) => {
     const slug = req.params.slug, i = await store.load(slug);

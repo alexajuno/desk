@@ -272,6 +272,19 @@ export async function newChat(base: string, start?: { issue: Issue; message: str
 
 const newId = () => `chat-${randomBytes(4).toString("hex")}`;
 
+// A new chat on the issue, in its folder and bound to it from the start, which works on the message at once: Plan's,
+// Start's, or another chat's handing work on. A chat works its one issue ("each guy handles one thing and communicate
+// and tell the others to handle the rest", the user, 29 Oct).
+export async function onIssue(i: Issue, message: string, more: Partial<Chat> = {}): Promise<Chat> {
+  const folder = resolve(agents.workdir(i));
+  const chat: Chat = { id: newId(), kind: "panel", title: i.title, created: now(), session: randomUUID(), issue: i.slug, folder, cwd: folder, ...more };
+  const s = settings.load();
+  await models.keep(chat.session, { model: s.chat_model, effort: s.chat_effort });
+  await hosted.start({ ...(await hostOptions(chat)), title: `desk chat ${stamp()}`, message });
+  await save(chat);
+  return chat;
+}
+
 // "17 Oct 19:24", for the name desk gives the session it starts. strftime's %b in the C locale: Sep, never Sept.
 function stamp(): string {
   const d = new Date(), month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
