@@ -4,12 +4,15 @@
 import { DockPill, newSession, openSession } from "../sessions/Dock";
 import { openMenu, toggled } from "../ui/menu";
 
-// As Linear's Chat history: the newest sessions, or those matching what is typed, each with its folder and age.
+interface Found { id: string; title: string; folder?: string; age?: string; marks?: [number, number][]; sub?: string; subMarks?: [number, number][] }
+
+// As Linear's Chat history: the sessions in progress, then the newest, or those matching what is typed, each with its
+// folder and age, the words found drawn bold, and a line from a prompt that holds a word the title lacks.
 function sessionsMenu(anchor: Element) {
   openMenu({
     anchor, className: "sessions-menu", filter: "keys", placeholder: "Find a session…", empty: "No matching sessions",
-    items: async (query) => ((await (await fetch(`/sessions/recent?q=${encodeURIComponent(query)}`)).json()) as { id: string; title: string; folder?: string; age?: string }[])
-      .map((s) => ({ label: s.title, hint: [s.folder, s.age].filter(Boolean).join(" · "), run: () => openSession(s.id) })),
+    items: async (query) => ((await (await fetch(`/sessions/recent?q=${encodeURIComponent(query)}`)).json()) as Found[])
+      .map((s) => ({ label: s.title, marks: s.marks, sub: s.sub, subMarks: s.subMarks, hint: [s.folder, s.age].filter(Boolean).join(" · "), run: () => openSession(s.id) })),
   });
 }
 

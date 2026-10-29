@@ -26,11 +26,27 @@ export interface MenuItem {
   group?: number; // a divider, or the heading, between groups
   heading?: string;
   sub?: string; // a second line under the label
+  marks?: [number, number][]; // the label's words a search found, as ranges of it, drawn bold
+  subMarks?: [number, number][]; // the same, in the second line
   checked?: boolean;
   toggle?: () => unknown; // Linear's checkbox at the row's left: ticks it and leaves the menu open
   run?: () => unknown;
   info?: boolean; // a line to read, not to pick, such as the usage under the chip's models
   keys?: string[]; // its shortcut as key caps at the row's right, as Linear's command menu shows a team's Ctrl ⇧ 1
+}
+
+// The text with the words a search found in <mark>.
+function marked(text: string, marks?: [number, number][]): ReactNode {
+  if (!marks?.length) return text;
+  const out: ReactNode[] = [];
+  let at = 0;
+  marks.forEach(([start, end], i) => {
+    if (start < at) return;
+    out.push(text.slice(at, start), <mark key={i}>{text.slice(start, end)}</mark>);
+    at = end;
+  });
+  out.push(text.slice(at));
+  return out;
 }
 
 export interface MenuOptions {
@@ -229,7 +245,7 @@ function MenuView({ o }: { o: MenuOptions }) {
           <span className={`check${item.checked ? " checked" : ""}`} role="checkbox" aria-checked={!!item.checked}>{item.checked ? TICK : null}</span>
         )}
         {item.icon}
-        <span className="name">{item.label}{item.sub && <small>{item.sub}</small>}</span>
+        <span className="name">{marked(item.label, item.marks)}{item.sub && <small>{marked(item.sub, item.subMarks)}</small>}</span>
         {item.current && TICK}
         {item.hint !== undefined && <span className="shortcut">{item.hint}</span>}
         {item.keys && <span className="keys">{item.keys.map((k, i) => <kbd key={i}>{k}</kbd>)}</span>}

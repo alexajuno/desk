@@ -278,12 +278,13 @@ export async function rows(query = "") {
   // A search finds a session by what the menu shows of it, its issue too, and by its prompts: both kept up to date here.
   const titled = sessiontext.titled(found.map((r) => [r.id, [r.title, r.issue && `${r.issue.slug} ${r.issue.title}`, r.folder].filter(Boolean).join(" ")]));
   const read = sessiontext.readIn([...t.values()]);
+  let words: string[] | null = null;
   if (query.trim()) {
     await Promise.all([titled, read]);
     const hit = await sessiontext.find(query);
-    if (hit) found = found.filter((r) => hit.sessions.has(r.id));
+    if (hit) [found, words] = [found.filter((r) => hit.sessions.has(r.id)), hit.words];
   }
-  return found.sort((a, b) => Number(b.busy) - Number(a.busy) || b.moved.getTime() - a.moved.getTime());
+  return { found: found.sort((a, b) => Number(b.busy) - Number(a.busy) || b.moved.getTime() - a.moved.getTime()), words };
 }
 
 // --- opening one -----------------------------------------------------------------------------------------------------
@@ -295,7 +296,9 @@ export async function newSession(base: string): Promise<chats.Chat> {
   return chats.agentChats().find((c) => !c.deleted && chats.empty(c)) ?? (await chats.newChat(base));
 }
 
-// The corner's history menu: the newest sessions, or those matching what is typed.
+// The corner's history menu: the sessions in rows' order, or those matching what is typed, its words marked.
 export async function recent(q: string) {
-  return (await rows(q)).slice(0, 30).map((r) => ({ id: r.id, title: r.title, folder: r.folder, state: r.state, age: ago(r.moved) }));
+  const { found, words } = await rows(q), first = found.slice(0, 30);
+  const marks = words ? await sessiontext.marked(words, first.map((r) => [r.id, r.title])) : new Map<string, sessiontext.Marked>();
+  return first.map((r) => ({ id: r.id, title: r.title, folder: r.folder, state: r.state, age: ago(r.moved), ...marks.get(r.id) }));
 }

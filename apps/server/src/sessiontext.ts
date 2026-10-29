@@ -100,7 +100,8 @@ function promptsIn(path: string, from: number, to: number): string[] {
     } catch {
       continue;
     }
-    if (event.type !== "user" || event.isMeta) continue;
+    // Nor Claude Code's summary of the talk before, which it writes as the user's when it compacts a session.
+    if (event.type !== "user" || event.isMeta || event.isCompactSummary) continue;
     const text = promptOf(event);
     if (text) found.push(text);
   }
@@ -147,4 +148,69 @@ export async function find(query: string): Promise<{ sessions: Set<string>; word
   if (!words.length) return null;
   const { rows } = await sql().query<{ session: string }>("select session from session_text where words @@ $1::tsquery", [words.map((w) => `(${w})`).join(" & ")]);
   return { sessions: new Set(rows.map((r) => r.session)), words };
+}
+
+// --- the words marked ------------------------------------------------------------------------------------------------
+
+// What Postgres puts around a word it marks: two characters of Unicode's private use, which no title or prompt holds.
+const OPEN = "", CLOSE = "";
+const MARKS = `StartSel="${OPEN}", StopSel="${CLOSE}"`;
+
+export interface Marked {
+  marks?: [number, number][]; // the title's words the query found, as ranges of it
+  sub?: string; // a line from a prompt that holds a word the title lacks, as issue search shows one under a title
+  subMarks?: [number, number][];
+}
+
+// The text Postgres marked, without the marks, and where they were.
+function unmarked(text: string): { text: string; marks: [number, number][] } {
+  let plain = "", start = -1;
+  const marks: [number, number][] = [];
+  for (const ch of text) {
+    if (ch === OPEN) start = plain.length;
+    else if (ch === CLOSE) {
+      if (start >= 0) marks.push([start, plain.length]);
+      start = -1;
+    } else plain += ch;
+  }
+  return { text: plain, marks };
+}
+
+// The words a search found, marked in each session's title as the menu shows it; for a session whose title lacks one of
+// them, a line from its prompts around the words it lacks.
+export async function marked(words: string[], sessions: [string, string][]): Promise<Map<string, Marked>> {
+  const found = new Map<string, Marked>();
+  if (!sessions.length) return found;
+  const all = words.map((w) => `(${w})`).join(" & ");
+  const titles = await sql().query<{ id: string; title: string; has: boolean[] }>(
+    `select t.id, ts_headline('desk_words', t.title, $3::tsquery, 'HighlightAll=true, ${MARKS}') as title,
+       array(select to_tsvector('desk_words', t.title) @@ w.q from unnest($4::tsquery[]) with ordinality as w(q, n) order by w.n) as has
+     from unnest($1::text[], $2::text[]) as t(id, title)`,
+    [sessions.map(([id]) => id), sessions.map(([, title]) => title), all, words],
+  );
+  const lacking: [string, string][] = [];
+  for (const [n, row] of titles.rows.entries()) {
+    const { text, marks } = unmarked(row.title);
+    found.set(row.id, text === sessions[n][1] && marks.length ? { marks } : {});
+    const missing = words.filter((_, i) => !row.has[i]);
+    if (missing.length) lacking.push([row.id, missing.map((w) => `(${w})`).join(" | ")]);
+  }
+  if (!lacking.length) return found;
+  const lines = await sql().query<{ id: string; line: string }>(
+    `select m.id, ts_headline('desk_words', s.prompts, m.q, 'MaxFragments=1, MaxWords=14, MinWords=6, ${MARKS}') as line
+     from unnest($1::text[], $2::tsquery[]) as m(id, q) join session_text s on s.session = m.id`,
+    [lacking.map(([id]) => id), lacking.map(([, q]) => q)],
+  );
+  for (const { id, line } of lines.rows) {
+    const { text, marks } = unmarked(line.split(/\s+/).filter(Boolean).join(" "));
+    if (!marks.length) continue;
+    // The menu shows the line's first 40 or so characters: it starts three words before the first word found.
+    const words = text.slice(0, marks[0][0]).split(" ");
+    const cut = words.length > 4 ? words.slice(0, -4).join(" ").length + 1 : 0, lead = cut ? "…" : "";
+    Object.assign(found.get(id) ?? {}, {
+      sub: lead + text.slice(cut),
+      subMarks: marks.map(([start, end]) => [start - cut + lead.length, end - cut + lead.length]),
+    });
+  }
+  return found;
 }

@@ -8,4 +8,8 @@
 .dock-history { width: 28px; padding: 0; justify-content: center; }
 .menu.sessions-menu { z-index: 20; width: 349px; } .menu.sessions-menu ul { max-height: 360px; overflow: auto; }
 .menu.sessions-menu li .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.menu.sessions-menu li .shortcut { flex: none; color: var(--text-4); }
+/* A folder's whole path may be long: it takes at most half the row, so the title always shows. */
+.menu.sessions-menu li .shortcut { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-4); }
+/* The words a search found, bold as desk's search page and Linear's draw them (.search-row mark). */
+.menu.sessions-menu mark { background: none; color: inherit; font-weight: 700; }
+.menu.sessions-menu li .name small { white-space: nowrap; }
