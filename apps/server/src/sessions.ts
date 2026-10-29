@@ -13,6 +13,7 @@ import { HOME } from "./config.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import { patternOf } from "./search.ts";
+import * as sessiontext from "./sessiontext.ts";
 import * as transcripts from "./transcript.ts";
 import * as uploads from "./uploads.ts";
 import { ago } from "./when.ts";
@@ -36,13 +37,16 @@ interface TableRow {
 
 const table = new Map<string, TableRow>();
 
-// What the user typed in a user event: not a tool's result, nor a slash command's own lines ("<command-name>").
-function textOf(event: { message?: { content?: unknown } }): string {
+// What the user typed in a user event, on one line: not a tool's result, nor a slash command's own lines
+// ("<command-name>"), nor what desk pushed ("<desk-push ...>").
+export function promptOf(event: { message?: { content?: unknown } }): string {
   let content = event.message?.content;
   if (Array.isArray(content)) content = content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n");
   const text = uploads.split(String(content ?? "")).text.split(/\s+/).filter(Boolean).join(" "); // without the files' paths
-  return text.startsWith("<") ? "" : [...text].slice(0, 300).join("");
+  return text.startsWith("<") ? "" : text;
 }
+
+const textOf = (event: { message?: { content?: unknown } }) => [...promptOf(event)].slice(0, 300).join("");
 
 // Read the transcript from where the row stopped, up to its last whole line; a line Claude Code is still writing is
 // read next time.
@@ -254,6 +258,9 @@ async function issuesBySession(): Promise<Map<string, Issue>> {
   for (const chat of chats.agentChats()) if (chat.issue && everything.has(chat.issue)) found.set(chat.session, everything.get(chat.issue)!);
   return found;
 }
+
+// Every prompt of every session into the search's table (sessiontext.ts), from where the last look stopped.
+export const index = () => sessiontext.readIn([...refresh().values()]);
 
 // The sessions, the one that moved last first; with a query, only those whose title, folder, issue or prompts hold
 // every word of it, where a word starts. A chat the user deleted is left out.

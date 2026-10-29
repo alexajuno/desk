@@ -13,6 +13,7 @@ import * as land from "./land.ts";
 import * as models from "./models.ts";
 import * as pins from "./pins.ts";
 import * as projects from "./projects.ts";
+import * as sessions from "./sessions.ts";
 import * as settings from "./settings.ts";
 import * as sync from "./sync.ts";
 import * as teams from "./teams.ts";
@@ -73,3 +74,5 @@ process.on("SIGINT", stop);
 
 await app.listen({ port: PORT, host: process.env.HOST ?? "127.0.0.1" });
 console.log(`desk on http://127.0.0.1:${PORT}`);
+// The Sessions menu's search reads the prompts written while desk was down, or all of them into a new database.
+void sessions.index();

@@ -14,6 +14,8 @@
 // issue.md, team.md and project.md are only written out, for agents, git and an editor to read; desk reads them in only
 // into a database with no issues yet, as a new one (issues.importAll).
 import { PGlite, type Transaction } from "@electric-sql/pglite";
+import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
+import { unaccent } from "@electric-sql/pglite/contrib/unaccent";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DB_DIR } from "./config.ts";
@@ -183,6 +185,27 @@ create table if not exists sessions ( -- what each session does, as the session 
   ended timestamptz, -- when its last turn ended, however: its reply, Stop, an error, or its process going
   updated timestamptz not null default now()
 );
+-- The Sessions menu's search (sessiontext.ts). desk_words reads a text as simple does, its words whole and lowercased,
+-- and folds their accents first, so that "cam giac" finds "cảm giác".
+create extension if not exists pg_trgm;
+create extension if not exists unaccent;
+do $$ begin
+  if not exists (select 1 from pg_ts_config where cfgname = 'desk_words') then
+    create text search configuration desk_words (copy = simple);
+    alter text search configuration desk_words alter mapping for asciiword, word, numword, asciihword, hword, numhword,
+      hword_asciipart, hword_part, hword_numpart with unaccent, simple;
+  end if;
+end $$;
+create table if not exists session_text ( -- what a search finds a session by: what the menu shows of it, and every prompt
+  session text primary key,
+  title text not null default '', -- its title, its issue's slug and title, and its folder, as the menu shows them
+  prompts text not null default '', -- every prompt typed in it, one a line
+  read_to bigint not null default 0, -- how far its transcript was read for them
+  words tsvector generated always as (to_tsvector('desk_words', title || ' ' || prompts)) stored
+);
+create index if not exists session_text_words on session_text using gin (words);
+create table if not exists session_words (word text primary key); -- each word of session_text once, for a typo's near words
+create index if not exists session_words_near on session_words using gin (word gin_trgm_ops);
 create table if not exists inbox ( -- the Inbox's rows (inbox.ts): what each session last did for you, and each issue to settle
   id text primary key, -- the session's id, or the slug of an issue in Triage with no session
   slug text not null, -- what the row opens: the issue's slug, or the id of a chat with no issue
@@ -239,7 +262,7 @@ export async function open(): Promise<PGlite> {
   // The data folder is a git repo of its own, for the issues: the database stays out of it.
   const ignore = join(dirname(DB_DIR), ".gitignore");
   if (!process.env.DESK_DB && !existsSync(ignore)) writeFileSync(ignore, "*\n");
-  const opened = await PGlite.create(DB_DIR);
+  const opened = await PGlite.create(DB_DIR, { extensions: { pg_trgm, unaccent } });
   await toTeams(opened);
   await opened.exec(SCHEMA);
   // Since 20 Oct, an issue's project is Linear's (projects.ts), as its team is what its project was before.
