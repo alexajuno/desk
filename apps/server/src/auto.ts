@@ -11,6 +11,7 @@ import * as agents from "./agents.ts";
 import * as chats from "./chats.ts";
 import * as compact from "./compact.ts";
 import * as store from "./issues.ts";
+import type { Issue } from "./issues.ts";
 import * as turns from "./turns.ts";
 
 interface Step { state?: string; kids?: Step[] }
@@ -21,6 +22,8 @@ const handed = new Map<string, number>();
 const stopped = new Map<string, number>();
 // The steps as they stood when desk last said next in each session.
 const nexted = new Map<string, string>();
+// When, in ms, the turn began that desk last said next or go to, in each session.
+const answered = new Map<string, number>();
 
 export const called = (slug: string) => void handed.set(slug, Date.now());
 export const stop = (session: string) => void stopped.set(session, Date.now());
@@ -36,19 +39,31 @@ function parsed(json: string | null): Step[] {
   }
 }
 
-// What desk says for the user as the session's turn ends, or null to wait for them.
+// When, in ms, the session's last turn began.
+const began = (session: string) => (turns.prompted(session) ?? 0) * 1000;
+
+// What Auto says for the user to the turn the session ended, its chat and issue given, or null to wait for them. It only
+// looks, so the Inbox asks it too (pages.ts); once desk said it, it holds for that turn, until the session works again.
+export function answer(session: string, chat: chats.Chat | null, i: Issue | null): string | null {
+  if (!chat?.auto || !i || chat.issue !== i.slug || chats.sessionOfIssue(i.slug) !== session) return null;
+  if (i.state !== "review" || (i.review_of !== "reply" && i.review_of !== "plan")) return null;
+  const turn = began(session);
+  if ((handed.get(i.slug) ?? 0) <= turn || (stopped.get(session) ?? 0) > turn) return null;
+  if (i.review_of === "plan") return "Auto: go";
+  const steps = i.plan_steps ?? "null";
+  if (!left(parsed(steps)) || (nexted.get(session) === steps && answered.get(session) !== turn)) return null;
+  return "Auto: next";
+}
+
+// What desk says for the user as the session's turn ends, once a turn, or null to wait for them.
 export async function due(session: string): Promise<{ slug: string; say: string } | null> {
   const chat = chats.agentChatOf(session);
-  if (!chat?.auto || !chat.issue || chats.sessionOfIssue(chat.issue) !== session) return null;
-  const i = await store.load(chat.issue).catch(() => null);
-  if (!i || i.state !== "review" || (i.review_of !== "reply" && i.review_of !== "plan")) return null;
-  const began = (turns.prompted(session) ?? 0) * 1000;
-  if ((handed.get(i.slug) ?? 0) <= began || (stopped.get(session) ?? 0) > began) return null;
-  if (i.review_of === "plan") return { slug: i.slug, say: "Auto: go" };
-  const steps = i.plan_steps ?? "null";
-  if (!left(parsed(steps)) || nexted.get(session) === steps) return null;
-  nexted.set(session, steps);
-  return { slug: i.slug, say: "Auto: next" };
+  const i = chat?.issue ? await store.load(chat.issue).catch(() => null) : null;
+  const say = answer(session, chat, i), turn = began(session);
+  if (!say || !i || answered.get(session) === turn) return null;
+  answered.set(session, turn);
+  if (say === "Auto: next") nexted.set(session, i.plan_steps ?? "null");
+  return { slug: i.slug, say };
 }
 
 // A break in the work compacts the chat first, in Manual too, so that Auto's next starts from the summary. The host counts
