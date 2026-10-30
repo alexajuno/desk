@@ -4,6 +4,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import * as agents from "./agents.ts";
+import * as auto from "./auto.ts";
 import * as automations from "./automations.ts";
 import * as changes from "./changes.ts";
 import * as chats from "./chats.ts";
@@ -228,7 +229,7 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
     if (i?.state === "landing") { // and no further: a landing session works, asks and replies on its way to Done
       if (landingStuck(i, asks)) why = "landing stuck";
     } else if (asks.has(h.session)) why = "waiting for you";
-    else if (replied) {
+    else if (replied && !auto.quiet(h.session, h.chat, i)) { // no row while Auto carries on: it reads the steps for you
       why = i ? replyWhy(i, Boolean(store.result(i))) : turns.prompted(h.session) ? "agent replied" : "agent wrote";
       waits = false;
     }

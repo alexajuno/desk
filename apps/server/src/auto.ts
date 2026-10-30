@@ -55,6 +55,14 @@ export function answer(session: string, chat: chats.Chat | null, i: Issue | null
   return "Auto: next";
 }
 
+// Whether Auto carries on in the session, so that the Inbox leaves it out (pages.ts, notifications): a turn of it runs, or
+// desk said next or go to the turn it ended, or will. "it shouldn't be in the inbox. only after everything is done" (the
+// user, 30 Oct). Each stop Auto waits on reaches the Inbox as in Manual.
+export function quiet(session: string, chat: chats.Chat | null, i: Issue | null): boolean {
+  if (!chat?.auto || !i || chat.issue !== i.slug || chats.sessionOfIssue(i.slug) !== session) return false;
+  return turns.working(session) || answered.get(session) === began(session) || answer(session, chat, i) !== null;
+}
+
 // What desk says for the user as the session's turn ends, once a turn, or null to wait for them.
 export async function due(session: string): Promise<{ slug: string; say: string } | null> {
   const chat = chats.agentChatOf(session);
@@ -73,7 +81,11 @@ async function look(session: string) {
   const next = await due(session);
   if (!next) return;
   const i = await store.load(next.slug);
-  await agents.say(i, next.say);
+  await agents.say(i, next.say).catch((error) => {
+    stop(session); // as a Stop: the Inbox shows the turn, rather than wait on a next that never came
+    answered.delete(session);
+    throw error;
+  });
   await store.move(i, { state: "running" }); // as Go does: the session works again
 }
 
