@@ -88,6 +88,7 @@ interface Session {
   q: Query;
   inbox: SDKUserMessage[]; // messages not yet read by Claude Code
   wake: (() => void) | null;
+  compacting: boolean; // a /compact runs, and the inbox keeps the next message until it ends
   working: boolean;
   since: number; // when it last started or finished a turn
   prompted: number | null; // when the user last wrote to it, or desk for them, in ms
@@ -147,21 +148,29 @@ function setWorking(s: Session, working: boolean) {
 
 // Words the user wrote, as the transcript's reader on desk's side counted them before (sessions.ts): not a slash
 // command, nor what a script or desk pushes in a tag such as <desk-push>, nor a screenshot alone.
+const textOf = (content: Content) =>
+  (typeof content === "string" ? content : content.filter((b) => b.type === "text").map((b) => String(b.text ?? "")).join("\n")).trim();
+
 function said(content: Content): boolean {
-  const text = (typeof content === "string" ? content : content.filter((b) => b.type === "text").map((b) => String(b.text ?? "")).join("\n")).trim();
+  const text = textOf(content);
   return Boolean(text) && !text.startsWith("<") && !/^\/[\w:-]+(\s|$)/.test(text);
 }
 
 // The messages Claude Code reads, one at a time, as the user sends them; it reads the next while a turn runs and folds
-// it in, as Enter does in its terminal.
+// it in, as Enter does in its terminal. A /compact's next waits here until the compaction ends: read during it, it
+// waited in Claude Code's own queue, where the compaction's end looked like the turn's with nothing to follow (take),
+// and its issue went to In review while the chat worked on (30 Oct, "A long chat tries to compact again on every
+// message after I cancel it").
 async function* inbox(s: Session): AsyncGenerator<SDKUserMessage> {
   while (!s.closed) {
-    const next = s.inbox.shift();
+    const next = s.compacting ? undefined : s.inbox.shift();
     if (next) {
-      if (said(next.message.content as Content)) {
+      const content = next.message.content as Content;
+      if (said(content)) {
         s.prompted = Date.now();
         tell(s);
       }
+      s.compacting = /^\/compact(\s|$)/.test(textOf(content));
       setWorking(s, true);
       yield next;
       continue;
@@ -180,7 +189,7 @@ function userMessage(content: Content, uuid?: string, priority?: SDKUserMessage[
 
 function start(o: StartOptions): Session {
   const id = o.id ?? randomUUID();
-  const s: Session = { id, cwd: o.cwd, title: o.title ?? "", q: null as unknown as Query, inbox: [], wake: null, working: false, since: Date.now(),
+  const s: Session = { id, cwd: o.cwd, title: o.title ?? "", q: null as unknown as Query, inbox: [], wake: null, compacting: false, working: false, since: Date.now(),
     prompted: null, replied: null, finished: null, asks: new Map(), tasks: new Map(), status: null, partial: new Map(), watchers: new Set(), closed: false, ended: Promise.resolve(), streaming: "" };
   // The first message waits in the inbox before the SDK first reads it, which it does as query() starts.
   if (o.message) s.inbox.push(userMessage(o.message));
@@ -342,6 +351,10 @@ function take(s: Session, m: SDKMessage) {
     const was = s.tasks.size;
     for (const t of s.tasks.values()) if (!t.background) s.tasks.delete(t.id);
     if (s.tasks.size !== was) send(s, { type: "tasks", tasks: tasksOf(s) });
+    if (s.compacting) {
+      s.compacting = false;
+      s.wake?.(); // the message it kept, which keeps the session working
+    }
     if (!s.inbox.length) setWorking(s, false);
   }
 }
@@ -451,6 +464,7 @@ app.post<{ Params: { id: string }; Body: { uuid: string } }>("/sessions/:id/with
 app.post<{ Params: { id: string } }>("/sessions/:id/interrupt", async (req) => {
   const s = find(req.params.id);
   s.inbox.length = 0; // Esc in the terminal drops what waits too
+  s.compacting = false; // and the next message is read at once, whether or not a cut-short compaction says it ended
   await s.q.interrupt();
   return row(s);
 });
