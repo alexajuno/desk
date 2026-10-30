@@ -9,6 +9,7 @@
 // ends its Build on a reply rather than its card is not told next forever.
 import * as agents from "./agents.ts";
 import * as chats from "./chats.ts";
+import * as compact from "./compact.ts";
 import * as store from "./issues.ts";
 import * as turns from "./turns.ts";
 
@@ -50,7 +51,10 @@ export async function due(session: string): Promise<{ slug: string; say: string 
   return { slug: i.slug, say: "Auto: next" };
 }
 
+// A break in the work compacts the chat first, in Manual too, so that Auto's next starts from the summary. The host counts
+// no slash command as the user's prompt (host.ts, said), so the compaction leaves the issue's review as it was.
 async function look(session: string) {
+  await compact.atBreak(session);
   const next = await due(session);
   if (!next) return;
   const i = await store.load(next.slug);
