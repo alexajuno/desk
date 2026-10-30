@@ -175,8 +175,10 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
 }
 
 // How the work lands, which a session sends with its Result, and Approve runs (land.ts, Lands): {"steps": [<bash
-// commands>], "landed": <where it will have landed>}, or null to take it back.
-function applyLands(i: Issue, body: unknown) {
+// commands>], "landed": <where it will have landed>}, or null to take it back. A Result with nothing to land is done at
+// once, as Approve would leave it, since Approve would only press Done for you: "i just wanna remove that manual step
+// when we both know that it's done" (the user, 30 Oct).
+async function applyLands(i: Issue, body: unknown) {
   if (!body || typeof body !== "object" || !("lands" in body)) return;
   const lands = (body as { lands: unknown }).lands;
   if (lands === null) {
@@ -190,7 +192,12 @@ function applyLands(i: Issue, body: unknown) {
     throw new HttpError(422, shape);
   if (i.state !== "review") throw new HttpError(422, 'lands goes with the Result: send "state": "review", "review_of": "result" with it');
   const kept = (steps as string[]).map((s) => s.trim()).filter(Boolean);
-  i.lands = JSON.stringify({ steps: kept, ...(typeof landed === "string" && landed.trim() && { landed: landed.trim() }) });
+  const where = typeof landed === "string" ? landed.trim() : "";
+  i.lands = JSON.stringify({ steps: kept, ...(where && { landed: where }) });
+  if (kept.length || i.review_of !== "result") return;
+  Object.assign(i, await store.landedState(i), { landed: where || "nothing to land" });
+  const pr = where.match(PULL);
+  if (pr && !i.link) i.link = pr[0];
 }
 
 // A design issue's steps, which its session sends whole each time one changes, and desk draws as a tree with the
@@ -475,7 +482,7 @@ export function routes(app: FastifyInstance) {
   app.patch("/api/issues/:slug", async (req: Req) => {
     const i = await loadIssue(req.params.slug);
     await apply(i, given(req.body, FIELDS));
-    applyLands(i, req.body);
+    await applyLands(i, req.body);
     await applyPlanSteps(i, req.body);
     const closed = await store.save(i);
     return { ...asJson(i, true), ...(closed.length ? { closed } : {}) };
