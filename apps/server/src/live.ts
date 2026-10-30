@@ -274,19 +274,20 @@ function content(m: Sent): hosted.Content {
 }
 
 // Coming back to a long chat compacts it before your message, so that your message and every reply after it re-read a
-// short context rather than the whole conversation: "1h idle + 300k, whenever i get back to the chat" (the user, 28 Oct,
-// on the issue "Compact a desk chat when you come back after an hour or it passes 300k"). After an hour away the prompt
-// cache, which desk's sessions keep for an hour, has expired, and the whole context would be written to it again anyway.
+// short context rather than the whole conversation (the user, 28 Oct, on the issue "Compact a desk chat when you come
+// back after an hour or it passes 300k"). After an hour away the prompt cache, which desk's sessions keep for an hour,
+// has expired, and the whole context would be written to it again anyway. Until 30 Oct any message to a chat over 300k
+// compacted it too, which put a compaction of about 76 s in front of a message just typed, and asked again on the next
+// one when you cancelled it: "300k is kinda a hard cap without caring what's going on" (the user, 30 Oct).
 const AWAY = 3600; // seconds since the chat's last turn ended
-const AWAY_OVER = 100_000; // tokens a chat holds for coming back after AWAY to compact it
-const OVER = 300_000; // tokens a chat holds for any message of yours to compact it
+const OVER = 100_000; // tokens a chat holds for coming back after AWAY to compact it
 
 // Only a message you type, between turns: not a command of your own, nor one sent to the turn running now.
 function compactsFirst(id: string, m: Sent): boolean {
   if (m.now || turns.working(id) || /^\/[\w:-]+(\s|$)/.test(m.text.trim())) return false;
-  const tokens = models.context(id)?.tokens ?? 0, ended = turns.ended(id);
-  const away = ended !== null && Date.now() / 1000 - ended > AWAY;
-  return tokens > OVER || (away && tokens > AWAY_OVER);
+  const ended = turns.ended(id);
+  if (ended === null || Date.now() / 1000 - ended <= AWAY) return false;
+  return (models.context(id)?.tokens ?? 0) > OVER;
 }
 
 // Send the user's message. A session still at work in Claude Code's daemon, from before the panel, takes no message
