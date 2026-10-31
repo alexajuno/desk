@@ -1,7 +1,7 @@
 // Settings, as Linear's (linear.app/<workspace>/settings, measured 17 Oct): its own sidebar in place of the app's, with
 // Back to app and a list of pages, and each page a 640px column of cards, one row per setting. desk keeps what it
-// has a setting for: Preferences (the theme, and the model and effort a new chat starts with) and Workflows &
-// automations (the two auto-close toggles). The server's settings are settings.ts. Linear keeps the auto-close toggles under each team; desk's
+// has a setting for: Preferences (the theme, how an issue's steps card starts, and the model and effort a new chat
+// starts with) and Workflows & automations (the two auto-close toggles). The server's settings are settings.ts. Linear keeps the auto-close toggles under each team; desk's
 // teams have no settings of their own, so they are desk's.
 import { observer } from "mobx-react-lite";
 import { useEffect, useRef, useState, type ReactNode } from "react";
