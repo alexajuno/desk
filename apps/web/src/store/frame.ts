@@ -6,8 +6,8 @@ import { makeAutoObservable, observableRef } from "mobx";
 import type { IssueRow, State } from "../lib/desk";
 import { onReload } from "./ui";
 
-// A session as the sidebar lists it.
-export interface ChatRow { session: string; title: string; issue: { slug: string; state: State } | null; working: boolean }
+// A session as the sidebar lists it. auto: Auto carries it on without you; a desk from before 1 Nov leaves it out.
+export interface ChatRow { session: string; title: string; issue: { slug: string; state: State } | null; working: boolean; auto?: boolean }
 
 export interface FrameData {
   trying: { slug: string; branch: string; issue: IssueRow | null } | null;

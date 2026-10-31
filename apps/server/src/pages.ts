@@ -268,8 +268,9 @@ export const inboxRows = async () => (await notifications(await store.loadAll())
   slug: r.slug, title: r.title, why: r.why, says: r.says, url: `/inbox?i=${r.slug}`, unread: r.read === null, ...(r.issue ? {} : { who: r.agent ?? "Chat" }),
 }));
 
-// The sidebar's Pinned and Chats, each session with its issue's state and whether it works now; the app adds whether it
-// said something you have not read, from the Inbox's rows ("just literally list all sessions with status icon related
+// The sidebar's Pinned and Chats, each session with its issue's state, whether it works now, and whether Auto carries it
+// on without you (auto.ts, quiet), as it keeps it out of the Inbox; the app adds whether it said something you have not
+// read, from the Inbox's rows ("just literally list all sessions with status icon related
 // to their issue if there is", the user, 19 Oct). Pinned holds the sessions the user pinned, in the order pinned (pins.ts).
 // Chats holds the rest still in hand, the one that moved last first, with no cap: an issue's session while the issue is
 // open, and any other chat, its issue parked, done or dropped or none, for a day after it last moved, or while it works
@@ -287,7 +288,7 @@ function chatsNow(all: Map<string, Issue>) {
   const shown = held(all).filter((h) => table.has(h.session) && !h.chat?.automation);
   const row = (h: Held) => ({
     session: h.session, title: h.issue?.title ?? chatTitle(h.chat!), issue: h.issue && { slug: h.issue.slug, state: h.issue.state },
-    working: turns.working(h.session),
+    working: turns.working(h.session), auto: auto.quiet(h.session, h.chat, h.issue),
   });
   const bySession = new Map(shown.map((h) => [h.session, h]));
   const pinned = pins.all().filter((s) => bySession.has(s));
