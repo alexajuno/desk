@@ -25,6 +25,7 @@ interface TableRow {
   path: string;
   read_to: number;
   moved?: number;
+  born?: number; // when its transcript was written first, in seconds
   cwd?: string;
   kind?: string;
   first_prompt?: string;
@@ -180,9 +181,11 @@ export function refresh(): Map<string, TableRow> {
       if (!stat.isFile()) continue;
       seen.add(sid);
       let row = table.get(sid);
+      const born = (stat.birthtimeMs || stat.mtimeMs) / 1000;
+      if (row && row.born === undefined) [row.born, changed] = [born, true]; // a row from before born was kept
       if (row && row.read_to === stat.size) continue;
       if (!row || stat.size < row.read_to) { // new, or written anew
-        row = { id: sid, path, read_to: 0 };
+        row = { id: sid, path, read_to: 0, born };
         table.set(sid, row);
       }
       readRow(row);
@@ -269,15 +272,18 @@ export const index = () => sessiontext.readIn([...refresh().values()]);
 // in /tmp. desk's own chats and those typed in a terminal stay ("it's valid to be accountable", the user, 31 Oct).
 export async function rows(query = "") {
   const t = refresh(), issues = await issuesBySession(), live = await agents.live();
-  const desks = new Set(chats.agentChats().map((c) => c.session));
+  const desks = new Map(chats.agentChats().map((c) => [c.session, c]));
   const deleted = new Set(chats.agentChats().filter((c) => c.deleted).map((c) => c.session)); // out of sight (chats.ts, remove)
   const run = (row: TableRow) => row.kind === "script" || row.kind === "background" || /^\/tmp(\/|$)/.test(row.cwd ?? "");
-  let found: { id: string; title: string; folder: string; moved: Date; state: string; busy: boolean; issue: Issue | null }[] = [];
+  let found: { id: string; title: string; folder: string; moved: Date; created: Date; state: string; busy: boolean; issue: Issue | null;
+    agent: string | null; automation: string | null }[] = [];
   for (const row of t.values()) {
     if (deleted.has(row.id) || (!desks.has(row.id) && run(row))) continue;
     const sid = row.id, i = issues.get(sid) ?? null, now = state(live.get(sid) ?? {});
-    found.push({ id: sid, title: shown(row, i, desks.has(sid)), folder: folder(i?.folder || row.cwd), moved: new Date((row.moved ?? 0) * 1000), state: now,
-      busy: now === "working" || now === "waiting" || i?.state === "running", issue: i });
+    const chat = desks.get(sid);
+    found.push({ id: sid, title: shown(row, i, !!chat), folder: folder(i?.folder || row.cwd), moved: new Date((row.moved ?? 0) * 1000),
+      created: new Date((row.born ?? row.moved ?? 0) * 1000), state: now, busy: now === "working" || now === "waiting" || i?.state === "running", issue: i,
+      agent: chat?.agent || null, automation: chat?.automation || null });
   }
   // A search finds a session by what the menu shows of it, its issue too, and by its prompts: both kept up to date here.
   const titled = sessiontext.titled(found.map((r) => [r.id, [r.title, r.issue && `${r.issue.slug} ${r.issue.title}`, r.folder].filter(Boolean).join(" ")]));

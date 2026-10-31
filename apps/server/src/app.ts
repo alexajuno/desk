@@ -10,6 +10,7 @@ import * as agents from "./agents.ts";
 import * as api from "./api.ts";
 import * as chats from "./chats.ts";
 import { HOME } from "./config.ts";
+import * as fields from "./fields.ts";
 import * as store from "./issues.ts";
 import { byRank, CLOSED, runs } from "./issues.ts";
 import * as land from "./land.ts";
@@ -324,6 +325,7 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/api/page/projects", async () => pages.projectsPage());
   app.get("/api/page/automations", async () => pages.automationsPage());
   app.get("/api/page/automation/:slug", async (req: Req) => pages.automationPage(req.params.slug));
+  app.get("/api/page/search/fields", async () => fields.fields());
   app.get("/api/page/search", async (req: Req) =>
     pages.searchPage(req.query.q ?? "", req.query.kind ?? "", req.query.team ?? "", req.query.status ?? ""));
   app.get("/api/page/file/:slug/:name", async (req: Req) => pages.filePage(req.params.slug, req.params.name));
