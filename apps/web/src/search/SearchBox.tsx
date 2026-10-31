@@ -6,7 +6,8 @@
 // settings (pages.ts, searchPage), which the app finds itself (settings.ts). The arrows move, Enter opens the thing
 // where it lives, and Esc or a click outside closes the box, leaving you where you were. Typing @ opens Linear's menu of
 // filters under the @, Status and Teams; a pick takes the @word out and adds a chip under the tabs, which every kind
-// answers by step 1.6's table and which stays as you change tab.
+// answers by step 1.6's table and which stays as you change tab. / and the sidebar's Search open it, with the search
+// as it last closed (step 1.7).
 import { action, makeObservable, observable, runInAction } from "mobx";
 import { observer, useLocalObservable } from "mobx-react-lite";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -85,14 +86,21 @@ function widthOf(text: string, box: HTMLInputElement) {
   return ctx.measureText(text).width;
 }
 
+// The search as the box last closed: what was typed, the tab, the filters and the row in focus, which / brings back with
+// the words selected, in place of Back to a search page (step 1.7).
+interface Kept { query: string; tab: Kind | ""; team: Filter; status: Filter; at: string | null }
+
 class Search {
   open = false;
+  kept: Kept | null = null;
   constructor() {
     makeObservable(this, { open: observable, show: action, hide: action });
   }
-  show() {
+  // With a query, the box opens afresh with it typed: an old /search address's words (app/routes.tsx).
+  show(query?: string) {
     closeMenu();
     catchKeys(); // what is typed before the box draws (catcher.tsx)
+    if (query !== undefined) this.kept = { query, tab: "", team: NONE, status: NONE, at: null };
     this.open = true;
   }
   hide() {
@@ -100,7 +108,7 @@ class Search {
   }
 }
 export const search = new Search();
-export const openSearch = () => search.show();
+export const openSearch = (query?: string) => search.show(query);
 export const closeSearch = () => search.hide();
 
 // Where a hit opens: a chat in its issue's place, or its own; a milestone on its project's Issues, at its group.
@@ -142,11 +150,12 @@ function where(h: Hit): string {
 const many = (n: number) => n.toLocaleString("en-US");
 
 const SearchView = observer(function SearchView() {
-  const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<Kind | "">("");
-  const f = useLocalObservable(() => ({ team: NONE, status: NONE })); // the filters, which a chip's menu reads as it ticks
+  const kept = search.kept;
+  const [query, setQuery] = useState(kept?.query ?? "");
+  const [tab, setTab] = useState<Kind | "">(kept?.tab ?? "");
+  const f = useLocalObservable(() => ({ team: kept?.team ?? NONE, status: kept?.status ?? NONE })); // the filters, which a chip's menu reads as it ticks
   const [groups, setGroups] = useState<Group[] | null>(null);
-  const [at, setAt] = useState<string | null>(null); // the row in focus, by its key
+  const [at, setAt] = useState<string | null>(kept?.at ?? null); // the row in focus, by its key
   const [caret, setCaret] = useState(0); // in what is typed, or -1 while the box has no focus
   const [shut, setShut] = useState<number | null>(null); // the @word whose menu Esc closed, by where it starts
   const [on, setOn] = useState(0); // the @ menu's row in focus
@@ -233,8 +242,8 @@ const SearchView = observer(function SearchView() {
     setMenuAt({ x: Math.max(8, Math.min(r.left + pad + widthOf(query.slice(0, open.start), box) - box.scrollLeft, innerWidth - 358)), y: r.bottom + 4 });
   }, [open?.start, query]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const state = useRef({ rows, focused, query, picks, on, open, pick, composing: false });
-  Object.assign(state.current, { rows, focused, query, picks, on, open, pick });
+  const state = useRef({ rows, focused, query, tab, picks, on, open, pick, composing: false });
+  Object.assign(state.current, { rows, focused, query, tab, picks, on, open, pick });
 
   const walk = (step: number) => setTab((now) => KINDS[(KINDS.findIndex((k) => k.kind === now) + 1 + step + KINDS.length + 1) % (KINDS.length + 1) - 1]?.kind ?? "");
 
@@ -242,6 +251,7 @@ const SearchView = observer(function SearchView() {
     input.current?.focus();
     const caught = takeCaught();
     if (caught) typed(caught);
+    else input.current?.select(); // the last words: typing starts afresh, and Enter or an arrow carries on
     function onKey(e: KeyboardEvent) {
       const s = state.current, k = keyOf(e);
       if (menus.current) return; // a chip's menu, which takes its own keys
@@ -284,6 +294,8 @@ const SearchView = observer(function SearchView() {
     return () => {
       removeEventListener("keydown", onKey, true);
       document.removeEventListener("mousedown", onDown, true);
+      const s = state.current;
+      search.kept = { query: s.query, tab: s.tab, team: f.team, status: f.status, at: s.focused?.key ?? null };
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

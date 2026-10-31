@@ -1,5 +1,5 @@
 import { observer } from "mobx-react-lite";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { createBrowserRouter, type LoaderFunctionArgs, Navigate, useLocation, useParams } from "react-router";
 import { prime } from "../api/page";
 import { Frame } from "../frame/Frame";
@@ -14,7 +14,7 @@ import { ProjectsPage } from "../lists/ProjectsPage";
 import { TeamPage } from "../lists/TeamPage";
 import { TeamsPage } from "../lists/TeamsPage";
 import { listUrl } from "../lists/useList";
-import { SearchPage } from "../search/SearchPage";
+import { openSearch } from "../search/SearchBox";
 import { SettingsPage } from "../settings/SettingsPage";
 import { SessionFullRoute } from "../sessions/SessionFullRoute";
 import { issues } from "../store/issues";
@@ -27,6 +27,14 @@ const search = (request: Request) => new URL(request.url).search;
 const at = (url: (args: LoaderFunctionArgs) => string) => (args: LoaderFunctionArgs) => prime(url(args));
 // Under the splash nothing draws until the first page can (react-router's own fallback warns when a route has none).
 const Booting = () => null;
+
+// The search page left on 31 Oct for the box over the page (step 1.7): its old address, from history or a bookmark, opens
+// the box over the Inbox with its words typed.
+function OldSearch() {
+  const q = new URLSearchParams(useLocation().search).get("q") ?? "";
+  useEffect(() => openSearch(q), [q]);
+  return <Navigate to="/inbox" replace />;
+}
 
 // The Backlog listed every open issue, and became All issues on 17 Oct; a link to it, in an issue's text, keeps its view.
 function ToIssues() {
@@ -87,8 +95,8 @@ export const router = createBrowserRouter(
       loader: at(({ params }) => `/api/page/file/${params.slug}/${encodeURIComponent(params.name ?? "")}`) },
     // The Inbox fetches nothing: its rows and its open issue come over the sync socket.
     { path: "/inbox", element: <InboxPage /> },
-    { path: "/search", element: <SearchPage /> },
-    // Sessions left the sidebar on 17 Oct: it lists what runs, and the corner's clock finds the rest.
+    { path: "/search", element: <OldSearch /> },
+    // Sessions left the sidebar on 17 Oct: it lists what runs, and the search finds the rest.
     { path: "/sessions", element: <Navigate to="/inbox" replace /> },
     { path: "/sessions/:id", element: <SessionFullRoute /> },
     { path: "/settings", element: <Navigate to="/settings/preferences" replace /> },

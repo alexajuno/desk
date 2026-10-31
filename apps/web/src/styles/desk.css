@@ -40,7 +40,6 @@
   --bg-side-hover: lch(9.232% 0.85 272);
   --bg-icon-hover: lch(10.149% 0.689 272);
   --scrollbar: lch(37.275% 1.2 272);       /* the sidebar's thin scrollbar, measured on linear.app 2026-10-19 */
-  --bg-mark: rgb(94 105 209 / 0.3);
   --shadow-panel: lch(0 0 0 / 0.3) 0 0.5px 1px 1px;
   /* buttons, and their fill under the mouse (the buttons block below) */
   --btn: lch(10.149% 0.689 272);
@@ -452,30 +451,9 @@ button.plan-step:hover, button.plan-step.open { background: var(--bg-hover); }
 .pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 48px; border: 1px solid var(--border-3);
         background: var(--bg-panel); color: var(--text-3); font-size: 12px; white-space: nowrap; }
 
-/* search: the query box fills the top bar; a row shows the description where it matched.
-   The box measured on linear.app's search page on 28 Oct, dark and light, at 2x: 13px/22px at 450 in --text-2,
-   its placeholder at 500 in --text-5, the icon in --text-3 */
-.search-box { display: flex; align-items: center; gap: 8px; flex: 1; margin: 0; color: var(--text-3); }
-.search-box input[type=text] { height: 42px; padding: 0; border: 0; background: transparent; font: 450 13px/22px var(--font); color: var(--text-2); }
-.search-box input[type=text]::placeholder { font-weight: 500; color: var(--text-5); }
-/* where the keys typed after / wait for the search page (search/catcher.tsx): out of sight, yet able to take the focus */
+/* where the keys typed after / wait for the search's box (search/catcher.tsx): out of sight, yet able to take the focus */
 .search-catch { position: fixed; top: -100px; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-.results .item .title { flex: none; max-width: 60%; }
 .item .snippet { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
-.item mark { background: var(--bg-mark); color: var(--text-1); border-radius: 2px; }
-/* search's rows, Linear's (linear.app/alexajuno/search, measured on 25 Oct at 2x, dark and light): 40px, 8px corners, padded
-   0 8px 0 10px. First what the row is, Issue or Project, in 12px/450 text-3 in a 40px column, 16px before its 16px icon;
-   8px on, its title in 13px/450 text-2 with the matched words in 700 rather than on a fill; at the right its team (a 14px
-   icon, its name 8px after it) and its age, both in 12px text-3. Linear's rows show no description; desk's keep where it
-   matched, as before. */
-.results .item.search-row { height: 40px; gap: 8px; margin: 0 8px; padding: 0 8px 0 10px; border-radius: 8px; }
-.search-row .kind { flex: none; width: 40px; margin-right: 8px; font-size: 12px; color: var(--text-3); }
-.search-row .status { display: inline-flex; flex: none; color: var(--text-1); }
-.search-row .title { font-weight: 450; color: var(--text-2); }
-.search-row mark { background: none; color: inherit; font-weight: 700; }
-.search-row .team { display: inline-flex; flex: none; align-items: center; gap: 8px; margin-left: 8px; font-size: 12px; color: var(--text-3); }
-.search-row .team .glyph { width: 14px; height: 14px; margin: 0 2px; }
-.results .filter-bar { margin: 0 8px 4px; }
 .dim-icon { display: contents; color: var(--text-3); }
 
 /* search's @ menu (measured on linear.app's search on 25 Oct at 2x, dark and light): 350px wide, 4px under the box, its left

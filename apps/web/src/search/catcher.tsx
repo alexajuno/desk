@@ -1,6 +1,5 @@
-// What you type after / until the search page's box shows: the page comes in over a few frames (the router's
-// transition, and a chat's move off the screen), and a key typed meanwhile would reach no box, or act as a shortcut.
-// / gives the focus at once to this box, out of sight, and the search page takes what it caught (23 Oct).
+// What you type after / until the search's box shows: a key typed before it draws would reach no box, or act as a
+// shortcut. / gives the focus at once to this box, out of sight, and the search takes what it caught (23 Oct).
 const catcher = () => document.getElementById("search-catch") as HTMLInputElement | null;
 
 export const Catcher = () => (

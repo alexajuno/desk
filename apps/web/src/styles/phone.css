@@ -51,7 +51,7 @@
 
   .corner { left: 8px; right: 8px; bottom: calc(var(--floor) + 8px); justify-content: center; pointer-events: none; }
   .corner > * { pointer-events: auto; }
-  .corner-new, .dock-history { display: none; }
+  .corner-new { display: none; }
   .dock-pill { max-width: 100%; box-shadow: var(--shadow-pop); }
   .corner .dock-pill .dock-pill-x { opacity: 1; } /* no mouse to show it */
   .toast { left: 8px; right: 8px; bottom: calc(var(--floor) + 8px); }

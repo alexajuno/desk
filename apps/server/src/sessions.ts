@@ -314,10 +314,3 @@ export async function search(query: string, keep: (i: Issue | null) => boolean, 
   const marks = words ? await sessiontext.marked(words, first.map((r) => [r.id, r.title])) : new Map<string, sessiontext.Marked>();
   return { count: kept.length, hits: first.map((r) => ({ ...r, age: ago(r.moved), ...marks.get(r.id) })) };
 }
-
-// The corner's history menu: the sessions in rows' order, or those matching what is typed, its words marked.
-export async function recent(q: string) {
-  const { found, words } = await rows(q), first = found.slice(0, 30);
-  const marks = words ? await sessiontext.marked(words, first.map((r) => [r.id, r.title])) : new Map<string, sessiontext.Marked>();
-  return first.map((r) => ({ id: r.id, title: r.title, folder: r.folder, state: r.state, age: ago(r.moved), ...marks.get(r.id) }));
-}

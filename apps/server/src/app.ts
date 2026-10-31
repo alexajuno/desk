@@ -667,7 +667,6 @@ export async function create(): Promise<FastifyInstance> {
   });
 
   // --- sessions: the corner's history, and New session
-  app.get("/sessions/recent", async (req: Req) => sessions.recent(req.query.q ?? ""));
   // New session: an agent chat, opened in the panel.
   app.post("/sessions/new", async (req) => {
     try {

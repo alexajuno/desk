@@ -18,6 +18,7 @@ import { GLYPH, Ring, SIDE_ICON, StateIcon, TRIANGLE } from "../ui/icons";
 import { keyOf } from "../lib/keys";
 import { openMenu, toggled, type MenuOptions } from "../ui/menu";
 import { toast } from "../ui/toast";
+import { openSearch } from "../search/SearchBox";
 import { helpMenu } from "./help";
 import { toggleSide } from "./side";
 
@@ -161,9 +162,9 @@ export const Sidebar = observer(function Sidebar() {
       {/* Linear's top row is the workspace switcher, then search and New issue. desk has one workspace, so its place holds the sidebar's toggle. */}
       <div className="side-head">
         <button className="side-icon side-toggle" type="button" title="Hide sidebar  [" onClick={toggleSide}>{SIDE_ICON}</button>
-        <Go className={`side-icon${at("/search")}`} to="/search" title="Search  /">
+        <button className="side-icon" type="button" title="Search  /" onClick={() => openSearch()}>
           <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path fillRule="evenodd" d="M7 2C9.76142 2 12 4.23858 12 7C12 8.11012 11.6375 9.13519 11.0254 9.96484L13.7803 12.7197L13.832 12.7764C14.0723 13.0709 14.0549 13.5057 13.7803 13.7803C13.5057 14.0549 13.0709 14.0723 12.7764 13.832L12.7197 13.7803L9.96484 11.0254C9.13519 11.6375 8.11012 12 7 12C4.23858 12 2 9.76142 2 7C2 4.23858 4.23858 2 7 2ZM7 3.5C5.067 3.5 3.5 5.067 3.5 7C3.5 8.933 5.067 10.5 7 10.5C8.933 10.5 10.5 8.933 10.5 7C10.5 5.067 8.933 3.5 7 3.5Z" /></svg>
-        </Go>
+        </button>
         <button className="side-icon new-issue" type="button" title="New issue  C" onClick={() => ui.openCreator()}>
           <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path fillRule="evenodd" d="M7.25 1C7.66414 1 7.99988 1.33589 8 1.75C8 2.16421 7.66421 2.5 7.25 2.5H4.75C3.50745 2.5 2.50012 3.50744 2.5 4.75V11.25C2.5 12.4926 3.50736 13.5 4.75 13.5H11.25C12.4926 13.5 13.5 12.4926 13.5 11.25V8.75C13.5001 8.33589 13.8359 8 14.25 8C14.6641 8 14.9999 8.33589 15 8.75V11.25C15 13.3211 13.3211 15 11.25 15H4.75C2.67893 15 1 13.3211 1 11.25V4.75C1.00012 2.67905 2.67899 1 4.75 1H7.25Z" /><path fillRule="evenodd" d="M13.4326 1.26953C13.7913 0.910937 14.3728 0.910883 14.7314 1.26953C15.0897 1.6282 15.0899 2.20981 14.7314 2.56836L9.2373 8.06152C8.68101 8.6177 7.94043 8.95161 7.15527 9C7.06754 9.0052 6.99468 8.93248 7 8.84473C7.04847 8.05961 7.38232 7.31897 7.93848 6.7627L13.4326 1.26953Z" /></svg>
         </button>

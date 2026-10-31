@@ -71,17 +71,11 @@ const chatPage = observable.box<IssuePageData | null>(null, { deep: false });
 // after a third of a second's glide (25 Oct). A chat's views change in place, with no move.
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 let moving: Promise<void> | null = null; // the move on screen, which the issue's own slide in waits for
-let drawing: Promise<void> = Promise.resolve(); // its change to the page, which a text box to focus waits for
 function move(next: Layout, change: () => void) {
   if (next === dock.layout || !document.startViewTransition || still.matches || splashUp()) return change();
   const t = document.startViewTransition(() => flushSync(change));
-  drawing = t.updateCallbackDone.catch(() => {});
   const done = moving = t.finished.catch(() => {}).then(() => { if (moving === done) moving = null; });
 }
-
-// A page's text box takes the focus once the chat's move has drawn the page: leaving a chat that hides its issue, the
-// panel stays hidden until the move's next frame, and a hidden box ignores focus() (23 Oct: / from such an issue).
-export const drawn = () => drawing;
 
 // What the page on screen asks for (the frame calls it as the address changes): an issue page's chat comes alone, on
 // Chat.
