@@ -639,13 +639,52 @@ const Steps = observer(function Steps({ s, items, running, live: isLive }: { s: 
       )}
       {open && (
         <div className="steps-list">
-          {items.map((i) => (i.t === "thinking" ? <Thought key={i.key} text={i.text ?? ""} /> : <Step key={i.key} s={s} item={i} result={s.results.get(i.id!)} />))}
+          <StepList s={s} items={items} results={s.results} running={s.working} />
           {running.map((b) => <p key={`${b.msg}:${b.index}`} className="step busy"><span className="step-name">{b.kind === "thinking" ? "Thinking" : b.name}</span></p>)}
         </div>
       )}
     </div>
   );
 });
+
+// A fold's steps in order, a line each, but for Claude's commands, which draw as a terminal shows them, one block for
+// each run of them ("yep A", the user, 31 Oct, of two mockups). Whether the turn or the subagent still runs, which a
+// command with no output yet is running in.
+function StepList({ s, items, results, running }: { s: LiveSession; items: Item[]; results: Map<string, Item>; running: boolean }) {
+  const runs: (Item | Item[])[] = [];
+  for (const i of items) {
+    const last = runs[runs.length - 1];
+    if (i.t === "tool" && i.name === "Bash") Array.isArray(last) ? last.push(i) : runs.push([i]);
+    else runs.push(i);
+  }
+  return runs.map((r) => Array.isArray(r) ? (
+    <div key={r[0].key} className="cmds">
+      {r.map((i) => <Command key={i.key} item={i} result={results.get(i.id!)} running={running} />)}
+    </div>
+  ) : r.t === "thinking" ? <Thought key={r.key} text={r.text ?? ""} /> : <Step key={r.key} s={s} item={r} result={results.get(r.id!)} />);
+}
+
+// A command as a terminal shows it: what Claude said it does, the command after its prompt, then what it printed. Claude
+// Code gives a command's output only once it ends, so one running shows its seconds.
+function Command({ item, result, running }: { item: Item; result?: Item; running: boolean }) {
+  const busy = !result && running;
+  useTick(busy);
+  const command = item.command ?? item.summary ?? "";
+  const what = item.summary !== cutTo(command, 120) ? item.summary : ""; // the summary is the command when Claude said nothing
+  const out = (result?.text ?? "").replace(/\x1b\[[0-9;]*m/g, "").replace(/\s+$/, "");
+  const exit = result?.error ? /^Exit code \d+(\n|$)/.exec(out)?.[0] ?? out : ""; // a failure, as Claude Code says it
+  return (
+    <div className="cmd">
+      {what && <div className="cmd-what"># {what}</div>}
+      <div className="cmd-line"><span className="cmd-prompt">$ </span>{command}</div>
+      {exit && <div className="cmd-exit">{exit.trimEnd()}</div>}
+      {out.length > exit.length && <div className="cmd-out">{out.slice(exit.length)}</div>}
+      {busy && <div className="cmd-run">running{item.at ? ` · ${elapsed(item.at)}` : ""}</div>}
+    </div>
+  );
+}
+
+const cutTo = (text: string, n: number) => (text.length > n ? `${text.slice(0, n)}…` : text); // as the server cuts a summary
 
 // A thought shows its first line, as a step does its summary, and the whole of it on a click.
 function Thought({ text }: { text: string }) {
@@ -698,10 +737,18 @@ const AgentSteps = observer(function AgentSteps({ s, tool, result }: { s: LiveSe
     if (result && !result.text?.startsWith("Async agent launched")) return <pre className="step-result">{result.text || "(no output)"}</pre>;
     return <p className="agent-none">{task ? "Starting…" : "No steps recorded."}</p>;
   }
+  // Its words break its steps into runs, each drawn as a fold's are.
+  const parts: (Item | Item[])[] = [];
+  for (const i of shown) {
+    const last = parts[parts.length - 1];
+    if (i.t === "text") parts.push(i);
+    else if (Array.isArray(last)) last.push(i);
+    else parts.push([i]);
+  }
   return (
     <div className="steps-list">
-      {shown.map((i) => (i.t === "tool" ? <Step key={i.key} s={s} item={i} result={results.get(i.id!)} />
-        : i.t === "thinking" ? <Thought key={i.key} text={i.text ?? ""} /> : <AgentText key={i.key} text={i.text ?? ""} />))}
+      {parts.map((p) => (Array.isArray(p) ? <StepList key={p[0].key} s={s} items={p} results={results} running={Boolean(task)} />
+        : <AgentText key={p.key} text={p.text ?? ""} />))}
     </div>
   );
 });

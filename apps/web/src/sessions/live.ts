@@ -15,6 +15,8 @@ export interface Item {
   name?: string;
   summary?: string;
   input?: string;
+  command?: string; // a Bash call's command, whole
+  at?: number; // when a tool call was made
   error?: boolean;
   images?: number;
   files?: string[]; // the names of the files attached by path

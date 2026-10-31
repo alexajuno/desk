@@ -29,6 +29,8 @@ export interface Item {
   name?: string;
   summary?: string;
   input?: string;
+  command?: string; // a Bash call's command, whole, which the chat draws as a terminal does
+  at?: number; // when a tool call was made, from which the chat counts a running command's seconds
   error?: boolean;
   images?: number;
   files?: string[];
@@ -244,7 +246,10 @@ function entryItems(e: Entry): Item[] {
     if (b.type === "thinking" && b.thinking?.trim()) return [{ t: "thinking", key, msg, text: b.thinking }];
     if (b.type === "tool_use") {
       const input = (b.input ?? {}) as Record<string, unknown>;
-      return [{ t: "tool", key, msg, id: b.id, name: b.name, summary: summary(b.name, input), input: cut(JSON.stringify(input, null, 1), 3000) }];
+      const command = b.name === "Bash" && typeof input.command === "string" ? { command: cut(input.command, 3000) } : {};
+      // The host's stream carries no time: a call it sends is made as it comes.
+      const at = Date.parse(e.timestamp ?? "") || Date.now();
+      return [{ t: "tool", key, msg, id: b.id, name: b.name, summary: summary(b.name, input), input: cut(JSON.stringify(input, null, 1), 3000), ...command, at }];
     }
     return [];
   });
