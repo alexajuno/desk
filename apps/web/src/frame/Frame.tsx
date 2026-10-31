@@ -159,8 +159,10 @@ function onKeyDown(e: KeyboardEvent) {
   // Linear's Ctrl ⇧ ↑: the open issue's parent.
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key === "ArrowUp" && page()?.parent) { go(`/issue/${page()!.parent}`); e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
-    // The issue's next step, the primary button in the row over its Properties.
-    const step = keyOf(e) === "Enter" && document.querySelector<HTMLButtonElement>(".issue-acts .step:not(:disabled)");
+    // The issue's next step, the primary button in the row over its Properties, or at the right of its chat's head: the
+    // one on screen, since an issue's page stays hidden under its chat, its own Approve with it.
+    const step = keyOf(e) === "Enter" && [...document.querySelectorAll<HTMLButtonElement>(".issue-acts .step:not(:disabled), .chat-acts .step:not(:disabled)")]
+      .find((b) => b.checkVisibility());
     if (step) { step.click(); e.preventDefault(); }
     // Ctrl ⌫ on the sidebar's chat under the mouse deletes it, not the issue in focus or open.
     else if (chatKey(e)) e.preventDefault();

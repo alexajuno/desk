@@ -191,12 +191,24 @@ export const IssueView = observer(function IssueView({ data, inInbox = false, pa
 function Actions({ p, step, trial: t, trust, act }: {
   p: IssueRow; step: IssuePageData["step"]; trial: StepButton | null; trust: boolean; act: (action: string) => void;
 }) {
-  const b = step.button;
   const session = p.session, chat = session ? () => openSession(session, p.slug) : null;
   return (
     <div className="issue-acts">
       <button className="act" type="button" title="Copy link" onClick={() => copy(`${location.origin}/issue/${p.slug}`, "Link copied")}>{GLYPH.link}</button>
-      {chat && !b?.chat && <button className="act open-chat" type="button" title="Open the issue's chat  I" onClick={chat}>{GLYPH.chat}</button>}
+      {chat && !step.button?.chat && <button className="act open-chat" type="button" title="Open the issue's chat  I" onClick={chat}>{GLYPH.chat}</button>}
+      <StepButtons p={p} step={step} trial={t} trust={trust} act={act} chat={chat} />
+    </div>
+  );
+}
+
+// Try in review, then the step, the one primary button, which Ctrl Enter presses (Frame.tsx): over the issue's
+// Properties, and at the right of its chat's head, which passes no chat, so that a step said in the chat shows none.
+export function StepButtons({ p, step, trial: t, trust, act, chat }: {
+  p: IssueRow; step: IssuePageData["step"]; trial: StepButton | null; trust: boolean; act: (action: string) => void; chat: (() => void) | null;
+}) {
+  const b = step.button;
+  return (
+    <>
       {/* Try, in review: runs the issue's branch in the desk you use (pages.ts, tryButton). Not the step: Approve is. */}
       {t && <button type="button" title={t.title} disabled={t.disabled} onClick={() => act(t.action!)}>{t.label}</button>}
       {trust ? (
@@ -209,7 +221,7 @@ function Actions({ p, step, trial: t, trust, act }: {
         <button className="primary step" type="button" disabled={b.disabled} title={b.disabled ? undefined : stepTip(`${b.label}  Ctrl Enter`, step.text, p.state)}
           onClick={() => act(b.action!)}>{b.label}</button>
       )}
-    </div>
+    </>
   );
 }
 

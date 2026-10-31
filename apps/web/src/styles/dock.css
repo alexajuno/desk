@@ -84,6 +84,10 @@
 .side-collapsed .dock-head .side-toggle { display: grid; }
 @media (max-width: 900px) { .dock-head .side-toggle { display: grid; } }
 .dock-folder { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 450 12px var(--font); color: var(--text-3); }
+/* the issue's next step at its right, Try then Go or Approve, filled as the issue's own row over its Properties is
+   (desk.css, .issue-acts) */
+.chat-acts { flex: none; display: flex; gap: 6px; }
+.chat-acts:empty { display: none; }
 .dock-btn { flex: none; width: 28px; height: 28px; padding: 0; justify-content: center; border-radius: 6px; background: transparent; color: var(--text-3); }
 .dock-btn:hover { background: var(--bg-icon-hover); color: var(--text-1); }
 .live-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--text-4); transition: background-color 0.2s; }

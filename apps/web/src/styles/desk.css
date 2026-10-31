@@ -518,9 +518,9 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
    title and scrolls with it. */
 .issue > .issue-side { position: sticky; top: 32px; align-self: start; }
 .issue-acts { display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 24px; }
-.issue-acts button { flex: none; box-shadow: 0 0 0 0.5px var(--ring-btn), var(--shadow-panel); }
-.issue-acts button:hover { box-shadow: 0 0 0 0.5px var(--ring-btn-hover), var(--shadow-panel); }
-.issue-acts button.primary { box-shadow: var(--shadow-panel); }
+.issue-acts button, .chat-acts button { flex: none; box-shadow: 0 0 0 0.5px var(--ring-btn), var(--shadow-panel); }
+.issue-acts button:hover, .chat-acts button:hover { box-shadow: 0 0 0 0.5px var(--ring-btn-hover), var(--shadow-panel); }
+.issue-acts button.primary, .chat-acts button.primary { box-shadow: var(--shadow-panel); }
 .issue-acts button.act { width: 28px; padding: 0; justify-content: center; }
 .issue-acts .act svg { width: 14px; height: 14px; }
 .prop.landed { height: auto; min-height: 32px; overflow-wrap: anywhere; }

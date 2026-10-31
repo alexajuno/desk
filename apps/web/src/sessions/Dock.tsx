@@ -13,7 +13,7 @@ import { go } from "../app/nav";
 import { splashUp, useSplash } from "../app/splash";
 import { markdown } from "../lib/markdown";
 import { seenPage, usePage } from "../api/page";
-import { HeadStatus, IssueView, Title, type IssuePageData } from "../issues/IssueView";
+import { HeadStatus, IssueView, StepButtons, Title, useStep, type IssuePageData } from "../issues/IssueView";
 import { useLive as useIssueLive } from "../issues/useLive";
 import { actionsMenu, folderMenu } from "../issues/menus";
 import { painted } from "../issues/painted";
@@ -232,7 +232,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   return (
     <div className="session-split">
       <div className="session-view">
-        <ChatHead s={s} views={views} view={shown} setView={setView} />
+        <ChatHead s={s} views={views} view={shown} setView={setView} docked={docked} />
         <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>
           {here && shown === "issue" && <div className="dock-view dock-page"><IssueView data={here} /></div>}
           {here && shown === "changes" && <ChangesOf slug={here.issue.slug} />}
@@ -274,11 +274,13 @@ const ChatSteps = observer(function ChatSteps({ s, here }: { s: LiveSession; her
 });
 
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, then its issue's status and
-// title, and its views (Chat, Issue, Changes); where its work stands is in the steps above the composer. A chat with no
-// issue is renamed in its title, and shows its folder, which only an issue's Properties would show otherwise. Whether
-// the chat works shows in the chat itself, its Working… line and its stop button (28 Oct: "the header in chat interface
-// looks kinda tight").
-const ChatHead = observer(function ChatHead({ s, views, view, setView }: { s: LiveSession; views: View[]; view: View; setView: (v: View) => void }) {
+// title, its views (Chat, Issue, Changes), and at its right the issue's next step, Try and Go or Approve, which the
+// Issue tab shows over its Properties instead (1 Nov: "the approve button is not there, but i have to tab to issue");
+// the Inbox, which shows a chat without its head, has its own. Where its work stands is in the steps above the
+// composer. A chat with no issue is renamed in its title, and shows its folder, which only an issue's Properties would
+// show otherwise. Whether the chat works shows in the chat itself, its Working… line and its stop button (28 Oct: "the
+// header in chat interface looks kinda tight").
+const ChatHead = observer(function ChatHead({ s, views, view, setView, docked }: { s: LiveSession; views: View[]; view: View; setView: (v: View) => void; docked: boolean }) {
   const m = s.meta;
   const page = chatPage.get(), here = m?.issue && page?.issue.slug === m.issue.slug ? page : null;
   return (
@@ -291,12 +293,32 @@ const ChatHead = observer(function ChatHead({ s, views, view, setView }: { s: Li
         {!m?.issue && startsIn(s) && <span className="dock-folder" title={startsIn(s)}>{startsIn(s)}</span>}
       </div>
       {views.length > 1 && m?.issue && <ViewTabs slug={m.issue.slug} views={views} view={view} setView={setView} />}
+      {here && docked && view !== "issue" && <HeadStep data={here} />}
       {/* On Issue, its Actions, which the issue's page has in its top bar */}
       {here && view === "issue" && <button className="dock-btn" type="button" title="Actions"
         onClick={(e) => { if (!toggled(e.currentTarget)) actionsMenu(painted(here.issue), { anchor: e.currentTarget }, here.issue.slug); }}>{MORE_ICON}</button>}
     </header>
   );
 });
+
+// The issue's next step at the head's right, only while it is a click: Go on a plan, Approve on a card, Try beside
+// it. Open chat, the step while the issue's turn is said in its chat, has no button here, in that chat.
+const HeadStep = observer(function HeadStep({ data }: { data: IssuePageData }) {
+  const { p, step, landing, trust, act } = useStep(data);
+  return (
+    <div className="chat-acts">
+      <StepButtons p={p} step={step} trial={landing ? null : data.trial} trust={trust} act={act} chat={null} />
+    </div>
+  );
+});
+
+// The step at the head of the chat a box is in, which Ctrl Enter presses from the box while it is empty, as from the
+// chat itself (Frame.tsx).
+function pressStep(box: HTMLElement) {
+  const step = box.closest(".session-view")?.querySelector<HTMLButtonElement>(".chat-acts .step:not(:disabled)");
+  step?.click();
+  return Boolean(step);
+}
 
 // The chat, or its issue's page, or its Changes, each build step's diff (Changes.tsx), in the view tabs' pills, the Changes tab with how much the steps changed. The reply
 // box stays under each ("A", the user, 28 Oct, picking the tabs in the head over a row of their own).
@@ -1306,6 +1328,8 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
             } else if (e.key === "Enter" && e.ctrlKey && s.working) {
               e.preventDefault();
               void sendNow();
+            } else if (e.key === "Enter" && e.ctrlKey && !text.trim() && !attached.length && pressStep(e.currentTarget)) {
+              e.preventDefault();
             } else if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               void send();
