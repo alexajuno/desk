@@ -4,7 +4,8 @@
 import MarkdownIt, { type Token } from "markdown-it";
 import { spawnSync } from "node:child_process";
 
-const D2_BLOCK = /^```d2\n([\s\S]*?)^```/gm;
+// A ```d2 block, and its caption: what follows "d2" on its fence line, such as ```d2 Today.
+const D2_BLOCK = /^```d2(?:[ \t]+([^\n]*?))?[ \t]*\n([\s\S]*?)^```/gm;
 // D2's theme for each of desk's: 200 is "Dark Mauve", 0 its default light one. Both renders go on the page and desk.css
 // shows the one for the theme in use.
 const D2_THEMES: [string, number][] = [["dark", 200], ["light", 0]];
@@ -56,6 +57,17 @@ function draw(source: string): string {
   if (drawn.size > 256) drawn.delete(drawn.keys().next().value!);
   drawn.set(source, html);
   return html;
+}
+
+// A drawn block with its caption above it. In a row it carries its own width, --w, which desk.css sizes it by: each
+// picture shrinks with the row until its text would read under 12px, then the row breaks. A lone block with no caption
+// stays as it was.
+type Picture = { caption: string; html: string };
+function picture({ caption, html }: Picture, inRow: boolean): string {
+  if (!caption && !inRow) return html;
+  const width = /viewBox="[-\d.]+ [-\d.]+ ([\d.]+) [\d.]+"/.exec(html)?.[1];
+  const style = inRow && width ? ` style="--w: ${Math.round(Number(width))}"` : "";
+  return `<figure class="d2-pic"${style}>${caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : ""}${html}</figure>`;
 }
 
 // Linear's group triangle, so a section folds the way a list group does.
@@ -226,9 +238,9 @@ function markdown(base: string) {
 interface Heading { level: number; id: string; name: string }
 
 export function toHtmlWithToc(text: string, base = ""): [string, string] {
-  const diagrams: string[] = [];
-  const held = text.replace(D2_BLOCK, (_, source: string) => {
-    diagrams.push(draw(source));
+  const diagrams: Picture[] = [];
+  const held = text.replace(D2_BLOCK, (_, caption: string | undefined, source: string) => {
+    diagrams.push({ caption: caption ?? "", html: draw(source) });
     return `\n\nD2DIAGRAM${diagrams.length - 1}\n\n`;
   });
   const md = markdown(base);
@@ -273,7 +285,13 @@ export function toHtmlWithToc(text: string, base = ""): [string, string] {
   }
   flush();
   while (open.length) { html += "</div></section>"; open.pop(); }
-  diagrams.forEach((svg, n) => { html = html.replace(`<p>D2DIAGRAM${n}</p>`, () => svg); });
+  // Blocks with only blank lines between them, such as Today and After, are pictures of their own in a row, which the
+  // browser lays out side by side or one under the other ("we need two artifacts. two different pictures... and then
+  // the browser would handle positioning", the user, 28 Oct).
+  html = html.replace(/<p>D2DIAGRAM\d+<\/p>(?:\s*<p>D2DIAGRAM\d+<\/p>)*/g, (run) => {
+    const shown = [...run.matchAll(/D2DIAGRAM(\d+)/g)].map((m) => diagrams[Number(m[1])]);
+    return shown.length > 1 ? `<div class="d2-row">${shown.map((p) => picture(p, true)).join("")}</div>` : picture(shown[0], false);
+  });
   return [html, tocHtml(toc)];
 }
 

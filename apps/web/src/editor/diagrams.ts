@@ -7,7 +7,8 @@ import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import type { EditorView, NodeView } from "@tiptap/pm/view";
 import type { Node as PMNode } from "@tiptap/pm/model";
 
-const D2_BLOCK = /^```d2\n([\s\S]*?)^```/gm; // render.ts's
+const D2_BLOCK = /^```d2(?:[ \t]+[^\n]*?)?[ \t]*\n([\s\S]*?)^```/gm; // render.ts's, a caption after "d2" or not
+const isD2 = (language: unknown) => typeof language === "string" && /^d2(\s|$)/.test(language);
 const sourceKey = (source: string) => source.trimEnd();
 
 // The drawings of the page shown, by their source. One description is on screen at a time.
@@ -32,7 +33,7 @@ class CodeView implements NodeView {
     if (node.attrs.language) code.className = `language-${node.attrs.language}`;
     this.contentDOM = code;
     this.dom = pre;
-    if (node.attrs.language !== "d2") return;
+    if (!isD2(node.attrs.language)) return;
     this.dom = document.createElement("div");
     this.dom.className = "d2-block";
     this.drawing = document.createElement("div");

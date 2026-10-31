@@ -423,6 +423,7 @@ button.plan-step:hover, button.plan-step.open { background: var(--bg-hover); }
 .plan-step-drawn .glyph { width: 14px; height: 14px; }
 .plan-step-open { margin: 4px 0 8px 31px; border: 1px solid var(--border-3); border-radius: 8px; background: var(--bg-raised); overflow: hidden; }
 .plan-step-open .d2 { margin: 0; }
+.plan-step-open .d2-row { row-gap: 12px; }
 .body.plan-step-said { padding: 8px 12px; border-top: 1px solid var(--border-2); font-size: 12px; line-height: 18px; color: var(--text-3); }
 .plan-step-open .plan-step-said:first-child { border-top: 0; }
 .body.plan-step-said ul, .body.plan-step-said p { margin: 0; }
@@ -652,6 +653,14 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 /* diagrams */
 .d2 { margin: 0 0 1.2em; cursor: zoom-in; border: 1px solid var(--border-2); border-radius: 8px; overflow: hidden; background: var(--bg-raised); }
 .d2 svg { display: block; width: 100%; height: auto; max-height: 70vh; }
+/* A run of d2 blocks, such as Today and After, is a row of pictures (render.ts): each starts at the width where its text
+   reads 12px, 0.75 of its own (d2 draws text at 16px), and grows with the room left up to its own width, so two sit side
+   by side while both still read 12px and break onto two lines when they would not (tested at 1440x900, 29 Oct). --w is
+   the picture's own width, from its SVG. A caption, the word after d2 on the fence line, is meta text: 12px, dim. */
+.d2-pic { margin: 0; }
+.d2-pic figcaption { margin: 0 0 4px; font-size: 12px; line-height: 16px; color: var(--text-3); }
+.d2-row { display: flex; flex-wrap: wrap; align-items: flex-start; column-gap: 12px; }
+.d2-row > .d2-pic { flex: var(--w, 760) 1 calc(var(--w, 760) * 0.75px); min-width: 0; max-width: calc(var(--w, 760) * 1px); }
 /* each diagram comes in D2's dark and light theme; the page shows the one for desk's */
 :root:not([data-theme=light]) .d2 .for-light, :root[data-theme=light] .d2 .for-dark { display: none; }
 
