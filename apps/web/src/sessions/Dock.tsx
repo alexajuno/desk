@@ -21,7 +21,7 @@ import { dock, type Layout, type View } from "../store/dock";
 import { issues } from "../store/issues";
 import { lineKey } from "../store/frame";
 import { toggleSide as toggleSidebar } from "../frame/side";
-import { GLYPH, MORE_ICON, SIDE_ICON, StateIcon } from "../ui/icons";
+import { CHEVRON, GLYPH, MORE_ICON, SIDE_ICON, StateIcon } from "../ui/icons";
 import { isDrawn, type PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
@@ -833,13 +833,24 @@ function AgentNote({ s, note }: { s: LiveSession; note: Item }) {
 // --- what runs beside the conversation ---------------------------------------------------------------------------------
 
 // Each subagent, background command and watch running now, above the composer, with its latest step and how long it
-// has run. Only to look at: "i won't try to micromanage each shell or subagents" (the user, 19 Oct).
+// has run. Only to look at: "i won't try to micromanage each shell or subagents" (the user, 19 Oct). Two or more fold
+// into one line counting them by kind, which a click opens ("single task stays one row and multiple is collapsed",
+// the user, 1 Nov); once opened, it stays open as they come and go.
 const Running = observer(function Running({ s }: { s: LiveSession }) {
+  const [open, setOpen] = useState(false);
   useTick(s.tasks.length > 0);
   if (!s.tasks.length) return null;
+  const folds = s.tasks.length > 1;
   return (
-    <div className="running" aria-label="Running now">
-      {s.tasks.map((t) => (
+    <div className={`running${open ? " open" : ""}`} aria-label="Running now">
+      {folds && (
+        <button type="button" className="running-head" aria-expanded={open} title={open ? "Fold them" : "Show each"} onClick={() => setOpen(!open)}>
+          <span className="running-dot" aria-hidden="true" />
+          <span className="running-name">{counted(s)}</span>
+          <span className="running-fold">{CHEVRON}</span>
+        </button>
+      )}
+      {(!folds || open) && s.tasks.map((t) => (
         <div key={t.id} className="running-row">
           <span className="running-dot" aria-hidden="true" />
           <span className="running-name">{taskName(s, t)}</span>
@@ -858,6 +869,16 @@ function taskName(s: LiveSession, t: Task): string {
   if (t.kind === "local_agent") return t.agent && t.agent !== "general-purpose" ? t.agent : "Agent";
   if (s.items.some((i) => i.id === t.tool && i.name === "Monitor")) return "Watch";
   return t.kind === "local_bash" ? "Shell" : t.kind.includes("workflow") ? "Workflow" : "Task";
+}
+
+// The tasks counted by kind, in the order each kind first started: "3 shells · 1 scout · 1 watch".
+function counted(s: LiveSession): string {
+  const kinds = new Map<string, number>();
+  for (const t of s.tasks) {
+    const name = taskName(s, t).toLowerCase();
+    kinds.set(name, (kinds.get(name) ?? 0) + 1);
+  }
+  return [...kinds].map(([name, n]) => `${n} ${n === 1 ? name : /(s|sh|ch|x)$/.test(name) ? `${name}es` : `${name}s`}`).join(" · ");
 }
 
 // --- what waits on the user: a permission, or Claude's questions --------------------------------------------------------
