@@ -14,7 +14,7 @@ Plan as a discussion partner, the way two engineers talk at a whiteboard: one sa
 - **Short words.** Plain words, a few lines per reply. Lean on what you both already know; a wrong guess the user corrects costs less than a paragraph that hedges it.
 - **Detail goes in a picture, not in paragraphs.** Where cases or states matter, draw them: a state diagram for states, a sequence for who does what in order, a table of cases for edge cases. The user reads only the diagrams ("honestly i've never read text in the plan, in the design", 27 Oct), so whatever decides the design is drawn.
 - **A piece about how a UI looks gets mockups too**, one picture per option in the app's own look, the user's pick going on its step: the ui-mockup skill draws them.
-- **What exists, then the change.** A part that changes is drawn as Today and After, from the code as it is; one diagram when nothing exists yet ("at each step that touch the design of the pr, we need two diagrams: current state and what gonna be changed", 27 Oct). Today sits above After, each the diagram's whole width, with `grid-columns: 1`: side by side, each came out too long for the text column ("they should have been stacked vertically for visibility", 28 Oct). A table is drawn as a table, its new columns marked. A column or a table is never Decide alone: IGH-314's fee and cap were each built twice because the columns sat there, and the user's every cut ("isn't it the same as owed column?") came only once the code showed them.
+- **What exists, then the change.** A part that changes is drawn as Today and After, from the code as it is; one diagram when nothing exists yet ("at each step that touch the design of the pr, we need two diagrams: current state and what gonna be changed", 27 Oct). Today and After are two d2 blocks, one after the other, fenced ```` ```d2 Today ```` and ```` ```d2 After ````: desk draws each as a picture of its own, the fence's word above it in small grey, and the page places them, side by side when both still read, one under the other when not ("we need two artifacts. two different pictures... and then the browser would handle positioning", 28 Oct). One diagram holding both, stacked with `grid-columns: 1`, shrank its text past reading on a wide pair ("hard to be seen. it depends on the size of the image", 30 Oct). A table is drawn as a table, its new columns marked. A column or a table is never Decide alone: IGH-314's fee and cap were each built twice because the columns sat there, and the user's every cut ("isn't it the same as owed column?") came only once the code showed them.
 - **They ask back.** You can't know what the user doesn't know, so don't guess: keep each piece small, and when they ask back, answer a level lower, drawn inside the step it belongs to, so the bigger picture stays around it ("so probably just let the model does what it does and i'll ask back", 27 Oct).
 - **End each reply on what you need:** a reaction, a pick, or "go".
 
@@ -30,14 +30,12 @@ A design issue's plan lives on its steps, which desk keeps ("i think we need dat
 - **Each step holds its own diagram and its decisions**, sent from a draft with `PUT /api/issues/<slug>/steps/1.2`, as the desk skill says. The chat draws the step's diagram where it was sent, and only that one, with its decisions under it; a click on the step in the card above the composer brings that message back into view, and on the issue's page a click on its row opens its diagram and decisions under it.
 
 ~~~markdown
-```d2
-grid-columns: 1
-today: Today {
-  <what exists, read from the code: only the part this step is about>
-}
-after: After {
-  <the change this step settles or makes, the part it works on marked>
-}
+```d2 Today
+<what exists, read from the code: only the part this step is about>
+```
+
+```d2 After
+<the change this step settles or makes, the part it works on marked>
 ```
 
 - **<The decision, in a few words.>** "<the user's reason, in their words>" (<date>).
@@ -55,14 +53,12 @@ One file on one screen, under about 250 words outside the diagrams, with a `# <w
 ~~~markdown
 > **Now (<HH:MM>):** <where the talk or the work stands, such as "Build, 2 of 3", and what you need next>.
 
-```d2
-grid-columns: 1
-today: Today {
-  <what exists, read from the code>
-}
-after: After {
-  <the change: only what has been said, the part being worked on marked>
-}
+```d2 Today
+<what exists, read from the code>
+```
+
+```d2 After
+<the change: only what has been said, the part being worked on marked>
 ```
 
 ### Steps
@@ -78,7 +74,7 @@ after: After {
 **Decide alone:** <what you settle yourself>.
 ~~~
 
-- **Now** changes on every rewrite. A second diagram is for a second part that changes, never for the progress.
+- **Now** changes on every rewrite. A second pair of Today and After is for a second part that changes, never for the progress.
 
 ### Either way
 

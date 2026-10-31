@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-BLOCK = re.compile(r"^```d2\n(.*?)^```", re.S | re.M)  # the pattern apps/server/src/render.ts draws
+BLOCK = re.compile(r"^```d2(?:[ \t]+[^\n]*)?\n(.*?)^```", re.S | re.M)  # render.ts's: a caption after "d2", as Today, or none
 
 
 def blocks(path: Path):
