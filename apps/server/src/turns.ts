@@ -8,6 +8,9 @@
 //     {"type": "hello", "sessions": [<state>, ...]}    first, on every connect: each session the host holds
 //     {"type": "session", ...<state>}                  one changed; "open": false once its process ended
 //     {"type": "usage", "windows": {...}}             a reply said the plan's usage (models.ts, heardUsage)
+//     {"type": "tab", ...} or {"type": "tab-closed", ...}   a session's tab in the agents' Chrome (tabs.ts)
+//
+// Its hello also says whether its browser relay runs and the tabs it noted, which desk answers (tabs.ts).
 //
 // A <state> is {id, open, working, asks, prompted, replied, ended}, its times in ms, null while the host has seen none. The
 // socket closing says the host is gone, and every process it held with it. A desk that restarts, as on every Try,
@@ -20,10 +23,12 @@
 // its sessions never all quiet.
 import { statSync } from "node:fs";
 import type { WebSocket } from "ws";
+import type { Tab } from "./relay.ts";
 import * as chats from "./chats.ts";
 import * as db from "./db.ts";
 import * as hosted from "./hosted.ts";
 import * as sessions from "./sessions.ts";
+import * as tabs from "./tabs.ts";
 import * as transcript from "./transcript.ts";
 
 interface Row {
@@ -209,7 +214,7 @@ async function hello(ws: WebSocket, states: State[]) {
 export function connect(ws: WebSocket) {
   let heard = Promise.resolve();
   ws.on("message", (data) => {
-    let e: { type?: string; sessions?: State[]; windows?: Record<string, any> } & Partial<State>;
+    let e: { type?: string; sessions?: State[]; windows?: Record<string, any>; relay?: boolean; tabs?: Tab[]; target?: string } & Partial<State> & Partial<Tab>;
     try {
       e = JSON.parse(data.toString());
     } catch {
@@ -220,8 +225,12 @@ export function connect(ws: WebSocket) {
       return;
     }
     heard = heard.then(async () => {
-      if (e.type === "hello") await hello(ws, e.sessions ?? []);
-      else if (e.type === "session" && e.id) kept([await db.write((tx) => upsert(tx, e as State))]);
+      if (e.type === "hello") {
+        await hello(ws, e.sessions ?? []);
+        await tabs.hello(ws, e.relay, e.tabs ?? []);
+      } else if (e.type === "session" && e.id) kept([await db.write((tx) => upsert(tx, e as State))]);
+      else if (e.type === "tab" && e.target && e.session) await tabs.opened(e as Tab);
+      else if (e.type === "tab-closed" && e.target) await tabs.closed(e.target);
     }).catch((error) => console.error("desk: the host's word", error));
   });
   // The host is gone, and every process it held, unless desk is the one stopping.

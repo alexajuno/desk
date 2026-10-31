@@ -35,6 +35,7 @@ const HELD: Record<string, { key: string; hidden: string[] }> = {
   activity: { key: "id", hidden: [] },
   chats: { key: "id", hidden: ["folder", "cwd", "seen", "extra"] },
   inbox: { key: "id", hidden: [] },
+  tabs: { key: "target", hidden: [] },
 };
 
 // The row as the app holds it, in SQL, from a row named t.
@@ -127,6 +128,13 @@ create table if not exists chats ( -- desk's chats (chats.ts): each a session, a
   seen double precision,
   deleted text, -- when the user deleted it: out of sight, its row and transcript kept
   extra jsonb not null default '{}' -- what else its file held, such as the messages of a chat from before the panel
+);
+create table if not exists tabs ( -- each tab a desk session has open in the agents' Chrome, as the host's relay tells it (tabs.ts)
+  target text primary key, -- Chrome's id for it
+  session text not null, -- the session that opened it, or the tab that opened it
+  url text not null default '',
+  title text not null default '',
+  opened text not null -- when desk first heard of it
 );
 create table if not exists automations ( -- what happened to each of automations/*.md, which hold the rest (automations.ts)
   slug text primary key,

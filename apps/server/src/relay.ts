@@ -9,6 +9,9 @@
 // for it. A tab opened from a session's tab, a popup or a link to a new tab, is that session's too, which the relay's own
 // watcher sees: one connection straight to the Chrome on 9334. Unlike one through the proxy, it does not keep the Chrome
 // running once no session uses it (the chrome skill, "How it behaves"), and it ends as the Chrome stops, its tabs with it.
+//
+// What it noted lives only as long as the host. desk keeps it (tabs.ts), and gives a new host's relay the tabs a host
+// before it noted (adopt), each of them that session's again while it is open.
 import { createServer } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 
@@ -16,7 +19,8 @@ const PROXY = "http://127.0.0.1:9333"; // starts the Chrome on its first connect
 const CHROME = "http://127.0.0.1:9334"; // the Chrome itself, which refuses while it is down
 const BIGGEST = 512 * 1024 * 1024; // bytes in one message: a full-page screenshot comes back as one
 
-export type TabNews = { type: "tab"; target: string; session: string; url: string; title: string } | { type: "tab-closed"; target: string };
+export interface Tab { target: string; session: string; url: string; title: string }
+export type TabNews = { type: "tab" } & Tab | { type: "tab-closed"; target: string };
 
 const pages = new Map<string, { url: string; title: string; opener?: string; said?: string }>(); // the Chrome's open tabs, by target id
 const owners = new Map<string, string>(); // the session that opened each tab, by its target id
@@ -73,6 +77,20 @@ function pipe(mcp: WebSocket, session: string) {
   }, () => mcp.close(1011, "The agents' Chrome did not start"));
 }
 
+// The tabs it knows the session of, as they are now.
+export const tabs = (): Tab[] => [...owners].flatMap(([target, session]) => {
+  const page = pages.get(target);
+  return page ? [{ target, session, url: page.url, title: page.title }] : [];
+});
+
+// The tabs desk keeps that this relay did not note, which a host before it did: each still open is that session's again,
+// and the rest are told closed, once the watcher has the Chrome's every tab.
+export function adopt(known: { target: string; session: string }[]) {
+  for (const { target, session } of known) own(target, session);
+  if (listed) closeGone();
+  else void watch();
+}
+
 function own(target: string, session: string) {
   if (owners.has(target)) return;
   owners.set(target, session);
@@ -89,18 +107,30 @@ function say(target: string) {
 }
 
 let watching = false;
+let listed = false; // the watcher has heard of every tab the Chrome had when it connected
+
+// Each tab noted whose page is not open: once listed, or with the Chrome down, a tab adopted that closed meanwhile.
+function closeGone() {
+  for (const target of [...owners.keys()]) if (!pages.has(target)) {
+    owners.delete(target);
+    tell({ type: "tab-closed", target });
+  }
+}
 
 // The watcher: every tab's opening, address, title and closing, as the Chrome tells them.
 async function watch() {
   if (watching) return;
   watching = true;
   const url = await browserUrl(CHROME).catch(() => null);
-  if (!url) return void (watching = false);
+  if (!url) {
+    watching = false;
+    return closeGone();
+  }
   const ws = new WebSocket(url, { perMessageDeflate: false });
   ws.on("open", () => ws.send(JSON.stringify({ id: 1, method: "Target.setDiscoverTargets", params: { discover: true } })));
   ws.on("message", (data: Buffer) => heard(parse(data)));
   ws.on("close", () => {
-    watching = false;
+    watching = listed = false;
     for (const target of owners.keys()) tell({ type: "tab-closed", target }); // the Chrome stopped, and its tabs with it
     owners.clear();
     pages.clear();
@@ -111,6 +141,10 @@ async function watch() {
 interface TargetInfo { targetId: string; type: string; url: string; title: string; openerId?: string }
 
 function heard(m: Cdp | null) {
+  if (m?.id === 1) { // Target.setDiscoverTargets answers after it told every tab open
+    listed = true;
+    return closeGone();
+  }
   const info = m?.params?.targetInfo as TargetInfo | undefined;
   if (m?.method === "Target.targetDestroyed") {
     const target = m.params!.targetId as string;

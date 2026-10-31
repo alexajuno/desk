@@ -395,7 +395,19 @@ function reach() {
   const ws = new WebSocket(`${DESK.replace(/^http/, "ws")}/api/host`, { origin: DESK });
   ws.on("open", () => {
     desk = ws;
-    ws.send(JSON.stringify({ type: "hello", sessions: [...sessions.values()].filter((s) => !s.closed).map(stateOf) }));
+    // relay: whether the browser relay runs, and tabs, what it noted: desk keeps the tabs (tabs.ts).
+    ws.send(JSON.stringify({ type: "hello", sessions: [...sessions.values()].filter((s) => !s.closed).map(stateOf),
+      relay: relaying, tabs: relaying ? relay.tabs() : [] }));
+  });
+  // desk answers with the tabs a host before this one noted, as {"type": "owners", "tabs": [{target, session}, ...]}.
+  ws.on("message", (data: Buffer) => {
+    let m: { type?: string; tabs?: { target: string; session: string }[] };
+    try {
+      m = JSON.parse(data.toString());
+    } catch {
+      return;
+    }
+    if (m.type === "owners" && relaying && Array.isArray(m.tabs)) relay.adopt(m.tabs);
   });
   ws.on("close", () => {
     if (desk === ws) desk = null;
