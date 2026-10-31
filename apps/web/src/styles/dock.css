@@ -105,6 +105,11 @@
 .dock-foot { position: sticky; bottom: 0; z-index: 1; display: flex; flex-direction: column; background: var(--bg-panel); }
 .dock-foot::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: var(--foot-fade); pointer-events: none;
                      background: linear-gradient(to top, var(--bg-panel), transparent); }
+/* Scrolled up from the chat's end, a pill over the fade says so and goes back (Dock.tsx), picked from three mockups on
+   31 Oct: a filled control, ringed as Display's round button is (desk.css, .view-btn), on a popover's shadow to float. */
+.jump-latest { position: absolute; bottom: calc(100% + 12px); left: 50%; z-index: 2; transform: translateX(-50%); padding: 0 12px 0 10px;
+               border: 0; box-shadow: 0 0 0 0.5px var(--ring-btn), var(--shadow-pop); }
+.jump-latest:hover { box-shadow: 0 0 0 0.5px var(--ring-btn-hover), var(--shadow-pop); }
 .convo > * { animation: dock-rise 0.18s ease both; }
 .convo-empty { margin: 48px 12px; text-align: center; font-size: 13px; color: var(--text-3); }
 .convo-note { margin: 0; text-align: center; font-size: 12px; color: var(--text-3); }

@@ -155,6 +155,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   useSplash(!s.loaded); // desk opening on a chat shows it with its conversation, never "Connecting…"
   const scroller = useRef<HTMLDivElement>(null);
   const stuck = useRef(true); // following the bottom, as new words come
+  const [away, setAway] = useState(false); // not following it, which the Jump to latest pill says
   const m = s.meta;
   // The chat in the middle keeps its view in the store, where the keys reach it; the Inbox's pane keeps its own, and
   // shows only the chat and its Changes.
@@ -169,12 +170,23 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   useLayoutEffect(() => {
     const el = scroller.current!;
     stuck.current = shown === "chat";
+    setAway(false);
     el.scrollTo({ top: shown === "chat" ? el.scrollHeight : 0 });
   }, [shown]);
 
   const onScroll = () => {
     const el = scroller.current!;
     stuck.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    setAway(!stuck.current);
+  };
+  // The pill takes the chat back to its end, which it follows again. It jumps there, as a step's jump to its message
+  // does (StepsCard.tsx), and leaves the keys on the conversation as the pill goes.
+  const toEnd = () => {
+    const el = scroller.current!;
+    stuck.current = true;
+    setAway(false);
+    el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
+    el.focus({ preventScroll: true });
   };
   const streamed = s.partial.reduce((n, b) => n + b.text.length, 0);
   useLayoutEffect(() => {
@@ -225,6 +237,12 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
             {m?.issue ? <IssueConversation s={s} slug={m.issue.slug} /> : <Conversation s={s} page={null} slug={null} />}
           </div>
           <div className="dock-foot">
+            {shown === "chat" && away && (
+              <button className="jump-latest" type="button" onClick={toEnd}>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5" /></svg>
+                Jump to latest
+              </button>
+            )}
             {here && shown === "chat" && <ChatSteps s={s} here={here} />}
             <Running s={s} />
             {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
