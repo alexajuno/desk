@@ -764,6 +764,17 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .s-bar button.chip-part:hover { background: var(--bg-cmd-on); color: var(--text-cmd-on); }
 .s-bar .chip.foreign, .s-bar .chip.foreign .chip-part + .chip-part { border-color: var(--health-off_track); }
 .s-bar .chip.foreign .chip-part { color: var(--health-off_track); }
+/* What is typed completes to: the menu under the word, in the @ menu's look, a field's values dimmed at its right and a
+   value's label after it; the completion greyed after the caret, in the bar's font. */
+.menu.command .s-bar { position: relative; }
+.s-ghost { position: absolute; height: 24px; font: 400 13px/24px var(--font); color: var(--text-cmd-hint); white-space: pre; pointer-events: none; }
+.s-menu { max-height: min(420px, calc(100vh - 200px)); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
+.s-menu .at-row .ic { flex: none; display: grid; place-items: center; width: 16px; height: 16px; }
+.s-menu .at-row .n, .s-menu .at-row .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-menu .at-row .n { flex: 0 1 auto; }
+.s-menu .at-row .label { flex: 0 100 auto; margin-left: -4px; color: var(--text-tip-key); }
+.s-menu .at-row.field .n { flex: none; }
+.s-menu .at-row.field .label { margin-left: auto; padding-left: 12px; font-size: 12px; }
 .menu.command.search ~ .menu { z-index: 31; }
 
 /* the S and P menus filter from keys read on the window, so their box is text, with a drawn caret */

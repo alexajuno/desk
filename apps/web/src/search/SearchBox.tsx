@@ -8,8 +8,10 @@
 // as key:value, state:done, by the names each kind keeps its fields under (the server's fields.ts); Space or Enter at
 // its end turns it into a chip at the bar's start, red in a kind that has no such field, as Issues have no status, where
 // it is searched as words; Backspace right after the chips turns the last one back into text (the search issue's step
-// 1.2). The chips and the words go to the server as one search, which reads the filters itself. / and the sidebar's
-// Search open it, with the search as it last closed (step 1.7).
+// 1.2). As a filter is typed, a menu under it offers the fields its letters start, then the field's values, the one in
+// focus greyed after the caret; Tab takes it, Enter takes a value, the arrows move in it, Esc closes it (mockup C). The
+// chips and the words go to the server as one search, which reads the filters itself. / and the sidebar's Search open
+// it, with the search as it last closed (step 1.7).
 import { action, makeObservable, observable } from "mobx";
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -97,6 +99,66 @@ function chipWords(f: Filter, named: Field[]) {
   };
 }
 
+// What the menu under the caret offers (step 1.2's Typing): the fields a key's first two letters start, the lit kind's
+// or in All every kind's, with issue. for a chat's issue's own; after issue., those; after a colon, the field's values
+// the letters after it start, then those that hold them, the ones typed already left out. A date offers today, before
+// it and after it. Each offer is the whole filter it leaves typed: a field's name and its colon, or the filter with it.
+interface Offer { take: string; name: string; label: string; icon?: ReactNode; value: boolean }
+interface Menu { start: number; typed: string; heading: string; offers: Offer[] }
+const DATES: Value[] = [
+  { value: "today", label: "today", icon: "glyph-calendar" },
+  { value: "<today", label: "before today", icon: "glyph-calendar" },
+  { value: ">today", label: "after today", icon: "glyph-calendar" },
+];
+const TYPING = /^(-?)([a-z_]*(?:\.[a-z_]*)?)(?::(.*))?$/i;
+
+function menuAt(text: string, caret: number, fields: Fields, kind: Kind | ""): Menu | null {
+  if (caret < 0 || /^\S/.test(text.slice(caret))) return null; // a selection, or inside a word
+  const start = text.slice(0, caret).search(/\S*$/), typed = text.slice(start, caret), m = TYPING.exec(typed);
+  if (!m) return null;
+  const [, not, key, after] = m, low = key.toLowerCase(), heading = kind ? KINDS.find((k) => k.kind === kind)!.name : "All";
+  if (after === undefined) {
+    if (low.length < 2) return null; // one letter picks a kind (step 2.5)
+    const own = first((kind ? [kind] : KINDS.map((k) => k.kind)).flatMap((k) => fields[k] ?? []), (f) => f.name);
+    const dot = low.indexOf(".");
+    const offers: Offer[] = own.filter((f) => f.name.startsWith(low) && f.name.includes(".") === dot >= 0)
+      .map((f) => ({ take: `${not}${f.name}:`, name: `${f.name.slice(dot + 1)}:`, label: hint(f), value: false }));
+    const its = own.filter((f) => f.name.startsWith("issue."));
+    if (dot < 0 && its.length && "issue.".startsWith(low))
+      offers.push({ take: `${not}issue.`, name: "issue.", label: its.map((f) => f.name.slice(6)).join(", "), value: false });
+    return offers.length ? { start, typed, heading: dot < 0 ? heading : low.slice(0, dot), offers } : null;
+  }
+  const named = kind ? [fieldOf(fields, kind, low)].filter((f) => !!f) : fieldsNamed(fields, kind, low);
+  if (!named.length) return null; // red once a chip: the kind has no such field
+  const values = named[0].type === "date" ? DATES : first(named.flatMap((f) => f.values), (v) => v.value);
+  const parts = after.split(","), part = parts.pop()!.toLowerCase(), had = new Set(parts.map((p) => p.toLowerCase()));
+  const left = values.filter((v) => !had.has(v.value.toLowerCase()));
+  const starts = (v: Value) => [v.value, v.label].some((s) => s.toLowerCase().startsWith(part));
+  const holds = (v: Value) => !starts(v) && [v.value, v.label].some((s) => s.toLowerCase().includes(part));
+  const offers = [...left.filter(starts), ...left.filter(holds)].map((v) => ({
+    take: `${not}${named[0].name}:${[...parts, v.value].join(",")}`, name: v.value,
+    label: v.label.toLowerCase() === v.value.toLowerCase() ? "" : v.label, icon: iconOf(v.icon, true), value: true,
+  }));
+  return offers.length ? { start, typed, heading: named[0].name, offers } : null;
+}
+
+// The first of each name, in order: in All, state is Chats' before Teams'.
+const first = <T,>(all: T[], name: (t: T) => string) => all.filter((t, i) => all.findIndex((u) => name(u) === name(t)) === i);
+
+// What a field's row says at its right: its first values, or the kind of value it takes.
+function hint(f: Field) {
+  if (f.type !== "set") return f.type === "date" ? "a day" : "a number";
+  return f.values.slice(0, 4).map((v) => v.value).join(", ") + (f.values.length > 4 ? ", …" : "");
+}
+
+// The width of text in the box's own font, which places the menu under the word typed and the completion after it.
+let canvas: HTMLCanvasElement | null = null;
+function widthOf(text: string, box: HTMLInputElement) {
+  const ctx = (canvas ??= document.createElement("canvas")).getContext("2d")!;
+  ctx.font = getComputedStyle(box).font;
+  return ctx.measureText(text).width;
+}
+
 // The search as the box last closed: what was typed, the chips, the tab and the row in focus, which / brings back with
 // the words selected, in place of Back to a search page (step 1.7).
 interface Kept { query: string; chips: Filter[]; tab: Kind | ""; at: string | null }
@@ -168,7 +230,11 @@ const SearchView = observer(function SearchView() {
   const [fields, setFields] = useState(known);
   const [groups, setGroups] = useState<Group[] | null>(null);
   const [at, setAt] = useState<string | null>(kept?.at ?? null); // the row in focus, by its key
+  const [caret, setCaret] = useState(-1); // where the caret is, -1 while text is selected
+  const [lit, setLit] = useState({ at: "", i: 0 }); // the menu's offer in focus, for the word it offers for
+  const [shut, setShut] = useState(""); // the word whose menu Esc closed
   const el = useRef<HTMLDivElement>(null), input = useRef<HTMLInputElement>(null), asked = useRef(0), caretTo = useRef<number | null>(null);
+  const menuEl = useRef<HTMLDivElement>(null), ghost = useRef<HTMLSpanElement>(null);
   const seq = issues.seq; // a change anywhere asks again, keeping the row in focus
   // The search: the chips, then what is typed, filters typed but not yet chips among it.
   const q = [...chips.map(textOf), query.trim()].filter(Boolean).join(" ");
@@ -197,7 +263,20 @@ const SearchView = observer(function SearchView() {
   const rows = shown.flatMap((g) => g.hits);
   const focused = rows.find((h) => h.key === at) ?? rows[0];
 
-  // Text a chip leaves or puts back, with the caret where it belongs.
+  // The menu under the caret, unless Esc closed it for this word, and its offer in focus, the first for a new word.
+  const offered = menuAt(query, caret, fields, tab);
+  const word = offered ? `${offered.start}:${offered.typed}` : "";
+  const menu = offered && word !== shut ? offered : null;
+  const litAt = menu && lit.at === word ? Math.min(lit.i, menu.offers.length - 1) : 0;
+  // What the offer in focus adds to the word, greyed after the caret when it ends what is typed.
+  const take = menu?.offers[litAt].take ?? "";
+  const rest = menu && caret === query.length && take.toLowerCase().startsWith(menu.typed.toLowerCase()) ? take.slice(menu.typed.length) : "";
+
+  const track = () => {
+    const box = input.current;
+    setCaret(box && box.selectionStart === box.selectionEnd ? box.selectionStart ?? -1 : -1);
+  };
+  // Text a chip or an offer leaves or puts back, with the caret where it belongs.
   const retype = (text: string, to: number) => {
     setQuery(text);
     caretTo.current = to;
@@ -206,17 +285,32 @@ const SearchView = observer(function SearchView() {
     if (caretTo.current === null) return;
     input.current?.setSelectionRange(caretTo.current, caretTo.current);
     caretTo.current = null;
+    track();
   }, [query, chips]);
-  // Space or Enter at the end of a filter turns it into a chip: it leaves the text, and the caret stays where it began.
-  function chipAt(): boolean {
-    const box = input.current, end = box?.selectionStart ?? -1, text = box?.value ?? ""; // the box's own, ahead of a draw
-    if (!box || end !== box.selectionEnd || /^\S/.test(text.slice(end))) return false;
-    const start = text.slice(0, end).search(/\S*$/), f = filterOf(text.slice(start, end));
+  // The filter text holds from start to end as a chip: it leaves the text, and the caret stays where it began.
+  function chipOf(text: string, start: number, end: number): boolean {
+    const f = filterOf(text.slice(start, end));
     if (!f || !fieldOf(fields, "", f.key)) return false;
     setChips((now) => [...now, f]);
     retype(text.slice(0, start) + text.slice(end).trimStart(), start);
     return true;
   }
+  // Space or Enter at the end of a filter turns it into a chip.
+  function chipAt(): boolean {
+    const box = input.current, end = box?.selectionStart ?? -1, text = box?.value ?? ""; // the box's own, ahead of a draw
+    if (!box || end !== box.selectionEnd || /^\S/.test(text.slice(end))) return false;
+    return chipOf(text, text.slice(0, end).search(/\S*$/), end);
+  }
+  // An offer taken, by Tab, Enter among values, or a click: a field's name and colon, typed for its value to follow; a
+  // value, the filter made a chip.
+  function takeOffer(i: number) {
+    const box = input.current, o = menu?.offers[i];
+    if (!box || !menu || !o) return;
+    const text = box.value, end = menu.start + menu.typed.length, next = text.slice(0, menu.start) + o.take + text.slice(end);
+    if (!o.value || !chipOf(next, menu.start, menu.start + o.take.length)) retype(next, menu.start + o.take.length);
+    box.focus();
+  }
+  const light = (step: number) => menu && setLit({ at: word, i: (litAt + step + menu.offers.length) % menu.offers.length });
   // A chip back into text, at its start, to change it: Backspace right after the chips, or a click on its values.
   function unchip(i: number) {
     const text = textOf(chips[i]);
@@ -225,8 +319,8 @@ const SearchView = observer(function SearchView() {
     input.current?.focus();
   }
 
-  const state = useRef({ rows, focused, query, chips, tab, chipAt, unchip, composing: false });
-  Object.assign(state.current, { rows, focused, query, chips, tab, chipAt, unchip });
+  const state = useRef({ rows, focused, query, chips, tab, chipAt, unchip, menu, litAt, takeOffer, light, shutMenu: () => {}, composing: false });
+  Object.assign(state.current, { rows, focused, query, chips, tab, chipAt, unchip, menu, litAt, takeOffer, light, shutMenu: () => setShut(word) });
 
   const walk = (step: number) => setTab((now) => KINDS[(KINDS.findIndex((k) => k.kind === now) + 1 + step + KINDS.length + 1) % (KINDS.length + 1) - 1]?.kind ?? "");
 
@@ -243,13 +337,17 @@ const SearchView = observer(function SearchView() {
         const i = s.rows.indexOf(s.focused!) + step;
         if (s.rows[i]) setAt(s.rows[i].key);
       };
+      const down = k === "ArrowDown" || (e.ctrlKey && k === "n"), up = k === "ArrowUp" || (e.ctrlKey && k === "p");
       let handled = true;
-      if (k === "Escape") closeSearch();
+      if (k === "Escape") { if (s.menu) s.shutMenu(); else closeSearch(); } // the menu first, then the box
       else if (k === " " && inBox && s.chipAt()) { /* a chip */ }
       else if (k === "Backspace" && inBox && s.chips.length && box.selectionStart === 0 && box.selectionEnd === 0) s.unchip(s.chips.length - 1);
-      else if (k === "ArrowDown" || (e.ctrlKey && k === "n")) move(1);
-      else if (k === "ArrowUp" || (e.ctrlKey && k === "p")) move(-1);
-      else if (k === "Enter") { if (!(inBox && s.chipAt()) && s.focused) openHit(s.focused); }
+      else if (s.menu && (down || up)) s.light(down ? 1 : -1);
+      else if (down) move(1);
+      else if (up) move(-1);
+      // Enter takes a value; letters that start a field may be words searched for, so there it opens the hit.
+      else if (k === "Enter") { if (s.menu?.offers[s.litAt].value) s.takeOffer(s.litAt); else if (!(inBox && s.chipAt()) && s.focused) openHit(s.focused); }
+      else if (k === "Tab" && !e.shiftKey && s.menu) s.takeOffer(s.litAt);
       else if (k === "Tab") {
         // "chat" then Tab goes to Chats, and what was typed goes: it named the kind, not a thing to find.
         const named = !e.shiftKey && KINDS.find((n) => [n.one, n.kind].includes(s.query.trim().toLowerCase()));
@@ -262,9 +360,9 @@ const SearchView = observer(function SearchView() {
         e.stopImmediatePropagation();
       }
     }
-    // A click outside closes it.
+    // A click outside closes it; the menu, drawn over the page, is inside.
     const onDown = (e: MouseEvent) => {
-      if (!el.current?.contains(e.target as Element)) closeSearch();
+      if (!el.current?.contains(e.target as Element) && !menuEl.current?.contains(e.target as Element)) closeSearch();
     };
     addEventListener("keydown", onKey, true);
     document.addEventListener("mousedown", onDown, true);
@@ -283,6 +381,24 @@ const SearchView = observer(function SearchView() {
   useLayoutEffect(() => {
     el.current?.querySelector("ul")?.scrollTo({ top: 0 });
   }, [tab]);
+  // The menu under the word typed, its rows lined up with it, and kept in the window; the completion after the caret,
+  // while the text fits the bar.
+  useLayoutEffect(() => {
+    const box = input.current, list = menuEl.current, after = ghost.current;
+    if (!box) return;
+    const r = box.getBoundingClientRect();
+    if (list && menu) {
+      const x = r.left + widthOf(query.slice(0, menu.start), box) - box.scrollLeft - 14;
+      list.style.left = `${Math.max(8, Math.min(x, innerWidth - list.offsetWidth - 8))}px`;
+      list.style.top = `${r.bottom + 8}px`;
+      list.querySelector(".at-row.on")?.scrollIntoView({ block: "nearest" });
+    }
+    if (after) {
+      after.style.left = `${box.offsetLeft + widthOf(query, box)}px`;
+      after.style.top = `${box.offsetTop}px`;
+      after.style.visibility = box.scrollWidth > box.clientWidth ? "hidden" : "";
+    }
+  });
 
   const count = (kind: Kind) => groups?.find((g) => g.kind === kind)?.count;
   const list: ReactNode[] = [];
@@ -334,9 +450,10 @@ const SearchView = observer(function SearchView() {
         <div className="s-bar" onMouseDown={(e) => { if (e.target === e.currentTarget) input.current?.focus(); }}>
           {chips.map(chip)}
           <input ref={input} className="menu-filter" type="text" placeholder={chips.length ? "" : "Search chats, issues, projects…"} autoComplete="off" spellCheck={false}
-            value={query} onChange={(e) => setQuery(e.target.value)}
+            value={query} onChange={(e) => { setQuery(e.target.value); setShut(""); track(); }} onSelect={track}
             onCompositionStart={() => { state.current.composing = true; }}
             onCompositionEnd={() => { state.current.composing = false; }} />
+          {rest && <span ref={ghost} className="s-ghost" aria-hidden="true">{rest}</span>}
         </div>
       </div>
       <nav className="s-tabs" aria-label="Kind">
@@ -353,8 +470,22 @@ const SearchView = observer(function SearchView() {
       <ul>{list}</ul>
       <div className="menu-foot">
         <button type="button" onClick={() => { if (focused) openHit(focused); }}><kbd>↵</kbd>Open</button>
-        <span className="keyhint"><kbd>Tab</kbd>Next kind</span>
+        <span className="keyhint"><kbd>Tab</kbd>Complete, or next kind</span>
       </div>
+      {menu && createPortal(
+        <div ref={menuEl} className="at-menu s-menu" role="listbox" aria-label={menu.heading} onMouseDown={(e) => e.preventDefault()}>
+          <div className="at-heading">{menu.heading}</div>
+          {menu.offers.map((o, i) => (
+            <div key={o.take} role="option" aria-selected={i === litAt} className={`at-row${o.value ? "" : " field"}${i === litAt ? " on" : ""}`}
+              onMouseMove={() => { if (i !== litAt) setLit({ at: word, i }); }} onMouseDown={(e) => { if (e.button === 0) takeOffer(i); }}>
+              {o.value && <span className="ic">{o.icon}</span>}
+              <span className="n">{o.name}</span>
+              {o.label && <span className="label">{o.label}</span>}
+            </div>
+          ))}
+        </div>,
+        document.body,
+      )}
     </div>
   );
 });

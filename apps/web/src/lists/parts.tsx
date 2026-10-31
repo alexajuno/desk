@@ -6,7 +6,7 @@ import { observer } from "mobx-react-lite";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { fold, type Priority, type Protocol, type State, type TreeRow } from "../lib/desk";
 import { Tree } from "../issues/Tree";
-import { GLYPH, PLUS, PrioIcon, ProtoIcon, StateIcon, TRIANGLE } from "../ui/icons";
+import { GLYPH, HealthIcon, PLUS, PrioIcon, ProjectStatusIcon, ProtoIcon, StateIcon, TRIANGLE } from "../ui/icons";
 import { closeMenu, menus, openMenu, toggled, type MenuOptions } from "../ui/menu";
 import { showTip, tipShownFor } from "../ui/tooltip";
 import { ui, type CreatorPreset } from "../store/ui";
@@ -41,14 +41,21 @@ function ListGlyph({ name }: { name: string }) {
   );
 }
 
-// An icon by the key the server's views.ts gives it: state-running, priority-high, protocol-quick, glyph-folder.
-// In a menu a property's glyph is desk.js's (menu = true); in the list it is list.html's.
+// A chat's state as the dock's dot draws it (sessions/Dock.tsx, Dot): working, waiting for you, idle; closed in grey.
+const CHAT_DOT: Record<string, string> = { working: "working", waiting: "asks", open: "idle", closed: "" };
+
+// An icon by the key the server's views.ts and fields.ts give it: state-running, priority-high, protocol-quick,
+// project-started, health-at_risk, chat-working, glyph-folder. In a menu a property's glyph is desk.js's (menu = true);
+// in the list it is list.html's.
 export function iconOf(key: string | null | undefined, menu = false): ReactNode {
   if (!key) return null;
   const [kind, ...rest] = key.split("-"), v = rest.join("-");
   if (kind === "state") return <StateIcon state={v as State} />;
   if (kind === "priority") return <PrioIcon level={v as Priority} />;
   if (kind === "protocol") return <ProtoIcon name={v as Protocol} />;
+  if (kind === "project") return <ProjectStatusIcon status={v} />;
+  if (kind === "health") return <HealthIcon health={v} />;
+  if (kind === "chat") return <span className={`live-dot ${CHAT_DOT[v] ?? ""}`} />;
   return menu ? GLYPH[v as keyof typeof GLYPH] ?? null : <ListGlyph name={v} />;
 }
 
