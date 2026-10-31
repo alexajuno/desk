@@ -9,15 +9,25 @@
 //   issue page, no chat ── Plan · Start · O ──▶ chat ◀── Tab · 1-3 · Esc ──▶ Issue · Changes
 //
 // The chat you left is remembered in this browser; its view is not, and each chat comes on Chat.
+//
+// Beside it, the chat in the middle may open its right half, which holds what Claude drives ("i want terminal on the
+// right half side similar to claude code. i'm imagining later on claude will drive both my chrome instance and terminal
+// in the sidebar", the user, 31 Oct): its terminal now, its browser later, each a view of the half (sessions/Half.tsx).
+// Which chats have it open, and how wide it is, are remembered in this browser.
 import { action, computed, makeObservable, observable } from "mobx";
 
 export type Layout = "page" | "chat";
 // What the chat in the middle shows under its head: the chat, or its issue's page or changes.
 export type View = "chat" | "issue" | "changes";
+// What the right half beside it shows: the chat's terminal, and later its browser.
+export type Half = "terminal";
+
+// The right half's share of the chat's width at first, and the least and most it takes when dragged.
+export const HALF = { start: 0.5, min: 0.25, max: 0.75 };
 
 const saved = (() => {
   try {
-    return JSON.parse(localStorage.dock ?? "{}") as { session?: string; pill?: boolean };
+    return JSON.parse(localStorage.dock ?? "{}") as { session?: string; pill?: boolean; halves?: Record<string, Half>; halfWidth?: number };
   } catch {
     return {};
   }
@@ -28,16 +38,18 @@ class Dock {
   center = false; // a chat holds the middle now
   view: View = "chat"; // what the chat in the middle shows; each chat comes on Chat
   pill = saved.pill ?? false; // the chat you left, at the bottom right
+  halves: Record<string, Half> = saved.halves ?? {}; // the chats whose right half is open, and on which view
+  halfWidth = saved.halfWidth ?? HALF.start; // the right half's share of the chat's width
 
   constructor() {
     makeObservable(this, {
-      session: observable, center: observable, view: observable, pill: observable,
-      layout: computed, arrange: action, setView: action, dismiss: action,
+      session: observable, center: observable, view: observable, pill: observable, halves: observable, halfWidth: observable,
+      layout: computed, arrange: action, setView: action, dismiss: action, setHalf: action, setHalfWidth: action,
     });
   }
 
   private save() {
-    localStorage.dock = JSON.stringify({ session: this.session, pill: this.pill });
+    localStorage.dock = JSON.stringify({ session: this.session, pill: this.pill, halves: this.halves, halfWidth: this.halfWidth });
   }
 
   get layout(): Layout {
@@ -63,6 +75,18 @@ class Dock {
   // The chat in the middle on a view.
   setView(view: View) {
     this.view = view;
+  }
+
+  // The chat's right half open on a view, or hidden. The 20 chats opened last keep theirs.
+  setHalf(session: string, half: Half | null) {
+    const { [session]: _, ...rest } = this.halves;
+    this.halves = Object.fromEntries([...Object.entries(rest), ...(half ? [[session, half]] : [])].slice(-20));
+    this.save();
+  }
+
+  setHalfWidth(share: number) {
+    this.halfWidth = Math.min(HALF.max, Math.max(HALF.min, share));
+    this.save();
   }
 
   // × on the pill: the chat you left stops waiting there.

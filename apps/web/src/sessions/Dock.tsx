@@ -2,7 +2,8 @@
 // steps fold under one line, questions come as buttons, and the composer queues a message while Claude works (Enter)
 // or stops it (Ctrl C). A chat opens to read, with desk's keys, unless nothing is said in it yet; I or Enter goes into
 // the composer and Esc leaves it, as vim's modes. An issue's chat shows its steps above the composer (StepsCard.tsx),
-// and its page or its Changes in its place, on a tab in its head (store/dock.ts says where each stands).
+// and its page or its Changes in its place, on a tab in its head (store/dock.ts says where each stands). Its right
+// half, beside it, holds what Claude drives: its terminal (Half.tsx).
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -25,6 +26,7 @@ import { isDrawn, type PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { anyCommit, Changes, Counts, useChanges } from "./Changes";
+import { Half } from "./Half";
 import { StepsCard } from "./StepsCard";
 import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
 import { EFFORTS, effortName, loadModels, runsMenu, warm, type Runs as RunsShown } from "./models";
@@ -203,30 +205,34 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   }, [take]);
 
   // The composer lies over the conversation's end, as claude.ai's does: the foot sticks to the bottom of the view, and
-  // the conversation runs on behind it (dock.css).
+  // the conversation runs on behind it (dock.css). The chat in the middle may have its right half open beside it.
+  const half = docked && m?.chat ? dock.halves[id] : undefined;
   return (
-    <div className="session-view">
-      <ChatHead s={s} views={views} view={shown} setView={setView} />
-      <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>
-        {here && shown === "issue" && <div className="dock-view dock-page"><IssueView data={here} /></div>}
-        {here && shown === "changes" && <ChangesOf slug={here.issue.slug} />}
-        <div className="convo" hidden={shown !== "chat"}>
-          {!s.loaded ? <p className="convo-empty">Connecting…</p>
-            : quiet(s) ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
-              : m?.chat && m.issue ? "This issue's chat. Write to carry the issue on: it starts from the issue's document."
-              : m?.bare || (m?.chat && s.startAs === "chat") ? `Just Claude, as claude runs in a terminal ${startsIn(s) === "~" ? "from your home folder" : `in ${startsIn(s)}`}: no issue and no desk instructions.`
-              : m?.chat ? "Ask desk's agent anything: it files the work and does it here. Start with @ and a name to talk to one of your agents."
-              : "Nothing said yet."}</p>
-            : null}
-          {m?.issue ? <IssueConversation s={s} slug={m.issue.slug} /> : <Conversation s={s} page={null} slug={null} />}
-        </div>
-        <div className="dock-foot">
-          {here && shown === "chat" && <ChatSteps s={s} here={here} />}
-          <Running s={s} />
-          {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
-          <Composer s={s} />
+    <div className="session-split">
+      <div className="session-view">
+        <ChatHead s={s} views={views} view={shown} setView={setView} />
+        <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>
+          {here && shown === "issue" && <div className="dock-view dock-page"><IssueView data={here} /></div>}
+          {here && shown === "changes" && <ChangesOf slug={here.issue.slug} />}
+          <div className="convo" hidden={shown !== "chat"}>
+            {!s.loaded ? <p className="convo-empty">Connecting…</p>
+              : quiet(s) ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
+                : m?.chat && m.issue ? "This issue's chat. Write to carry the issue on: it starts from the issue's document."
+                : m?.bare || (m?.chat && s.startAs === "chat") ? `Just Claude, as claude runs in a terminal ${startsIn(s) === "~" ? "from your home folder" : `in ${startsIn(s)}`}: no issue and no desk instructions.`
+                : m?.chat ? "Ask desk's agent anything: it files the work and does it here. Start with @ and a name to talk to one of your agents."
+                : "Nothing said yet."}</p>
+              : null}
+            {m?.issue ? <IssueConversation s={s} slug={m.issue.slug} /> : <Conversation s={s} page={null} slug={null} />}
+          </div>
+          <div className="dock-foot">
+            {here && shown === "chat" && <ChatSteps s={s} here={here} />}
+            <Running s={s} />
+            {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
+            <Composer s={s} />
+          </div>
         </div>
       </div>
+      {half && <Half session={id} view={half} />}
     </div>
   );
 });
@@ -1209,6 +1215,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           {GLYPH.plus}
           <input ref={picker} type="file" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
+        {s.meta?.chat && dock.center && dock.session === s.id && <TerminalButton id={s.id} />}
         {fresh(s) && <StartAs s={s} />}
         {fresh(s) && <StartIn s={s} />}
         {stash && (
@@ -1229,6 +1236,15 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
         </button>
       </div>
     </div>
+  );
+});
+
+// The terminal beside the reply box: the chat's right half, on its terminal, open or hidden (Half.tsx), lit while open.
+const TerminalButton = observer(function TerminalButton({ id }: { id: string }) {
+  const open = dock.halves[id] === "terminal";
+  return (
+    <button className={`dock-btn terminal-btn${open ? " on" : ""}`} type="button" title={`${open ? "Hide the terminal" : "Terminal"}  Ctrl \``}
+      aria-pressed={open} onClick={() => dock.setHalf(id, open ? null : "terminal")}>{GLYPH.terminal}</button>
   );
 });
 

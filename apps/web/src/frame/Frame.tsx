@@ -25,6 +25,7 @@ import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openNearest, openPicture, stepViewer, viewerOpen } from "../ui/viewer";
 import { commentKey, dropPick } from "../sessions/Changes";
 import { arrange, Dock, focusComposer, newSession, openSession, viewKey } from "../sessions/Dock";
+import { toggleTerminal } from "../sessions/Half";
 import { Catcher } from "../search/catcher";
 import { openSearch, search, SearchHost } from "../search/SearchBox";
 import { deleteReadKey, deleteRow, markAllKey, toggleRead } from "../inbox/actions";
@@ -120,6 +121,8 @@ function onKeyDown(e: KeyboardEvent) {
   // Ctrl+/ works from a text box too, and Esc closes the shortcuts from their own search box.
   if ((e.ctrlKey || e.metaKey) && e.key === "/") { ui.setKeys(!ui.keysOpen); e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyO") { newSession(); e.preventDefault(); return; }
+  // Ctrl `, as VS Code's: the chat's terminal, beside it, from its reply box and from the terminal itself too.
+  if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.code === "Backquote" && toggleTerminal()) { e.preventDefault(); return; }
   // Ctrl End and Ctrl Home, as in Claude Code: the chat to its end or its start, from its composer too. At the end it
   // follows the reply again, as the chat does while you stay at its bottom (Dock).
   const view = e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && (e.key === "End" || e.key === "Home") && chatView();
