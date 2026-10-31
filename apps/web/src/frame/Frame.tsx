@@ -23,7 +23,7 @@ import { datePicker } from "../ui/datepicker";
 import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openNearest, openPicture, stepViewer, viewerOpen } from "../ui/viewer";
 import { commentKey, dropPick } from "../sessions/Changes";
-import { arrange, Dock, focusComposer, newSession, openSession, togglePlan, viewKey } from "../sessions/Dock";
+import { arrange, Dock, focusComposer, newSession, openSession, viewKey } from "../sessions/Dock";
 import { Catcher } from "../search/catcher";
 import { openSearch, search, SearchHost } from "../search/SearchBox";
 import { deleteReadKey, deleteRow, markAllKey, toggleRead } from "../inbox/actions";
@@ -46,7 +46,7 @@ function openIssueSession(slug: string) {
   else say("This issue has no session yet.");
 }
 
-// The chat the page at this address is: an issue's, its issue's Plan a ] away, or a session's own page.
+// The chat the page at this address is: an issue's, its issue on its Issue tab, or a session's own page.
 function chatOf(pathname: string): { session: string | null; slug: string | null } {
   const issue = /^\/issue\/([^/]+)$/.exec(pathname);
   if (issue) {
@@ -182,8 +182,8 @@ function onKeyDown(e: KeyboardEvent) {
   if (key === "o" && !e.shiftKey) { oPressed = Date.now(); return; }
   // P, R and Delete on the sidebar's chat under the mouse pin, rename and delete it, before any row in focus.
   if (chatKey(e)) { e.preventDefault(); return; }
-  // Tab, Esc and J and K on an issue's chat in the middle: its views, and its Plan's steps.
-  if (viewKey(e, key)) { e.preventDefault(); return; }
+  // Tab, 1 to 3 and Esc on an issue's chat in the middle: its views.
+  if (viewKey(e)) { e.preventDefault(); return; }
 
   const focused = focusedRow();
   // Linear's Shift ↑ ↓: the selection grows from the row in focus, a row at a time.
@@ -296,7 +296,6 @@ function onKeyDown(e: KeyboardEvent) {
     e.preventDefault();
   }
   else if (e.key === "[") toggleSide();
-  else if (e.key === "]") togglePlan();
   else if (e.key === "Escape") {
     if (document.querySelector(".inbox") && page()) go("/inbox");
     else if (page() || location.pathname.startsWith("/sessions/")) goBack(); // a chat with no issue too, read and left

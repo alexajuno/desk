@@ -420,11 +420,6 @@ a.not-main:hover { background: var(--btn-side-hover); box-shadow: 0 0 0 0.5px va
 button.plan-step { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; transition: background-color .1s; }
 button.plan-step:hover, button.plan-step.open { background: var(--bg-hover); }
 .plan-step-drawn { display: inline-flex; flex: none; color: var(--text-3); }
-/* a step that sent its commit: how much it changed, at the row's end, which opens it in the chat's Changes */
-.plan-step-line { display: flex; align-items: center; gap: 2px; }
-.plan-step-line > .plan-step { flex: 1; min-width: 0; }
-.plan-step-counts { flex: none; height: 24px; padding: 0 6px; border: 0; border-radius: 6px; background: none; cursor: pointer; }
-.plan-step-counts:hover { background: var(--bg-hover); }
 .plan-step-drawn .glyph { width: 14px; height: 14px; }
 .plan-step-open { margin: 4px 0 8px 31px; border: 1px solid var(--border-3); border-radius: 8px; background: var(--bg-raised); overflow: hidden; }
 .plan-step-open .d2 { margin: 0; }

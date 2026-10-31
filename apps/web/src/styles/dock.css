@@ -1,5 +1,5 @@
 /* A session's chat (sessions/Dock.tsx), in the middle of the screen, drawn the way claude.ai draws a chat, with its
-   issue's Plan, page and Changes on tabs in its head, in its place. Opening it, the issue page gives way as the chat
+   issue's steps above the composer, and its page and Changes on tabs in its head, in its place. Opening it, the issue page gives way as the chat
    rises in the middle. Colours are desk's variables. */
 
 :root { --dock-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -18,29 +18,6 @@
 /* With a chat in the middle, its issue's page stays under it, hidden: the chat shows the issue on its Issue tab. */
 .chat-center .panel { display: none; }
 .chat-center .corner { display: none; }
-/* Its Plan: the steps down the left, the picked one's diagram and decisions beside them (sessions/PlanView.tsx), each
-   scrolling on its own under the head, as the Inbox's list and its open row do ("the scrolling part should only be the
-   steps side", the user, 28 Oct), with the sidebar's thin scrollbar, the step's at the chat's edge. A narrow chat,
-   one column, scrolls whole. */
-.chat-side.plan-view { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 28px; padding: 20px 24px 32px; }
-.plan-view-list { min-width: 0; }
-.plan-view-step { min-width: 0; }
-@container (min-width: 881px) {
-  .chat-side.plan-view { box-sizing: border-box; height: 100%; padding: 0 0 0 24px; }
-  .plan-view-list, .plan-view-step { overflow: auto; scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
-  .plan-view-list { padding: 20px 0 32px; }
-  .plan-view-step { padding: 20px 24px 32px 0; }
-}
-.plan-view-title { display: flex; align-items: center; gap: 9px; height: 28px; margin: 0 0 12px; font: 500 15px var(--font); color: var(--text-1); }
-.plan-view-title .side-what { margin-left: 0; }
-.plan-view-step .plan-step-said { margin-top: 12px; }
-.plan-view-list .plan-step.on { background: var(--bg-active); }
-/* A narrow chat puts the picked step under the list. */
-@container (max-width: 880px) { .chat-side.plan-view { grid-template-columns: minmax(0, 1fr); } }
-/* In its list a step's name comes first and its note takes what room is left; its decisions read at the text's size. */
-.plan-view-list .plan-step-title { flex: 0 1 auto; }
-.plan-view-list .plan-step-note { flex: 1 1 0; min-width: 0; max-width: none; text-align: right; }
-.plan-view-step .body.plan-step-said { padding: 0; border-top: 0; font-size: 14px; line-height: 22px; color: var(--text-2); }
 @media (max-width: 900px) { .dock { left: 8px; } }
 
 /* The move between layouts (Dock.tsx, move), one view transition: the issue's panel and the chat each carry a name, and
@@ -87,7 +64,7 @@
 @keyframes dock-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
 @keyframes dock-blink { 50% { opacity: 0; } }
 
-/* its head: an issue's status and title, or a chat's title and folder, then Chat and Changes and the step (Dock.tsx, ChatHead) */
+/* its head: an issue's status and title, or a chat's title and folder, then Chat, Issue and Changes (Dock.tsx, ChatHead) */
 .dock-head { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px 0 14px;
              border-bottom: 1px solid var(--border-1); }
 .dock-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; font: 500 13px var(--font); }
@@ -103,13 +80,6 @@
 .field-chip.head-status { flex: none; margin-left: -5px; padding: 0 5px; border-color: transparent; background: transparent; }
 .field-chip.head-status:hover { background: var(--btn-ghost-hover); }
 .head-status .icon { display: inline-flex; }
-/* The step the work stands at (Dock.tsx, HeadStep), a quiet chip as the head's others: its place, then its name, with
-   the room its part's name and the head's chips left (28 Oct). */
-.field-chip.head-step { flex: 0 1 auto; min-width: 0; max-width: 440px; margin-left: 4px; border-color: transparent; background: transparent; color: var(--text-1); }
-.field-chip.head-step:hover { background: var(--btn-ghost-hover); }
-.head-step .icon { display: inline-flex; flex: none; }
-.field-chip .head-step-at { flex: none; color: var(--text-3); }
-.head-step-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dock-head .side-toggle { display: none; flex: none; margin-left: -6px; }
 .side-collapsed .dock-head .side-toggle { display: grid; }
 @media (max-width: 900px) { .dock-head .side-toggle { display: grid; } }
@@ -151,14 +121,10 @@
 .diff-added { color: var(--diff-add-text); }
 .diff-deleted { color: var(--diff-del-text); }
 
-/* Plan and Issue, under the head in the conversation's place (Dock.tsx, SessionView). Each is a container, as the
-   panel is, so the issue lays itself out by its width and the plan puts its steps beside the picked one when there is
-   room. Plan fills what the foot leaves, its steps and the picked step each scrolling on their own; a plan with no
-   steps is one column, as wide as the conversation. The issue's page scrolls as the conversation does, its Properties
-   staying put; its Open chat is this chat. */
+/* Issue, under the head in the conversation's place (Dock.tsx, SessionView): a container, as the panel is, so the
+   issue lays itself out by its width. It scrolls as the conversation does, its Properties staying put; its Open chat
+   is this chat. */
 .dock-view { box-sizing: border-box; width: 100%; container-type: inline-size; }
-.dock-plan { flex: 1 1 0; min-height: 0; overflow-y: auto; }
-.dock-plan > .chat-side:not(.plan-view) { max-width: 808px; margin: 0 auto; padding: 32px 24px var(--foot-fade); }
 .dock-page { flex: 1 0 auto; padding-bottom: var(--foot-fade); }
 .dock .open-chat { display: none; }
 
@@ -259,21 +225,7 @@ table.diff .diff-hunk td { padding: 4px 12px 4px 48px; font: 400 11px var(--mono
 .sent .reply.body { font-size: 14px; line-height: 22px; }
 .sent-details { margin: 10px 0 0; }
 
-/* An issue's Plan (PlanView.tsx): the plan as it stands, then the chat's artifacts as quiet 32px rows, as Linear's
-   sidebar rows are, each bringing its message into view with a moment's ring (.brought). */
-.chat-side { padding: 16px 16px 32px; }
-.side-part + .side-part { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-2); }
-.side-head { display: flex; align-items: center; justify-content: space-between; height: 28px; margin-bottom: 6px; font: 500 12px var(--font); color: var(--text-3); }
-.side-count { font-weight: 450; color: var(--text-4); font-variant-numeric: tabular-nums; }
-.side-plan.body { font-size: 13px; line-height: 20px; }
-.side-plan .d2 { margin-bottom: 8px; }
-.side-none { margin: 0; font-size: 13px; color: var(--text-4); }
-.side-row { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 8px; border-radius: 6px; background: transparent;
-            font: 450 13px var(--font); color: var(--text-2); text-align: left; }
-.side-row:hover { background: var(--bg-hover); color: var(--text-1); }
-.side-row .glyph { flex: none; width: 14px; height: 14px; color: var(--text-3); }
-.side-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side-what { flex: none; margin-left: auto; font-size: 12px; color: var(--text-4); }
+/* A message the steps above the composer bring into view, with a moment's ring (StepsCard.tsx, bring). */
 .brought { animation: brought 1.2s ease; border-radius: 8px; }
 .sent.brought { border-radius: 10px; }
 /* A message brought into view stops under the chat's head, not against it. */

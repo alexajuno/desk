@@ -26,13 +26,6 @@ export const useChanges = (slug: string) => usePage<{ steps: StepDiff[] }>(`/api
 export const anyCommit = (steps: (PlanStep & { commit?: string })[] | null | undefined): boolean =>
   Boolean(steps?.some((s) => s.commit || anyCommit(s.kids)));
 
-// A step to show in its chat's Changes, asked for by a click on its counts in its Plan (Steps.tsx): the chat turns to
-// Changes, and that step's card opens and comes into view.
-export const wanted = observable.box<{ slug: string; place: string } | null>(null, { deep: false });
-export function showChanges(slug: string, place: string) {
-  runInAction(() => wanted.set({ slug, place }));
-}
-
 // Lines picked in a step's diff to comment on, as GitHub's + picks them: a click on a line's number picks the line, and
 // a drag along the numbers or a shift-click picks a range, inside the hunk it started in ("line selection effect similar
 // to github's", the user, 28 Oct). from is where the pick started and to where it ends, either way round; drag holds
@@ -111,16 +104,8 @@ export const Changes = observer(function Changes({ steps }: { steps: StepDiff[] 
 // one to look at before saying "next".
 const StepCard = observer(function StepCard({ s, open: first }: { s: StepDiff; open: boolean }) {
   const [open, setOpen] = useState(first);
-  const card = useRef<HTMLElement>(null);
-  const asked = wanted.get()?.place === s.place;
-  useEffect(() => {
-    if (!asked) return;
-    setOpen(true);
-    card.current?.scrollIntoView({ block: "start" });
-    runInAction(() => wanted.set(null));
-  }, [asked]);
   return (
-    <section ref={card} className={`change-step${open ? " open" : ""}`} data-place={s.place}>
+    <section className={`change-step${open ? " open" : ""}`} data-place={s.place}>
       <button type="button" className="change-step-head" aria-expanded={open} onClick={() => setOpen(!open)}
         title={`${open ? "Fold" : "Open"} step ${s.place}, ${s.commit.slice(0, 7)}`}>
         <span className="change-fold">{TRIANGLE}</span>

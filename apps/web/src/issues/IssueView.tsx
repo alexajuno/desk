@@ -1,6 +1,6 @@
 // An issue, as its page shows it (templates/issue_view.html); the Inbox's right pane shows the same. Its actions sit in
 // a row over its Properties (Actions), and its status shows once, in Properties, where a click changes it. Open chat
-// opens the issue as its chat, in the middle, its issue a ] away, and hides once the chat is open. Ctrl+Enter
+// opens the issue as its chat, in the middle, its issue on its Issue tab, and hides once the chat is open. Ctrl+Enter
 // presses the step and I opens the chat, as the buttons' tooltips say.
 import { observer } from "mobx-react-lite";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";

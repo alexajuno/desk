@@ -12,13 +12,9 @@
   /* a chat's head keeps room for its title: a chat with no issue leaves its folder out, and Changes its counts
      (Dock.tsx, ChatHead and ViewTabs) */
   .dock-head .dock-folder, .dock-tabs .diff-counts { display: none; }
-  /* and the step the work stands at as its circle and its place alone, "3 of 4" (Dock.tsx, HeadStep) */
-  .head-step-title { display: none; }
-  .field-chip.head-step { margin-left: 0; padding: 0 6px 0 5px; }
-  /* An issue's chat in the middle keeps its four tabs, a little narrower, and its step, which ends the head; its title
-     gives way, since its Issue tab shows it (28 Oct: at 412px the title had a letter left, and none on Issue). */
+  /* An issue's chat in the middle keeps its tabs, a little narrower; its title gives way, since its Issue tab shows it
+     (28 Oct: at 412px the title had a letter left, and none on Issue). */
   .dock .dock-head:has(.dock-tabs) .dock-title { display: none; }
-  .dock .dock-head:has(.dock-tabs) .head-step { margin-left: auto; }
   .dock .dock-tabs { gap: 2px; }
   .dock .dock-tabs button { padding: 0 8px; }
   .panel, .side-collapsed .panel, .dock, .side-collapsed .dock {
