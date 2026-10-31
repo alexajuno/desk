@@ -24,6 +24,7 @@ import * as sessions from "./sessions.ts";
 import * as sync from "./sync.ts";
 import { tailnetName } from "./tailnet.ts";
 import * as teams from "./teams.ts";
+import * as terminal from "./terminal.ts";
 import * as transcript from "./transcript.ts";
 import * as updates from "./updates.ts";
 import * as turns from "./turns.ts";
@@ -816,6 +817,32 @@ export async function create(): Promise<FastifyInstance> {
   // What one of the session's subagents did, by the Agent call that started it: its steps, for that step's fold.
   app.get("/api/live/:id/agent/:tool", async (req: Req) => transcript.subagentItems(sessionOf(req), String(req.params.tool ?? "")));
   app.get("/api/live/:id/context", async (req: Req) => models.context(sessionOf(req)));
+  // The chat's terminal (terminal.ts): the page starts it, and draws it over the WebSocket, ?cols=&rows= its size.
+  app.post("/api/live/:id/terminal", async (req: Req) => {
+    mustBePage(req);
+    try {
+      const { name, cwd } = await terminal.of(sessionOf(req));
+      return await terminal.start(name, cwd);
+    } catch (error) {
+      if (error instanceof terminal.NoTerminal) throw new HttpError(404, error.message);
+      throw error;
+    }
+  });
+  app.get("/api/live/:id/terminal/screen", {
+    websocket: true,
+    preValidation: async (req, reply) => {
+      if (!fromDesk(req) || !live.SESSION_ID.test((req.params as { id: string }).id)) await reply.code(403).send();
+    },
+  }, (socket, req) => {
+    const q = req.query as Record<string, string | undefined>;
+    let name: string;
+    try {
+      name = terminal.nameOf((req.params as { id: string }).id);
+    } catch (error) {
+      return socket.close(4404, (error as Error).message);
+    }
+    void terminal.attach(socket, name, Number(q.cols), Number(q.rows));
+  });
 
   // --- the app's live sync; a WebSocket is not bound by CORS, so another site could otherwise read every issue
   app.get("/api/sync", {
