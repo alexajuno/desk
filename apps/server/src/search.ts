@@ -56,12 +56,14 @@ export function markRanges(text: string, ranges: [number, number][] = []): strin
 // Python's str slicing counts code points; JavaScript's counts UTF-16 units. Titles and descriptions may hold emoji.
 const cp = (text: string) => [...text];
 
+// The description from three words before the first word found, as a chat's line starts (sessiontext.ts): the search
+// box's row shows only its first 40 or so characters.
 function snippet(text: string, first: RegExp, patterns: RegExp[]): string {
   first.lastIndex = 0;
   const found = first.exec(text)!;
   const chars = cp(text), hit = cp(text.slice(0, found.index)).length;
-  let start = 0;
-  if (hit > 40) start = chars.slice(0, hit - 40).lastIndexOf(" ") + 1;
+  const words = text.slice(0, found.index).split(" ");
+  const start = words.length > 4 ? cp(words.slice(0, -4).join(" ")).length + 1 : 0;
   return (start ? "…" : "") + markWords(chars.slice(start, hit + 160).join(""), patterns);
 }
 
