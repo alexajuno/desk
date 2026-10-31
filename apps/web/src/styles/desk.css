@@ -313,6 +313,9 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
 .nav-item .from { margin-left: auto; font-size: 12px; }
 /* a session in Chats: the Inbox row's dot while it is unread */
 .nav-item .unread { flex: none; width: 8px; height: 8px; margin-left: auto; border-radius: 50%; background: var(--accent); }
+/* a session Auto carries on without you: the composer's Auto icon, smaller, in the row's grey, where the dot would be */
+.nav-item .auto-on { flex: none; display: flex; margin-left: auto; }
+.nav-item .auto-on svg { width: 14px; height: 14px; }
 /* desk running a branch for a review, a row that is no link when no issue is known to have switched it */
 .nav-item.static { cursor: default; } .nav-item.static:hover { background: none; color: var(--text-3); }
 /* Linear's Help button, measured 2026-10-15: a 24px circle 10px in from the window's bottom left corner,

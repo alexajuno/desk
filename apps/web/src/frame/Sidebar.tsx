@@ -140,20 +140,23 @@ export const Sidebar = observer(function Sidebar() {
   const d = frame.data;
   const at = (path: string) => (here === path ? " here" : "");
   const [folded, toggle] = useFolded();
-  // A session's row: its issue's state, or a ring for a chat with no issue, then on the right the Inbox's dot while its
-  // row there is unread and the chat is not working. It shows no dot of its own while it works: its issue's In progress
-  // icon says so ("not necessary", the user, 25 Oct). One with an issue opens the issue, where its chat docks, and goes
-  // by the issue's title.
+  // A session's row: its issue's state, or a ring for a chat with no issue, then on the right the composer's Auto icon
+  // while Auto carries the chat on without you, or else the Inbox's dot while its row there is unread and the chat is not
+  // working. "i mark it auto til done already so i don't have to care about that chat in progress" (the user, 1 Nov): at
+  // each stop Auto waits on, the icon goes and the dot comes. It shows no dot of its own while it works: its issue's In
+  // progress icon says so ("not necessary", the user, 25 Oct). One with an issue opens the issue, where its chat docks,
+  // and goes by the issue's title.
   const chatRow = (c: ChatRow, pinned: boolean) => {
     const unread = issues.inbox.get(c.session)?.read === null;
     return (
       <Go key={c.session} className={`nav-item${c.issue ? at(`/issue/${c.issue.slug}`) : ""}${at(`/sessions/${c.session}`)}`}
         to={c.issue ? `/issue/${c.issue.slug}` : `/sessions/${c.session}`} data-chat={c.session}
-        title={c.working ? "Working" : unread ? "Said something you have not read" : c.title}
+        title={c.auto ? "Auto: goes on without you" : c.working ? "Working" : unread ? "Said something you have not read" : c.title}
         onContextMenu={(e) => { e.preventDefault(); chatMenu(c, pinned, { x: e.clientX, y: e.clientY }); }}>
         {c.issue ? <StateIcon state={issues.bySlug.get(c.issue.slug)?.state ?? c.issue.state} /> : <Ring />}
         <span className="nav-title">{c.title}</span>
-        {!c.working && unread && <span className="unread" aria-label="Unread" />}
+        {c.auto ? <span className="auto-on" aria-label="Auto">{GLYPH.auto}</span>
+          : !c.working && unread && <span className="unread" aria-label="Unread" />}
       </Go>
     );
   };
