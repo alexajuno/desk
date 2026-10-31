@@ -70,6 +70,21 @@ function picture({ caption, html }: Picture, inRow: boolean): string {
   return `<figure class="d2-pic"${style}>${caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : ""}${html}</figure>`;
 }
 
+// A step's pictures, as api.ts keeps them: each d2 block's caption, such as Today, and its source. takePictures splits a
+// step's Markdown into its blocks and the rest, its decisions; picturesText gives the blocks back one after another,
+// which toHtml draws as a row.
+export type StepPicture = { caption?: string; d2: string };
+export function takePictures(text: string): { pictures: StepPicture[]; rest: string } {
+  const pictures: StepPicture[] = [];
+  const rest = text.replace(D2_BLOCK, (_, caption: string | undefined, source: string) => {
+    pictures.push({ ...(caption ? { caption } : {}), d2: source.trim() });
+    return "";
+  });
+  return { pictures, rest: rest.replace(/\n{3,}/g, "\n\n").trim() };
+}
+export const picturesText = (pictures: StepPicture[]) =>
+  pictures.map((p) => `\`\`\`d2${p.caption ? ` ${p.caption}` : ""}\n${p.d2}\n\`\`\``).join("\n\n");
+
 // Linear's group triangle, so a section folds the way a list group does.
 const TRIANGLE = "M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613" +
   "L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z";

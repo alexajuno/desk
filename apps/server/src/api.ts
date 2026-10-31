@@ -10,7 +10,7 @@
 //     GET    /api/issues/<slug>/sections/<name>   one section of the issue's document, as Markdown
 //     PUT    /api/issues/<slug>/sections/<name>   write it, the Markdown as the request's body; empty takes it out
 //     GET    /api/issues/<slug>/steps/<place>     one step's diagram and decisions, as Markdown; 1.2 is the first's second
-//     PUT    /api/issues/<slug>/steps/<place>     write them: its d2 block the diagram, the rest its decisions
+//     PUT    /api/issues/<slug>/steps/<place>     write them: its d2 blocks the diagram, the rest its decisions
 //     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
 //     POST   /api/issues/<slug>/work    the agent chat works it itself: the chat becomes the issue's session, taking
 //                                       over one that sits idle
@@ -59,6 +59,7 @@ import * as updates from "./updates.ts";
 import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
 import * as roster from "./roster.ts";
+import { picturesText, takePictures, type StepPicture } from "./render.ts";
 import { find } from "./search.ts";
 import * as settings from "./settings.ts";
 import * as teams from "./teams.ts";
@@ -206,7 +207,9 @@ async function applyLands(i: Issue, body: unknown) {
 // rather than text rendering level only" (the user, 27 Oct). null takes them back.
 // A build step also carries its commit, the one that ends it, from which desk draws the step's diff: "we have diff show
 // while coding, allowing user to catches the problem early" (the user, 28 Oct).
-export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[]; diagram?: string; said?: string; commit?: string;
+export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[]; pictures?: StepPicture[]; said?: string;
+  commit?: string;
+  diagram?: string; // a step drawn before 31 Oct: its one picture's source, which picturesOf reads as a picture with no caption
   base?: string; // desk's own, on the first step with a commit: where its branch left main (firstBase)
 };
 const STEP_STATES = ["todo", "running", "done"];
@@ -239,10 +242,11 @@ async function applyPlanSteps(i: Issue, body: unknown) {
   const list = (body as { plan_steps: unknown }).plan_steps;
   if (list === null) return void (i.plan_steps = null);
   const kept = new Map<string, PlanStep>();
-  const keep = (steps: PlanStep[]) => steps.forEach((s) => { if (s.diagram || s.said || s.commit) kept.set(s.title, s); keep(s.kids ?? []); });
+  const keep = (steps: PlanStep[]) => steps.forEach((s) => { if (s.pictures || s.diagram || s.said || s.commit) kept.set(s.title, s); keep(s.kids ?? []); });
   keep(i.plan_steps ? JSON.parse(i.plan_steps) : []);
   const carry = (steps: PlanStep[]) => steps.forEach((s) => {
     const was = kept.get(s.title);
+    if (was?.pictures) s.pictures = was.pictures;
     if (was?.diagram) s.diagram = was.diagram;
     if (was?.said) s.said = was.said;
     if (was?.commit && !s.commit) s.commit = was.commit;
@@ -291,8 +295,8 @@ async function fullCommits(i: Issue, steps: PlanStep[]) {
 // The steps as an issue's JSON gives them, each one a session drew marked "drawn" rather than carrying its diagram and
 // decisions, which would fill every list of issues: GET /steps/<place> reads them.
 function briefSteps(steps: PlanStep[]): unknown[] {
-  return steps.map(({ diagram, said, kids, commit, base: _, ...step }) => ({ ...step, ...(commit ? { commit: commit.slice(0, 7) } : {}),
-    ...(diagram || said ? { drawn: true } : {}), ...(kids ? { kids: briefSteps(kids) } : {}) }));
+  return steps.map(({ pictures, diagram, said, kids, commit, base: _, ...step }) => ({ ...step, ...(commit ? { commit: commit.slice(0, 7) } : {}),
+    ...(pictures || diagram || said ? { drawn: true } : {}), ...(kids ? { kids: briefSteps(kids) } : {}) }));
 }
 
 // A step by its place, as 1.2 names Design's second: its number among its siblings, from 1, down from the top.
@@ -309,13 +313,10 @@ function stepAt(i: Issue, place: string): { steps: PlanStep[]; step: PlanStep } 
   return { steps, step: step! };
 }
 
-// A step's Markdown as a session sends it: its diagram, the first d2 block, and its decisions, the rest.
-const D2_BLOCK = /^```d2\n([\s\S]*?)^```[ \t]*$/m;
-function stepParts(text: string): { diagram: string; said: string } {
-  const m = D2_BLOCK.exec(text);
-  return m ? { diagram: m[1].trim(), said: (text.slice(0, m.index) + text.slice(m.index + m[0].length)).trim() } : { diagram: "", said: text.trim() };
-}
-const stepText = (s: PlanStep) => [s.diagram ? `\`\`\`d2\n${s.diagram}\n\`\`\`` : "", s.said ?? ""].filter(Boolean).join("\n\n");
+// A step's Markdown as a session sent it: its diagram, its d2 blocks one after another, such as Today and After, each
+// with its caption, then its decisions.
+const picturesOf = (s: Pick<PlanStep, "pictures" | "diagram">): StepPicture[] => s.pictures ?? (s.diagram ? [{ d2: s.diagram }] : []);
+const stepText = (s: PlanStep) => [picturesText(picturesOf(s)), s.said ?? ""].filter(Boolean).join("\n\n");
 
 async function teamJson(t: Team, full = false) {
   const mine = teams.issuesOf(await store.loadAll(), t.slug);
@@ -525,21 +526,22 @@ export function routes(app: FastifyInstance) {
       return { ...asJson(i), section: name, written: Boolean(sent.trim()) };
     });
 
-    // Its d2 block is the step's diagram, the rest its decisions; empty takes both out. The reply names the step (step_title), which
-    // the chat draws where the session sent it, by its title, as the list's places move.
+    // Its d2 blocks are the step's diagram, its pictures, the rest its decisions; empty takes both out. The reply names
+    // the step (step_title), which the chat draws where the session sent it, by its title, as the list's places move.
     raw.put("/api/issues/:slug/steps/:place", async (req: StepReq) => {
       const i = await loadIssue(req.params.slug);
       const { steps, step } = stepAt(i, req.params.place);
       const sent = typeof req.body === "string" ? req.body : str(((req.body ?? {}) as Record<string, unknown>).text);
-      const { diagram, said } = stepParts(sent);
+      const { pictures, rest: said } = takePictures(sent);
       if (/^##\s/m.test(said)) throw new HttpError(422, "A step's decisions are lines, not sections: start a heading at ### or leave it out.");
+      delete step.pictures;
       delete step.diagram;
       delete step.said;
-      if (diagram) step.diagram = diagram;
+      if (pictures.length) step.pictures = pictures;
       if (said) step.said = said;
       i.plan_steps = JSON.stringify(steps);
       await store.save(i);
-      return { ...asJson(i), step: req.params.place, step_title: step.title, diagram: Boolean(diagram), said: Boolean(said) };
+      return { ...asJson(i), step: req.params.place, step_title: step.title, diagram: pictures.length > 0, pictures: pictures.length, said: Boolean(said) };
     });
   });
 

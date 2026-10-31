@@ -18,7 +18,7 @@ import * as periods from "./periods.ts";
 import * as pins from "./pins.ts";
 import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
-import { toHtml, toHtmlWithToc } from "./render.ts";
+import { picturesText, toHtml, toHtmlWithToc, type StepPicture } from "./render.ts";
 import * as roster from "./roster.ts";
 import { findScored, findThings, markRanges, type Found } from "./search.ts";
 import * as sessions from "./sessions.ts";
@@ -440,11 +440,12 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
 
 // A design issue's steps for its page and its chat, each one's diagram and decisions drawn, as its session sent them
 // with PUT /steps/<place>.
-type Step = { title: string; state: string; note?: string; kids?: Step[]; diagram?: string; said?: string };
+// Its pictures, such as Today and After, draw as a row; a step drawn before 31 Oct has its one diagram's source instead.
+type Step = { title: string; state: string; note?: string; kids?: Step[]; pictures?: StepPicture[]; diagram?: string; said?: string };
 function drawnSteps(steps: Step[], base: string): unknown[] {
-  return steps.map(({ diagram, said, kids, ...step }) => ({
+  return steps.map(({ pictures, diagram, said, kids, ...step }) => ({
     ...step,
-    ...(diagram ? { diagram_html: toHtml(`\`\`\`d2\n${diagram}\n\`\`\``, base) } : {}),
+    ...(pictures || diagram ? { diagram_html: toHtml(picturesText(pictures ?? [{ d2: diagram! }]), base) } : {}),
     ...(said ? { said_html: toHtml(said, base) } : {}),
     ...(kids ? { kids: drawnSteps(kids, base) } : {}),
   }));
