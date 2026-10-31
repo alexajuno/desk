@@ -5,9 +5,10 @@
 //     parent_auto_close      the last open sub-issue closed closes its parent
 //     chat_model             the model a new desk chat or issue session starts with, a Claude Code alias or model id such as opus
 //     chat_effort            the effort it starts with: low, medium, high, xhigh or max
+//     steps_card             how an issue's steps above its chat's composer start: collapsed, one line, or expanded
 //
 // Linear keeps the first two in Settings > Team > Workflow (linear.app/docs/parent-and-sub-issues#status-automation);
-// desk has no teams, so they are Settings > Workflow. The sessions' two are Settings > Preferences.
+// desk has no teams, so they are Settings > Workflow. The sessions' two and the steps card are Settings > Preferences.
 import { join } from "node:path";
 import { DATA_DIR } from "./config.ts";
 import * as copies from "./copies.ts";
@@ -16,17 +17,22 @@ import { sql } from "./db.ts";
 
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type Effort = (typeof EFFORTS)[number];
+export const STEPS_CARD = ["collapsed", "expanded"] as const;
 
 export interface Settings {
   sub_issue_auto_close: boolean;
   parent_auto_close: boolean;
   chat_model: string;
   chat_effort: Effort;
+  steps_card: (typeof STEPS_CARD)[number];
 }
 
 // Sub-issue auto-close is on from the start, as the user asked for it (17 Oct); Parent auto-close is off, Linear's default.
-// A chat starts on Opus at extra high effort, as every chat ran before the setting.
-export const DEFAULTS: Settings = { sub_issue_auto_close: true, parent_auto_close: false, chat_model: "opus", chat_effort: "xhigh" };
+// A chat starts on Opus at extra high effort, as every chat ran before the setting. The steps card starts collapsed, as
+// the user asked with the setting ("set it to collapse by default", 1 Nov).
+export const DEFAULTS: Settings = {
+  sub_issue_auto_close: true, parent_auto_close: false, chat_model: "opus", chat_effort: "xhigh", steps_card: "collapsed",
+};
 
 const FILE = join(DATA_DIR, "settings.json"); // where they were until 19 Oct, written out still (copies.ts)
 const MODEL = /^[a-z0-9][a-z0-9.\-[\]]{0,79}$/; // an alias or a model id, such as sonnet or claude-opus-5-5[1m]
@@ -35,6 +41,7 @@ const MODEL = /^[a-z0-9][a-z0-9.\-[\]]{0,79}$/; // an alias or a model id, such 
 function wrong(name: keyof Settings, value: unknown): string {
   if (typeof DEFAULTS[name] === "boolean") return typeof value === "boolean" ? "" : `${name} must be true or false.`;
   if (name === "chat_effort") return EFFORTS.includes(value as Effort) ? "" : `chat_effort must be one of ${EFFORTS.join(", ")}.`;
+  if (name === "steps_card") return STEPS_CARD.includes(value as Settings["steps_card"]) ? "" : `steps_card must be one of ${STEPS_CARD.join(", ")}.`;
   return typeof value === "string" && MODEL.test(value) ? "" : `${name} must be a model's alias or id, such as opus or sonnet.`;
 }
 
