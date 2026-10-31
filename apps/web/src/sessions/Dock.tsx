@@ -26,6 +26,7 @@ import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { anyCommit, Changes, Counts, useChanges, wanted } from "./Changes";
 import { PlanView } from "./PlanView";
+import { StepsCard } from "./StepsCard";
 import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
 import { EFFORTS, effortName, loadModels, runsMenu, warm, type Runs as RunsShown } from "./models";
 
@@ -245,6 +246,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
           {m?.issue ? <IssueConversation s={s} slug={m.issue.slug} /> : <Conversation s={s} page={null} slug={null} />}
         </div>
         <div className="dock-foot">
+          {here && shown === "chat" && <StepsCard steps={here.plan_steps ?? []} />}
           <Running s={s} />
           {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
           <Composer s={s} />
