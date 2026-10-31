@@ -33,13 +33,16 @@ import { query, type PermissionResult, type Query, type SDKMessage, type SDKUser
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import { WebSocket } from "ws";
+import * as relay from "./relay.ts";
 
 const option = (name: string) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] ?? "" : "");
 const SOCKET = option("--socket");
 if (!SOCKET) throw new Error("usage: node host.ts --socket <path> [--desk <desk's address>]");
 const DESK = option("--desk"); // desk, which the host tells what each session does: http://127.0.0.1:<port>
-// desk compares this with its own copy of the file, and restarts the host while nothing works when they differ.
-const VERSION = createHash("sha1").update(readFileSync(fileURLToPath(import.meta.url))).digest("hex").slice(0, 12);
+const RELAY = Number(option("--relay")) || 0; // the browser relay's port (relay.ts), or none
+// desk compares this with its own copy of the files, and restarts the host while nothing works when they differ.
+const VERSION = ["./host.ts", "./relay.ts"].reduce((h, f) => h.update(readFileSync(fileURLToPath(new URL(f, import.meta.url)))), createHash("sha1"))
+  .digest("hex").slice(0, 12);
 // The user's own Claude Code, the one their terminal runs, rather than the copy the SDK's package carries.
 const CLAUDE = execFileSync("sh", ["-c", "command -v claude"], { encoding: "utf8" }).trim();
 // ms an idle session keeps its process, shown in a tab or not; its next message resumes it, in about 3 s and with the
@@ -212,7 +215,9 @@ function start(o: StartOptions): Session {
       ...(o.settings ? { settings: o.settings } : {}),
       includePartialMessages: true,
       pathToClaudeCodeExecutable: CLAUDE,
-      env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "desk", BASH_MAX_TIMEOUT_MS: LONGEST_COMMAND },
+      // DESK_CDP_ENDPOINT: the session's own way into the agents' Chrome, which chrome-mcp.sh connects its chrome MCP to.
+      env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "desk", BASH_MAX_TIMEOUT_MS: LONGEST_COMMAND,
+        ...(relaying ? { DESK_CDP_ENDPOINT: `ws://127.0.0.1:${RELAY}/cdp/${id}` } : {}) },
       // A tool call Claude Code wants a yes for, and every AskUserQuestion, waits here for the user's answer in the panel.
       canUseTool: (tool, input, { signal, toolUseID }) => new Promise<PermissionResult>((resolve) => {
         const askId = toolUseID ?? randomUUID();
@@ -531,6 +536,12 @@ function stop() {
 }
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
+
+// The browser relay goes up before any session starts, each of which reaches the Chrome through it. When its port is
+// taken, the sessions go straight to the Chrome, as before it.
+const relaying = RELAY > 0 && await relay.start(RELAY, (news) => {
+  if (desk?.readyState === WebSocket.OPEN) desk.send(JSON.stringify(news));
+}).then(() => true, (e: Error) => (console.log(`no browser relay: ${e.message}`), false));
 
 if (existsSync(SOCKET)) unlinkSync(SOCKET); // a host that died left it behind; hosted.ts checks no host answers first
 await app.listen({ path: SOCKET });

@@ -6,12 +6,13 @@ import { request as httpRequest } from "node:http";
 import { dirname, join } from "node:path";
 import { spawn } from "node:child_process";
 import { WebSocket } from "ws";
-import { HOME, PORT, REPO } from "./config.ts";
+import { HOME, PORT, RELAY_PORT, REPO } from "./config.ts";
 import { sleep, which } from "./proc.ts";
 import { pathOf } from "./transcript.ts";
 
 export const SOCKET = join(process.env.XDG_RUNTIME_DIR || "/tmp", `desk-host-${PORT}.sock`);
 const HOST = join(REPO, "apps", "server", "src", "host.ts");
+const CODE = [HOST, join(dirname(HOST), "relay.ts")]; // the files a host runs, whose content is its version
 const LOG = join(HOME, ".cache", "desk", `host-${PORT}.log`);
 const UNIT = `desk-host-${PORT}`;
 
@@ -44,7 +45,7 @@ export interface StartOptions {
 }
 
 // The version a host of the code checked out now would report (host.ts computes it the same way).
-const current = () => createHash("sha1").update(readFileSync(HOST)).digest("hex").slice(0, 12);
+const current = () => CODE.reduce((h, f) => h.update(readFileSync(f)), createHash("sha1")).digest("hex").slice(0, 12);
 
 export class HostError extends Error {
   status: number;
@@ -95,7 +96,8 @@ async function launch() {
   mkdirSync(dirname(LOG), { recursive: true });
   const out = openSync(LOG, "a");
   const node = process.execPath;
-  const args = ["--socket", SOCKET, "--desk", `http://127.0.0.1:${PORT}`]; // the host tells desk what each session does (turns.ts)
+  const args = ["--socket", SOCKET, "--desk", `http://127.0.0.1:${PORT}`, // the host tells desk what each session does (turns.ts)
+    "--relay", String(RELAY_PORT)];
   const argv = which("systemd-run")
     ? ["systemd-run", "--user", "--scope", "--slice=agents.slice", `--unit=${UNIT}-${Date.now()}`, "--collect", "--quiet", "--", node, HOST, ...args]
     : [node, HOST, ...args];

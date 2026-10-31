@@ -20,3 +20,6 @@ export const DB_DIR = resolve(expand(process.env.DESK_DB ?? join(DATA_DIR, ".db"
 // The code repo: apps/server/src is three levels under it.
 export const REPO = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 export const PORT = Number(process.env.PORT ?? 8790);
+// The session host's browser relay (relay.ts), which a second desk for testing moves off with DESK_RELAY_PORT, or turns
+// off with 0. 9335 and 9336 are the phone's mobile-mcp.
+export const RELAY_PORT = Number(process.env.DESK_RELAY_PORT ?? 9340);
