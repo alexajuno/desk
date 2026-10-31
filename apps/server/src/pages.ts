@@ -434,6 +434,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     context_html: toHtml(store.section(i, "Context"), `/issue/${slug}/f/`), // the chat's first message, folded
     session_kind: session.kind ?? null, live: talkOf(i),
     step: step(i, await asking(), store.hasPlan(i), Boolean(result)), landed: i.landed, trial: await tryButton(i),
+    branch: await land.branchOf(i), // the branch its session tested in desk's checkout, which Try runs
     lands: reviewing ? land.landsOf(i) : null, // the steps Approve runs, which the review lists to untick
     plan_steps: i.plan_steps ? drawnSteps(JSON.parse(i.plan_steps), `/issue/${slug}/f/`) : null, // a design issue's steps (api.ts, PlanStep)
   };

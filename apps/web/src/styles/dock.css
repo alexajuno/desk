@@ -84,6 +84,32 @@
 .side-collapsed .dock-head .side-toggle { display: grid; }
 @media (max-width: 900px) { .dock-head .side-toggle { display: grid; } }
 .dock-folder { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 450 12px var(--font); color: var(--text-3); }
+/* the ⌄ after an issue's title, which drops its details open under the head (IssueView, IssueDetails): an icon button
+   inside a row, a 24px square with 6px corners, quiet until the mouse is on it and filled while they are open; its
+   chevron turns as the steps card's does */
+.head-details { flex: none; align-self: center; width: 24px; height: 24px; padding: 0; justify-content: center; border: 0; border-radius: 6px;
+                background: transparent; color: var(--text-3); }
+.head-details:hover { background: var(--btn-ghost-hover); color: var(--text-1); }
+.head-details.open { background: var(--bg-active); color: var(--text-1); }
+.head-details .chev { transform: rotate(90deg); transition: transform .15s; }
+.head-details.open .chev { transform: rotate(-90deg); }
+/* the details themselves, under the head and lined up with its title, pushing the chat down: its parents, its chips,
+   its sub-issues as the issue's page lists them, then its session, branch and date in the quiet grey */
+.issue-details { flex: none; display: flex; flex-direction: column; gap: 12px; max-height: 45%; overflow: auto;
+                 padding: 10px 14px 14px 41px; border-bottom: 1px solid var(--border-1); }
+.issue-details .issue-parents { margin: 0; }
+.issue-details .chips { display: flex; margin: 0; }
+.details-label { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font: 500 13px var(--font); color: var(--text-3); }
+.issue-details .tree .item { height: 32px; margin-left: -8px; padding-left: 8px; }
+.issue-details .tree .tree .item { padding-left: 10px; }
+.issue-details .tree .item .select-box { display: none; }
+.details-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font: 450 12px var(--font); color: var(--text-3); }
+.details-meta code, .details-meta a { color: var(--text-2); }
+.details-meta .landed { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.details-copy { flex: none; width: 24px; height: 24px; margin-left: -8px; padding: 0; justify-content: center; border: 0; border-radius: 6px;
+                background: transparent; color: var(--text-3); }
+.details-copy:hover { background: var(--btn-ghost-hover); color: var(--text-1); }
+.details-copy svg { width: 14px; height: 14px; }
 /* the issue's next step at its right, Try then Go or Approve, filled as the issue's own row over its Properties is
    (desk.css, .issue-acts) */
 .chat-acts { flex: none; display: flex; gap: 6px; }

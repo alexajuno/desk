@@ -13,8 +13,8 @@
      (Dock.tsx, ChatHead and ViewTabs) */
   .dock-head .dock-folder, .dock-tabs .diff-counts { display: none; }
   /* An issue's chat in the middle keeps its tabs, a little narrower; its title gives way, since its Issue tab shows it
-     (28 Oct: at 412px the title had a letter left, and none on Issue). */
-  .dock .dock-head:has(.dock-tabs) .dock-title { display: none; }
+     (28 Oct: at 412px the title had a letter left, and none on Issue), and leaves the ⌄ to its details. */
+  .dock .dock-head:has(.dock-tabs) .dock-title > :not(.head-details) { display: none; }
   .dock .dock-tabs { gap: 2px; }
   .dock .dock-tabs button { padding: 0 8px; }
   .panel, .side-collapsed .panel, .dock, .side-collapsed .dock {

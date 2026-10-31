@@ -13,7 +13,7 @@ import { go } from "../app/nav";
 import { splashUp, useSplash } from "../app/splash";
 import { markdown } from "../lib/markdown";
 import { seenPage, usePage } from "../api/page";
-import { HeadStatus, IssueView, StepButtons, Title, useStep, type IssuePageData } from "../issues/IssueView";
+import { HeadStatus, IssueDetails, IssueView, StepButtons, Title, useStep, type IssuePageData } from "../issues/IssueView";
 import { useLive as useIssueLive } from "../issues/useLive";
 import { actionsMenu, folderMenu } from "../issues/menus";
 import { painted } from "../issues/painted";
@@ -101,8 +101,9 @@ const BY_DIGIT: View[] = ["chat", "issue", "changes"];
 
 // The keys of an issue's chat in the middle while you read it, the reply box keeping its own Tab: Tab and Shift Tab walk
 // its views, 1 to 3 open one of them and again go back to Chat (two Tabs to its page and three to its Changes were "too
-// long", the user, 29 Oct), and Esc goes back to Chat from another one. I goes into the reply box on any view, and V
-// opens the diagram on screen (Frame.tsx).
+// long", the user, 29 Oct), and Esc goes back to Chat from another one; ], as [ the sidebar, drops its issue's details
+// open under its head, or folds them. I goes into the reply box on any view, and V opens the diagram on screen
+// (Frame.tsx).
 export function viewKey(e: KeyboardEvent): boolean {
   if (e.ctrlKey || e.metaKey || e.altKey || !hasIssue()) return false;
   const views = viewsOf(chatPage.get(), true), at = Math.max(0, views.indexOf(dock.view));
@@ -110,6 +111,7 @@ export function viewKey(e: KeyboardEvent): boolean {
   const to = BY_DIGIT[["1", "2", "3"].indexOf(e.key)];
   if (to && views.includes(to)) { dock.setView(to === views[at] ? "chat" : to); return true; }
   if (e.key === "Escape" && views[at] !== "chat") { dock.setView("chat"); return true; }
+  if (e.key === "]") { dock.setDetails(!dock.details); return true; }
   return false;
 }
 
@@ -233,6 +235,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
     <div className="session-split">
       <div className="session-view">
         <ChatHead s={s} views={views} view={shown} setView={setView} docked={docked} />
+        {here && docked && dock.details && <IssueDetails data={here} />}
         <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>
           {here && shown === "issue" && <div className="dock-view dock-page"><IssueView data={here} /></div>}
           {here && shown === "changes" && <ChangesOf slug={here.issue.slug} />}
@@ -274,9 +277,10 @@ const ChatSteps = observer(function ChatSteps({ s, here }: { s: LiveSession; her
 });
 
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, then its issue's status and
-// title, its views (Chat, Issue, Changes), and at its right the issue's next step, Try and Go or Approve, which the
-// Issue tab shows over its Properties instead (1 Nov: "the approve button is not there, but i have to tab to issue");
-// the Inbox, which shows a chat without its head, has its own. Where its work stands is in the steps above the
+// title, with a ⌄ that drops the issue's details open under the head (IssueDetails), its views (Chat, Issue,
+// Changes), and at its right the issue's next step, Try and Go or Approve, which the Issue tab shows over its
+// Properties instead (1 Nov: "the approve button is not there, but i have to tab to issue"); the Inbox, which shows a
+// chat without its head, has its own. Where its work stands is in the steps above the
 // composer. A chat with no issue is renamed in its title, and shows its folder, which only an issue's Properties would
 // show otherwise. Whether the chat works shows in the chat itself, its Working… line and its stop button (28 Oct: "the
 // header in chat interface looks kinda tight").
@@ -291,6 +295,10 @@ const ChatHead = observer(function ChatHead({ s, views, view, setView, docked }:
         {m?.chat && !m.issue ? <Title line title={m.title} save={(t) => renameChat(s.id, t)} />
           : <span>{m?.issue?.title ?? m?.title ?? ""}</span>}
         {!m?.issue && startsIn(s) && <span className="dock-folder" title={startsIn(s)}>{startsIn(s)}</span>}
+        {here && docked && (
+          <button className={`head-details${dock.details ? " open" : ""}`} type="button" aria-expanded={dock.details}
+            title={dock.details ? "Hide the issue's details  ]" : "The issue's details  ]"} onClick={() => dock.setDetails(!dock.details)}>{CHEVRON}</button>
+        )}
       </div>
       {views.length > 1 && m?.issue && <ViewTabs slug={m.issue.slug} views={views} view={view} setView={setView} />}
       {here && docked && view !== "issue" && <HeadStep data={here} />}

@@ -37,14 +37,15 @@ class Dock {
   session: string | null = saved.session ?? null; // the chat in the middle, or the one you left
   center = false; // a chat holds the middle now
   view: View = "chat"; // what the chat in the middle shows; each chat comes on Chat
+  details = false; // its issue's details dropped open under its head; each chat comes with them folded
   pill = saved.pill ?? false; // the chat you left, at the bottom right
   halves: Record<string, Half> = saved.halves ?? {}; // the chats whose right half is open, and on which view
   halfWidth = saved.halfWidth ?? HALF.start; // the right half's share of the chat's width
 
   constructor() {
     makeObservable(this, {
-      session: observable, center: observable, view: observable, pill: observable, halves: observable, halfWidth: observable,
-      layout: computed, arrange: action, setView: action, dismiss: action, setHalf: action, setHalfWidth: action,
+      session: observable, center: observable, view: observable, details: observable, pill: observable, halves: observable, halfWidth: observable,
+      layout: computed, arrange: action, setView: action, setDetails: action, dismiss: action, setHalf: action, setHalfWidth: action,
     });
   }
 
@@ -56,9 +57,13 @@ class Dock {
     return this.center ? "chat" : "page";
   }
 
-  // What the page now on screen asks for: its chat in the middle, or none. A chat that comes to the middle comes on Chat.
+  // What the page now on screen asks for: its chat in the middle, or none. A chat that comes to the middle comes on
+  // Chat, its issue's details folded.
   arrange(session: string | null) {
-    if (!session || !this.center || session !== this.session) this.view = "chat";
+    if (!session || !this.center || session !== this.session) {
+      this.view = "chat";
+      this.details = false;
+    }
     if (session) {
       this.session = session;
       this.pill = true;
@@ -75,6 +80,11 @@ class Dock {
   // The chat in the middle on a view.
   setView(view: View) {
     this.view = view;
+  }
+
+  // Its issue's details under its head, open or folded.
+  setDetails(open: boolean) {
+    this.details = open;
   }
 
   // The chat's right half open on a view, or hidden. The 20 chats opened last keep theirs. One you open starts what it

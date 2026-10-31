@@ -55,6 +55,7 @@ export interface IssuePageData {
   live: string;
   step: { text: string; button: StepButton | null };
   trial: StepButton | null;
+  branch: string | null; // the branch its session tested in desk's checkout, which Try runs
   landed: string | null; // in done, where its session said the work landed
   lands: { steps: string[]; landed?: string } | null; // in review, the steps Approve runs, as its session gave them
   plan_steps: PlanStep[] | null; // a design issue's steps, which its session sets and ticks
@@ -291,6 +292,34 @@ function Parents({ trail }: { trail: IssuePageData["trail"] }) {
   );
 }
 
+// The issue's details, dropped open under its chat's head by the ⌄ beside its title, or ], pushing the chat down (the
+// user's pick from two mockups, "A", 1 Nov): its parents, its properties as chips, its sub-issues, then its session,
+// branch and date and Copy link. The rest of its page is in the chat itself.
+export const IssueDetails = observer(function IssueDetails({ data }: { data: IssuePageData }) {
+  const p = painted(data.issue);
+  return (
+    <div className="issue-details">
+      {data.trail.length > 0 && <Parents trail={data.trail} />}
+      <Chips p={p} team={data.team} project={data.project} milestone={data.milestone} />
+      {data.kids.length > 0 && (
+        <div className="details-kids">
+          <div className="details-label">Sub-issues{data.progress[1] > 0 && <span className="pill">{`${data.progress[0]}/${data.progress[1]} done`}</span>}</div>
+          <Tree items={data.kids} />
+        </div>
+      )}
+      <div className="details-meta">
+        {p.session && <span>Session <code>{p.session.slice(0, 8)}</code> <span className={`live ${data.live}`}>{liveWord(data, p)}</span></span>}
+        {data.branch && <span>Branch <code>{data.branch}</code></span>}
+        <span>Opened {p.created_short}</span>
+        {p.link && <span>Link <a href={p.link}>{p.link.split("/").pop()}</a></span>}
+        {/* Where its session said the work landed, unless that is the pull request the Link already is. */}
+        {data.landed && !(p.link && data.landed.includes(p.link)) && <span className="landed">Landed {data.landed.replace(/`/g, "")}</span>}
+        <button className="details-copy" type="button" title="Copy link" onClick={() => copy(`${location.origin}/issue/${p.slug}`, "Link copied")}>{GLYPH.link}</button>
+      </div>
+    </div>
+  );
+});
+
 // A set project or milestone opens where it lives rather than its picker, since one is seldom changed once set ("honestly
 // i never edit project", the user, 29 Oct): Shift P and Shift M change it, as their tooltips say. A milestone opens on its
 // project's Issues, grouped by milestone, at its group (ProjectPage's ProjectIssues). An empty one opens its picker.
@@ -299,7 +328,7 @@ const milestonePath = (project: string, id: string) => `/project/${project}/issu
 const OPEN_PROJECT = "Open the project\nChange project  Shift P", OPEN_MILESTONE = "Open the milestone\nChange milestone  Shift M";
 
 // Linear's Inbox has no room for the Properties column in a pane under 820px, so it shows them as chips here
-// instead (desk.css); each does what its row in the column does.
+// instead (desk.css), and so do an issue's details under its chat's head; each does what its row in the column does.
 const Chips = observer(function Chips({ p, team, project, milestone }: { p: IssueRow; team: { slug: string; title: string } | null; project: { slug: string; title: string } | null; milestone: string | null }) {
   return (
     <div className="chips">
@@ -348,6 +377,12 @@ const Chips = observer(function Chips({ p, team, project, milestone }: { p: Issu
           <span>Milestone</span>
         </button>
       ))}
+      {p.due && (
+        <button className="field-chip due-pick" type="button" data-slug={p.slug} title="Change due date  Shift D"
+          onClick={(e) => { if (!toggled(e.currentTarget)) datePicker({ anchor: e.currentTarget, title: "Due date", current: p.due, kinds: ["day"], set: (t) => setField(p.slug, "due", t ?? "") }); }}>
+          <DueChip due={p.due} closed={["done", "dropped"].includes(p.state)} />
+        </button>
+      )}
       <button className={`field-chip folder-pick${p.folder ? "" : " unset"}`} type="button" data-slug={p.slug} data-value={p.folder ?? ""} title="Pick the folder the issue's session starts in; ~ until you pick one"
         onClick={(e) => { if (!toggled(e.currentTarget)) folderMenu(p.folder ?? "", e.currentTarget, (f) => setFolder(p.slug, f)); }}>
         <svg className="glyph" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M2 4.5c0-.83.67-1.5 1.5-1.5h3l1.5 1.5h4.5c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5h-9C2.67 13 2 12.33 2 11.5v-7z" /></svg>
@@ -357,10 +392,12 @@ const Chips = observer(function Chips({ p, team, project, milestone }: { p: Issu
   );
 });
 
+// Where its session stands, after its id.
+const liveWord = (data: IssuePageData, p: IssueRow) => data.session_kind === "interactive" ? "open in a terminal"
+  : data.live === "working" ? "working" : ["done", "dropped", "waiting"].includes(p.state) ? "idle" : "your turn";
+
 function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
   const live = data.live;
-  const liveWord = data.session_kind === "interactive" ? "open in a terminal"
-    : live === "working" ? "working" : ["done", "dropped", "waiting"].includes(p.state) ? "idle" : "your turn";
   return (
     <aside className="props">
       <div className="label">Properties</div>
@@ -442,7 +479,7 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
         <>
           {/* What Open chat opens. Opening it in kitty instead is in the … menu. */}
           <div className="label">Session</div>
-          <div className="prop static"><code>{p.session.slice(0, 8)}</code> <span className={`live ${live}`}>{liveWord}</span></div>
+          <div className="prop static"><code>{p.session.slice(0, 8)}</code> <span className={`live ${live}`}>{liveWord(data, p)}</span></div>
         </>
       )}
     </aside>
