@@ -51,7 +51,7 @@ export function toggleTerminal(): boolean {
   if (!live(dock.session).meta?.chat) return (toast("Only a desk chat has a terminal."), true);
   const open = dock.halves[dock.session] === "terminal";
   const inside = document.activeElement?.closest(".half");
-  dock.setHalf(dock.session, open ? null : "terminal");
+  dock.setHalf(dock.session, open ? null : "terminal", true);
   if (open && inside) document.querySelector<HTMLTextAreaElement>(".dock .composer textarea")?.focus();
   return true;
 }

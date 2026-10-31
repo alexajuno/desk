@@ -11,6 +11,7 @@
 //     {"type": "frame", "frame": <frame>}                         on connect, then when it changed
 //     {"type": "files", "slugs": [<slug>, ...]}                   its other files changed
 //     {"type": "page", "slug": "<slug>", "page": <page>}         the issue the app shows, then each time it changed
+//     {"type": "terminal", "session": "<session>"}               Claude started that chat's terminal: open it (terminal.ts)
 //
 // The app sends one message, {"type": "show", "slug": "<slug>"}, or "slug": null, naming the issue it shows, as the
 // Inbox's right pane does: desk answers with its <page>, the issue as its page draws it (pages.ts, issuePageJson), or
@@ -181,6 +182,13 @@ function tellFiles(slugs: string[]) {
   const message = JSON.stringify({ type: "files", slugs });
   for (const ws of [...listeners, ...legacy]) ws.send(message);
   void pagesJob();
+}
+
+// Claude started the chat's terminal, or asks to show it: every app opens it beside that chat, for the user to watch
+// what Claude types into it.
+export function showTerminal(session: string) {
+  const message = JSON.stringify({ type: "terminal", session });
+  for (const ws of listeners) if (ws.readyState === ws.OPEN) ws.send(message);
 }
 
 // Tell the apps each write, and the frame after it and after each word from the host; and the open chats.

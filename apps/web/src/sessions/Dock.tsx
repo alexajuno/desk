@@ -1244,7 +1244,7 @@ const TerminalButton = observer(function TerminalButton({ id }: { id: string }) 
   const open = dock.halves[id] === "terminal";
   return (
     <button className={`dock-btn terminal-btn${open ? " on" : ""}`} type="button" title={`${open ? "Hide the terminal" : "Terminal"}  Ctrl \``}
-      aria-pressed={open} onClick={() => dock.setHalf(id, open ? null : "terminal")}>{GLYPH.terminal}</button>
+      aria-pressed={open} onClick={() => dock.setHalf(id, open ? null : "terminal", true)}>{GLYPH.terminal}</button>
   );
 });
 

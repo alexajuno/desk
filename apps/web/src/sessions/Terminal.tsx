@@ -9,6 +9,7 @@ import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
 import { postJson, reason } from "../api/http";
+import { dock } from "../store/dock";
 
 // Where the session stands, as the view says it while it is not on.
 type Stand = "starting" | "on" | "away" | "failed";
@@ -26,7 +27,7 @@ export function TerminalView({ session, ended }: { session: string; ended: () =>
     term.loadAddon(new ClipboardAddon(undefined, CLIPBOARD));
     term.open(host.current!);
     fit.fit();
-    term.focus();
+    if (dock.takeFocus(session)) term.focus(); // you opened it, rather than Claude
 
     // Ctrl ` goes on to desk, which hides the half (Frame.tsx); Ctrl ⇧ C copies xterm.js's own selection, and Ctrl ⇧ V
     // is left to the browser, whose paste xterm.js takes, as a Linux terminal's keys.

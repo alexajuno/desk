@@ -828,6 +828,21 @@ export async function create(): Promise<FastifyInstance> {
       throw error;
     }
   });
+  // Claude's end of it, by the chat's id: the session starts as the page would start it, and every app opens it beside
+  // the chat, for the user to watch Claude type into it with tt ("when i or the agent triggers it", 31 Oct).
+  app.post("/api/chats/:id/terminal", async (req: Req) => {
+    if (!chats.exists(req.params.id)) throw new HttpError(404, "No such chat");
+    const chat = chats.load(req.params.id);
+    try {
+      const { name, cwd } = await terminal.of(chat.session);
+      const started = await terminal.start(name, cwd);
+      sync.showTerminal(chat.session);
+      return started;
+    } catch (error) {
+      if (error instanceof terminal.NoTerminal) throw new HttpError(404, error.message);
+      throw error;
+    }
+  });
   app.get("/api/live/:id/terminal/screen", {
     websocket: true,
     preValidation: async (req, reply) => {
