@@ -288,8 +288,9 @@ kbd { font: 500 11px var(--font); color: var(--text-3); border: 1px solid var(--
 .side-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9999px; color: var(--text-3); }
 .side-icon:hover { background: var(--bg-icon-hover); color: var(--text-1); }
 .side-icon.here { background: var(--bg-active); color: var(--text-1); }
+/* A sidebar button is quiet as its links are, Search too since it opens the search's box rather than a page (31 Oct) */
+button.side-icon { padding: 0; border: 0; background: none; }
 /* New issue, Linear's pencil: the one sidebar button filled, ringed like the view tabs (18 Oct), with a brighter icon */
-button.side-icon { padding: 0; border: 0; }
 .side-icon.new-issue { background: var(--btn-side); box-shadow: 0 0 0 0.5px var(--ring-btn), var(--shadow-panel); color: var(--text-2); }
 .side-icon.new-issue:hover { background: var(--btn-side-hover); box-shadow: 0 0 0 0.5px var(--ring-btn-hover), var(--shadow-panel); color: var(--text-1); }
 .nav-item { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 9px 0 6px; border-radius: 8px; color: var(--text-3);
