@@ -175,9 +175,15 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
     el.scrollTo({ top: shown === "chat" ? el.scrollHeight : 0 });
   }, [shown]);
 
+  // Only the reader scrolling up lets go of the end, and coming back near it takes it again. A chat opened cold grows
+  // as its pictures load, between a scroll to its end and that scroll's own event, which then finds it far from the
+  // end though nobody moved: measured alone, it stopped such a chat 888px short (31 Oct).
+  const lastTop = useRef(0);
   const onScroll = () => {
     const el = scroller.current!;
-    stuck.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) stuck.current = true;
+    else if (el.scrollTop < lastTop.current) stuck.current = false;
+    lastTop.current = el.scrollTop;
     setAway((a) => (stuck.current ? false : a || "quiet"));
   };
   // The pill takes the chat back to its end, which it follows again. It jumps there, as a step's jump to its message
