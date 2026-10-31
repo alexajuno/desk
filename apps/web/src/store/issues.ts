@@ -94,17 +94,26 @@ export interface InboxRow {
   marked?: number | null; // when you marked it unread
 }
 
+// A tab a desk session has open in the agents' Chrome (the server's tabs.ts), which its chat's Browser shows.
+export interface Tab {
+  target: string; // Chrome's id for it
+  session: string; // the session that opened it, or whose tab opened it
+  url: string;
+  title: string;
+  opened: string; // when desk first heard of it
+}
+
 // One change from desk's log: the row as it is now, or null once deleted. kind is its table.
 interface Change { seq: number; kind: string; key: string; row: Record<string, unknown> | null }
 
 export type SyncMessage =
-  | { type: "snapshot"; log: string; seq: number; rows: { issues: Issue[]; teams?: Team[]; projects?: Project[]; milestones?: Milestone[]; chats?: Chat[]; inbox?: InboxRow[] } }
+  | { type: "snapshot"; log: string; seq: number; rows: { issues: Issue[]; teams?: Team[]; projects?: Project[]; milestones?: Milestone[]; chats?: Chat[]; inbox?: InboxRow[]; tabs?: Tab[] } }
   | { type: "changes"; after: number; changes: Change[] }
   | { type: "files"; slugs: string[] };
 
 const newestFirst = (a: { created: string }, b: { created: string }) => (a.created < b.created ? 1 : a.created > b.created ? -1 : 0);
 
-// Every issue, team, project, chat and Inbox row, in memory. The screen draws from here, and MobX redraws only what read a field that changed.
+// Every issue, team, project, chat, Inbox row and tab, in memory. The screen draws from here, and MobX redraws only what read a field that changed.
 export class IssueStore {
   bySlug = observable.map<string, Issue>();
   teams = observable.map<string, Team>();
@@ -112,6 +121,7 @@ export class IssueStore {
   milestones = observable.map<string, Milestone>();
   chats = observable.map<string, Chat>(); // by id
   inbox = observable.map<string, InboxRow>(); // by id
+  tabs = observable.map<string, Tab>(); // by target
   files = observable.map<string, number>(); // slug: how many times its other files changed (a plan, a result)
   connected = false;
   log = ""; // the name of desk's log these rows follow
@@ -135,12 +145,13 @@ export class IssueStore {
       this.milestones.replace((message.rows.milestones ?? []).map((m) => [m.id, m]));
       this.chats.replace((message.rows.chats ?? []).map((c) => [c.id, c])); // none from a desk before the table
       this.inbox.replace((message.rows.inbox ?? []).map((r) => [r.id, r]));
+      this.tabs.replace((message.rows.tabs ?? []).map((t) => [t.target, t]));
       this.log = message.log;
       this.seq = message.seq;
       return true;
     }
     if (message.after !== this.seq) return false;
-    const tables: Record<string, Map<string, unknown>> = { issues: this.bySlug, teams: this.teams, projects: this.projects, milestones: this.milestones, chats: this.chats, inbox: this.inbox };
+    const tables: Record<string, Map<string, unknown>> = { issues: this.bySlug, teams: this.teams, projects: this.projects, milestones: this.milestones, chats: this.chats, inbox: this.inbox, tabs: this.tabs };
     for (const c of message.changes) {
       const table = tables[c.kind]; // a table this app does not hold yet is a newer desk's
       if (table && c.row) table.set(c.key, c.row);
@@ -175,6 +186,11 @@ export class IssueStore {
   issueOf(session: string): string | null {
     for (const [slug, chat] of this.chatOfIssue) if (chat.session === session) return slug;
     return null;
+  }
+
+  // The tabs the session has open in the agents' Chrome, the first opened first, as a browser's strip lists them.
+  tabsOf(session: string): Tab[] {
+    return [...this.tabs.values()].filter((t) => t.session === session).sort((a, b) => (a.opened < b.opened ? -1 : a.opened > b.opened ? 1 : 0));
   }
 
   // The Inbox's unread rows, which the sidebar counts and the Inbox marks with a dot.

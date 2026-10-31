@@ -58,6 +58,8 @@
   .composer-foot:has(.start-in) .mode { display: none; }
   /* The context and the week stay in the model menu: with them the foot ran 465px in its 359 at 412 wide (31 Oct). */
   .composer-foot .used { display: none; }
+  /* The globe too, which ran it 371px in its 359 (1 Nov): the half's own tabs reach the browser from its terminal. */
+  .composer-foot .half-browser { display: none; }
 
   /* A phone's Chrome shows a notification only from a service worker, which desk has not; the line offering them
      would turn on nothing. */
@@ -85,5 +87,4 @@
   .session-split:has(> .half) > .session-view { display: none; }
   .session-split > .half { flex: 1; width: auto !important; min-width: 0; border-left: 0; }
   .half-grip { display: none; }
-  .half-head { display: flex; }
 }

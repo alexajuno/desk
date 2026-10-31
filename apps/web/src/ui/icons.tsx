@@ -183,6 +183,11 @@ export const GLYPH = {
   plus: glyph(<path d="M8 3.5v9M3.5 8h9" />),
   triage: glyph(<><path d="M2 9.5h3.25l1 1.75h3.5l1-1.75H14" /><path d="M2 9.5l1.6-5.1c.13-.42.52-.65.95-.65h6.9c.43 0 .82.23.95.65L14 9.5v2.75c0 .55-.45 1-1 1H3c-.55 0-1-.45-1-1z" /><path d="M8 4.5v3.25M6.6 6.4 8 7.75 9.4 6.4" /></>),
   terminal: glyph(<><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" /><path d="M4.5 6l2 2-2 2M8 10.5h3.5" /></>),
+  // A chat's Browser (sessions/Browser.tsx): the globe that opens it and stands for a site with no icon, and its bar's.
+  globe: glyph(<><circle cx="8" cy="8" r="5.75" /><path d="M2.25 8h11.5M8 2.25C9.6 3.85 10.4 5.75 10.4 8S9.6 12.15 8 13.75M8 2.25C6.4 3.85 5.6 5.75 5.6 8s.8 4.15 2.4 5.75" /></>),
+  back: glyph(<path d="M9.5 3.5L5 8l4.5 4.5" />),
+  forward: glyph(<path d="M6.5 3.5L11 8l-4.5 4.5" />),
+  reload: glyph(<><path d="M12.75 8a4.75 4.75 0 1 1-1.4-3.36" /><path d="M12 2.5v2.75H9.25" /></>),
   id: glyph(<path d="M6.5 2.5l-1 11M10.5 2.5l-1 11M3 6h10.5M2.5 10H13" />),
   archive: glyph(<><rect x="2" y="3" width="12" height="3" rx="1" /><path d="M3 6v6.5c0 .28.22.5.5.5h9c.28 0 .5-.22.5-.5V6M6.5 8.75h3" /></>),
   trash: glyph(<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" />),

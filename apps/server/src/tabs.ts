@@ -31,3 +31,41 @@ export async function hello(ws: WebSocket, relay: boolean | undefined, tabs: Tab
   });
   if (rest?.length) ws.send(JSON.stringify({ type: "owners", tabs: rest }));
 }
+
+// Each tab's site icon, for its pill in the chat's Browser, which the page cannot load from the site itself: the icon
+// is often not at /favicon.ico, and a site may refuse it to another site's page (code.claude.com's leads to a page
+// claude.com gives only to its own). desk fetches the icon the page's HTML names, else /favicon.ico, without the
+// user's cookies, and keeps it by the site, none included, as long as it runs.
+type Icon = { type: string; body: Buffer } | null;
+const icons = new Map<string, Promise<Icon>>();
+
+export async function icon(target: string): Promise<Icon> {
+  const url = (await db.sql().query<{ url: string }>("select url from tabs where target = $1", [target])).rows[0]?.url;
+  if (!url || !/^https?:/.test(url)) return null;
+  const site = new URL(url).origin;
+  if (!icons.has(site)) icons.set(site, fetchIcon(url));
+  return icons.get(site)!;
+}
+
+const get = (url: string) => fetch(url, { redirect: "follow", signal: AbortSignal.timeout(4000), headers: { "user-agent": "Mozilla/5.0 (desk)" } }).catch(() => null);
+
+async function fetchIcon(url: string): Promise<Icon> {
+  const page = await get(url);
+  let named: string | null = null;
+  if (page?.ok && page.headers.get("content-type")?.includes("html")) {
+    for (const tag of (await page.text()).slice(0, 300_000).match(/<link\b[^>]*>/gi) ?? []) {
+      const rel = /\brel=["']?([^"'>]+)/i.exec(tag)?.[1].toLowerCase().split(/\s+/) ?? [];
+      const href = /\bhref=["']?([^"'\s>]+)/i.exec(tag)?.[1];
+      if (rel.includes("icon") && href) {
+        named = new URL(href.replaceAll("&amp;", "&"), page.url).href;
+        break;
+      }
+    }
+  }
+  for (const src of [named, new URL("/favicon.ico", url).href]) {
+    const res = src ? await get(src) : null;
+    const type = res?.headers.get("content-type") ?? "";
+    if (res?.ok && type.startsWith("image/")) return { type, body: Buffer.from(await res.arrayBuffer()) };
+  }
+  return null;
+}

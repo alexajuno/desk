@@ -1365,7 +1365,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           {GLYPH.plus}
           <input ref={picker} type="file" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
-        {s.meta?.chat && dock.center && dock.session === s.id && <TerminalButton id={s.id} />}
+        {s.meta?.chat && dock.center && dock.session === s.id && <><HalfButton id={s.id} view="terminal" /><HalfButton id={s.id} view="browser" /></>}
         {fresh(s) && <StartAs s={s} />}
         {fresh(s) && <StartIn s={s} />}
         {stash && (
@@ -1390,12 +1390,18 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   );
 });
 
-// The terminal beside the reply box: the chat's right half, on its terminal, open or hidden (Half.tsx), lit while open.
-const TerminalButton = observer(function TerminalButton({ id }: { id: string }) {
-  const open = dock.halves[id] === "terminal";
+// The terminal and the globe beside the reply box: the chat's right half, on its terminal or its browser, open or
+// hidden (Half.tsx), each lit while the half shows its view.
+const HALF_BUTTONS = {
+  terminal: { icon: GLYPH.terminal, label: "Terminal", key: "Ctrl `" },
+  browser: { icon: GLYPH.globe, label: "Browser", key: "Ctrl ⇧ B" },
+} as const;
+
+const HalfButton = observer(function HalfButton({ id, view }: { id: string; view: keyof typeof HALF_BUTTONS }) {
+  const open = dock.halves[id] === view, { icon, label, key } = HALF_BUTTONS[view];
   return (
-    <button className={`dock-btn terminal-btn${open ? " on" : ""}`} type="button" title={`${open ? "Hide the terminal" : "Terminal"}  Ctrl \``}
-      aria-pressed={open} onClick={() => dock.setHalf(id, open ? null : "terminal", true)}>{GLYPH.terminal}</button>
+    <button className={`dock-btn half-btn half-${view}${open ? " on" : ""}`} type="button" title={`${open ? `Hide the ${label.toLowerCase()}` : label}  ${key}`}
+      aria-pressed={open} onClick={() => dock.setHalf(id, open ? null : view, true)}>{icon}</button>
   );
 });
 

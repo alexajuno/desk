@@ -25,6 +25,7 @@ import * as sessions from "./sessions.ts";
 import * as sync from "./sync.ts";
 import { tailnetName } from "./tailnet.ts";
 import * as teams from "./teams.ts";
+import * as tabs from "./tabs.ts";
 import * as terminal from "./terminal.ts";
 import * as transcript from "./transcript.ts";
 import * as updates from "./updates.ts";
@@ -851,6 +852,13 @@ export async function create(): Promise<FastifyInstance> {
       if (error instanceof terminal.NoTerminal) throw new HttpError(404, error.message);
       throw error;
     }
+  });
+  // A tab's site icon, for its pill in the chat's Browser (tabs.ts); ?site= is only for the browser's cache, which a tab
+  // that moves to another site leaves behind.
+  app.get("/api/tabs/:target/icon", async (req: Req, reply) => {
+    const found = await tabs.icon(req.params.target);
+    if (!found) throw new HttpError(404, "No icon for that tab");
+    return reply.type(found.type).header("cache-control", "max-age=86400").send(found.body);
   });
   app.get("/api/live/:id/terminal/screen", {
     websocket: true,

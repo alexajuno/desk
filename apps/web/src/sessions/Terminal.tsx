@@ -30,10 +30,10 @@ export function TerminalView({ session, ended }: { session: string; ended: () =>
     const yours = dock.yours(session);
     if (yours) term.focus();
 
-    // Ctrl ` goes on to desk, which hides the half (Frame.tsx); Ctrl ⇧ C copies xterm.js's own selection, and Ctrl ⇧ V
+    // Ctrl ` goes on to desk, which hides the half, and Ctrl ⇧ B, which shows the browser (Frame.tsx); Ctrl ⇧ C copies xterm.js's own selection, and Ctrl ⇧ V
     // is left to the browser, whose paste xterm.js takes, as a Linux terminal's keys.
     term.attachCustomKeyEventHandler((e) => {
-      if (e.ctrlKey && !e.altKey && !e.metaKey && e.code === "Backquote") return false;
+      if (e.ctrlKey && !e.altKey && !e.metaKey && (e.code === "Backquote" || (e.shiftKey && e.code === "KeyB"))) return false;
       if (e.ctrlKey && e.shiftKey && (e.code === "KeyC" || e.code === "KeyV")) {
         if (e.type === "keydown" && e.code === "KeyC" && term.hasSelection()) void navigator.clipboard.writeText(term.getSelection());
         return false;

@@ -457,8 +457,8 @@ button.foot-step:hover { background: var(--bg-hover); }
 .dock-pill:hover .dock-pill-x { opacity: 1; }
 
 /* The chat's right half (sessions/Half.tsx), beside it at the window's full height: what Claude drives, its terminal
-   now and its browser later. Its left edge is a hairline, which drags. Its head, the view's name and a ×, shows only
-   on a phone (phone.css), where the half takes the chat's place, until a second view gives it tabs. */
+   and its browser. Its left edge is a hairline, which drags. Its head, as tall as the chat's, holds a tab for each
+   view, as the chat's head does, and a × that hides it. */
 .session-split { display: flex; height: 100%; min-height: 0; }
 .session-split > .session-view { flex: 1; min-width: 0; }
 .session-split:has(> .half) > .session-view { min-width: 360px; } /* the half gives way first on a narrow window */
@@ -468,10 +468,29 @@ button.foot-step:hover { background: var(--bg-hover); }
 .half-grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: var(--border-3); opacity: 0; transition: opacity 0.1s; }
 .half-grip:hover::after, .half-dragging .half-grip::after { opacity: 1; }
 .half-dragging, .half-dragging * { cursor: col-resize; user-select: none; }
-.half-head { display: none; flex: none; align-items: center; gap: 8px; height: 44px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--border-1); }
-.half-name { flex: 1; font: 500 13px var(--font); color: var(--text-1); }
-/* The terminal button beside Attach a file, lit while the half shows it, as a current control is. */
-.terminal-btn.on { background: var(--bg-active); color: var(--text-1); }
+.half-head { display: flex; flex: none; align-items: center; gap: 8px; height: 44px; padding: 0 8px; border-bottom: 1px solid var(--border-1); }
+.half-head .dock-tabs { flex: 1; }
+/* The terminal and globe buttons beside Attach a file, each lit while the half shows its view, as a current control is. */
+.half-btn.on { background: var(--bg-active); color: var(--text-1); }
+
+/* The chat's Browser (Browser.tsx), mockup A ("okay A", 31 Oct): a 40px strip of its session's tabs, pills as the
+   head's tabs, the open one filled as a current tab is; then back, forward, reload and the address, a filled pill;
+   then the page. */
+.browser { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.browser-tabs, .browser-nav { flex: none; display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 8px; border-bottom: 1px solid var(--border-1); }
+.browser-tabs { overflow-x: auto; scrollbar-width: none; }
+.browser-tab { flex: 0 1 auto; min-width: 72px; max-width: 190px; padding: 0 10px 0 8px; background: transparent; color: var(--text-3); }
+.browser-tab:hover { background: var(--btn-ghost-hover); color: var(--text-2); }
+.browser-tab.here { background: var(--bg-tab-on); color: var(--text-1); box-shadow: 0 0 0 0.5px var(--ring-btn); }
+.browser-tab span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.browser-fav { flex: none; display: flex; width: 14px; height: 14px; border-radius: 3px; }
+.browser-fav .glyph { width: 14px; height: 14px; }
+.browser-nav .dock-btn:disabled { background: transparent; }
+.browser-url { flex: 1; min-width: 0; height: 28px; margin-left: 4px; padding: 0 12px; border-radius: 9999px; background: var(--btn); box-shadow: 0 0 0 0.5px var(--ring-btn);
+               font: 450 12px/28px var(--font); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.browser-url b { font-weight: 450; color: var(--text-2); }
+.browser-page { flex: 1; min-height: 0; }
+.browser-empty { margin: 48px 12px; text-align: center; font-size: 13px; color: var(--text-3); }
 
 /* The terminal (Terminal.tsx): xterm.js, in the mono font, its cells filling the half less a margin; its sixteen
    colours are VS Code's Dark+ and Light+ terminal ones (terminalColorRegistry.ts, read 31 Oct), and its ground and
