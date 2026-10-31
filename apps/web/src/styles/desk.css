@@ -752,15 +752,18 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .menu.command.search mark { background: none; color: inherit; font-weight: 700; }
 .menu.command.search .menu-foot { gap: 2px; }
 .menu-foot .keyhint { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; color: var(--text-tip-key); }
-/* Its filters (step 2.4): the lists' chips under the tabs, in the box's palette, + and Clear after them; the @ menu and a
-   chip's menu open over the box. */
-.menu.command.search .s-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 12px 6px; font-size: 12px; }
-.s-filters .chip { border-color: var(--border-tip); background: none; }
-.s-filters .chip-part { color: var(--text-tip); }
-.s-filters .chip-part + .chip-part { border-left-color: var(--border-tip); }
-.s-filters .chip-op, .s-filters .chip-remove, .s-filters .filter-add { color: var(--text-tip-key); }
-.s-filters .filter-clear { margin-left: auto; color: var(--text-tip); }
-.s-filters button.chip-part:hover, .s-filters .filter-add:hover, .s-filters .filter-clear:hover { background: var(--bg-cmd-on); color: var(--text-cmd-on); }
+/* Its bar (the search issue's mockup C, 1 Nov): the chips, then what is typed, on lines of their own as they grow; the
+   lists' chips in the box's palette, red where the kind has no such field. */
+.menu.command .s-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-height: 40px; box-sizing: border-box;
+                       padding: 8px 12px 8px 36px; cursor: text; }
+.menu.command .s-bar .menu-filter { flex: 1 1 80px; width: auto; min-width: 80px; height: 24px !important; padding: 0 !important; }
+.s-bar .chip { flex: none; border-color: var(--border-tip); background: none; cursor: default; }
+.s-bar .chip-part { height: auto; color: var(--text-tip); } /* a button is 28px tall, the chip 24 */
+.s-bar .chip-part + .chip-part { border-left-color: var(--border-tip); }
+.s-bar .chip-op, .s-bar .chip-remove { color: var(--text-tip-key); }
+.s-bar button.chip-part:hover { background: var(--bg-cmd-on); color: var(--text-cmd-on); }
+.s-bar .chip.foreign, .s-bar .chip.foreign .chip-part + .chip-part { border-color: var(--health-off_track); }
+.s-bar .chip.foreign .chip-part { color: var(--health-off_track); }
 .menu.command.search ~ .menu { z-index: 31; }
 
 /* the S and P menus filter from keys read on the window, so their box is text, with a drawn caret */
