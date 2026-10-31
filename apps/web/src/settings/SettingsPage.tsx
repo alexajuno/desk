@@ -23,6 +23,7 @@ interface Settings {
   parent_auto_close: boolean;
   chat_model: string;
   chat_effort: string;
+  steps_card: string;
 }
 
 const PAGES: { group: string; pages: { slug: string; title: string; icon: ReactNode }[] }[] = [
@@ -35,6 +36,8 @@ export const TITLES: Record<string, string> = Object.fromEntries(PAGES.flatMap((
 // finds them by it (search/settings.ts).
 export const SETTINGS = [
   { page: "preferences", section: "Interface and theme", id: "theme", title: "Interface theme", about: "Follow the system, or keep desk light or dark" },
+  { page: "preferences", section: "Interface and theme", id: "steps_card", title: "Steps above the composer",
+    about: "Start an issue’s steps in its chat as one line, or open while a step is left" },
   { page: "preferences", section: "Sessions", id: "chat_model", title: "Model", about: "The model a new chat or issue session starts with" },
   { page: "preferences", section: "Sessions", id: "chat_effort", title: "Effort", about: "How hard a new chat or issue session thinks before it answers" },
   { page: "workflow", section: "Auto-close automations", id: "parent_auto_close", title: "Auto-close parent issues",
@@ -137,6 +140,7 @@ export function TextField({ id, value, save, clean = (typed) => typed }: {
 }
 
 const THEMES: [string, string][] = [["system", "System preference"], ["light", "Light"], ["dark", "Dark"]];
+const STEPS_CARD: [string, string][] = [["collapsed", "Collapsed"], ["expanded", "Expanded"]];
 
 const CHEVRON_DOWN = <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>;
 
@@ -190,6 +194,7 @@ function Sessions() {
 }
 
 function Preferences() {
+  const [shown, change] = useSettings();
   const [theme, setTheme] = useState(() => (["light", "dark"].includes(localStorage.theme) ? localStorage.theme : "system"));
   const pick = (to: string) => {
     if (to === "system") delete localStorage.theme;
@@ -209,6 +214,16 @@ function Preferences() {
           {CHEVRON_DOWN}
         </button>
       </Row>
+      {shown && <Row id="steps_card">
+        <button id="steps_card" type="button" className="set-pick" onClick={(e) => {
+          if (toggled(e.currentTarget)) return;
+          openMenu({ anchor: e.currentTarget, items: () => STEPS_CARD.map(([value, label]) => ({
+            label, current: value === shown.steps_card, run: () => change({ steps_card: value }) })) });
+        }}>
+          {STEPS_CARD.find(([value]) => value === shown.steps_card)?.[1]}
+          {CHEVRON_DOWN}
+        </button>
+      </Row>}
     </Section>
   );
 }
