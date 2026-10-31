@@ -1,10 +1,9 @@
-// Search (ported from desk/search.py): the issues, and the projects, whose title or description holds every word of the
-// query, in any state.
+// Search (ported from desk/search.py): the issues, and the projects, teams and milestones, whose title or description
+// holds every word of the query, in any state.
 // A word matches where a word starts, so "sear" finds "search" as you type but "arch" does not. Best match first: a
 // word in the title outweighs any number of words in the description, and the query as typed, in the title, outweighs
 // both. Ties go to open issues, then the backlog's order.
 import { CLOSED, rank, type Issue } from "./issues.ts";
-import { CLOSED as PROJECT_CLOSED, type Project } from "./projects.ts";
 
 // Python's \w is any letter or digit in any script, as in Vietnamese titles; JavaScript's is ASCII only.
 const W = "[\\p{L}\\p{N}_]";
@@ -72,12 +71,6 @@ export interface Hit {
   snippet: string; // the description around a word the title lacks; empty when the title has them all
 }
 
-export interface ProjectHit {
-  project: Project;
-  title: string;
-  snippet: string;
-}
-
 // A query's words, each as a pattern, and the whole query as one.
 function patternsOf(query: string) {
   const words = query.split(/\s+/).filter(Boolean);
@@ -122,15 +115,23 @@ export function findScored(issues: Map<string, Issue>, query: string): [number, 
   });
 }
 
-// The projects whose name or description holds every word, scored as issues are; ties go to open ones, then the newest.
-export function findProjects(projects: Map<string, Project>, query: string): [number, ProjectHit][] {
+export interface Found<T> {
+  thing: T;
+  title: string;
+  snippet: string;
+}
+
+// The things whose name (text's first) or description (its second) holds every word, scored as issues are, best first;
+// ties go to the open ones, then the newest.
+export function findThings<T extends { created: string }>(things: Iterable<T>, query: string, text: (t: T) => [string, string],
+  closed: (t: T) => boolean): [number, Found<T>][] {
   const q = patternsOf(query);
   if (!q) return [];
-  const found: [number, ProjectHit][] = [];
-  for (const project of projects.values()) {
-    const s = scored(project.title, project.body, q);
-    if (s) found.push([s.score, { project, title: s.title, snippet: s.snippet }]);
+  const found: [number, Found<T>][] = [];
+  for (const thing of things) {
+    const s = scored(...text(thing), q);
+    if (s) found.push([s.score, { thing, title: s.title, snippet: s.snippet }]);
   }
-  const closed = (p: Project) => (PROJECT_CLOSED.has(p.status) ? 1 : 0);
-  return found.sort(([sa, a], [sb, b]) => sb - sa || closed(a.project) - closed(b.project) || b.project.created.localeCompare(a.project.created));
+  const shut = (t: T) => (closed(t) ? 1 : 0);
+  return found.sort(([sa, a], [sb, b]) => sb - sa || shut(a.thing) - shut(b.thing) || b.thing.created.localeCompare(a.thing.created));
 }

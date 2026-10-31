@@ -29,7 +29,20 @@ const PAGES: { group: string; pages: { slug: string; title: string; icon: ReactN
   { group: "Personal", pages: [{ slug: "preferences", title: "Preferences", icon: GLYPH.sliders }] },
   { group: "Issues", pages: [{ slug: "workflow", title: "Workflows & automations", icon: GLYPH.parent }] },
 ];
-const TITLES = Object.fromEntries(PAGES.flatMap((g) => g.pages).map((p) => [p.slug, p.title]));
+export const TITLES: Record<string, string> = Object.fromEntries(PAGES.flatMap((g) => g.pages).map((p) => [p.slug, p.title]));
+
+// Every setting, by its page and its card's heading, as its row names it: each Row draws its own from here, and search
+// finds them by it (search/settings.ts).
+export const SETTINGS = [
+  { page: "preferences", section: "Interface and theme", id: "theme", title: "Interface theme", about: "Follow the system, or keep desk light or dark" },
+  { page: "preferences", section: "Sessions", id: "chat_model", title: "Model", about: "The model a new chat or issue session starts with" },
+  { page: "preferences", section: "Sessions", id: "chat_effort", title: "Effort", about: "How hard a new chat or issue session thinks before it answers" },
+  { page: "workflow", section: "Auto-close automations", id: "parent_auto_close", title: "Auto-close parent issues",
+    about: "Automatically close an open parent issue when its last sub-issue is closed" },
+  { page: "workflow", section: "Auto-close automations", id: "sub_issue_auto_close", title: "Auto-close sub-issues",
+    about: "Automatically close all sub-issues when their parent issue is closed" },
+];
+const SETTING = new Map(SETTINGS.map((s) => [s.id, s]));
 
 // Back to app returns to the last page outside Settings.
 let lastApp = "/issues";
@@ -70,9 +83,23 @@ export function Section({ title, about, children }: { title?: string; about?: st
   );
 }
 
-export function Row({ id, title, about, children }: { id: string; title: string; about?: string; children: ReactNode }) {
+// A setting's row, named as SETTINGS names it, or as it says itself: a team's settings are not in SETTINGS. A setting
+// opened from search comes in at #<its id>, and its row comes into view with a moment's ring, as a chat's message does
+// (.brought); the row knows, since a page's rows may come only once its settings are in.
+export function Row({ id, title = SETTING.get(id)?.title ?? id, about = SETTING.get(id)?.about, children }: {
+  id: string; title?: string; about?: string; children: ReactNode;
+}) {
+  const { hash } = useLocation(), row = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    const at = row.current;
+    if (!at || decodeURIComponent(hash.slice(1)) !== id) return;
+    at.scrollIntoView({ block: "center" });
+    at.classList.remove("brought");
+    void at.offsetWidth; // the same setting opened again rings again
+    at.classList.add("brought");
+  }, [hash, id]);
   return (
-    <li className="set-row">
+    <li ref={row} className="set-row">
       <div className="set-text"><label htmlFor={id}>{title}</label>{about && <span>{about}</span>}</div>
       {children}
     </li>
@@ -140,7 +167,7 @@ function Sessions() {
   const efforts = model ? EFFORTS.filter(([value]) => model.efforts.includes(value)) : EFFORTS;
   return (
     <Section title="Sessions">
-      <Row id="chat_model" title="Model" about="The model a new chat or issue session starts with">
+      <Row id="chat_model">
         <button id="chat_model" type="button" className="set-pick" onClick={(e) => {
           if (toggled(e.currentTarget)) return;
           openMenu({ anchor: e.currentTarget, items: () => list.map((m) => ({ label: m.name, current: m.value === shown.chat_model, run: () => change({ chat_model: m.value }) })) });
@@ -149,7 +176,7 @@ function Sessions() {
           {CHEVRON_DOWN}
         </button>
       </Row>
-      <Row id="chat_effort" title="Effort" about="How hard a new chat or issue session thinks before it answers">
+      <Row id="chat_effort">
         <button id="chat_effort" type="button" className="set-pick" onClick={(e) => {
           if (toggled(e.currentTarget)) return;
           openMenu({ anchor: e.currentTarget, items: () => efforts.map(([value, label]) => ({ label, current: value === shown.chat_effort, run: () => change({ chat_effort: value }) })) });
@@ -172,7 +199,7 @@ function Preferences() {
   };
   return (
     <Section title="Interface and theme">
-      <Row id="theme" title="Interface theme" about="Follow the system, or keep desk light or dark">
+      <Row id="theme">
         <button id="theme" type="button" className="set-pick" onClick={(e) => {
           if (toggled(e.currentTarget)) return;
           openMenu({ anchor: e.currentTarget, items: () => THEMES.map(([value, label]) => ({
@@ -192,12 +219,10 @@ function Workflow() {
   const change = (name: "parent_auto_close" | "sub_issue_auto_close", on: boolean) => set({ [name]: on });
   return (
     <Section title="Auto-close automations" about="Automate closing issues based on status changes to related issues.">
-      <Row id="parent_auto_close" title="Auto-close parent issues"
-        about="Automatically close an open parent issue when its last sub-issue is closed">
+      <Row id="parent_auto_close">
         <Switch id="parent_auto_close" on={shown.parent_auto_close} change={(on) => change("parent_auto_close", on)} />
       </Row>
-      <Row id="sub_issue_auto_close" title="Auto-close sub-issues"
-        about="Automatically close all sub-issues when their parent issue is closed">
+      <Row id="sub_issue_auto_close">
         <Switch id="sub_issue_auto_close" on={shown.sub_issue_auto_close} change={(on) => change("sub_issue_auto_close", on)} />
       </Row>
     </Section>

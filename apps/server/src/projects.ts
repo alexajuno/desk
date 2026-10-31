@@ -146,6 +146,10 @@ export async function milestonesOf(project: string, q: Db = sql()): Promise<Mile
   return (await q.query<Milestone>("select * from milestones where project = $1 order by sort, created", [project])).rows;
 }
 
+export async function allMilestones(q: Db = sql()): Promise<Milestone[]> {
+  return (await q.query<Milestone>("select * from milestones order by project, sort, created")).rows;
+}
+
 export async function milestone(id: string, q: Db = sql()): Promise<Milestone | null> {
   return (await q.query<Milestone>("select * from milestones where id = $1", [id])).rows[0] ?? null;
 }

@@ -20,7 +20,7 @@ import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
 import { toHtml, toHtmlWithToc } from "./render.ts";
 import * as roster from "./roster.ts";
-import { findProjects, findScored, markRanges } from "./search.ts";
+import { findScored, findThings, markRanges, type Found } from "./search.ts";
 import * as sessions from "./sessions.ts";
 import * as teams from "./teams.ts";
 import type { Team } from "./teams.ts";
@@ -638,34 +638,71 @@ export function markRows(act: "read" | "unread" | "delete", ids: string[] | null
   return inbox.mark(act, ids ?? every.map((r) => r.id));
 }
 
-// Search's hits, as its box lists them: a group per kind, Chats first, each with how many it found. All holds each
-// kind's best 5 ("a group per kind, Chats first, best 5 each", step 1.5), and a kind's tab its whole list, the first
-// 100. Each kind is narrowed to some teams and to open or closed ones by the filters its @ menu adds: a chat by its
-// issue's, and one with no issue is open and in no team (step 1.6). In All, an issue whose chat is listed is left out
-// of Issues, since the chat's row shows it. Issues and projects come best match first.
+// Search's hits, as its box lists them: a group per kind, Chats, Issues, Projects, Teams and Milestones (the app adds
+// Settings), each with how many it found. All holds each kind's best 5 ("a group per kind, Chats first, best 5 each",
+// step 1.5), and a kind's tab its whole list, the first 100. Before anything is typed, each kind lists what is live in it
+// (step 1.4), All only the chats: the chats in progress then the newest, open issues the last moved first, projects In
+// Progress, active teams, and each started project's current milestone; with a Status filter, every one that answers it.
+// The filters its @ menu adds narrow each kind by step 1.6's table: a chat by its issue, one with no issue being open and
+// in no team; a team by itself, archived being closed; a milestone by its project's team, closed once its issues are
+// done. In All, an issue whose chat is listed is left out of Issues, since the chat's row shows it. Issues, projects,
+// teams and milestones come best match first.
 export async function searchPage(q: string, kind = "", team = "", status = "") {
-  const all = await store.loadAll(), everyTeam = await teams.loadAll();
+  const all = await store.loadAll(), everyTeam = await teams.loadAll(), everyProject = await projects.loadAll();
   // A filter as the lists write theirs: "desk,muse", or "not:desk" for every other value.
   const filter = (text: string) => ({ not: text.startsWith("not:"), values: text.replace(/^not:/, "").split(",").filter(Boolean) });
   const passes = (f: ReturnType<typeof filter>, value: string) => !f.values.length || f.values.includes(value) !== f.not;
   const byTeam = filter(team), byStatus = filter(status);
   const kept = (t: string | null, closed: boolean) => passes(byTeam, t ?? "") && passes(byStatus, closed ? "closed" : "open");
   const teamOf = (slug: string | null) => (slug ? { slug, title: everyTeam.get(slug)?.title ?? slug } : null);
-  const limit = (k: string) => (!kind ? 5 : kind === k ? 100 : 0);
+  const typed = /\S/.test(q), live = !typed && !byStatus.values.length;
+  const limit = (k: string) => (kind ? (kind === k ? 100 : 0) : typed ? 5 : k === "chats" ? 100 : 0);
+  // What is listed before anything is typed, as a search finds it, with nothing marked.
+  const asListed = <T extends { title: string }>(things: T[]): [number, Found<T>][] => things.map((thing) => [0, { thing, title: markRanges(thing.title), snippet: "" }]);
+
   const chats = await sessions.search(q, (i) => (i ? kept(i.team, CLOSED.has(i.state)) : !byTeam.values.length && passes(byStatus, "open")), limit("chats"));
   const chatHits = chats.hits.map((c) => ({ kind: "chat", key: `chat/${c.id}`, session: c.id, title: markRanges(c.title, c.marks),
     snippet: c.sub ? markRanges(c.sub, c.subMarks) : "", folder: c.folder, age: c.age, state: c.state, issue: c.issue && issueJson(c.issue) }));
-  const listed = new Set(kind ? [] : chats.hits.flatMap((c) => (c.issue ? [c.issue.slug] : [])));
-  const issues = findScored(all, q).filter(([, h]) => kept(h.issue.team, CLOSED.has(h.issue.state)));
-  const issueHits = issues.filter(([, h]) => !listed.has(h.issue.slug)).slice(0, limit("issues"))
-    .map(([, { issue, title, snippet }]) => ({ kind: "issue", key: issue.slug, title, snippet, team: teamOf(issue.team), date: shortDate(issue.created), issue: issueJson(issue) }));
-  const found = findProjects(await projects.loadAll(), q).filter(([, h]) => kept(h.project.team, projects.CLOSED.has(h.project.status)));
-  const projectHits = found.slice(0, limit("projects")).map(([, { project: p, title, snippet }]) => ({ kind: "project", key: `project/${p.slug}`, title, snippet,
+  const shown = new Set(kind ? [] : chats.hits.flatMap((c) => (c.issue ? [c.issue.slug] : [])));
+
+  let issues = (typed ? findScored(all, q).map(([, h]) => h) : [...all.values()].filter((i) => !live || !CLOSED.has(i.state))
+    .map((issue) => ({ issue, title: markRanges(issue.title), snippet: "" }))).filter((h) => kept(h.issue.team, CLOSED.has(h.issue.state)));
+  if (!typed && limit("issues")) {
+    const moved = new Map(issues.map((h) => [h.issue.slug, store.changed(h.issue.slug)]));
+    issues = issues.sort((a, b) => moved.get(b.issue.slug)! - moved.get(a.issue.slug)!);
+  }
+  const issueHits = issues.filter((h) => !shown.has(h.issue.slug)).slice(0, limit("issues"))
+    .map(({ issue, title, snippet }) => ({ kind: "issue", key: issue.slug, title, snippet, team: teamOf(issue.team), date: shortDate(issue.created), issue: issueJson(issue) }));
+
+  const shut = (p: Project) => projects.CLOSED.has(p.status);
+  const found = (typed ? findThings(everyProject.values(), q, (p) => [p.title, p.body], shut)
+    : asListed([...everyProject.values()].filter((p) => !live || p.status === "started").sort((a, b) => b.created.localeCompare(a.created))))
+    .filter(([, h]) => kept(h.thing.team, shut(h.thing)));
+  const projectHits = found.slice(0, limit("projects")).map(([, { thing: p, title, snippet }]) => ({ kind: "project", key: `project/${p.slug}`, title, snippet,
     team: teamOf(p.team), date: shortDate(p.created), project: { slug: p.slug, status: p.status, progress: Math.round(projects.progress(projects.issuesOf(all, p.slug)) * 100) } }));
+
+  const archived = (t: Team) => t.state === "archived";
+  const teamsFound = (typed ? findThings(everyTeam.values(), q, (t) => [t.title, t.body], archived)
+    : asListed([...everyTeam.values()].filter((t) => !live || !archived(t)))).filter(([, h]) => kept(h.thing.slug, archived(h.thing)));
+  const teamHits = teamsFound.slice(0, limit("teams")).map(([, { thing: t, title, snippet }]) => ({ kind: "team", key: `team/${t.slug}`, title, snippet,
+    team: { slug: t.slug, title: t.title }, state: t.state, open: [...all.values()].filter((i) => i.team === t.slug && !CLOSED.has(i.state)).length }));
+
+  const byProject = Map.groupBy(await projects.allMilestones(), (m) => m.project);
+  const everyMilestone = [...everyProject.values()].flatMap((p) =>
+    projects.milestoneProgress(byProject.get(p.slug) ?? [], projects.issuesOf(all, p.slug)).map((m) => ({ ...m, of: p })));
+  const done = (m: (typeof everyMilestone)[number]) => m.progress === 100;
+  const milestonesFound = (typed ? findThings(everyMilestone, q, (m) => [m.title, m.body], done)
+    : asListed(everyMilestone.filter((m) => !live || (m.current && m.of.status === "started")))).filter(([, h]) => kept(h.thing.of.team, done(h.thing)));
+  const milestoneHits = milestonesFound.slice(0, limit("milestones")).map(([, { thing: m, title, snippet }]) => ({ kind: "milestone", key: `milestone/${m.id}`,
+    title, snippet, team: teamOf(m.of.team), project: { slug: m.of.slug, title: m.of.title },
+    milestone: { id: m.id, target: m.target, target_label: periods.label(m.target), progress: m.progress } }));
+
   return { kinds: [
     { kind: "chats", count: chats.count, hits: chatHits },
     { kind: "issues", count: issues.length, hits: issueHits },
     { kind: "projects", count: found.length, hits: projectHits },
+    { kind: "teams", count: teamsFound.length, hits: teamHits },
+    { kind: "milestones", count: milestonesFound.length, hits: milestoneHits },
   ] };
 }
 
