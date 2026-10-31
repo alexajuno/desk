@@ -22,8 +22,9 @@ export async function setField(slug: string, field: Settable, value: string, bas
 }
 
 // A new title gave the issue a new slug, and the old one leads nowhere: the page that shows it, as its own page or
-// opened beside a list (?i=), moves to the new one.
-function follow(from: string, to: string) {
+// opened beside a list (?i=), moves to the new one. The frame calls it too, as the chat in the middle moves to another
+// issue (Frame.tsx).
+export function follow(from: string, to: string) {
   const url = new URL(location.href);
   url.pathname = url.pathname.replace(new RegExp(`^/issue/${from}$`), `/issue/${to}`);
   if (url.searchParams.get("i") === from) url.searchParams.set("i", to);

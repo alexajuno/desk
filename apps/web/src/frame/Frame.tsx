@@ -2,12 +2,13 @@
 // on a page that is one (an issue with a chat, its issue on its tabs, or /sessions/<id>), the corner's session buttons,
 // the shortcuts panel, the new issue panel, and the menus and toasts over them. desk's keys and the clicks that act
 // across the page live here, as desk.js read them on the document.
+import { compareStructural, reaction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect } from "react";
 import { Outlet, useLocation } from "react-router";
 import { deskPath, go } from "../app/nav";
 import { firstDrawn } from "../app/splash";
-import { remove, removeMany, setField, setFields, undo, undoList } from "../issues/actions";
+import { follow, remove, removeMany, setField, setFields, undo, undoList } from "../issues/actions";
 import { fieldMenu, milestoneMenu, projectPicker, projectStatusMenu, teamPicker } from "../issues/menus";
 import { ofProjects, projectsStatus, projectsTeam, selectable, selectAll, selection, SelectionBar, selectionField } from "../issues/selection";
 import { listView, setView } from "../lists/current";
@@ -36,6 +37,7 @@ import { noteVisit, openIssue, openProject, openTeam, teamPath } from "./open";
 import { chatKey, Sidebar } from "./Sidebar";
 import { Tabs } from "./Tabs";
 import { closeSide, sideOpen, toggleSide } from "./side";
+import { dock } from "../store/dock";
 import { issues } from "../store/issues";
 import { toast as say } from "../ui/toast";
 
@@ -51,10 +53,27 @@ function chatOf(pathname: string): { session: string | null; slug: string | null
   const issue = /^\/issue\/([^/]+)$/.exec(pathname);
   if (issue) {
     const slug = decodeURIComponent(issue[1]);
-    return { session: issues.sessionOf(slug), slug };
+    return { session: issues.sessionOf(slug) ?? (following?.from === slug ? following.session : null), slug };
   }
   const session = /^\/sessions\/([^/]+)$/.exec(pathname);
   return { session: session?.[1] ?? null, slug: null };
+}
+
+// The chat in the middle and the issue it works, while a chat is there.
+const middle = () => (dock.center && dock.session ? { session: dock.session, issue: issues.issueOf(dock.session) } : null);
+
+// The chat the page last followed, and the address it followed it from, which keeps picking that chat: the router
+// fetches the new page before it moves (routes.tsx), and meanwhile the old address names an issue with no chat.
+let following: { from: string; session: string } | null = null;
+
+// The page follows the chat you have open, not the issue ("valid", the user, 31 Oct): when that chat's issue changes
+// under it, by a new title or a bind (an agent's Accept does both), the address moves with it, else it would name an
+// issue with no chat, and the chat would close. A chat that lets its issue go to another one's takeover leaves the page
+// on the issue, with its new chat.
+function followMiddle(now: ReturnType<typeof middle>, before: ReturnType<typeof middle>) {
+  if (!(now?.issue && before?.issue && now.session === before.session && now.issue !== before.issue)) return;
+  following = { from: before.issue, session: now.session };
+  follow(before.issue, now.issue);
 }
 
 // The issue this page shows, on an issue page.
@@ -339,6 +358,8 @@ export const Frame = observer(function Frame() {
   useEffect(() => ui.clearSelection(), [pathname]); // a selection belongs to its page's list
   const chat = chatOf(pathname);
   useLayoutEffect(() => arrange(chat.session), [chat.session]);
+  // MobX runs it as the change lands, before React draws the frame again with the chat's issue changed.
+  useEffect(() => reaction(middle, followMiddle, { equals: compareStructural }), []);
   useEffect(() => firstDrawn(), []); // the splash goes once the parts drawn are whole
   useEffect(() => {
     document.addEventListener("keydown", onKeyDown);
