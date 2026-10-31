@@ -9,6 +9,7 @@
 // (app/splash.ts). Every answer is kept by its address (seen), so going back to a page draws it at once, and fetches it
 // again behind.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigation } from "react-router";
 import { useSplash } from "../app/splash";
 import { issues } from "../store/issues";
 import { onReload } from "../store/ui";
@@ -19,6 +20,7 @@ const seen = new Map<string, Seen>();
 const KEEP = 40; // pages kept; the oldest goes first
 const FRESH = 2000; // ms a primed answer counts as the page's own first fetch, while no issue changed since
 const WAIT = 3000; // ms a loader waits for a slow desk before the page draws without its data
+const GONE = 600; // ms the page stays on an address that answered 404 before it takes the copy on screen down
 
 function keep(url: string, data: unknown) {
   seen.delete(url);
@@ -54,6 +56,21 @@ export function usePage<T>(url: string, also: string | number = "") {
   const [error, setError] = useState<string | null>(null);
   const asked = useRef(0);
   const seq = issues.seq; // read in render: the component is an observer, so a change draws it again
+  const moving = useRef(false);
+  moving.current = useNavigation().state !== "idle";
+  useEffect(() => () => { ++asked.current; }, []); // gone from the screen: nothing it asked for lands
+
+  // A 404 takes the copy on screen down, so a page whose issue is gone says so rather than freeze (31 Oct). Not at
+  // once: a new title answers 404 at the old address while the page moves to the new one (issues/actions.ts, follow;
+  // frame/Frame.tsx), so the 404 stands only once the page has stayed on the address a moment, moving nowhere.
+  const takeDown = useCallback((mine: number) => {
+    setTimeout(() => {
+      if (mine !== asked.current) return;
+      if (moving.current) return takeDown(mine);
+      seen.delete(url);
+      setData(null);
+    }, GONE);
+  }, [url]);
 
   const reload = useCallback(async () => {
     const mine = ++asked.current;
@@ -61,6 +78,7 @@ export function usePage<T>(url: string, also: string | number = "") {
     if (!res || mine !== asked.current) return;
     if (!res.ok) {
       setError(res.status === 404 ? "That issue is gone." : `Failed (${res.status})`);
+      if (res.status === 404) takeDown(mine);
       return;
     }
     const json = (await res.json()) as T;
@@ -68,7 +86,7 @@ export function usePage<T>(url: string, also: string | number = "") {
     keep(url, json);
     setError(null);
     setData(json);
-  }, [url]);
+  }, [url, takeDown]);
 
   // A new address: what was seen of it shows at once. Its loader's answer, just fetched with no issue changed since,
   // stands as the page's first; anything else, and every change to an issue, is fetched again. The old address's
