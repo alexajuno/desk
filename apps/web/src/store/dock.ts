@@ -1,12 +1,12 @@
 // Where a session's chat stands (the plan of "Chat in the center, the issue on the side"): whatever you work on takes
 // the middle of the screen. An issue with a chat opens as that chat, alone in the middle, on Chat, its steps above the
-// composer; the tabs in its head, or Tab and 1 to 3, show its issue's page (Issue) or its Changes in the chat's place,
-// the reply box staying under each ("all could be on a single screen. just that we need a way to switching between
-// those views", the user, 28 Oct: the plan of "Chat, plan and issue on one screen", which took the sheet over the chat
-// away; the Plan tab went on 31 Oct, for the steps above the composer). Any other page takes the middle, and the chat
-// you left waits as a pill at the bottom right.
+// composer; the tabs in its head, or Tab and 1 and 2, show its Changes in the chat's place, the reply box staying under
+// them ("all could be on a single screen. just that we need a way to switching between those views", the user, 28 Oct:
+// the plan of "Chat, plan and issue on one screen", which took the sheet over the chat away; the Plan tab went on 31
+// Oct, for the steps above the composer, and the Issue tab on 1 Nov, for the step's button in the head and the details
+// under it). Any other page takes the middle, and the chat you left waits as a pill at the bottom right.
 //
-//   issue page, no chat ── Plan · Start · O ──▶ chat ◀── Tab · 1-3 · Esc ──▶ Issue · Changes
+//   issue page, no chat ── Plan · Start · I ──▶ chat ◀── Tab · 1-2 · Esc ──▶ Changes
 //
 // The chat you left is remembered in this browser; its view is not, and each chat comes on Chat.
 //
@@ -17,8 +17,8 @@
 import { action, computed, makeObservable, observable } from "mobx";
 
 export type Layout = "page" | "chat";
-// What the chat in the middle shows under its head: the chat, or its issue's page or changes.
-export type View = "chat" | "issue" | "changes";
+// What the chat in the middle shows under its head: the chat, or its issue's changes.
+export type View = "chat" | "changes";
 // What the right half beside it shows: the chat's terminal, and later its browser.
 export type Half = "terminal";
 

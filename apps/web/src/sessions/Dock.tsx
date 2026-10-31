@@ -13,15 +13,14 @@ import { go } from "../app/nav";
 import { splashUp, useSplash } from "../app/splash";
 import { markdown } from "../lib/markdown";
 import { seenPage, usePage } from "../api/page";
-import { HeadStatus, IssueDetails, IssueView, landSkip, Lands, StepButtons, Title, useStep, type IssuePageData } from "../issues/IssueView";
+import { HeadStatus, IssueDetails, landSkip, Lands, StepButtons, Title, useStep, type IssuePageData } from "../issues/IssueView";
 import { useLive as useIssueLive } from "../issues/useLive";
-import { actionsMenu, folderMenu } from "../issues/menus";
-import { painted } from "../issues/painted";
+import { folderMenu } from "../issues/menus";
 import { dock, type Layout, type View } from "../store/dock";
 import { issues } from "../store/issues";
 import { lineKey } from "../store/frame";
 import { toggleSide as toggleSidebar } from "../frame/side";
-import { CHEVRON, GLYPH, MORE_ICON, SIDE_ICON, StateIcon } from "../ui/icons";
+import { CHEVRON, GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
 import { isDrawn, type PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
@@ -35,8 +34,8 @@ import { EFFORTS, effortName, loadModels, resets, runsMenu, tokens, warm, type R
 // can make a frame or more after the address changes, or at once when it is there already (SessionView says where).
 const wantsFocus = observable.box<string | null>(null);
 
-// Open a session's chat in the middle: its issue's page when it has one, which shows the chat with the issue on its
-// Issue tab. It opens to read, unless nothing is said in it yet ("unless i open an empty chat, don't focus on composer", the user,
+// Open a session's chat in the middle: its issue's page when it has one, which shows the chat with the issue in its
+// head. It opens to read, unless nothing is said in it yet ("unless i open an empty chat, don't focus on composer", the user,
 // 21 Oct).
 export function openSession(id: string, slug?: string | null) {
   slug ??= issues.issueOf(id);
@@ -52,7 +51,7 @@ export function focusComposer() {
   return Boolean(box);
 }
 
-// New session: an agent chat, in the middle. Its issue is on its Issue tab once the agent files one (SessionFullRoute).
+// New session: an agent chat, in the middle. Its issue is in its head once the agent files one (SessionFullRoute).
 // A draft, such as New automation's, waits typed in its composer.
 export async function newSession(draft = "") {
   const res = await postJson("/sessions/new");
@@ -84,31 +83,30 @@ export function arrange(session: string | null) {
   move(dock.layoutAfter(session), () => dock.arrange(session));
 }
 
-// The views a chat has, in its head's order: Chat; for an issue's chat in the middle, its page; and for an issue's, its
-// Changes once a step has sent its commit.
-function viewsOf(here: IssuePageData | null, docked: boolean): View[] {
+// The views a chat has, in its head's order: Chat, and for an issue's, its Changes once a step has sent its commit. Its
+// page is no view of it since 1 Nov: its step and Try are in the head, its details drop open under it, and its Plan and
+// card are drawn in the chat ("for content, it's all in the chat huh", the user).
+function viewsOf(here: IssuePageData | null): View[] {
   const views: View[] = ["chat"];
-  if (here && docked) views.push("issue");
   if (here && anyCommit(here.plan_steps)) views.push("changes");
   return views;
 }
 
-// Whether the chat in the middle is an issue's, whose page it can show.
+// Whether the chat in the middle is an issue's, whose details and Changes it can show.
 const hasIssue = () => dock.center && chatPage.get()?.issue.session === dock.session;
 
-// The view each of 1 to 3 opens, in the head's order whichever views the chat has, so a key always means one view.
-const BY_DIGIT: View[] = ["chat", "issue", "changes"];
+// The view each of 1 and 2 opens, in the head's order, so a key always means one view.
+const BY_DIGIT: View[] = ["chat", "changes"];
 
 // The keys of an issue's chat in the middle while you read it, the reply box keeping its own Tab: Tab and Shift Tab walk
-// its views, 1 to 3 open one of them and again go back to Chat (two Tabs to its page and three to its Changes were "too
-// long", the user, 29 Oct), and Esc goes back to Chat from another one; ], as [ the sidebar, drops its issue's details
-// open under its head, or folds them. I goes into the reply box on any view, and V opens the diagram on screen
-// (Frame.tsx).
+// its views, 1 and 2 open one of them and again go back to Chat (Tabs to its views were "too long", the user, 29 Oct),
+// and Esc goes back to Chat from another one; ], as [ the sidebar, drops its issue's details open under its head, or
+// folds them. I goes into the reply box on any view, and V opens the diagram on screen (Frame.tsx).
 export function viewKey(e: KeyboardEvent): boolean {
   if (e.ctrlKey || e.metaKey || e.altKey || !hasIssue()) return false;
-  const views = viewsOf(chatPage.get(), true), at = Math.max(0, views.indexOf(dock.view));
+  const views = viewsOf(chatPage.get()), at = Math.max(0, views.indexOf(dock.view));
   if (e.key === "Tab") { dock.setView(views[(at + (e.shiftKey ? views.length - 1 : 1)) % views.length]); return true; }
-  const to = BY_DIGIT[["1", "2", "3"].indexOf(e.key)];
+  const to = BY_DIGIT[["1", "2"].indexOf(e.key)];
   if (to && views.includes(to)) { dock.setView(to === views[at] ? "chat" : to); return true; }
   if (e.key === "Escape" && views[at] !== "chat") { dock.setView("chat"); return true; }
   if (e.key === "]") { dock.setDetails(!dock.details); return true; }
@@ -165,7 +163,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   const docked = dock.center && dock.session === id;
   const [own, setOwn] = useState<View>("chat");
   const page = chatPage.get(), here = m?.issue && page?.issue.slug === m.issue.slug ? page : null;
-  const views = viewsOf(here, docked);
+  const views = viewsOf(here);
   const want = docked ? dock.view : own;
   const shown = views.includes(want) ? want : "chat";
   const setView = (v: View) => (docked ? dock.setView(v) : setOwn(v));
@@ -237,7 +235,6 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
         <ChatHead s={s} views={views} view={shown} setView={setView} docked={docked} />
         {here && docked && dock.details && <IssueDetails data={here} />}
         <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>
-          {here && shown === "issue" && <div className="dock-view dock-page"><IssueView data={here} /></div>}
           {here && shown === "changes" && <ChangesOf slug={here.issue.slug} />}
           <div className="convo" hidden={shown !== "chat"}>
             {!s.loaded ? <p className="convo-empty">Connecting…</p>
@@ -277,11 +274,10 @@ const ChatSteps = observer(function ChatSteps({ s, here }: { s: LiveSession; her
 });
 
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, then its issue's status and
-// title, with a ⌄ that drops the issue's details open under the head (IssueDetails), its views (Chat, Issue,
-// Changes), and at its right the issue's next step, Try and Go or Approve, which the Issue tab shows over its
-// Properties instead (1 Nov: "the approve button is not there, but i have to tab to issue"); the Inbox, which shows a
-// chat without its head, has its own. Where its work stands is in the steps above the
-// composer. A chat with no issue is renamed in its title, and shows its folder, which only an issue's Properties would
+// title, with a ⌄ that drops the issue's details open under the head (IssueDetails), its views (Chat, Changes), and
+// at its right the issue's next step, Try and Go or Approve (1 Nov: "the approve button is not there, but i have to
+// tab to issue"); the Inbox, which shows a chat without its head, has its own. Where its work stands is in the steps
+// above the composer. A chat with no issue is renamed in its title, and shows its folder, which only an issue's Properties would
 // show otherwise. Whether the chat works shows in the chat itself, its Working… line and its stop button (28 Oct: "the
 // header in chat interface looks kinda tight").
 const ChatHead = observer(function ChatHead({ s, views, view, setView, docked }: { s: LiveSession; views: View[]; view: View; setView: (v: View) => void; docked: boolean }) {
@@ -301,10 +297,7 @@ const ChatHead = observer(function ChatHead({ s, views, view, setView, docked }:
         )}
       </div>
       {views.length > 1 && m?.issue && <ViewTabs slug={m.issue.slug} views={views} view={view} setView={setView} />}
-      {here && docked && view !== "issue" && <HeadStep data={here} />}
-      {/* On Issue, its Actions, which the issue's page has in its top bar */}
-      {here && view === "issue" && <button className="dock-btn" type="button" title="Actions"
-        onClick={(e) => { if (!toggled(e.currentTarget)) actionsMenu(painted(here.issue), { anchor: e.currentTarget }, here.issue.slug); }}>{MORE_ICON}</button>}
+      {here && docked && <HeadStep data={here} />}
     </header>
   );
 });
@@ -328,12 +321,12 @@ function pressStep(box: HTMLElement) {
   return Boolean(step);
 }
 
-// The chat, or its issue's page, or its Changes, each build step's diff (Changes.tsx), in the view tabs' pills, the Changes tab with how much the steps changed. The reply
-// box stays under each ("A", the user, 28 Oct, picking the tabs in the head over a row of their own).
+// The chat, or its Changes, each build step's diff (Changes.tsx), in the view tabs' pills, the Changes tab with how much
+// the steps changed. The reply box stays under each ("A", the user, 28 Oct, picking the tabs in the head over a row of
+// their own).
 const VIEW_TAB: Record<View, [string, string]> = {
   chat: ["Chat", "The conversation  1 or Esc"],
-  issue: ["Issue", "Its page  2"],
-  changes: ["Changes", "Each build step's diff, from its commit  3"],
+  changes: ["Changes", "Each build step's diff, from its commit  2"],
 };
 const ViewTabs = observer(function ViewTabs({ slug, views, view, setView }: { slug: string; views: View[]; view: View; setView: (v: View) => void }) {
   return (

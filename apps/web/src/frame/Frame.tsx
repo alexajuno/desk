@@ -49,7 +49,7 @@ function openIssueSession(slug: string) {
   else say("This issue has no session yet.");
 }
 
-// The chat the page at this address is: an issue's, its issue on its Issue tab, or a session's own page.
+// The chat the page at this address is: an issue's, its issue in its head, or a session's own page.
 function chatOf(pathname: string): { session: string | null; slug: string | null } {
   const issue = /^\/issue\/([^/]+)$/.exec(pathname);
   if (issue) {

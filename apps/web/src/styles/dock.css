@@ -15,7 +15,7 @@
 .dock { transition: left 0.2s ease; } /* as the panel follows the sidebar */
 .side-collapsed .dock { left: 8px; }
 .chat-center .dock { display: flex; }
-/* With a chat in the middle, its issue's page stays under it, hidden: the chat shows the issue on its Issue tab. */
+/* With a chat in the middle, its issue's page stays under it, hidden: the chat shows the issue in its head and details. */
 .chat-center .panel { display: none; }
 .chat-center .corner { display: none; }
 @media (max-width: 900px) { .dock { left: 8px; } }
@@ -48,7 +48,7 @@
 @keyframes dock-rise-in { from { opacity: 0; transform: translateY(12px) scale(0.99); } }
 
 
-/* An issue in a narrow page or chat: its properties go under its title as chips, as in the Inbox. */
+/* An issue in a narrow page or the Inbox's pane: its properties go under its title as chips. */
 @container (max-width: 819px) {
   .issue { grid-template-columns: minmax(0, 1fr); }
   .issue .props { display: none; }
@@ -105,11 +105,15 @@
 .issue-details .tree .item .select-box { display: none; }
 .details-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font: 450 12px var(--font); color: var(--text-3); }
 .details-meta code, .details-meta a { color: var(--text-2); }
+/* its session's word on the session's line, not the chat's Working… line, which a bare .working is */
+.details-meta .live { display: inline; }
 .details-meta .landed { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.details-copy { flex: none; width: 24px; height: 24px; margin-left: -8px; padding: 0; justify-content: center; border: 0; border-radius: 6px;
-                background: transparent; color: var(--text-3); }
-.details-copy:hover { background: var(--btn-ghost-hover); color: var(--text-1); }
-.details-copy svg { width: 14px; height: 14px; }
+/* its Copy link and Actions: icon buttons inside a row, 24px squares with 6px corners, 4px apart */
+.details-acts { flex: none; display: flex; gap: 4px; margin-left: -8px; }
+.details-acts button { width: 24px; height: 24px; padding: 0; justify-content: center; border: 0; border-radius: 6px;
+                       background: transparent; color: var(--text-3); }
+.details-acts button:hover { background: var(--btn-ghost-hover); color: var(--text-1); }
+.details-acts svg { width: 14px; height: 14px; }
 /* the issue's next step at its right, Try then Go or Approve, filled as the issue's own row over its Properties is
    (desk.css, .issue-acts) */
 .chat-acts { flex: none; display: flex; gap: 6px; }
@@ -156,13 +160,6 @@
 .diff-counts { display: inline-flex; gap: 4px; font: 400 11px var(--font); font-variant-numeric: tabular-nums; }
 .diff-added { color: var(--diff-add-text); }
 .diff-deleted { color: var(--diff-del-text); }
-
-/* Issue, under the head in the conversation's place (Dock.tsx, SessionView): a container, as the panel is, so the
-   issue lays itself out by its width. It scrolls as the conversation does, its Properties staying put; its Open chat
-   is this chat. */
-.dock-view { box-sizing: border-box; width: 100%; container-type: inline-size; }
-.dock-page { flex: 1 0 auto; padding-bottom: var(--foot-fade); }
-.dock .open-chat { display: none; }
 
 /* A card per build step, its files under it, as wide as the conversation. */
 .changes { flex: 1 0 auto; box-sizing: border-box; width: 100%; max-width: 808px; margin: 0 auto; padding: 20px 24px var(--foot-fade);

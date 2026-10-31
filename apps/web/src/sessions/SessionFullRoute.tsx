@@ -1,5 +1,5 @@
 // /sessions/<id>: a session's chat alone in the middle (Dock.tsx draws it), until it has an issue: then its issue's
-// page, which shows the chat with its issue on its Issue tab. A new agent chat goes there once it files its issue.
+// page, which shows the chat with its issue in its head. A new agent chat goes there once it files its issue.
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
 import { useParams } from "react-router";

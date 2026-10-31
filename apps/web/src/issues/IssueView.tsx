@@ -1,6 +1,6 @@
 // An issue, as its page shows it (templates/issue_view.html); the Inbox's right pane shows the same. Its actions sit in
 // a row over its Properties (Actions), and its status shows once, in Properties, where a click changes it. Open chat
-// opens the issue as its chat, in the middle, its issue on its Issue tab, and hides once the chat is open. Ctrl+Enter
+// opens the issue as its chat, in the middle, its issue in its head, and hides once the chat is open. Ctrl+Enter
 // presses the step and I opens the chat, as the buttons' tooltips say.
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
@@ -9,7 +9,7 @@ import { post, said } from "../api/http";
 import { go, Go } from "../app/nav";
 import { PRIORITY_NAMES, PROTOCOL_NAMES, STATE_NAMES, type Field, type IssueRow, type Priority, type Protocol, type State, type TreeRow } from "../lib/desk";
 import { keyOf } from "../lib/keys";
-import { fieldIcon, GLYPH, GO_CHEVRON, PrioIcon, ProtoIcon, StateIcon, TRIANGLE } from "../ui/icons";
+import { fieldIcon, GLYPH, GO_CHEVRON, MORE_ICON, PrioIcon, ProtoIcon, StateIcon, TRIANGLE } from "../ui/icons";
 import { toggled } from "../ui/menu";
 import { showFolded } from "../ui/folds";
 import { toast } from "../ui/toast";
@@ -18,7 +18,7 @@ import { issues } from "../store/issues";
 import { copy, setField, setFolder } from "./actions";
 import { openSession } from "../sessions/Dock";
 import { teamPath } from "../frame/open";
-import { fieldMenu, folderMenu, milestoneMenu, projectPicker, teamPicker, waitingMenu } from "./menus";
+import { actionsMenu, fieldMenu, folderMenu, milestoneMenu, projectPicker, teamPicker, waitingMenu } from "./menus";
 import { datePicker } from "../ui/datepicker";
 import { DueChip } from "./Tree";
 import { painted } from "./painted";
@@ -280,7 +280,7 @@ function Pick({ className, slug, field, value, title, children }: { className: s
 
 // An issue's status at the head of its chat, before its title, as an issue's row in a list starts with it: its icon
 // alone, a quiet chip filled only under the mouse, that opens the menu it opens on the issue's page. Its priority and
-// team live in the Properties of its Issue tab, with P and Ctrl ⇧ M ("looks valid", the user, 28 Oct).
+// team live in the details under the head, with P and Ctrl ⇧ M ("looks valid", the user, 28 Oct).
 export const HeadStatus = observer(function HeadStatus({ issue }: { issue: IssueRow }) {
   const p = painted(issue);
   return (
@@ -322,7 +322,11 @@ export const IssueDetails = observer(function IssueDetails({ data }: { data: Iss
         {p.link && <span>Link <a href={p.link}>{p.link.split("/").pop()}</a></span>}
         {/* Where its session said the work landed, unless that is the pull request the Link already is. */}
         {data.landed && !(p.link && data.landed.includes(p.link)) && <span className="landed">Landed {data.landed.replace(/`/g, "")}</span>}
-        <button className="details-copy" type="button" title="Copy link" onClick={() => copy(`${location.origin}/issue/${p.slug}`, "Link copied")}>{GLYPH.link}</button>
+        {/* and the issue's Actions, which its page has in its top bar */}
+        <span className="details-acts">
+          <button type="button" title="Copy link" onClick={() => copy(`${location.origin}/issue/${p.slug}`, "Link copied")}>{GLYPH.link}</button>
+          <button type="button" title="Actions" onClick={(e) => { if (!toggled(e.currentTarget)) actionsMenu(p, { anchor: e.currentTarget }, p.slug); }}>{MORE_ICON}</button>
+        </span>
       </div>
     </div>
   );
