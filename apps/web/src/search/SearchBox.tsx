@@ -1,7 +1,7 @@
 // The search, one box for everything over the page you are on (step 1.1): the O menus' box (frame/open.tsx, desk.css's
 // .menu.command), 720px wide, 13% down the window, with no dimming (step 1.8). Under what you type, a tab per kind, each
-// with how many it found and dimmed when it found none; Tab and Shift Tab walk them, and a kind's name then Tab goes to
-// its tab (step 1.2). All shows a group per kind, Chats first, each its best 5 under a heading that opens its tab
+// with how many it found and dimmed when it found none; Tab and Shift Tab walk them, and a kind's first letter then Tab
+// goes to its tab, a for All (step 1.2). All shows a group per kind, Chats first, each its best 5 under a heading that opens its tab
 // (step 1.5); before anything is typed, each tab lists what is live (step 1.4). The server finds every kind but the
 // settings (pages.ts, searchPage), which the app finds itself (settings.ts). The arrows move, Enter opens the thing
 // where it lives, and Esc or a click outside closes the box, leaving you where you were. A filter is typed into the bar
@@ -11,7 +11,7 @@
 // 1.2). As a filter is typed, a menu under it offers the fields its letters start, then the field's values, the one in
 // focus greyed after the caret; Tab takes it, Enter takes a value, the arrows move in it, Esc closes it (mockup C). The
 // chips and the words go to the server as one search, which reads the filters itself. / and the sidebar's Search open
-// it, with the search as it last closed (step 1.7).
+// it on Chats with nothing typed, the kind searched most (step 1.2).
 import { action, makeObservable, observable } from "mobx";
 import { observer } from "mobx-react-lite";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -29,14 +29,16 @@ import { catchKeys, takeCaught } from "./catcher";
 import { findSettings } from "./settings";
 
 type Kind = "chats" | "issues" | "projects" | "teams" | "milestones" | "settings";
-const KINDS: { kind: Kind; name: string; one: string }[] = [
-  { kind: "chats", name: "Chats", one: "chat" },
-  { kind: "issues", name: "Issues", one: "issue" },
-  { kind: "projects", name: "Projects", one: "project" },
-  { kind: "teams", name: "Teams", one: "team" },
-  { kind: "milestones", name: "Milestones", one: "milestone" },
-  { kind: "settings", name: "Settings", one: "setting" },
+const KINDS: { kind: Kind; name: string }[] = [
+  { kind: "chats", name: "Chats" },
+  { kind: "issues", name: "Issues" },
+  { kind: "projects", name: "Projects" },
+  { kind: "teams", name: "Teams" },
+  { kind: "milestones", name: "Milestones" },
+  { kind: "settings", name: "Settings" },
 ];
+// The letter that, then Tab, picks a kind: its name's first, and a for All.
+const letterOf = (name: string) => name[0].toLowerCase();
 const BEST = 5; // each group's rows in All
 
 // One row of the answer, as pages.ts's searchPage and settings.ts make them: its title and the line that matched are
@@ -159,21 +161,20 @@ function widthOf(text: string, box: HTMLInputElement) {
   return ctx.measureText(text).width;
 }
 
-// The search as the box last closed: what was typed, the chips, the tab and the row in focus, which / brings back with
-// the words selected, in place of Back to a search page (step 1.7).
-interface Kept { query: string; chips: Filter[]; tab: Kind | ""; at: string | null }
+// What the box opens on: Chats with nothing typed ("wanna search for sessions, usually the most", the user, 1 Nov), or
+// an old /search address's words in All (app/routes.tsx).
+interface Start { query: string; tab: Kind | "" }
 
 class Search {
   open = false;
-  kept: Kept | null = null;
+  start: Start = { query: "", tab: "chats" };
   constructor() {
     makeObservable(this, { open: observable, show: action, hide: action });
   }
-  // With a query, the box opens afresh with it typed: an old /search address's words (app/routes.tsx).
   show(query?: string) {
     closeMenu();
     catchKeys(); // what is typed before the box draws (catcher.tsx)
-    if (query !== undefined) this.kept = { query, chips: [], tab: "", at: null };
+    this.start = query === undefined ? { query: "", tab: "chats" } : { query, tab: "" };
     this.open = true;
   }
   hide() {
@@ -223,13 +224,13 @@ function where(h: Hit): string {
 const many = (n: number) => n.toLocaleString("en-US");
 
 const SearchView = observer(function SearchView() {
-  const kept = search.kept;
-  const [query, setQuery] = useState(kept?.query ?? "");
-  const [chips, setChips] = useState<Filter[]>(kept?.chips ?? []);
-  const [tab, setTab] = useState<Kind | "">(kept?.tab ?? "");
+  const start = search.start;
+  const [query, setQuery] = useState(start.query);
+  const [chips, setChips] = useState<Filter[]>([]);
+  const [tab, setTab] = useState<Kind | "">(start.tab);
   const [fields, setFields] = useState(known);
   const [groups, setGroups] = useState<Group[] | null>(null);
-  const [at, setAt] = useState<string | null>(kept?.at ?? null); // the row in focus, by its key
+  const [at, setAt] = useState<string | null>(null); // the row in focus, by its key
   const [caret, setCaret] = useState(-1); // where the caret is, -1 while text is selected
   const [lit, setLit] = useState({ at: "", i: 0 }); // the menu's offer in focus, for the word it offers for
   const [shut, setShut] = useState(""); // the word whose menu Esc closed
@@ -319,8 +320,8 @@ const SearchView = observer(function SearchView() {
     input.current?.focus();
   }
 
-  const state = useRef({ rows, focused, query, chips, tab, chipAt, unchip, menu, litAt, takeOffer, light, shutMenu: () => {}, composing: false });
-  Object.assign(state.current, { rows, focused, query, chips, tab, chipAt, unchip, menu, litAt, takeOffer, light, shutMenu: () => setShut(word) });
+  const state = useRef({ rows, focused, query, chips, chipAt, unchip, menu, litAt, takeOffer, light, shutMenu: () => {}, composing: false });
+  Object.assign(state.current, { rows, focused, query, chips, chipAt, unchip, menu, litAt, takeOffer, light, shutMenu: () => setShut(word) });
 
   const walk = (step: number) => setTab((now) => KINDS[(KINDS.findIndex((k) => k.kind === now) + 1 + step + KINDS.length + 1) % (KINDS.length + 1) - 1]?.kind ?? "");
 
@@ -328,7 +329,7 @@ const SearchView = observer(function SearchView() {
     input.current?.focus();
     const caught = takeCaught();
     if (caught) retype(caught, caught.length);
-    else input.current?.select(); // the last words: typing starts afresh, and Enter or an arrow carries on
+    else input.current?.select(); // an old address's words: typing starts afresh, and Enter or an arrow carries on
     function onKey(e: KeyboardEvent) {
       const s = state.current, k = keyOf(e), box = input.current;
       if (e.isComposing || s.composing) return; // the input method owns this key
@@ -349,9 +350,11 @@ const SearchView = observer(function SearchView() {
       else if (k === "Enter") { if (s.menu?.offers[s.litAt].value) s.takeOffer(s.litAt); else if (!(inBox && s.chipAt()) && s.focused) openHit(s.focused); }
       else if (k === "Tab" && !e.shiftKey && s.menu) s.takeOffer(s.litAt);
       else if (k === "Tab") {
-        // "chat" then Tab goes to Chats, and what was typed goes: it named the kind, not a thing to find.
-        const named = !e.shiftKey && KINDS.find((n) => [n.one, n.kind].includes(s.query.trim().toLowerCase()));
-        if (named) { setTab(named.kind); retype("", 0); }
+        // i then Tab goes to Issues, and the i goes: it named the kind, not a thing to find. One letter never has a menu,
+        // which starts at two.
+        const typed = s.query.trim().toLowerCase();
+        const named = e.shiftKey || typed.length !== 1 ? undefined : typed === "a" ? "" : KINDS.find((n) => letterOf(n.name) === typed)?.kind;
+        if (named !== undefined) { setTab(named); retype("", 0); }
         else walk(e.shiftKey ? -1 : 1);
       }
       else handled = false;
@@ -369,8 +372,6 @@ const SearchView = observer(function SearchView() {
     return () => {
       removeEventListener("keydown", onKey, true);
       document.removeEventListener("mousedown", onDown, true);
-      const s = state.current;
-      search.kept = { query: s.query, chips: s.chips, tab: s.tab, at: s.focused?.key ?? null };
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -449,7 +450,7 @@ const SearchView = observer(function SearchView() {
         <span className="menu-icon">{GLYPH.search}</span>
         <div className="s-bar" onMouseDown={(e) => { if (e.target === e.currentTarget) input.current?.focus(); }}>
           {chips.map(chip)}
-          <input ref={input} className="menu-filter" type="text" placeholder={chips.length ? "" : "Search chats, issues, projects…"} autoComplete="off" spellCheck={false}
+          <input ref={input} className="menu-filter" type="text" placeholder={chips.length ? "" : kindName ? `Search ${kindName.toLowerCase()}…` : "Search chats, issues, projects…"} autoComplete="off" spellCheck={false}
             value={query} onChange={(e) => { setQuery(e.target.value); setShut(""); track(); }} onSelect={track}
             onCompositionStart={() => { state.current.composing = true; }}
             onCompositionEnd={() => { state.current.composing = false; }} />
@@ -457,11 +458,12 @@ const SearchView = observer(function SearchView() {
         </div>
       </div>
       <nav className="s-tabs" aria-label="Kind">
-        <button type="button" className={`s-tab${tab ? "" : " here"}`} onClick={() => setTab("")}>All</button>
+        <button type="button" className={`s-tab${tab ? "" : " here"}`} title="All  A then Tab" onClick={() => setTab("")}>All</button>
         {KINDS.map(({ kind, name }) => {
           const n = count(kind);
           return (
-            <button key={kind} type="button" className={`s-tab${tab === kind ? " here" : ""}${n === 0 ? " none" : ""}`} onClick={() => setTab(kind)}>
+            <button key={kind} type="button" className={`s-tab${tab === kind ? " here" : ""}${n === 0 ? " none" : ""}`} title={`${name}  ${letterOf(name).toUpperCase()} then Tab`}
+              onClick={() => setTab(kind)}>
               {name}{!!n && <span className="n">{many(n)}</span>}
             </button>
           );
