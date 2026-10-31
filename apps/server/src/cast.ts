@@ -11,11 +11,15 @@
 // gets fewer, not a queue.
 //
 // Chrome draws a tab behind when asked, so four times a second desk asks the tab whether it is hidden, and a hidden one
-// for a screenshot, sent on when it changed. It is the whole window at the screen's scale, about 230 kB, which the
-// Browser shrinks itself: a screenshot cropped or scaled resizes the page while it is taken, and two at once, desk's or
-// Claude's own, leave it shrunk for good (1 Nov: 1380x815 to 9x6, and clearing its emulation did not put it back),
-// while whole ones at once left it alone. What the screencast sends while a screenshot wakes the tab is the wrong size
-// (1064x586, 592x326), so a hidden tab's screencast pictures are dropped.
+// for a screenshot, sent on when it changed. Once one has been still for STILL looks, it is looked at once a second,
+// until it changes or you act on it: four whole screenshots a second cost the agents' Chrome most of a core (1 Nov).
+// And Chrome draws one only while its window draws, which a still tab in front stops, so desk keeps the tab in front
+// drawing meanwhile (keepDrawing, below), and gives up on a screenshot that takes longer than WAIT. Each is the whole
+// window at the screen's scale, about 230 kB, which the Browser shrinks itself: a screenshot cropped or scaled resizes
+// the page while it is taken, and two at once, desk's or Claude's own, leave it shrunk for good (1 Nov: 1380x815 to
+// 9x6, and clearing its emulation did not put it back), while whole ones at once left it alone. What the screencast
+// sends while a screenshot wakes the tab is the wrong size (1064x586, 592x326), so a hidden tab's screencast pictures
+// are dropped.
 //
 // The Browser sends back your mouse and keys, each a message: {"mouse": "down" | "up" | "move", "x", "y", "n", "held"},
 // {"wheel": [dx, dy], "x", "y"} and {"key": "down" | "up", "k", "code", "kc", "text"}, each with "mods", Chrome's
@@ -35,6 +39,8 @@ import * as db from "./db.ts";
 
 const CHROME = "ws://127.0.0.1:9334"; // the Chrome itself, as the relay's watcher reaches it (relay.ts): watching keeps it up no longer than a session does
 const EVERY = 250; // ms between looks at the tab
+const STILL = 8; // looks at a tab behind that found it as it was, 2 s, after which it is looked at once a second
+const WAIT = 3000; // ms an answer from the tab is waited for, after which it is let go: a dialog open in the page holds them
 export const TARGET = /^[0-9A-F]{32}$/; // Chrome's id of a tab
 // What a look asks the tab: whether it is hidden, and its window's size
 const VIEW = "JSON.stringify([document.visibilityState, innerWidth, innerHeight])";
@@ -52,14 +58,17 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
   if (browser.readyState !== WebSocket.OPEN) return;
   const chrome = new WebSocket(`${CHROME}/devtools/page/${target}`, { maxPayload: 64 * 1024 * 1024 });
   const waiting = new Map<number, (result: unknown) => void>();
-  let asked = 0, sent = "", told = "", looking = false, again = false, behind = true, size = fit(w, h);
+  let asked = 0, sent = "", told = "", looking = false, again = false, behind = true, still = 0, size = fit(w, h);
   let whole = { w: 0, h: 0 }; // the tab's window, in its CSS pixels, as a look measured it last
 
-  // A call to the tab, answered with its result, or with nothing once the tab is gone.
-  const ask = <T>(method: string, params: object = {}) => new Promise<T | undefined>((done) => {
+  // A call to the tab, answered with its result, or with nothing once the tab is gone or, given a time, once it passed;
+  // an answer that comes after is dropped.
+  const ask = <T>(method: string, params: object = {}, ms = 0) => new Promise<T | undefined>((done) => {
     if (chrome.readyState !== WebSocket.OPEN) return done(undefined);
-    waiting.set(++asked, done as (result: unknown) => void);
-    chrome.send(JSON.stringify({ id: asked, method, params }));
+    const id = ++asked;
+    waiting.set(id, done as (result: unknown) => void);
+    chrome.send(JSON.stringify({ id, method, params }));
+    if (ms) setTimeout(() => waiting.delete(id) && done(undefined), ms);
   });
   const show = (jpeg: string, then?: () => void) => {
     if (jpeg === sent || browser.readyState !== WebSocket.OPEN) return then?.();
@@ -69,12 +78,18 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
   const look = async () => {
     if (looking) return;
     looking = true;
-    const view = await ask<{ result: { value?: string } }>("Runtime.evaluate", { expression: VIEW });
-    const [hidden, width, height] = JSON.parse(view?.result.value ?? "[]") as [string, number, number];
-    behind = hidden === "hidden";
-    if (width && height) whole = { w: width, h: height };
+    const view = await ask<{ result: { value?: string } }>("Runtime.evaluate", { expression: VIEW }, WAIT);
+    if (view) {
+      const [hidden, width, height] = JSON.parse(view.result.value ?? "[]") as [string, number, number];
+      behind = hidden === "hidden";
+      wake(browser, behind);
+      if (width && height) whole = { w: width, h: height };
+    }
     if (behind) {
-      const shot = await ask<{ data: string }>("Page.captureScreenshot", { format: "jpeg", quality: 50 }); // whole, as the header says
+      drawing++;
+      const shot = await ask<{ data: string }>("Page.captureScreenshot", { format: "jpeg", quality: 50 }, WAIT); // whole, as the header says
+      drawing--;
+      still = shot?.data === sent ? still + 1 : 0;
       if (shot) show(shot.data);
     }
     looking = false;
@@ -86,10 +101,12 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
   // a look right after your input to a hidden tab, which lands it and shows what it did
   const soon = () => {
     if (!behind) return;
+    still = 0;
     if (looking) again = true;
     else void look();
   };
-  const timer = setInterval(() => void look(), EVERY);
+  let ticks = 0;
+  const timer = setInterval(() => (still < STILL || ++ticks % 4 === 0) && void look(), EVERY);
   const cast = () => ask("Page.startScreencast", { format: "jpeg", quality: 70, maxWidth: size.w, maxHeight: size.h });
 
   // One move or one wheel on its way at a time, as the header says: the next held back, merged into the one held.
@@ -189,6 +206,107 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
   });
   browser.on("close", () => {
     clearInterval(timer);
+    wake(browser, false);
     chrome.close();
   });
+}
+
+// The tab in front of the window, kept drawing while a Browser shows a tab behind it. Chrome draws a tab behind only
+// while its window draws, and the window draws only while the tab in front changes: behind a still one, a screenshot
+// took 1 to 3 s, and some never came (1 Nov), though the agents' Chrome runs with its backgrounding off. A highlight
+// with nothing in it, shown and hidden on the tab in front every frame, keeps the window drawing, which brought them to
+// 0.1 to 0.5 s; it is drawn over the page, not in it, so neither the page nor Claude's calls see it. A screencast of the
+// tab in front draws nothing new, and bringing the watched tab to the front would take it from Claude's.
+//
+// One connection to the Chrome attaches to each tab and asks every second which are in front, one a window, while a
+// Browser shows a tab behind, and the highlight is drawn only while a screenshot of one is on its way.
+const FRAME = 16; // ms between the highlight's shows and hides, a frame at 60 Hz
+const NOTHING = { x: 0, y: 0, width: 1, height: 1, color: { r: 0, g: 0, b: 0, a: 0 } };
+const showing = new Set<WebSocket>(); // the Browsers showing a tab behind
+let drawing = 0; // their screenshots on their way
+let waker: { stop: () => void } | undefined;
+
+function wake(browser: WebSocket, behind: boolean) {
+  if (behind) showing.add(browser);
+  else showing.delete(browser);
+  if (showing.size && !waker) waker = keepDrawing();
+  else if (!showing.size && waker) {
+    waker.stop();
+    waker = undefined;
+  }
+}
+
+function keepDrawing() {
+  let chrome: WebSocket | undefined, asked = 0, on = false, busy = false, stopped = false;
+  const tabs = new Map<string, { session: string; front: boolean; ready: boolean }>(); // by target
+  const waiting = new Map<number, (result: unknown) => void>();
+  const ask = <T>(method: string, params: object = {}, sessionId?: string) => new Promise<T | undefined>((done) => {
+    if (chrome?.readyState !== WebSocket.OPEN) return done(undefined);
+    const id = ++asked;
+    waiting.set(id, done as (result: unknown) => void);
+    chrome.send(JSON.stringify({ id, method, params, sessionId }));
+    setTimeout(() => waiting.delete(id) && done(undefined), WAIT);
+  });
+  const connect = async () => {
+    const res = await fetch(`${CHROME.replace("ws", "http")}/json/version`, { signal: AbortSignal.timeout(WAIT) }).catch(() => undefined);
+    const url = res?.ok ? ((await res.json()) as { webSocketDebuggerUrl?: string }).webSocketDebuggerUrl : undefined;
+    if (!url || stopped) return;
+    const ws = chrome = new WebSocket(url, { maxPayload: 64 * 1024 * 1024 });
+    ws.on("message", (data: Buffer) => {
+      const m = JSON.parse(String(data)) as { id?: number; result?: unknown };
+      if (!m.id) return;
+      waiting.get(m.id)?.(m.result);
+      waiting.delete(m.id);
+    });
+    ws.on("error", () => {}); // it closes next
+    ws.on("close", () => {
+      if (chrome === ws) chrome = undefined;
+      tabs.clear();
+      for (const done of waiting.values()) done(undefined);
+      waiting.clear();
+    });
+    await new Promise((done) => ws.once("open", done).once("close", done));
+  };
+  // which tabs are in front, each made ready for the highlight once it is
+  const find = async () => {
+    const all = await ask<{ targetInfos: { targetId: string; type: string }[] }>("Target.getTargets");
+    if (!all) return;
+    const pages = all.targetInfos.filter((t) => t.type === "page").map((t) => t.targetId);
+    for (const target of tabs.keys()) if (!pages.includes(target)) tabs.delete(target);
+    await Promise.all(pages.map(async (target) => {
+      let tab = tabs.get(target);
+      if (!tab) {
+        const got = await ask<{ sessionId: string }>("Target.attachToTarget", { targetId: target, flatten: true });
+        if (!got) return;
+        tabs.set(target, (tab = { session: got.sessionId, front: false, ready: false }));
+      }
+      const seen = await ask<{ result: { value?: string } }>("Runtime.evaluate", { expression: "document.visibilityState" }, tab.session);
+      tab.front = seen?.result.value === "visible";
+      if (tab.front && !tab.ready) tab.ready = Boolean((await ask("DOM.enable", {}, tab.session)) && (await ask("Overlay.enable", {}, tab.session)));
+    }));
+  };
+  const tick = () => {
+    if (busy) return;
+    busy = true;
+    void (chrome ? find() : connect().then(find)).finally(() => { busy = false; });
+  };
+  const second = setInterval(tick, 1000);
+  tick();
+  const frame = setInterval(() => {
+    if (!drawing) return;
+    on = !on;
+    for (const tab of tabs.values()) {
+      if (!tab.front || !tab.ready || chrome?.readyState !== WebSocket.OPEN) continue;
+      chrome.send(JSON.stringify({ id: ++asked, sessionId: tab.session, method: on ? "Overlay.highlightRect" : "Overlay.hideHighlight", params: on ? NOTHING : {} }));
+    }
+  }, FRAME);
+  return {
+    // closing the connection lets go of each tab, and its highlight with it
+    stop: () => {
+      stopped = true;
+      clearInterval(second);
+      clearInterval(frame);
+      chrome?.close();
+    },
+  };
 }

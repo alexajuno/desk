@@ -79,6 +79,16 @@ function Page({ tab }: { tab: Tab }) {
       };
     };
     watch();
+    // desk out of sight lets go of the tab, which leaves Chrome's window still for nobody (cast.ts), and takes it back
+    // once you look again
+    const seen = () => {
+      if (!document.hidden) return void (socket || watch());
+      const ws = socket;
+      socket = null;
+      clearTimeout(retry);
+      ws?.close();
+    };
+    document.addEventListener("visibilitychange", seen);
     const send = (said: object) => socket?.readyState === WebSocket.OPEN && socket.send(JSON.stringify(said));
     say.current = send;
     // a half dragged wider, or the window, gets its pictures at the new size
@@ -207,6 +217,7 @@ function Page({ tab }: { tab: Tab }) {
       clearTimeout(wait);
       cancelAnimationFrame(frame);
       sized.disconnect();
+      document.removeEventListener("visibilitychange", seen);
       removeEventListener("mousemove", drag);
       removeEventListener("mouseup", up);
       for (const [name, on] of [["mousedown", down], ["mousemove", hover], ["wheel", wheel], ["contextmenu", menu]] as const) img.removeEventListener(name, on as EventListener);
