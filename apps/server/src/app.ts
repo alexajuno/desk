@@ -818,6 +818,12 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/api/live/:id/commands", async (req: Req) => live.commands(sessionOf(req)));
   // What one of the session's subagents did, by the Agent call that started it: its steps, for that step's fold.
   app.get("/api/live/:id/agent/:tool", async (req: Req) => transcript.subagentItems(sessionOf(req), String(req.params.tool ?? "")));
+  // A command's output whole, which the chat holds only the end of (transcript.ts, ending), for its "… 412 more lines".
+  app.get("/api/live/:id/result/:tool", async (req: Req) => {
+    const text = transcript.resultOf(sessionOf(req), String(req.params.tool ?? ""));
+    if (text === null) throw new HttpError(404, "No such result in the chat's transcript.");
+    return { text };
+  });
   app.get("/api/live/:id/context", async (req: Req) => models.context(sessionOf(req)));
   // The chat's terminal (terminal.ts): the page starts it, and draws it over the WebSocket, ?cols=&rows= its size.
   app.post("/api/live/:id/terminal", async (req: Req) => {

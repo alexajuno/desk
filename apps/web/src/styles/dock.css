@@ -275,6 +275,10 @@ p.step.busy { box-sizing: border-box; border: 0.5px solid transparent; }
 .cmd-what, .cmd-prompt, .cmd-run { color: var(--text-4); }
 .cmd-line { color: var(--text-1); }
 .cmd-exit { color: var(--state-waiting); }
+/* a long output's fold, "… 412 more lines", a line of the output's own, dim until the mouse is on it */
+button.cmd-more { display: block; height: auto; padding: 0; border: 0; border-radius: 0; background: none; font: inherit; color: var(--text-4);
+                  text-align: left; cursor: pointer; transition: color 0.1s; }
+button.cmd-more:hover { background: none; color: var(--text-2); }
 .thought-text { margin: 2px 0 4px; padding: 0 6px; white-space: pre-wrap; font-size: 12px; line-height: 1.5; color: var(--text-3); }
 
 .working { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; color: var(--text-3); }

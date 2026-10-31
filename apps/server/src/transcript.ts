@@ -10,6 +10,7 @@
 //     {"t": "thinking", "key": …, "msg": …, "text": "…"}
 //     {"t": "tool", "key": …, "msg": …, "id": "toolu_…", "name": "Read", "summary": "src/app.ts", "input": "…"}
 //     {"t": "result", "key": "<uuid>:r0", "id": "toolu_…", "text": "…", "error": false}   a tool's result, drawn in its step
+//     {"t": "result", …, "more": 412}                                            a command's, cut to its end: 412 lines came before
 //     {"t": "note", "key": …, "text": "Stopped"}                                 the user stopped the turn, or it compacted,
 //                                                                                or a script sent the agent a message for the user,
 //                                                                                or a task ended, or a command printed a line
@@ -31,6 +32,7 @@ export interface Item {
   input?: string;
   command?: string; // a Bash call's command, whole, which the chat draws as a terminal does
   at?: number; // when a tool call was made, from which the chat counts a running command's seconds
+  more?: number; // a command's output cut to its end: how many of its lines came before, which resultOf gives whole
   error?: boolean;
   images?: number;
   files?: string[];
@@ -116,6 +118,38 @@ export function read(path: string, from: number): [Entry[], number] {
 }
 
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
+
+// A command's output cut to its last n characters, from a line's start, since its end is what a build says last, its
+// error or its result ("but i'm afraid of long command results", the user, 31 Oct); and how many lines came before. A
+// failure keeps its first line, Claude Code's "Exit code 1".
+function ending(text: string, n: number): { text: string; more?: number } {
+  if (text.length <= n) return { text };
+  const exit = /^Exit code \d+\n/.exec(text)?.[0] ?? "";
+  let end = text.slice(-n);
+  const line = end.indexOf("\n");
+  if (line >= 0) end = end.slice(line + 1);
+  const before = text.slice(exit.length, text.length - end.length);
+  return { text: exit + end, more: Math.max(1, before.split("\n").length - 1) };
+}
+
+// A command's output, from what Claude Code gives its result beside the text: toolUseResult in the transcript and
+// tool_use_result over the host's stream, Bash's being { stdout, stderr, interrupted, … }. One too big for the
+// conversation, which gets only its first 2KB, Claude Code saves whole in a file of its own, persistedOutputPath; a
+// failure's is only its text, "Exit code 1" and what it printed, cut by Claude Code at 30,000 characters from its start
+// (seen 31 Oct). Null for any other tool's result.
+function commandOutput(e: Entry, b: Entry, text: string): string | null {
+  const r = e.toolUseResult ?? e.tool_use_result;
+  if (typeof r?.persistedOutputPath === "string") {
+    try {
+      return readFileSync(r.persistedOutputPath, "utf8");
+    } catch {
+      return text; // gone with its session's folder
+    }
+  }
+  if (typeof r?.stdout === "string") return text;
+  return b.is_error && /^Exit code \d+\n/.test(text) ? text : null;
+}
+
 const short = (path: unknown) => String(path ?? "").replace(HOME, "~");
 
 // One line saying what a tool call does: the file, the command, the pattern.
@@ -227,8 +261,10 @@ function entryItems(e: Entry): Item[] {
     const texts: string[] = [];
     let images = 0;
     (content as Entry[] ?? []).forEach((b, n) => {
-      if (b.type === "tool_result") items.push({ t: "result", key: `${uuid}:r${n}`, id: b.tool_use_id, text: cut(resultText(b.content), 4000), error: Boolean(b.is_error) });
-      else if (b.type === "text") {
+      if (b.type === "tool_result") {
+        const text = resultText(b.content), output = commandOutput(e, b, text);
+        items.push({ t: "result", key: `${uuid}:r${n}`, id: b.tool_use_id, ...(output !== null ? ending(output, 4000) : { text: cut(text, 4000) }), error: Boolean(b.is_error) });
+      } else if (b.type === "text") {
         const note = notice(b.text ?? "");
         if (note !== null) return void items.push(...noted(`${uuid}:${n}`, note));
         const text = typed(b.text ?? "");
@@ -278,6 +314,34 @@ export function subagentItems(session: string, tool: string, limit = 300): Item[
     }
   }
   return [];
+}
+
+// A tool's result whole, as the chat opens a command's long output, from the session's transcript or a subagent's.
+export function resultOf(session: string, tool: string): string | null {
+  const paths = listed(session).flatMap((path) => {
+    const dir = join(path.slice(0, -".jsonl".length), "subagents");
+    let names: string[] = [];
+    try {
+      names = readdirSync(dir).filter((n) => n.endsWith(".jsonl"));
+    } catch {
+      // no subagents
+    }
+    return [path, ...names.map((n) => join(dir, n))];
+  });
+  for (const path of paths) {
+    // Only the lines naming the call are parsed: a long chat's transcript runs to megabytes.
+    for (const line of readFileSync(path, "utf8").split("\n")) {
+      if (!line.includes(tool) || !line.includes('"tool_result"')) continue;
+      try {
+        const e: Entry = JSON.parse(line);
+        const b = (Array.isArray(e.message?.content) ? e.message.content : []).find((b: Entry) => b.type === "tool_result" && b.tool_use_id === tool);
+        if (b) return commandOutput(e, b, resultText(b.content)) ?? resultText(b.content);
+      } catch {
+        // a line cut short
+      }
+    }
+  }
+  return null;
 }
 
 // The last `limit` items of the session's conversation, and where its transcript was read to.

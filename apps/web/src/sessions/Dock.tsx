@@ -659,30 +659,57 @@ function StepList({ s, items, results, running }: { s: LiveSession; items: Item[
   }
   return runs.map((r) => Array.isArray(r) ? (
     <div key={r[0].key} className="cmds">
-      {r.map((i) => <Command key={i.key} item={i} result={results.get(i.id!)} running={running} />)}
+      {r.map((i) => <Command key={i.key} s={s} item={i} result={results.get(i.id!)} running={running} />)}
     </div>
   ) : r.t === "thinking" ? <Thought key={r.key} text={r.text ?? ""} /> : <Step key={r.key} s={s} item={r} result={results.get(r.id!)} />);
 }
 
-// A command as a terminal shows it: what Claude said it does, the command after its prompt, then what it printed. Claude
-// Code gives a command's output only once it ends, so one running shows its seconds.
-function Command({ item, result, running }: { item: Item; result?: Item; running: boolean }) {
+// A command as a terminal shows it: what Claude said it does, the command after its prompt, then what it printed, a long
+// output only its last lines under how many came before, which a click opens whole ("but i'm afraid of long command
+// results", the user, 31 Oct). Claude Code gives a command's output only once it ends, so one running shows its seconds.
+function Command({ s, item, result, running }: { s: LiveSession; item: Item; result?: Item; running: boolean }) {
   const busy = !result && running;
   useTick(busy);
+  const [open, setOpen] = useState(false);
+  const [whole, setWhole] = useState<string | null>(null); // the output whole, of which the chat holds only the end (more)
   const command = item.command ?? item.summary ?? "";
   const what = item.summary !== cutTo(command, 120) ? item.summary : ""; // the summary is the command when Claude said nothing
-  const out = (result?.text ?? "").replace(/\x1b\[[0-9;]*m/g, "").replace(/\s+$/, "");
+  const out = (whole ?? result?.text ?? "").replace(/\x1b\[[0-9;]*m/g, "").replace(/\s+$/, "");
   const exit = result?.error ? /^Exit code \d+(\n|$)/.exec(out)?.[0] ?? out : ""; // a failure, as Claude Code says it
+  const lines = out.length > exit.length ? out.slice(exit.length).split("\n") : [];
+  const before = whole === null ? result?.more ?? 0 : 0; // the lines the chat does not hold
+  const folds = before > 0 || lines.length >= LAST + FOLDS;
+  const shown = folds && !open ? lines.slice(-LAST) : lines;
+  const hidden = lines.length - shown.length + before;
+
+  const toggle = async () => {
+    if (!open && before && result) {
+      const res = await fetch(`/api/live/${s.id}/result/${item.id}`);
+      if (res.ok) setWhole(((await res.json()) as { text: string }).text);
+      else toast(await reason(res));
+    }
+    setOpen(!open);
+  };
+
   return (
     <div className="cmd">
       {what && <div className="cmd-what"># {what}</div>}
       <div className="cmd-line"><span className="cmd-prompt">$ </span>{command}</div>
       {exit && <div className="cmd-exit">{exit.trimEnd()}</div>}
-      {out.length > exit.length && <div className="cmd-out">{out.slice(exit.length)}</div>}
+      {folds && (
+        <button className="cmd-more" type="button" onClick={() => void toggle()}>
+          {hidden ? `… ${hidden.toLocaleString()} more line${hidden === 1 ? "" : "s"}` : `… only the last ${LAST} lines`}
+        </button>
+      )}
+      {shown.length > 0 && <div className="cmd-out">{shown.join("\n")}</div>}
       {busy && <div className="cmd-run">running{item.at ? ` · ${elapsed(item.at)}` : ""}</div>}
     </div>
   );
 }
+
+// A long output's lines the chat shows, its end, where a build says its error or its result; and the fewest a fold
+// hides, since a fold over fewer costs as much room as the lines.
+const LAST = 8, FOLDS = 4;
 
 const cutTo = (text: string, n: number) => (text.length > n ? `${text.slice(0, n)}…` : text); // as the server cuts a summary
 
