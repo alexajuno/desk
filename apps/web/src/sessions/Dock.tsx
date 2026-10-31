@@ -155,7 +155,8 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   useSplash(!s.loaded); // desk opening on a chat shows it with its conversation, never "Connecting…"
   const scroller = useRef<HTMLDivElement>(null);
   const stuck = useRef(true); // following the bottom, as new words come
-  const [away, setAway] = useState(false); // not following it, which the Jump to latest pill says
+  // Not following it, which the Jump to latest pill says, "fresh" once words came below, which its dot says.
+  const [away, setAway] = useState<false | "quiet" | "fresh">(false);
   const m = s.meta;
   // The chat in the middle keeps its view in the store, where the keys reach it; the Inbox's pane keeps its own, and
   // shows only the chat and its Changes.
@@ -177,7 +178,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   const onScroll = () => {
     const el = scroller.current!;
     stuck.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    setAway(!stuck.current);
+    setAway((a) => (stuck.current ? false : a || "quiet"));
   };
   // The pill takes the chat back to its end, which it follows again. It jumps there, as a step's jump to its message
   // does (StepsCard.tsx), and leaves the keys on the conversation as the pill goes.
@@ -192,6 +193,9 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   useLayoutEffect(() => {
     if (stuck.current) scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
   }, [s.items.length, streamed, s.pending.length, s.asks.length, s.working, s.loaded]);
+  useEffect(() => {
+    if (!stuck.current) setAway((a) => a && "fresh");
+  }, [s.items.length, streamed]);
   // A reply that streams grows the conversation, and a composer that grows or a question card that comes grows the
   // foot over its end: either way the view keeps to the bottom while it was there. The view itself changes size only
   // with the window.
@@ -241,6 +245,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
               <button className="jump-latest" type="button" onClick={toEnd}>
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5" /></svg>
                 Jump to latest
+                {away === "fresh" && <span className="view-dot" />}
               </button>
             )}
             {here && shown === "chat" && <ChatSteps s={s} here={here} />}

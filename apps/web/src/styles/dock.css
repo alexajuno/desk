@@ -110,6 +110,7 @@
 .jump-latest { position: absolute; bottom: calc(100% + 12px); left: 50%; z-index: 2; transform: translateX(-50%); padding: 0 12px 0 10px;
                border: 0; box-shadow: 0 0 0 0.5px var(--ring-btn), var(--shadow-pop); }
 .jump-latest:hover { box-shadow: 0 0 0 0.5px var(--ring-btn-hover), var(--shadow-pop); }
+.jump-latest .view-dot { position: static; margin-left: 2px; } /* words came below: Display's dot, after the label */
 .convo > * { animation: dock-rise 0.18s ease both; }
 .convo-empty { margin: 48px 12px; text-align: center; font-size: 13px; color: var(--text-3); }
 .convo-note { margin: 0; text-align: center; font-size: 12px; color: var(--text-3); }
