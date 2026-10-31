@@ -273,6 +273,7 @@ export async function open(): Promise<PGlite> {
   await opened.exec("alter table chats add column if not exists deleted text;"); // a chat's Delete (chats.ts, remove), from 25 Oct
   await opened.exec("alter table chats add column if not exists auto boolean not null default false;"); // its composer's Auto (chats.ts, setAuto), from 29 Oct
   await opened.exec("alter table teams add column if not exists aliases text not null default '';"); // a team's rename (teams.ts), from 25 Oct
+  await opened.exec("alter table trying add column if not exists head text;"); // the commit desk detached the checkout on (land.ts), from 31 Oct
   await opened.exec("drop table if exists slack_filed; drop table if exists slack_threads;"); // Slack's tags, out since 22 Oct
   // desk's database is a few MB: Postgres's default 128 MB of shared buffers only holds memory, about 50 MB of it. Set
   // once in postgresql.auto.conf, it applies from the next start.

@@ -79,7 +79,7 @@ const lineFile = (top: string) => gitFile(top, "desk-line");
 
 export interface InLine { slug: string; branch: string; for: string }
 interface LineData { line: InLine[]; branches: Record<string, string> }
-export interface Note { branch: string; slug: string; back: string; for?: string; told?: boolean; since: number; pid?: number }
+export interface Note { branch: string; slug: string; back: string; for?: string; told?: boolean; since: number; pid?: number; head?: string }
 
 const readBack = new Map<string, Promise<void>>();
 
@@ -139,19 +139,19 @@ async function saveLine(top: string, data: LineData) {
 // The branch desk switched the checkout to, as noted, whether or not it still runs there.
 async function noteOf(top: string): Promise<Note | null> {
   await current(top);
-  const r = (await sql().query<{ branch: string; slug: string; back: string; holder: string | null; told: boolean; since: number; pid: number | null }>(
+  const r = (await sql().query<{ branch: string; slug: string; back: string; holder: string | null; told: boolean; since: number; pid: number | null; head: string | null }>(
     "select * from trying where repo = $1", [top])).rows[0];
   if (!r) return null;
   // In the order switchTo wrote the note, for sameNote.
   return { branch: r.branch, slug: r.slug, back: r.back, ...(r.holder !== null && { for: r.holder }), told: r.told, since: r.since,
-    ...(r.pid !== null && { pid: r.pid }) };
+    ...(r.pid !== null && { pid: r.pid }), ...(r.head !== null && { head: r.head }) };
 }
 
 function writeNote(top: string, note: Note | null) {
   return db.write(async (tx) => {
     await tx.query("delete from trying where repo = $1", [top]);
-    if (note?.branch && note.slug && note.back) await tx.query("insert into trying values ($1, $2, $3, $4, $5, $6, $7, $8)",
-      [top, note.branch, note.slug, note.back, note.for ?? null, Boolean(note.told), note.since ?? 0, note.pid ?? null]);
+    if (note?.branch && note.slug && note.back) await tx.query("insert into trying values ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+      [top, note.branch, note.slug, note.back, note.for ?? null, Boolean(note.told), note.since ?? 0, note.pid ?? null, note.head ?? null]);
   });
 }
 
@@ -281,7 +281,7 @@ async function leaveLine(top: string, slug: string) {
 }
 
 // Detach the checkout on the branch and note it: whose it is, which branch to go back to, who holds it ("for"), whether
-// that session knows (told), since when, and which desk process switched it (pid).
+// that session knows (told), since when, which desk process switched it (pid), and the commit it detached on (head).
 async function switchTo(top: string, slug: string, branch: string, by: string, told = true): Promise<string> {
   const now = await trying(top);
   const back = now ? now.back : await git(top, "branch", "--show-current");
@@ -289,7 +289,8 @@ async function switchTo(top: string, slug: string, branch: string, by: string, t
   if (await git(top, "status", "--porcelain", "--untracked-files=no")) throw new Blocked(`${top} has uncommitted changes, so desk leaves it as it is.`);
   const r = await run(["git", "checkout", "--detach", branch], { cwd: top });
   if (r.code) throw new Blocked((r.stderr || r.stdout).trim() || "git checkout failed");
-  const note: Note = { branch, slug, back, for: by, told, since: Date.now() / 1000, pid: process.pid };
+  const head = await git(top, "rev-parse", "HEAD");
+  const note: Note = { branch, slug, back, for: by, told, since: Date.now() / 1000, pid: process.pid, ...(head && { head }) };
   await saveNote(top, note);
   return `${top} runs ${branch} now.`;
 }
