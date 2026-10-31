@@ -21,7 +21,7 @@ import { issues } from "../store/issues";
 import { lineKey } from "../store/frame";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { GLYPH, MORE_ICON, SIDE_ICON, StateIcon } from "../ui/icons";
-import { stepNow, type PlanStep } from "../issues/Steps";
+import { isDrawn, stepNow, type PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { anyCommit, Changes, Counts, useChanges, wanted } from "./Changes";
@@ -246,7 +246,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
           {m?.issue ? <IssueConversation s={s} slug={m.issue.slug} /> : <Conversation s={s} page={null} slug={null} />}
         </div>
         <div className="dock-foot">
-          {here && shown === "chat" && <StepsCard steps={here.plan_steps ?? []} />}
+          {here && shown === "chat" && <ChatSteps s={s} here={here} />}
           <Running s={s} />
           {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
           <Composer s={s} />
@@ -254,6 +254,14 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
       </div>
     </div>
   );
+});
+
+// The issue's steps above the composer (StepsCard.tsx), each drawn one bringing its latest send in the chat.
+const ChatSteps = observer(function ChatSteps({ s, here }: { s: LiveSession; here: IssuePageData }) {
+  const sends = s.results.size, steps = here.plan_steps ?? [];
+  const sent = useMemo(() => new Map(artifactsOf(s, here.issue.slug, steps).filter((a) => a.kind === "step" && a.latest).map((a) => [a.name, a.at])),
+    [s.items, sends, here.issue.slug, here.plan_steps]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <StepsCard steps={steps} sent={sent} />;
 });
 
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, then its issue's status and
@@ -536,17 +544,19 @@ function stepNamed(steps: PlanStep[], r: { place: string; title: string | null }
   return step;
 }
 
-// A step's diagram, where its session sent it, as the step stands now: the latest send of each step drawn, an earlier
-// one a line, since desk keeps only the step's latest. Its decisions are the side's (Steps), not the chat's.
+// A step's diagram and its decisions under it, where its session sent them, as the step stands now: the latest send of
+// each step drawn, an earlier one a line, since desk keeps only the step's latest. The steps above the composer bring
+// it here, the one place a step is read in its chat.
 const StepSent = function StepSent({ at, step, top, latest }: { at: string; step: PlanStep | null; top: string | null; latest: boolean }) {
   const name = step?.title ?? "A step";
-  if (!latest || !step?.diagram_html) {
-    return <p className="sent-line" data-at={at}>{GLYPH.file}<span>{name}</span><span className="sent-when">{!latest ? "an earlier diagram, sent" : step?.said_html ? "its decisions, sent" : "sent"}</span></p>;
+  if (!latest || !step || !isDrawn(step)) {
+    return <p className="sent-line" data-at={at}>{GLYPH.file}<span>{name}</span><span className="sent-when">{latest ? "sent" : "an earlier diagram, sent"}</span></p>;
   }
   return (
     <div className="sent step-sent" data-at={at}>
       <div className="sent-head"><StateIcon state={step.state} /><span>{name}</span>{top && top !== name && <span className="step-sent-where">{top}</span>}</div>
-      <div className="reply body sent-body" dangerouslySetInnerHTML={{ __html: step.diagram_html }} />
+      {step.diagram_html && <div className="reply body sent-body" dangerouslySetInnerHTML={{ __html: step.diagram_html }} />}
+      {step.said_html && <div className="reply body sent-body step-sent-said" dangerouslySetInnerHTML={{ __html: step.said_html }} />}
     </div>
   );
 };

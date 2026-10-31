@@ -15,17 +15,7 @@ import { artifactsOf, type Artifact } from "./Dock";
 import { isDrawn, isHere, placed, Steps, type PlanStep } from "../issues/Steps";
 import { anyCommit, useChanges } from "./Changes";
 import { useLive } from "./live";
-
-// A row's message, in the middle of the chat, and a moment's ring round it so the eye finds it.
-function bring(a: Artifact) {
-  const at = document.querySelector(`.dock [data-at="${CSS.escape(a.at)}"]`);
-  const target = (a.img !== undefined && at?.querySelectorAll("img")[a.img]) || at;
-  if (!target) return;
-  target.scrollIntoView({ block: "center", behavior: "smooth" });
-  target.classList.remove("brought");
-  void (target as HTMLElement).offsetWidth; // a second click rings it again
-  target.classList.add("brought");
-}
+import { bring } from "./StepsCard";
 
 // A phone's width, where the chat fills the screen (phone.css) and has no room for the steps and a diagram side by side.
 const phoneQuery = matchMedia("(max-width: 640px)");
@@ -63,7 +53,7 @@ export const PlanView = observer(function PlanView({ data }: { data: IssuePageDa
     const step = a.kind === "step" && (placed(steps).find(({ step }) => step.title === a.name)?.place ?? a.place);
     if (step) return setPick(step);
     dock.setView("chat");
-    requestAnimationFrame(() => bring(a));
+    requestAnimationFrame(() => bring(a.at, a.img));
   };
   // With its diagrams on its steps, a plan holds only Done when and Decide alone, folded: the steps are what you read.
   // A plan from before, its diagram in it, shows as it did.
