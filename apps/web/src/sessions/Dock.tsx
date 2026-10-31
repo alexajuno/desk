@@ -1012,6 +1012,11 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
     setKnown(null);
   }, [s.meta?.cwd]);
 
+  // A turn starting means the host holds the session, which lists Claude Code's own commands too: the next / asks again.
+  useEffect(() => {
+    if (s.working) commands.current = null;
+  }, [s.working]);
+
   // A / in the text, typed or kept in a draft, asks for the names it may mark.
   useEffect(() => {
     if (!known && /(^|\s)\/\w/.test(text)) void commandList();

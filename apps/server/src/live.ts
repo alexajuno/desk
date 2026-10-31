@@ -416,8 +416,14 @@ function skillsIn(dir: string): Command[] {
   });
 }
 
+// The two commands the composer runs itself, in any chat (Dock.tsx, runsIn), worded as Claude Code lists them.
+const COMPOSERS: Command[] = [
+  { name: "model", description: "Set the AI model for Claude Code" },
+  { name: "effort", description: "Set effort level for model usage" },
+];
+
 // The slash commands and skills the session takes: the host's own list while it holds the session, else the skills on
-// disk, the user's and the folder's.
+// disk, the user's and the folder's, with the composer's own /model and /effort.
 export async function commands(id: string): Promise<Command[]> {
   if (await hosted.holds(id)) {
     try {
@@ -428,6 +434,6 @@ export async function commands(id: string): Promise<Command[]> {
   }
   const cwd = (await meta(id)).cwd;
   const had = new Set<string>();
-  return [...skillsIn(join(cwd, ".claude", "skills")), ...skillsIn(join(HOME, ".claude", "skills"))]
+  return [...skillsIn(join(cwd, ".claude", "skills")), ...skillsIn(join(HOME, ".claude", "skills")), ...COMPOSERS]
     .filter((c) => !had.has(c.name) && had.add(c.name));
 }
