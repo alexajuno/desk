@@ -18,6 +18,7 @@ import { WebSocket, WebSocketServer } from "ws";
 const PROXY = "http://127.0.0.1:9333"; // starts the Chrome on its first connection, and stops it 5 minutes after the last
 const CHROME = "http://127.0.0.1:9334"; // the Chrome itself, which refuses while it is down
 const BIGGEST = 512 * 1024 * 1024; // bytes in one message: a full-page screenshot comes back as one
+const EVERY = 2000; // ms between the watcher's asks for every tab
 
 export interface Tab { target: string; session: string; url: string; title: string }
 export type TabNews = { type: "tab" } & Tab | { type: "tab-closed"; target: string };
@@ -117,7 +118,9 @@ function closeGone() {
   }
 }
 
-// The watcher: every tab's opening, address, title and closing, as the Chrome tells them.
+// The watcher: every tab's opening, address, title and closing, as the Chrome tells them. It tells no title a page sets
+// once it has loaded (1 Nov: code.claude.com's, and one set from a script, both left the strip showing the address), so
+// the watcher also asks for every tab every 2 s, and says each that changed.
 async function watch() {
   if (watching) return;
   watching = true;
@@ -127,9 +130,14 @@ async function watch() {
     return closeGone();
   }
   const ws = new WebSocket(url, { perMessageDeflate: false });
-  ws.on("open", () => ws.send(JSON.stringify({ id: 1, method: "Target.setDiscoverTargets", params: { discover: true } })));
+  let timer: NodeJS.Timeout | undefined;
+  ws.on("open", () => {
+    ws.send(JSON.stringify({ id: 1, method: "Target.setDiscoverTargets", params: { discover: true } }));
+    timer = setInterval(() => ws.send(JSON.stringify({ id: 2, method: "Target.getTargets" })), EVERY);
+  });
   ws.on("message", (data: Buffer) => heard(parse(data)));
   ws.on("close", () => {
+    clearInterval(timer);
     watching = listed = false;
     for (const target of owners.keys()) tell({ type: "tab-closed", target }); // the Chrome stopped, and its tabs with it
     owners.clear();
@@ -145,21 +153,27 @@ function heard(m: Cdp | null) {
     listed = true;
     return closeGone();
   }
+  if (m?.id === 2) { // every tab, as it is now: only those it knows of, since one may have closed since
+    for (const info of m.result?.targetInfos ?? []) if (pages.has(info.targetId)) changed(info);
+    return;
+  }
   const info = m?.params?.targetInfo as TargetInfo | undefined;
   if (m?.method === "Target.targetDestroyed") {
     const target = m.params!.targetId as string;
     pages.delete(target);
     if (owners.delete(target)) tell({ type: "tab-closed", target });
-  } else if (info?.type === "page" && (m!.method === "Target.targetCreated" || m!.method === "Target.targetInfoChanged")) {
-    const was = pages.get(info.targetId), opener = was?.opener ?? info.openerId;
-    pages.set(info.targetId, { url: info.url, title: info.title, opener, said: was?.said });
-    const by = opener && owners.get(opener);
-    if (by && !owners.has(info.targetId)) own(info.targetId, by);
-    else say(info.targetId);
-  }
+  } else if (info?.type === "page" && (m!.method === "Target.targetCreated" || m!.method === "Target.targetInfoChanged")) changed(info);
 }
 
-interface Cdp { id?: number; method?: string; sessionId?: string; params?: Record<string, unknown>; result?: { targetId?: string } }
+function changed(info: TargetInfo) {
+  const was = pages.get(info.targetId), opener = was?.opener ?? info.openerId;
+  pages.set(info.targetId, { url: info.url, title: info.title, opener, said: was?.said });
+  const by = opener && owners.get(opener);
+  if (by && !owners.has(info.targetId)) own(info.targetId, by);
+  else say(info.targetId);
+}
+
+interface Cdp { id?: number; method?: string; sessionId?: string; params?: Record<string, unknown>; result?: { targetId?: string; targetInfos?: TargetInfo[] } }
 
 function parse(data: Buffer): Cdp | null {
   try {

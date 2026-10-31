@@ -3,7 +3,7 @@
 // tab's address, then the page ("okay A", the user's pick from three mockups, 31 Oct). The strip has no new tab or ×:
 // the tabs are the session's, opened and closed by Claude.
 import { observer } from "mobx-react-lite";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { dock } from "../store/dock";
 import { issues, type Tab } from "../store/issues";
 import { GLYPH } from "../ui/icons";
@@ -24,24 +24,31 @@ export const BrowserView = observer(function BrowserView({ session }: { session:
           </button>
         ))}
       </div>
-      <div className="browser-nav">
-        <button className="dock-btn" type="button" title="Back" disabled>{GLYPH.back}</button>
-        <button className="dock-btn" type="button" title="Forward" disabled>{GLYPH.forward}</button>
-        <button className="dock-btn" type="button" title="Reload" disabled>{GLYPH.reload}</button>
-        <Address tab={shown} />
-      </div>
       <Page key={shown.target} tab={shown} />
     </div>
   );
 });
 
-// The tab's picture, live (the server's cast.ts), fit into the half: the tab is in the agents' Chrome's window, the size
-// Claude works in, which stays as it is. The tab in front of that window comes at the size the half shows it, in the
-// screen's pixels, and a tab behind it whole, at the screen's scale (cast.ts says why). desk restarting drops the
-// socket, so it watches again, once a second for a minute, the last picture kept meanwhile.
+// The tab's back, forward, reload and address, then its picture, live (the server's cast.ts), fit into the half: the tab
+// is in the agents' Chrome's window, the size Claude works in, which stays as it is. The tab in front of that window
+// comes at the size the half shows it, in the screen's pixels, and a tab behind it whole, at the screen's scale (cast.ts
+// says why). desk restarting drops the socket, so it watches again, once a second for a minute, the last picture kept
+// meanwhile.
 function Page({ tab }: { tab: Tab }) {
   const shot = useRef<HTMLImageElement>(null), typed = useRef<HTMLTextAreaElement>(null);
   const [stand, setStand] = useState<"waiting" | "on" | "away" | "failed">("waiting");
+  const [moves, setMoves] = useState({ back: false, forward: false }); // where the tab can go in its history, as desk says
+  const [editing, setEditing] = useState(false);
+  const say = useRef<(said: object) => void>(() => {});
+  // the tab's toolbar, as Chrome's: its buttons leave your keys with the page, and an address typed takes them back there
+  const go = (said: object) => {
+    say.current(said);
+    typed.current?.focus({ preventScroll: true });
+  };
+  const button = (name: string, glyph: ReactNode, keys: string, can: boolean, nav: string) => (
+    <button className="dock-btn" type="button" title={`${name}  ${keys}`} aria-label={name} disabled={!can || stand !== "on"}
+      onMouseDown={(e) => e.preventDefault()} onClick={() => go({ nav })}>{glyph}</button>
+  );
   useEffect(() => {
     const img = shot.current!, keys = typed.current!, box = img.parentElement!;
     const size = () => ({ w: Math.round(box.clientWidth * devicePixelRatio), h: Math.round(box.clientHeight * devicePixelRatio) });
@@ -59,6 +66,7 @@ function Page({ tab }: { tab: Tab }) {
       ws.binaryType = "blob";
       ws.onopen = () => { tries = 0; };
       ws.onmessage = (e) => {
+        if (typeof e.data === "string") return setMoves(JSON.parse(e.data) as { back: boolean; forward: boolean });
         if (next) URL.revokeObjectURL(next);
         img.src = next = URL.createObjectURL(e.data as Blob);
         setStand("on");
@@ -72,6 +80,7 @@ function Page({ tab }: { tab: Tab }) {
     };
     watch();
     const send = (said: object) => socket?.readyState === WebSocket.OPEN && socket.send(JSON.stringify(said));
+    say.current = send;
     // a half dragged wider, or the window, gets its pictures at the new size
     let wait = 0;
     const sized = new ResizeObserver(() => {
@@ -146,13 +155,27 @@ function Page({ tab }: { tab: Tab }) {
     // own (1 Nov: Vimium, in the agents' Chrome as in yours, took h, l, o, d and s, and its o opened its own search
     // bar). Each key goes but Ctrl ` and Ctrl ⇧ B, which go on to desk, as from the terminal (Terminal.tsx), and Ctrl V,
     // which pastes into the box: what an input method wrote there (fcitx5's Vietnamese) and what you pasted go to the
-    // tab as text.
+    // tab as text. Chrome's own keys for its toolbar do what they do there, since Chrome takes no key sent to a tab as
+    // its own: Alt ← and Alt → go back and forward, Ctrl R and F5 reload, and Ctrl L goes to the address.
+    const toolbar = (e: KeyboardEvent) => {
+      const alone = !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey, ctrl = e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) return e.key === "ArrowLeft" ? "back" : "forward";
+      if ((ctrl && e.code === "KeyR") || (alone && e.key === "F5")) return "reload";
+      return ctrl && e.code === "KeyL" ? "address" : "";
+    };
     const key = (e: KeyboardEvent) => {
       if (e.ctrlKey && !e.altKey && !e.metaKey && (e.code === "Backquote" || (e.shiftKey && e.code === "KeyB") || e.code === "KeyV")) return;
       if (e.isComposing || e.keyCode === 229) return; // the input method's
       e.preventDefault();
       e.stopPropagation();
-      const pressed = e.type === "keydown", plain = !e.ctrlKey && !e.altKey && !e.metaKey;
+      const pressed = e.type === "keydown", plain = !e.ctrlKey && !e.altKey && !e.metaKey, own = toolbar(e);
+      if (own) {
+        if (pressed && !e.repeat) {
+          if (own === "address") setEditing(true);
+          else send({ nav: own });
+        }
+        return;
+      }
       const text = !pressed || !plain ? "" : e.key === "Enter" ? "\r" : [...e.key].length === 1 ? e.key : "";
       flush();
       send({ key: pressed ? "down" : "up", k: e.key, code: e.code, kc: e.keyCode, text, mods: mods(e) });
@@ -193,20 +216,54 @@ function Page({ tab }: { tab: Tab }) {
     };
   }, [tab.target]);
   return (
-    <div className="browser-page">
-      <img ref={shot} className="browser-shot" alt={tab.title || tab.url} draggable={false} hidden={stand === "waiting"} />
-      <textarea ref={typed} className="browser-keys" aria-label="Keys to the page" autoComplete="off" autoCorrect="off" spellCheck={false} />
-      {(stand === "away" || stand === "failed") && <p className="term-note">{stand === "away" ? "Reconnecting…" : "desk does not answer."}</p>}
+    <>
+      <div className="browser-nav">
+        {button("Back", GLYPH.back, "Alt ←", moves.back, "back")}
+        {button("Forward", GLYPH.forward, "Alt →", moves.forward, "forward")}
+        {button("Reload", GLYPH.reload, "Ctrl R", true, "reload")}
+        <Address tab={tab} editing={editing} edit={setEditing} open={(url) => go({ open: url })} />
+      </div>
+      <div className="browser-page">
+        <img ref={shot} className="browser-shot" alt={tab.title || tab.url} draggable={false} hidden={stand === "waiting"} />
+        <textarea ref={typed} className="browser-keys" aria-label="Keys to the page" autoComplete="off" autoCorrect="off" spellCheck={false} />
+        {(stand === "away" || stand === "failed") && <p className="term-note">{stand === "away" ? "Reconnecting…" : "desk does not answer."}</p>}
+      </div>
+    </>
+  );
+}
+
+// The address as Chrome's bar shows it: the host brighter than the rest, any other address, such as data: or
+// about:blank, whole. A click or Ctrl L edits it, the whole of it selected, Enter takes the tab there, and Esc or a
+// click elsewhere puts it back.
+function Address({ tab, editing, edit, open }: { tab: Tab; editing: boolean; edit: (on: boolean) => void; open: (url: string) => void }) {
+  const { host, rest } = where(tab.url);
+  if (editing) {
+    return (
+      <input className="browser-url editing" defaultValue={tab.url} aria-label="Address" autoFocus spellCheck={false} autoComplete="off"
+        onFocus={(e) => e.currentTarget.select()} onBlur={() => edit(false)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || !e.currentTarget.value.trim()) return;
+          open(address(e.currentTarget.value));
+          edit(false);
+        }} />
+    );
+  }
+  return (
+    <div className="browser-url" title={`${tab.url}\nEdit  Ctrl L`} onClick={() => edit(true)}>
+      {host ? <><b>{host}</b>{rest}</> : tab.url.slice(0, 300)}
     </div>
   );
 }
 
-// The address as Chrome's bar shows it: the host brighter than the rest. Any other address, such as data: or
-// about:blank, whole.
-function Address({ tab }: { tab: Tab }) {
-  const { host, rest } = where(tab.url);
-  return <div className="browser-url" title={tab.url}>{host ? <><b>{host}</b>{rest}</> : tab.url.slice(0, 300)}</div>;
-}
+// What you typed in the address, as Chrome's bar takes it: an address as it is, a site with no scheme over https, one
+// on this laptop or your network over http, and anything else a Google search.
+const address = (typed: string) => {
+  const s = typed.trim();
+  if (/^(https?:\/\/|about:blank$)/i.test(s)) return s;
+  if (/^(localhost|\d+\.\d+\.\d+\.\d+|\[[\da-f:]+\])(:\d+)?([/?#]|$)/i.test(s)) return `http://${s}`;
+  if (!/\s/.test(s) && /^[^/?#:]+\.[a-z]{2,}(:\d+)?([/?#]|$)/i.test(s)) return `https://${s}`;
+  return `https://www.google.com/search?q=${encodeURIComponent(s)}`;
+};
 
 const where = (url: string): { host: string; rest: string } => {
   try {

@@ -25,6 +25,11 @@
 // answers a move or a wheel only once it draws again (1 Nov: a wheel waited until a screenshot, then scrolled), so one
 // of each is on its way at a time, the next held back (the latest move, the wheels added up), and desk asks the tab for
 // a screenshot after each, which also shows what it did.
+//
+// It also sends {"nav": "back" | "forward" | "reload"}, and {"open": "<an http or https address>"}, which Chrome's own
+// history and navigation take, as its toolbar's buttons would; Claude's own calls in the tab are left as they are. desk
+// tells the Browser whether the tab can go back and forward, {"back": true, "forward": false}, as a text message, when
+// the socket opens and when the tab moves.
 import { WebSocket } from "ws";
 import * as db from "./db.ts";
 
@@ -36,8 +41,10 @@ const VIEW = "JSON.stringify([document.visibilityState, innerWidth, innerHeight]
 const fit = (w: number, h: number) => ({ w: Math.round(Math.min(Math.max(w || 1000, 64), 4096)), h: Math.round(Math.min(Math.max(h || 1000, 64), 4096)) });
 const num = (n: unknown, or = 0) => (typeof n === "number" && Number.isFinite(n) ? n : or);
 const str = (s: unknown) => (typeof s === "string" ? s.slice(0, 32) : "");
+const ADDRESS = /^(https?:\/\/\S+|about:blank)$/i; // where a typed address may take the tab
 
-type Said = { w?: number; h?: number; insert?: string; mouse?: string; wheel?: [number, number]; key?: string; x?: number; y?: number; n?: number; held?: boolean; mods?: number; k?: string; code?: string; kc?: number; text?: string };
+type Said = { w?: number; h?: number; nav?: string; open?: string; insert?: string; mouse?: string; wheel?: [number, number]; key?: string; x?: number; y?: number; n?: number; held?: boolean; mods?: number; k?: string; code?: string; kc?: number; text?: string };
+type History = { currentIndex: number; entries: { id: number }[] };
 type Mouse = { type: string; x: number; y: number; button?: string; buttons?: number; modifiers: number; deltaX?: number; deltaY?: number };
 
 export async function watch(browser: WebSocket, target: string, w: number, h: number) {
@@ -45,7 +52,7 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
   if (browser.readyState !== WebSocket.OPEN) return;
   const chrome = new WebSocket(`${CHROME}/devtools/page/${target}`, { maxPayload: 64 * 1024 * 1024 });
   const waiting = new Map<number, (result: unknown) => void>();
-  let asked = 0, sent = "", looking = false, again = false, behind = true, size = fit(w, h);
+  let asked = 0, sent = "", told = "", looking = false, again = false, behind = true, size = fit(w, h);
   let whole = { w: 0, h: 0 }; // the tab's window, in its CSS pixels, as a look measured it last
 
   // A call to the tab, answered with its result, or with nothing once the tab is gone.
@@ -105,6 +112,24 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
   const moves = lane((_, next) => next);
   const wheels = lane((held, next) => ({ ...next, deltaX: num(held.deltaX) + num(next.deltaX), deltaY: num(held.deltaY) + num(next.deltaY) }));
 
+  // Whether the tab can go back and forward, told the Browser when it changed.
+  const moved = async () => {
+    const h = await ask<History>("Page.getNavigationHistory");
+    const now = h && JSON.stringify({ back: h.currentIndex > 0, forward: h.currentIndex < h.entries.length - 1 });
+    if (!now || now === told || browser.readyState !== WebSocket.OPEN) return;
+    told = now;
+    browser.send(now);
+  };
+  const nav = async (said: Said) => {
+    if (said.nav === "reload") await ask("Page.reload");
+    else if (said.nav === "back" || said.nav === "forward") {
+      const h = await ask<History>("Page.getNavigationHistory");
+      const entry = h?.entries[h.currentIndex + (said.nav === "back" ? -1 : 1)];
+      if (entry) await ask("Page.navigateToHistoryEntry", { entryId: entry.id });
+    } else if (typeof said.open === "string" && said.open.length <= 8192 && ADDRESS.test(said.open)) await ask("Page.navigate", { url: said.open });
+    soon();
+  };
+
   const input = (said: Said) => {
     const x = num(said.x) * whole.w, y = num(said.y) * whole.h, modifiers = num(said.mods) & 15;
     if (said.mouse === "move") {
@@ -128,9 +153,10 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
   chrome.on("open", () => {
     void cast();
     void look();
+    void ask("Page.enable").then(moved); // for the tab's moves, below
   });
   chrome.on("message", (data: Buffer) => {
-    const m = JSON.parse(String(data)) as { id?: number; result?: unknown; method?: string; params?: { data: string; sessionId: number } };
+    const m = JSON.parse(String(data)) as { id?: number; result?: unknown; method?: string; params?: { data: string; sessionId: number; frame?: { parentId?: string } } };
     if (m.id) {
       waiting.get(m.id)?.(m.result);
       waiting.delete(m.id);
@@ -138,7 +164,7 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
       const frame = m.params.sessionId, ack = () => void ask("Page.screencastFrameAck", { sessionId: frame });
       if (behind) ack();
       else show(m.params.data, ack);
-    }
+    } else if ((m.method === "Page.frameNavigated" && !m.params?.frame?.parentId) || m.method === "Page.navigatedWithinDocument") void moved();
   });
   chrome.on("error", () => {}); // it closes next
   chrome.on("close", () => {
@@ -158,7 +184,8 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
       size = fit(said.w, said.h);
       sent = "";
       void ask("Page.stopScreencast").then(cast);
-    } else if (whole.w) input(said);
+    } else if (said.nav || said.open) void nav(said);
+    else if (whole.w) input(said);
   });
   browser.on("close", () => {
     clearInterval(timer);
