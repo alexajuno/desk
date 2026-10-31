@@ -8,6 +8,7 @@ import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import * as agents from "./agents.ts";
 import * as api from "./api.ts";
+import * as cast from "./cast.ts";
 import * as chats from "./chats.ts";
 import { HOME } from "./config.ts";
 import * as fields from "./fields.ts";
@@ -859,6 +860,16 @@ export async function create(): Promise<FastifyInstance> {
     const found = await tabs.icon(req.params.target);
     if (!found) throw new HttpError(404, "No icon for that tab");
     return reply.type(found.type).header("cache-control", "max-age=86400").send(found.body);
+  });
+  // The tab's picture, live, for the chat's Browser (cast.ts).
+  app.get("/api/tabs/:target/screen", {
+    websocket: true,
+    preValidation: async (req, reply) => {
+      if (!fromDesk(req) || !cast.TARGET.test((req.params as { target: string }).target)) await reply.code(403).send();
+    },
+  }, (socket, req) => {
+    const q = req.query as Record<string, string | undefined>;
+    void cast.watch(socket, (req.params as { target: string }).target, Number(q.w), Number(q.h));
   });
   app.get("/api/live/:id/terminal/screen", {
     websocket: true,

@@ -489,7 +489,8 @@ button.foot-step:hover { background: var(--bg-hover); }
 .browser-url { flex: 1; min-width: 0; height: 28px; margin-left: 4px; padding: 0 12px; border-radius: 9999px; background: var(--btn); box-shadow: 0 0 0 0.5px var(--ring-btn);
                font: 450 12px/28px var(--font); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .browser-url b { font-weight: 450; color: var(--text-2); }
-.browser-page { flex: 1; min-height: 0; }
+.browser-page { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.browser-shot { display: block; width: 100%; height: 100%; object-fit: contain; object-position: top center; user-select: none; }
 .browser-empty { margin: 48px 12px; text-align: center; font-size: 13px; color: var(--text-3); }
 
 /* The terminal (Terminal.tsx): xterm.js, in the mono font, its cells filling the half less a margin; its sixteen
