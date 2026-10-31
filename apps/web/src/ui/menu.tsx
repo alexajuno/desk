@@ -322,7 +322,8 @@ function PopView({ o }: { o: MenuOptions }) {
 export const MenuHost = observer(function MenuHost() {
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
-      const open = menus.current, box = document.querySelector("body > .menu");
+      // The search's box is a .menu too, under any menu its chips open (search/SearchBox.tsx).
+      const open = menus.current, box = document.querySelector("body > .menu:not(.search)");
       const outside = open && !box?.contains(e.target as Node);
       menus.justClosed = outside ? open.anchor ?? null : null;
       if (outside) closeMenu();

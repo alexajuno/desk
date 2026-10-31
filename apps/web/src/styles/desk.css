@@ -483,7 +483,7 @@ button.plan-step:hover, button.plan-step.open { background: var(--bg-hover); }
    headed in 12px/500 (28px, 14px in), a 1px rule with 4px either side between groups; rows of 34px whose focus is a fill
    4px in from the sides, a 16px icon 14px in and the name 12px after it, in 13px/450. The fill's corners are not
    measured. */
-.at-menu { position: fixed; z-index: 20; width: 350px; box-sizing: border-box; padding: 4px 0; border-radius: 10px; background: var(--bg-tip);
+.at-menu { position: fixed; z-index: 31; width: 350px; box-sizing: border-box; padding: 4px 0; border-radius: 10px; background: var(--bg-tip);
            border: 0.5px solid var(--border-tip); box-shadow: var(--shadow-keys); color: var(--text-cmd-on); font: 450 13px var(--font); }
 .at-heading { display: flex; align-items: center; height: 28px; box-sizing: border-box; padding: 0 14px 2px; font: 500 12px var(--font); color: var(--text-tip-key); }
 .at-heading.ruled { height: 33px; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border-tip); }
@@ -766,6 +766,16 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .menu.command.search mark { background: none; color: inherit; font-weight: 700; }
 .menu.command.search .menu-foot { gap: 2px; }
 .menu-foot .keyhint { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; color: var(--text-tip-key); }
+/* Its filters (step 2.4): the lists' chips under the tabs, in the box's palette, + and Clear after them; the @ menu and a
+   chip's menu open over the box. */
+.menu.command.search .s-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 12px 6px; font-size: 12px; }
+.s-filters .chip { border-color: var(--border-tip); background: none; }
+.s-filters .chip-part { color: var(--text-tip); }
+.s-filters .chip-part + .chip-part { border-left-color: var(--border-tip); }
+.s-filters .chip-op, .s-filters .chip-remove, .s-filters .filter-add { color: var(--text-tip-key); }
+.s-filters .filter-clear { margin-left: auto; color: var(--text-tip); }
+.s-filters button.chip-part:hover, .s-filters .filter-add:hover, .s-filters .filter-clear:hover { background: var(--bg-cmd-on); color: var(--text-cmd-on); }
+.menu.command.search ~ .menu { z-index: 31; }
 
 /* the S and P menus filter from keys read on the window, so their box is text, with a drawn caret */
 div.menu-filter { flex: 1; line-height: 38px; color: var(--text-1); white-space: nowrap; overflow: hidden; }
