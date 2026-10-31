@@ -77,21 +77,22 @@ class Dock {
     this.view = view;
   }
 
-  // The chat's right half open on a view, or hidden. The 20 chats opened last keep theirs. One you open takes the cursor
-  // as it draws (takeFocus); one Claude opens, or one open as the page loads, leaves it where you type.
-  setHalf(session: string, half: Half | null, focus = false) {
+  // The chat's right half open on a view, or hidden. The 20 chats opened last keep theirs. One you open starts what it
+  // shows and takes the cursor as it draws (yours); one Claude opens, or one open as the page loads, leaves the cursor
+  // where you type, and only shows what runs.
+  setHalf(session: string, half: Half | null, byYou = false) {
     const { [session]: _, ...rest } = this.halves;
     this.halves = Object.fromEntries([...Object.entries(rest), ...(half ? [[session, half]] : [])].slice(-20));
-    this.focusing = half && focus ? session : null;
+    this.opening = half && byYou ? session : null;
     this.save();
   }
 
-  private focusing: string | null = null; // the chat whose half takes the cursor as it next draws
+  private opening: string | null = null; // the chat whose half you opened, until it draws
 
-  // Whether the chat's half takes the cursor now, once.
-  takeFocus(session: string): boolean {
-    const yes = this.focusing === session;
-    if (yes) this.focusing = null;
+  // Whether you opened the chat's half just now, rather than Claude or the page loading; told once.
+  yours(session: string): boolean {
+    const yes = this.opening === session;
+    if (yes) this.opening = null;
     return yes;
   }
 

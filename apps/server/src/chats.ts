@@ -101,6 +101,9 @@ function chatsByIssue(): Map<string, Chat> {
 // The session of the issue's chat, or null when it has none.
 export const sessionOfIssue = (slug: string): string | null => chatsByIssue().get(slug)?.session ?? null;
 
+// Every desk chat that works the issue, the newest and the ones before it.
+export const allOfIssue = (slug: string): Chat[] => [...all().values()].filter((c) => c.issue === slug && KINDS.has(c.kind ?? ""));
+
 // The issue the session's chat works, or null.
 export const issueOfSession = (session: string | null | undefined): string | null => (session ? ofSession(session)?.issue ?? null : null);
 

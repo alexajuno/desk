@@ -1,8 +1,8 @@
 // A chat's terminal, one view of its right half (Half.tsx): xterm.js drawing the chat's tmux session, which desk's
-// server starts when it first opens and attaches to through a PTY (apps/server/src/terminal.ts). What you type goes to
-// the shell, and Claude types into the same session with tt. tmux keeps the history: xterm.js keeps none, and passes
-// the wheel and a drag to tmux, which scrolls, and copies through the clipboard (OSC 52, the clipboard addon). Shift
-// and a drag selects in xterm.js instead, which Ctrl ⇧ C copies.
+// server starts when you or Claude open it and attaches to through a PTY (apps/server/src/terminal.ts). What you type
+// goes to the shell, and Claude types into the same session with tt. tmux keeps the history: xterm.js keeps none, and
+// passes the wheel and a drag to tmux, which scrolls, and copies through the clipboard (OSC 52, the clipboard addon).
+// Shift and a drag selects in xterm.js instead, which Ctrl ⇧ C copies.
 import { ClipboardAddon, type IClipboardProvider } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
@@ -27,7 +27,8 @@ export function TerminalView({ session, ended }: { session: string; ended: () =>
     term.loadAddon(new ClipboardAddon(undefined, CLIPBOARD));
     term.open(host.current!);
     fit.fit();
-    if (dock.takeFocus(session)) term.focus(); // you opened it, rather than Claude
+    const yours = dock.yours(session);
+    if (yours) term.focus();
 
     // Ctrl ` goes on to desk, which hides the half (Frame.tsx); Ctrl ⇧ C copies xterm.js's own selection, and Ctrl ⇧ V
     // is left to the browser, whose paste xterm.js takes, as a Linux terminal's keys.
@@ -60,7 +61,10 @@ export function TerminalView({ session, ended }: { session: string; ended: () =>
         else { setFailure("desk does not answer."); setStand("failed"); }
       };
     };
-    void (async () => {
+    // You opening it starts the session. Claude started it before opening it, and one left open as the page loads
+    // only attaches, so a terminal that ended meanwhile, with its shell or its issue, hides rather than starting again.
+    if (!yours) attach();
+    else void (async () => {
       const res = await postJson(`/api/live/${session}/terminal`);
       if (gone) return;
       if (!res.ok) { setFailure(await reason(res)); return setStand("failed"); }

@@ -787,6 +787,8 @@ export async function create(): Promise<FastifyInstance> {
     const { deleted } = (req.body ?? {}) as unknown as { deleted?: boolean };
     try {
       await chats.remove(sessionOf(req), deleted !== false);
+      // its terminal ends with it, and Undo leaves it ended
+      if (deleted !== false) void terminal.stop(terminal.nameOf(sessionOf(req))).catch((error) => console.error("ending a terminal", error));
     } catch (error) {
       if (error instanceof chats.NoChat) throw new HttpError(404, error.message);
       if (error instanceof chats.AtWork) throw new HttpError(409, error.message);

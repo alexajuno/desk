@@ -342,8 +342,15 @@ export async function saveIn(tx: Db, i: Issue): Promise<string[]> {
   const moved = had && had.title !== i.title && (await follow(tx, i));
   await put(tx, i);
   if (moved) await rewriteAll(tx);
-  return autoClose(tx, i, had?.state);
+  const closed = await autoClose(tx, i, had?.state);
+  if (had && !CLOSED.has(had.state) && CLOSED.has(i.state)) for (const told of closing) told([i.slug, ...closed]);
+  return closed;
 }
+
+// What ends with an open issue as it comes to Done or Dropped, by any path, told the issues that closed: a chat's
+// terminal (terminal.ts). Told in the write, before it commits.
+const closing: ((slugs: string[]) => void)[] = [];
+export const onClose = (told: (slugs: string[]) => void) => closing.push(told);
 
 // Save the issue, and what the Workflow automations close with it, as one write; returns the slugs they closed.
 export const save = (i: Issue): Promise<string[]> => db.write((tx) => saveIn(tx, i));

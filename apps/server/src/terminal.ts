@@ -2,7 +2,7 @@
 // with tt, the interactive-terminal skill's helper ("agent can either drive it or i type it. it's a tmux session
 // right", the user, 31 Oct). It lives on tt's own server, `tmux -L agent`, named after the chat, so `tt send chat-…`
 // reaches it, and starts only when the user or Claude opens it ("can we just start terminal's session when needed?",
-// 31 Oct). Its shell exiting ends it.
+// 31 Oct). Its shell exiting ends it, and so does its issue coming to Done or Dropped, or the chat being deleted.
 //
 // The page draws it with xterm.js over a WebSocket, through a PTY running `tmux attach`, as VS Code's terminal does
 // with node-pty. tmux keeps the history, which its own copy mode and the user's ~/.tmux.conf scroll and copy.
@@ -14,6 +14,7 @@ import type { WebSocket } from "ws";
 import * as agents from "./agents.ts";
 import * as chats from "./chats.ts";
 import { HOME } from "./config.ts";
+import * as store from "./issues.ts";
 import { run, which } from "./proc.ts";
 
 const SOCKET = "agent";
@@ -56,6 +57,15 @@ export async function start(name: string, cwd: string): Promise<{ name: string; 
   await tmux("set-option", "-w", "-t", `=${name}:`, "remain-on-exit", "off");
   return { name, started: true };
 }
+
+// End the session, its shell and what runs in it, such as a dev server; whether one was running. Each page attached to
+// it hears "ended", and hides it.
+export const stop = async (name: string) => (await tmux("kill-session", "-t", `=${name}`)).code === 0;
+
+// An issue that closes ends the terminals of its chats: the work is over, and nobody is left to type in them.
+store.onClose((slugs) => {
+  for (const chat of slugs.flatMap(chats.allOfIssue)) void stop(chat.id).catch((error) => console.error("ending a terminal", error));
+});
 
 // The page's end of it: a PTY attached to the session, its output to the socket as text, and the socket's messages to
 // it, each a JSON {"in": "<keys>"} or {"cols": n, "rows": n}. The socket closes once the session ends or the PTY
