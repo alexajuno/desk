@@ -50,7 +50,7 @@ export function moved(sessions: string[] | null) {
   for (const [id, look] of panels.values()) if (!sessions || sessions.includes(id)) look();
 }
 
-// A new count of the week moves every panel, and of a session's context its own.
+// A new count of the 5 hours or the week moves every panel, and of a session's context its own.
 models.onHeard((name) => {
   if (name === "usage") moved(null);
   else if (name.startsWith("context:")) moved([name.slice("context:".length)]);
@@ -73,7 +73,7 @@ interface Meta {
   auto: boolean; // Auto in its composer, rather than Manual (chats.ts, setAuto)
   picked: boolean; // a new chat's folder, picked in its composer (chats.ts, startIn)
   runs: models.Shown; // the model and effort, for the composer's chip
-  usage: ReturnType<typeof models.outright>; // the context and the week, shown outright in the composer
+  usage: ReturnType<typeof models.outright>; // the context, the 5 hours and the week, shown outright in the composer
 }
 
 const tilde = (path: string) => (path.startsWith(HOME) ? `~${path.slice(HOME.length)}` : path);

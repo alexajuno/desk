@@ -307,10 +307,12 @@ export function context(session: string): Context | null {
 }
 
 // What the composer shows outright, beside Manual (the user, 31 Oct: "display the current context and weekly usage
-// outright"): the session's context and the week, as last heard. It counts nothing again itself, since the panels ask
-// it again each time desk hears something new (live.ts), and a count asked from there would never end.
-export function outright(session: string): { context: Context | null; week: Window | null } {
-  return { context: heard.get(`context:${session}`)?.value ?? null, week: used().seven_day };
+// outright", and 1 Nov: "need to add 5 hour circle"): the session's context, the 5 hours and the week, as last heard.
+// It counts nothing again itself, since the panels ask it again each time desk hears something new (live.ts), and a
+// count asked from there would never end.
+export function outright(session: string): { context: Context | null; hours: Window | null; week: Window | null } {
+  const { five_hour, seven_day } = used();
+  return { context: heard.get(`context:${session}`)?.value ?? null, hours: five_hour, week: seven_day };
 }
 
 // --- start ----------------------------------------------------------------------------------------------------------

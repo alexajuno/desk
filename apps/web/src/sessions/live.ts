@@ -68,7 +68,7 @@ export interface Meta {
   picked: boolean; // a new chat's folder, picked in its composer
   auto: boolean; // Auto in its composer: desk says next for the user as a turn ends
   runs: { model: string; name: string; effort: string }; // for the composer's chip
-  usage?: { context: Context | null; week: Window | null }; // shown outright in the composer; none from a desk before 31 Oct
+  usage?: { context: Context | null; hours?: Window | null; week: Window | null }; // shown outright in the composer; none from a desk before 31 Oct, no hours before 1 Nov
 }
 
 // A file attached in the composer. An image Claude takes inline (PNG, JPEG, GIF, WebP) has a thumbnail and goes in the
