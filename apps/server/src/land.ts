@@ -189,11 +189,13 @@ export async function branchOf(i: Issue): Promise<string | null> {
 }
 
 // The branch desk switched the checkout to, with who holds it and since when, or null. A checkout put back on a branch
-// by hand counts as back, and so does one since detached by hand off that branch's line.
+// by hand counts as back, and so does one since detached by hand on another commit.
 export async function trying(top: string): Promise<Note | null> {
   const now = await noteOf(top);
   if (!now || (await git(top, "branch", "--show-current"))) return null;
-  // HEAD stays on the line while the session commits more on its branch; a branch deleted after landing fails too.
+  // HEAD stays on the commit desk detached on while the session commits more on its branch, amends it or deletes it.
+  if (now.head) return (await git(top, "rev-parse", "HEAD")) === now.head ? now : null;
+  // A note from before 31 Oct has no commit: HEAD on the branch's line. A branch amended or deleted fails it.
   if ((await git(top, "merge-base", "--is-ancestor", "HEAD", now.branch)) === null) return null;
   return now;
 }
