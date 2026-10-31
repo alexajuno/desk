@@ -8,7 +8,7 @@
 //     {"type": "asks", "asks": [...]}
 //     {"type": "tasks", "tasks": [...]}                          what runs beside the conversation now (host.ts)
 //     {"type": "status", "status": {...} | null}                 a retry, a compaction or a usage limit holds the turn up
-//     {"type": "meta", "meta": <meta>}                           its title, folder, issue, model or effort changed
+//     {"type": "meta", "meta": <meta>}                           its title, folder, issue, model, effort or usage changed
 //
 // An <item> is transcript.ts's. The app sends {"type": "visible", "visible": true} as its tab shows or hides, so desk
 // knows whether the user reads a chat's reply as it comes (the Inbox then leaves it out).
@@ -50,6 +50,12 @@ export function moved(sessions: string[] | null) {
   for (const [id, look] of panels.values()) if (!sessions || sessions.includes(id)) look();
 }
 
+// A new count of the week moves every panel, and of a session's context its own.
+models.onHeard((name) => {
+  if (name === "usage") moved(null);
+  else if (name.startsWith("context:")) moved([name.slice("context:".length)]);
+});
+
 // Whether a panel the user looks at shows the session now.
 export function watching(session: string | null | undefined): boolean {
   return Boolean(session) && [...visible.values()].includes(session!);
@@ -67,6 +73,7 @@ interface Meta {
   auto: boolean; // Auto in its composer, rather than Manual (chats.ts, setAuto)
   picked: boolean; // a new chat's folder, picked in its composer (chats.ts, startIn)
   runs: models.Shown; // the model and effort, for the composer's chip
+  usage: ReturnType<typeof models.outright>; // the context and the week, shown outright in the composer
 }
 
 const tilde = (path: string) => (path.startsWith(HOME) ? `~${path.slice(HOME.length)}` : path);
@@ -89,6 +96,7 @@ export async function meta(id: string): Promise<Meta> {
     title: issue?.title || chat?.named || (chat?.bare ? chatTitleOf(id) : "") || (chat && chat.title !== "New chat" ? chat.title : "") || titleOf(id) || "New session",
     issue: issue ? { slug: issue.slug, title: issue.title, state: issue.state } : null,
     runs: models.shown(id, Boolean(chat)),
+    usage: models.outright(id),
   };
 }
 
@@ -123,6 +131,7 @@ export async function connect(ws: WebSocket, id: string) {
   for (const i of items) sent.add(i.key);
   path = at;
   readTo = to;
+  models.context(id); // counted again when a turn ran since the last count, which comes as a meta
   const m = await meta(id);
   lastMeta = JSON.stringify(m);
   say({ type: "hello", meta: m, items, working: turns.working(id), asks: [], partial: [] });

@@ -144,10 +144,15 @@ export async function change(session: string, pick: Pick): Promise<void> {
 // held the menu up 2 to 4 s while a Claude Code started only for it.
 
 const heard = new Map<string, { value: any; at: number }>(); // at in ms
+const hearers = new Set<(name: string) => void>();
+
+// Told each time desk hears something new, by its name in the heard table, such as "usage" or "context:<session>".
+export const onHeard = (fn: (name: string) => void) => { hearers.add(fn); };
 
 async function hear(name: string, value: unknown) {
   const at = Date.now();
   heard.set(name, { value, at });
+  for (const fn of hearers) fn(name);
   await db.write((tx) => tx.query("insert into heard values ($1, $2, $3) on conflict (name) do update set value = excluded.value, at = excluded.at",
     [name, JSON.stringify(value), at / 1000]));
 }
@@ -299,6 +304,13 @@ export function context(session: string): Context | null {
   const kept = heard.get(`context:${session}`), ended = turns.ended(session);
   if (!kept || turns.working(session) || (ended !== null && ended * 1000 > kept.at)) recount(session);
   return kept?.value ?? null;
+}
+
+// What the composer shows outright, beside Manual (the user, 31 Oct: "display the current context and weekly usage
+// outright"): the session's context and the week, as last heard. It counts nothing again itself, since the panels ask
+// it again each time desk hears something new (live.ts), and a count asked from there would never end.
+export function outright(session: string): { context: Context | null; week: Window | null } {
+  return { context: heard.get(`context:${session}`)?.value ?? null, week: used().seven_day };
 }
 
 // --- start ----------------------------------------------------------------------------------------------------------
