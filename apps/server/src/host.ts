@@ -42,7 +42,9 @@ const DESK = option("--desk"); // desk, which the host tells what each session d
 const VERSION = createHash("sha1").update(readFileSync(fileURLToPath(import.meta.url))).digest("hex").slice(0, 12);
 // The user's own Claude Code, the one their terminal runs, rather than the copy the SDK's package carries.
 const CLAUDE = execFileSync("sh", ["-c", "command -v claude"], { encoding: "utf8" }).trim();
-const IDLE_CLOSE = 20 * 60_000; // ms an idle session with nobody watching keeps its process; it resumes on its next message
+// ms an idle session keeps its process, shown in a tab or not; its next message resumes it, in about 3 s and with the
+// prompt cache kept (measured 31 Oct: each process holds 250 MB or more, and one reply in five comes after 5 minutes).
+const IDLE_CLOSE = 5 * 60_000;
 // The longest Claude may ask a background command to run: a day. Claude Code counts an SDK session as unattended and
 // stops its background commands after 30 minutes, or the timeout Claude asks for up to 2 hours, unless this raises the
 // ceiling; it leaves the 30-minute default and the foreground timeouts as they are
@@ -410,7 +412,7 @@ function close(s: Session) {
 
 setInterval(() => {
   // One with a task still running keeps its process, which the task would end with.
-  for (const s of sessions.values()) if (!s.working && !s.watchers.size && !s.asks.size && !s.tasks.size && Date.now() - s.since > IDLE_CLOSE) close(s);
+  for (const s of sessions.values()) if (!s.working && !s.asks.size && !s.tasks.size && Date.now() - s.since > IDLE_CLOSE) close(s);
 }, 60_000);
 
 const row = (s: Session) => ({ id: s.id, cwd: s.cwd, title: s.title, working: s.working, since: s.since, asks: s.asks.size, watchers: s.watchers.size });
@@ -510,10 +512,7 @@ app.get<{ Params: { id: string } }>("/sessions/:id/events", { websocket: true },
   }
   s.watchers.add(ws);
   ws.send(JSON.stringify({ type: "hello", working: s.working, since: s.since, partial: [...s.partial.values()], asks: asksOf(s), tasks: tasksOf(s), status: s.status }));
-  ws.on("close", () => {
-    s.watchers.delete(ws);
-    s.since = Math.max(s.since, Date.now() - IDLE_CLOSE / 2); // closing the panel leaves it a while before its process goes
-  });
+  ws.on("close", () => s.watchers.delete(ws));
 });
 
 // desk asks the host to step down for a newer one, which it does only while nothing works or runs in the background,
