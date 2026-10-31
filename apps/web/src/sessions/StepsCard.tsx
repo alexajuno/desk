@@ -2,9 +2,12 @@
 // works ("i want the steps to be displayed right within the chat tab while it's doing, above the composer", the user,
 // 31 Oct; "go with A", on its mockups, over quiet lines and one folded line). The part being worked on is open and the
 // step being worked on filled; a part done or still to do folds to its line, and the head folds the whole card to one
-// line saying where the work stands. A step drawn in the chat brings its message into view there, ringed ("valid.
-// proceed", the user, 31 Oct, on its design): the steps' diagrams are read where they were sent.
+// line saying where the work stands, as the card starts unless Settings › Preferences says Expanded, which opens it
+// while a step is left ("set it to collapse by default", the user, 1 Nov). A step drawn in the chat brings its message
+// into view there, ringed ("valid. proceed", the user, 31 Oct, on its design): the steps' diagrams are read where they
+// were sent.
 import { useState } from "react";
+import { usePage } from "../api/page";
 import { CHEVRON, StateIcon } from "../ui/icons";
 import { isDrawn, isHere, stepNow, type PlanStep } from "../issues/Steps";
 
@@ -35,7 +38,8 @@ const leaves = (steps: PlanStep[]): PlanStep[] => steps.flatMap((s) => (s.kids?.
 // sent: where each step's latest send is in the chat (its data-at), by the step's title.
 export function StepsCard({ steps, sent }: { steps: PlanStep[]; sent: ReadonlyMap<string, string> }) {
   const now = stepNow(steps);
-  const [open, fold] = useFold(now !== null); // every step done: folded
+  const expanded = usePage<{ steps_card: string }>("/api/settings").data?.steps_card === "expanded";
+  const [open, fold] = useFold(expanded && now !== null); // every step done: folded
   if (!steps.length) return null;
   const all = leaves(steps);
   const at = now ? [now.part, `${now.n} of ${now.of}`].filter(Boolean).join(" · ") : `all ${all.length} done`;
