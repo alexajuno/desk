@@ -9,6 +9,7 @@ import * as automations from "./automations.ts";
 import * as changes from "./changes.ts";
 import * as chats from "./chats.ts";
 import { ISSUES_DIR, TEAMS_DIR } from "./config.ts";
+import * as fields from "./fields.ts";
 import * as store from "./issues.ts";
 import { byRank, CLOSED, runs, type Issue } from "./issues.ts";
 import * as inbox from "./inbox.ts";
@@ -643,34 +644,31 @@ export function markRows(act: "read" | "unread" | "delete", ids: string[] | null
 
 // Search's hits, as its box lists them: a group per kind, Chats, Issues, Projects, Teams and Milestones (the app adds
 // Settings), each with how many it found. All holds each kind's best 5 ("a group per kind, Chats first, best 5 each",
-// step 1.5), and a kind's tab its whole list, the first 100. Before anything is typed, each kind lists what is live in it
-// (step 1.4), All only the chats: the chats in progress then the newest, open issues the last moved first, projects In
-// Progress, active teams, and each started project's current milestone; with a Status filter, every one that answers it.
-// The filters its @ menu adds narrow each kind by step 1.6's table: a chat by its issue, one with no issue being open and
-// in no team; a team by itself, archived being closed; a milestone by its project's team, closed once its issues are
-// done. In All, an issue whose chat is listed is left out of Issues, since the chat's row shows it. Issues, projects,
-// teams and milestones come best match first.
-export async function searchPage(q: string, kind = "", team = "", status = "") {
-  const all = await store.loadAll(), everyTeam = await teams.loadAll(), everyProject = await projects.loadAll();
-  // A filter as the lists write theirs: "desk,muse", or "not:desk" for every other value.
-  const filter = (text: string) => ({ not: text.startsWith("not:"), values: text.replace(/^not:/, "").split(",").filter(Boolean) });
-  const passes = (f: ReturnType<typeof filter>, value: string) => !f.values.length || f.values.includes(value) !== f.not;
-  const byTeam = filter(team), byStatus = filter(status);
-  const kept = (t: string | null, closed: boolean) => passes(byTeam, t ?? "") && passes(byStatus, closed ? "closed" : "open");
+// step 1.5), and a kind's tab its whole list, the first 100. Each kind reads what was typed as its own filters and words
+// (fields.ts): state:done keeps the done issues, and a field it lacks is words, or in All leaves it out (step 1.3).
+// Before anything is typed, each kind lists what is live in it (step 1.4), All only the chats: the chats in progress then
+// the newest, open issues the last moved first, projects In Progress, active teams, and each started project's current
+// milestone; with only filters, every one that answers them. In All, an issue whose chat is listed is left out of Issues,
+// since the chat's row shows it. Issues, projects, teams and milestones come best match first.
+export async function searchPage(q: string, kind = "") {
+  const all = await store.loadAll(), everyTeam = await teams.loadAll(), everyProject = await projects.loadAll(), now = new Date();
+  const read = Object.fromEntries(fields.KINDS.map((k) => [k, fields.read(q, k)])) as Record<fields.Kind, fields.Read>;
+  const kept = (k: fields.Kind, row: fields.Row) => (!!kind || !read[k].foreign.length) && fields.passes(row, read[k].filters, k, now);
+  // Whether the kind was given words to find, and whether it lists only what is live, with neither words nor filters.
+  const words = (k: fields.Kind) => /\S/.test(read[k].words), live = (k: fields.Kind) => !words(k) && !read[k].filters.length;
   const teamOf = (slug: string | null) => (slug ? { slug, title: everyTeam.get(slug)?.title ?? slug } : null);
-  const typed = /\S/.test(q), live = !typed && !byStatus.values.length;
-  const limit = (k: string) => (kind ? (kind === k ? 100 : 0) : typed ? 5 : k === "chats" ? 100 : 0);
+  const limit = (k: string) => (kind ? (kind === k ? 100 : 0) : /\S/.test(q) ? 5 : k === "chats" ? 100 : 0);
   // What is listed before anything is typed, as a search finds it, with nothing marked.
   const asListed = <T extends { title: string }>(things: T[]): [number, Found<T>][] => things.map((thing) => [0, { thing, title: markRanges(thing.title), snippet: "" }]);
 
-  const chats = await sessions.search(q, (i) => (i ? kept(i.team, CLOSED.has(i.state)) : !byTeam.values.length && passes(byStatus, "open")), limit("chats"));
+  const chats = await sessions.search(read.chats.words, (r) => kept("chats", fields.chatRow(r)), limit("chats"));
   const chatHits = chats.hits.map((c) => ({ kind: "chat", key: `chat/${c.id}`, session: c.id, title: markRanges(c.title, c.marks),
     snippet: c.sub ? markRanges(c.sub, c.subMarks) : "", folder: c.folder, age: c.age, state: c.state, issue: c.issue && issueJson(c.issue) }));
   const shown = new Set(kind ? [] : chats.hits.flatMap((c) => (c.issue ? [c.issue.slug] : [])));
 
-  let issues = (typed ? findScored(all, q).map(([, h]) => h) : [...all.values()].filter((i) => !live || !CLOSED.has(i.state))
-    .map((issue) => ({ issue, title: markRanges(issue.title), snippet: "" }))).filter((h) => kept(h.issue.team, CLOSED.has(h.issue.state)));
-  if (!typed && limit("issues")) {
+  let issues = (words("issues") ? findScored(all, read.issues.words).map(([, h]) => h) : [...all.values()].filter((i) => !live("issues") || !CLOSED.has(i.state))
+    .map((issue) => ({ issue, title: markRanges(issue.title), snippet: "" }))).filter((h) => kept("issues", fields.issueRow(h.issue)));
+  if (!words("issues") && limit("issues")) {
     const moved = new Map(issues.map((h) => [h.issue.slug, store.changed(h.issue.slug)]));
     issues = issues.sort((a, b) => moved.get(b.issue.slug)! - moved.get(a.issue.slug)!);
   }
@@ -678,15 +676,17 @@ export async function searchPage(q: string, kind = "", team = "", status = "") {
     .map(({ issue, title, snippet }) => ({ kind: "issue", key: issue.slug, title, snippet, team: teamOf(issue.team), date: shortDate(issue.created), issue: issueJson(issue) }));
 
   const shut = (p: Project) => projects.CLOSED.has(p.status);
-  const found = (typed ? findThings(everyProject.values(), q, (p) => [p.title, p.body], shut)
-    : asListed([...everyProject.values()].filter((p) => !live || p.status === "started").sort((a, b) => b.created.localeCompare(a.created))))
-    .filter(([, h]) => kept(h.thing.team, shut(h.thing)));
+  // A project's health, from its updates, only when a filter may ask for it.
+  const health = new Map(read.projects.filters.length ? await Promise.all([...everyProject.keys()].map(async (slug) => [slug, updates.healthOf(await updates.activityOf(slug))] as const)) : []);
+  const found = (words("projects") ? findThings(everyProject.values(), read.projects.words, (p) => [p.title, p.body], shut)
+    : asListed([...everyProject.values()].filter((p) => !live("projects") || p.status === "started").sort((a, b) => b.created.localeCompare(a.created))))
+    .filter(([, h]) => kept("projects", fields.projectRow(h.thing, health.get(h.thing.slug) ?? updates.healthOf([]))));
   const projectHits = found.slice(0, limit("projects")).map(([, { thing: p, title, snippet }]) => ({ kind: "project", key: `project/${p.slug}`, title, snippet,
     team: teamOf(p.team), date: shortDate(p.created), project: { slug: p.slug, status: p.status, progress: Math.round(projects.progress(projects.issuesOf(all, p.slug)) * 100) } }));
 
   const archived = (t: Team) => t.state === "archived";
-  const teamsFound = (typed ? findThings(everyTeam.values(), q, (t) => [t.title, t.body], archived)
-    : asListed([...everyTeam.values()].filter((t) => !live || !archived(t)))).filter(([, h]) => kept(h.thing.slug, archived(h.thing)));
+  const teamsFound = (words("teams") ? findThings(everyTeam.values(), read.teams.words, (t) => [t.title, t.body], archived)
+    : asListed([...everyTeam.values()].filter((t) => !live("teams") || !archived(t)))).filter(([, h]) => kept("teams", fields.teamRow(h.thing)));
   const teamHits = teamsFound.slice(0, limit("teams")).map(([, { thing: t, title, snippet }]) => ({ kind: "team", key: `team/${t.slug}`, title, snippet,
     team: { slug: t.slug, title: t.title }, state: t.state, open: [...all.values()].filter((i) => i.team === t.slug && !CLOSED.has(i.state)).length }));
 
@@ -694,8 +694,8 @@ export async function searchPage(q: string, kind = "", team = "", status = "") {
   const everyMilestone = [...everyProject.values()].flatMap((p) =>
     projects.milestoneProgress(byProject.get(p.slug) ?? [], projects.issuesOf(all, p.slug)).map((m) => ({ ...m, of: p })));
   const done = (m: (typeof everyMilestone)[number]) => m.progress === 100;
-  const milestonesFound = (typed ? findThings(everyMilestone, q, (m) => [m.title, m.body], done)
-    : asListed(everyMilestone.filter((m) => !live || (m.current && m.of.status === "started")))).filter(([, h]) => kept(h.thing.of.team, done(h.thing)));
+  const milestonesFound = (words("milestones") ? findThings(everyMilestone, read.milestones.words, (m) => [m.title, m.body], done)
+    : asListed(everyMilestone.filter((m) => !live("milestones") || (m.current && m.of.status === "started")))).filter(([, h]) => kept("milestones", fields.milestoneRow(h.thing)));
   const milestoneHits = milestonesFound.slice(0, limit("milestones")).map(([, { thing: m, title, snippet }]) => ({ kind: "milestone", key: `milestone/${m.id}`,
     title, snippet, team: teamOf(m.of.team), project: { slug: m.of.slug, title: m.of.title },
     milestone: { id: m.id, target: m.target, target_label: periods.label(m.target), progress: m.progress, current: m.current } }));

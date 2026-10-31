@@ -306,12 +306,15 @@ export async function newSession(base: string): Promise<chats.Chat> {
   return chats.agentChats().find((c) => !c.deleted && chats.empty(c)) ?? (await chats.newChat(base));
 }
 
-// Search's chats (pages.ts, searchPage): those rows() finds that `keep` keeps, by their issue, one for each issue, the
-// first in rows' order; those whose title holds every word first, then those found by what was typed in them ("a match
-// in the title or in what you typed ranks first", step 1.3). How many, and the first `limit`, their words marked.
-export async function search(query: string, keep: (i: Issue | null) => boolean, limit: number) {
+// A chat as rows() finds it.
+export type Found = Awaited<ReturnType<typeof rows>>["found"][number];
+
+// Search's chats (pages.ts, searchPage): those rows() finds that `keep` keeps (by its filters, fields.ts), one for each
+// issue, the first in rows' order; those whose title holds every word first, then those found by what was typed in them
+// ("a match in the title or in what you typed ranks first", step 1.3). How many, and the first `limit`, their words marked.
+export async function search(query: string, keep: (r: Found) => boolean, limit: number) {
   const { found, words } = await rows(query), issued = new Set<string>();
-  let kept = found.filter((r) => keep(r.issue) && (!r.issue || (!issued.has(r.issue.slug) && !!issued.add(r.issue.slug))));
+  let kept = found.filter((r) => keep(r) && (!r.issue || (!issued.has(r.issue.slug) && !!issued.add(r.issue.slug))));
   if (words) {
     const titled = await sessiontext.inTitle(words, kept.map((r) => [r.id, r.title]));
     kept = [...kept.filter((r) => titled.has(r.id)), ...kept.filter((r) => !titled.has(r.id))];
