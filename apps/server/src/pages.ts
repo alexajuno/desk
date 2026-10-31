@@ -695,7 +695,7 @@ export async function searchPage(q: string, kind = "", team = "", status = "") {
     : asListed(everyMilestone.filter((m) => !live || (m.current && m.of.status === "started")))).filter(([, h]) => kept(h.thing.of.team, done(h.thing)));
   const milestoneHits = milestonesFound.slice(0, limit("milestones")).map(([, { thing: m, title, snippet }]) => ({ kind: "milestone", key: `milestone/${m.id}`,
     title, snippet, team: teamOf(m.of.team), project: { slug: m.of.slug, title: m.of.title },
-    milestone: { id: m.id, target: m.target, target_label: periods.label(m.target), progress: m.progress } }));
+    milestone: { id: m.id, target: m.target, target_label: periods.label(m.target), progress: m.progress, current: m.current } }));
 
   return { kinds: [
     { kind: "chats", count: chats.count, hits: chatHits },

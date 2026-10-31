@@ -24,7 +24,8 @@ import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openNearest, openPicture, stepViewer, viewerOpen } from "../ui/viewer";
 import { commentKey, dropPick } from "../sessions/Changes";
 import { arrange, Dock, focusComposer, newSession, openSession, togglePlan, viewKey } from "../sessions/Dock";
-import { Catcher, catchKeys } from "../search/catcher";
+import { Catcher } from "../search/catcher";
+import { openSearch, search, SearchHost } from "../search/SearchBox";
 import { deleteReadKey, deleteRow, markAllKey, toggleRead } from "../inbox/actions";
 import { Corner } from "./Corner";
 import { CreatorHost } from "./Creator";
@@ -96,7 +97,7 @@ function onKeyDown(e: KeyboardEvent) {
   // ← and →, or vim's h and l, walk the viewer's pictures.
   const by = ({ ArrowLeft: -1, ArrowRight: 1, h: -1, l: 1 } as Record<string, number>)[e.key];
   if (by && viewerOpen() && !e.ctrlKey && !e.metaKey && !e.altKey) { stepViewer(by); e.preventDefault(); return; }
-  if (menus.current || viewerOpen() || ui.editing || ui.creator || ui.teamCreator || ui.projectCreator !== null) return;
+  if (menus.current || search.open || viewerOpen() || ui.editing || ui.creator || ui.teamCreator || ui.projectCreator !== null) return;
   // Ctrl+/ works from a text box too, and Esc closes the shortcuts from their own search box.
   if ((e.ctrlKey || e.metaKey) && e.key === "/") { ui.setKeys(!ui.keysOpen); e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyO") { newSession(); e.preventDefault(); return; }
@@ -292,9 +293,7 @@ function onKeyDown(e: KeyboardEvent) {
     e.preventDefault();
   }
   else if (e.key === "/") {
-    const box = document.getElementById("search-q");
-    if (box) box.focus();
-    else { catchKeys(); go("/search"); }
+    openSearch();
     e.preventDefault();
   }
   else if (e.key === "[") toggleSide();
@@ -367,6 +366,7 @@ export const Frame = observer(function Frame() {
       <CreatorHost />
       <TeamCreatorHost />
       <ProjectCreatorHost />
+      <SearchHost />
       <MenuHost />
       <ToastHost />
     </>

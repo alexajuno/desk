@@ -43,6 +43,12 @@
   /* A menu's rows are tall enough for a finger. */
   .menu:not(.command) li:not(.heading, .divider) { height: 40px; }
 
+  /* The search spans the screen under its top, its list kept above the keyboard; a row drops the line that matched,
+     which left the title no room. */
+  .menu.command.search { top: 8px; width: calc(100vw - 16px); max-width: none; }
+  .menu.command.search ul { max-height: calc(100dvh - var(--floor) - 140px); }
+  .menu.command.search li .m { display: none; }
+
   .corner { left: 8px; right: 8px; bottom: calc(var(--floor) + 8px); justify-content: center; pointer-events: none; }
   .corner > * { pointer-events: auto; }
   .corner-new, .dock-history { display: none; }

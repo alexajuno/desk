@@ -742,6 +742,31 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .menu-foot button:hover { background: var(--bg-cmd-on); }
 .menu.command .menu-foot kbd { height: auto; min-width: 0; padding: 2px; border-radius: 4px; font-weight: 500; }
 
+/* The search (search/SearchBox.tsx), in the command menu's box as mockup A drew it (step 1.8, 31 Oct; not Linear's,
+   whose search is a page): under the box, a tab per kind as a quiet 28px pill in the box's palette, the open one filled,
+   its count dimmer, a kind with none dimmed; groups headed with their count, a heading opening its tab; a row is its
+   icon, its title, the line that matched in the keys' grey, then where and when in 12px at its right, the words found in
+   bold. The list grows to show about two groups, and shrinks with the window. */
+.menu.command.search { display: flex; flex-direction: column; }
+.menu.command.search .s-tabs { display: flex; gap: 4px; padding: 6px 12px 4px; overflow-x: auto; scrollbar-width: none; }
+.s-tab { flex: none; height: 28px; padding: 0 10px; gap: 6px; border: 0; background: none; font: 500 12px var(--font); color: var(--text-tip-key); }
+.s-tab:hover { background: none; color: var(--text-tip); }
+.s-tab .n { font-weight: 450; color: var(--text-cmd-hint); }
+.s-tab.here, .s-tab.here:hover { background: var(--bg-cmd-on); color: var(--text-cmd-on); box-shadow: 0 0 0 0.5px var(--border-tip); }
+.s-tab.here .n { color: var(--text-tip-key); }
+.s-tab.none { color: var(--text-cmd-hint); }
+.menu.command.search ul { max-height: min(560px, calc(87vh - 140px)); margin: 0; }
+.menu.command.search li.heading { display: flex; justify-content: space-between; cursor: pointer; }
+.menu.command.search li.heading:hover { color: var(--text-tip); }
+.menu.command.search li.heading .all { font-weight: 450; color: var(--text-cmd-hint); }
+.menu.command.search li .ic { flex: none; display: grid; place-items: center; width: 16px; height: 16px; }
+.menu.command.search li .t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu.command.search li .m { flex: 1 1 0; min-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-tip-key); }
+.menu.command.search li .w { flex: none; margin-left: auto; padding-left: 12px; font-size: 12px; color: var(--text-tip-key); white-space: nowrap; }
+.menu.command.search mark { background: none; color: inherit; font-weight: 700; }
+.menu.command.search .menu-foot { gap: 2px; }
+.menu-foot .keyhint { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; color: var(--text-tip-key); }
+
 /* the S and P menus filter from keys read on the window, so their box is text, with a drawn caret */
 div.menu-filter { flex: 1; line-height: 38px; color: var(--text-1); white-space: nowrap; overflow: hidden; }
 div.menu-filter:empty::before, div.menu-filter:not(:empty)::after { content: ""; display: inline-block; width: 1px; height: 15px;
