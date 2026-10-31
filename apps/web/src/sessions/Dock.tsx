@@ -13,7 +13,7 @@ import { go } from "../app/nav";
 import { splashUp, useSplash } from "../app/splash";
 import { markdown } from "../lib/markdown";
 import { seenPage, usePage } from "../api/page";
-import { HeadStatus, IssueDetails, IssueView, StepButtons, Title, useStep, type IssuePageData } from "../issues/IssueView";
+import { HeadStatus, IssueDetails, IssueView, landSkip, Lands, StepButtons, Title, useStep, type IssuePageData } from "../issues/IssueView";
 import { useLive as useIssueLive } from "../issues/useLive";
 import { actionsMenu, folderMenu } from "../issues/menus";
 import { painted } from "../issues/painted";
@@ -503,21 +503,22 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
   );
 });
 
-// The card a session sent, where it sent it: the latest drawn, its text folded under Details; an earlier one a line. The
-// plan is always a line, never drawn: while a step runs the chat shows that step's diagram only, and the whole plan is
-// on its Issue tab ("never go go all or anything. we had all diagrams on sidebar", the user, 27 Oct). Go and
-// Approve are typed in the composer, with no bar of buttons over it: "just let me type the message directly, it takes
-// no longer time" (the user, 28 Oct).
+// The plan or the card a session sent, where it sent it: the latest drawn, its text folded under Details; an earlier one
+// a line ("A", the user, 1 Nov, drawing the latest plan as the card is). Under a card in review, the steps Approve runs,
+// which you untick there to skip, as the Approve in the chat's head does: the card holds everything you decide on.
 const Sent = observer(function Sent({ at, page, section, latest }: { at: string; page: IssuePageData | null; section: Section; latest: boolean }) {
-  const parts = !page || section === "Plan" ? null : page.card ?? (page.result ? [page.result_html, ""] : null);
+  const parts = !page ? null : section === "Plan" ? page.plan_card : page.card ?? (page.result ? [page.result_html, ""] : null);
   const name = section === "Plan" ? "Plan" : "Card";
   if (!latest || !page || !parts) {
     return <p className="sent-line" data-at={at}>{GLYPH.file}<span>{name}</span><span className="sent-when">{latest ? "sent" : "an earlier version, sent"}</span></p>;
   }
+  const lands = section === "Result" && page.reviewing ? page.lands?.steps ?? null : null;
+  const [skip, setSkip] = landSkip(page.issue.slug, lands);
   return (
     <div className="sent" data-at={at}>
       <div className="sent-head">{GLYPH.file}<span>{name}</span></div>
       <div className="reply body sent-body" dangerouslySetInnerHTML={{ __html: parts[0] }} />
+      {lands && <Lands steps={lands} skip={skip} setSkip={setSkip} />}
       {parts[1] && (
         <details className="review-details sent-details">
           <summary>Details</summary>

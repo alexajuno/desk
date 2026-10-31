@@ -261,6 +261,8 @@ table.diff .diff-hunk td { padding: 4px 12px 4px 48px; font: 400 11px var(--mono
 .step-sent .sent-body + .step-sent-said { margin-top: 12px; }
 .sent .reply.body { font-size: 14px; line-height: 22px; }
 .sent-details { margin: 10px 0 0; }
+/* the steps Approve runs, under a card in review, apart from the card's last line as the Details are */
+.sent .review-lands { margin: 14px 0 0; }
 
 /* A message the steps above the composer bring into view, with a moment's ring (StepsCard.tsx, bring). */
 .brought { animation: brought 1.2s ease; border-radius: 8px; }

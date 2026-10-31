@@ -2,6 +2,7 @@
 // a row over its Properties (Actions), and its status shows once, in Properties, where a click changes it. Open chat
 // opens the issue as its chat, in the middle, its issue on its Issue tab, and hides once the chat is open. Ctrl+Enter
 // presses the step and I opens the chat, as the buttons' tooltips say.
+import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { post, said } from "../api/http";
@@ -75,8 +76,17 @@ const stepTip = (head: string, text: string, state: State) => (text === STATE_NA
 // The step of an issue landing (pages.ts, step), drawn at once on Approve.
 const LANDING: IssuePageData["step"] = { text: "Landing", button: { label: "Landing…", disabled: true } };
 
+// The landing steps you unticked, by their place, which Approve skips: by the issue and the steps it was given, so
+// that the card in its chat and the Approve in its chat's head skip the same ones, and a new set starts all ticked.
+const skips = observable.map<string, number[]>();
+
+export function landSkip(slug: string, steps: string[] | null): [number[], (skip: number[]) => void] {
+  const key = `${slug}\n${steps?.join("\n") ?? ""}`;
+  return [skips.get(key) ?? [], (skip) => runInAction(() => skips.set(key, skip))];
+}
+
 // An issue's step, its one primary button, and the landing steps Approve runs, which you untick to skip: on its page,
-// and in its chat under the plan or the card its session sent.
+// and in its chat, the step in its head and the steps under the card its session sent.
 export function useStep(data: IssuePageData, inInbox = false) {
   const p = painted(data.issue);
   // Trust folder takes the step's place once starting the issue's session found its folder untrusted.
@@ -84,10 +94,8 @@ export function useStep(data: IssuePageData, inInbox = false) {
   // Approve shows Landing while the server is still handing the work to the session, which takes a second or more.
   const landing = p.state === "landing" && data.issue.state !== "landing";
   const step = landing ? LANDING : data.step;
-  // The landing steps you unticked, by their place, which Approve skips; afresh for each issue and each set of steps.
   const steps = data.lands?.steps ?? null;
-  const [skip, setSkip] = useState<number[]>([]);
-  useEffect(() => setSkip([]), [p.slug, steps?.join("\n")]);
+  const [skip, setSkip] = landSkip(p.slug, steps);
 
   // A form route of the old pages: Plan, Start, Approve, Try, Trust folder. What its redirect says shows as a toast.
   // From the Inbox, Approve moves on as Linear does: the next notification opens, and a toast says what happened
