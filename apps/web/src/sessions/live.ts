@@ -5,6 +5,7 @@ import { action, makeObservable, observable, observableRef, observableShallow } 
 import { useEffect } from "react";
 import { postJson, reason } from "../api/http";
 import { toast } from "../ui/toast";
+import type { Context, Window } from "./models";
 
 export interface Item {
   t: "you" | "text" | "thinking" | "tool" | "result" | "note";
@@ -67,6 +68,7 @@ export interface Meta {
   picked: boolean; // a new chat's folder, picked in its composer
   auto: boolean; // Auto in its composer: desk says next for the user as a turn ends
   runs: { model: string; name: string; effort: string }; // for the composer's chip
+  usage?: { context: Context | null; week: Window | null }; // shown outright in the composer; none from a desk before 31 Oct
 }
 
 // A file attached in the composer. An image Claude takes inline (PNG, JPEG, GIF, WebP) has a thumbnail and goes in the

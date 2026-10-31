@@ -29,7 +29,7 @@ import { anyCommit, Changes, Counts, useChanges } from "./Changes";
 import { Half } from "./Half";
 import { StepsCard } from "./StepsCard";
 import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
-import { EFFORTS, effortName, loadModels, runsMenu, warm, type Runs as RunsShown } from "./models";
+import { EFFORTS, effortName, loadModels, resets, runsMenu, tokens, warm, type Runs as RunsShown } from "./models";
 
 // The chat that takes the cursor: the one openSession opened. It takes it as it comes on screen, which a view transition
 // can make a frame or more after the address changes, or at once when it is there already (SessionView says where).
@@ -1298,6 +1298,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           </button>
         )}
         <span className="spacer" />
+        <Used s={s} />
         {moded(s) && <Mode s={s} />}
         <Runs s={s} />
         {s.working && (
@@ -1395,6 +1396,31 @@ const Mode = observer(function Mode({ s }: { s: LiveSession }) {
 });
 
 // The chip by Send: the model and effort the session runs on; its menu picks others and shows the usage.
+// The context and the week, outright beside Manual, each a ring and its number, named on hover, as Claude desktop's
+// ring by its model picker (the user, 31 Oct: "display the current context and weekly usage outright"). No colour at
+// any number: "i kinda hate the warning stuff. just gimme the number" (17 Oct). The 5-hour stays in the chip's menu.
+const Used = observer(function Used({ s }: { s: LiveSession }) {
+  const { context, week } = s.meta?.usage ?? {};
+  if (!context && !week) return null;
+  return (
+    <span className="used">
+      {context && <span title={`Context · ${tokens(context.tokens)} of ${tokens(context.max)}`}><Ring percent={context.percent} />{context.percent}%</span>}
+      {week && <span title={`Week · ${week.resets ? `resets ${resets(week.resets)}` : "just reset"}`}><Ring percent={week.percent} />{week.percent}%</span>}
+    </span>
+  );
+});
+
+function Ring({ percent }: { percent: number }) {
+  const r = 5.25, round = 2 * Math.PI * r;
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" strokeWidth="1.75">
+      <circle cx="7" cy="7" r={r} stroke="var(--text-5)" />
+      {percent > 0 && <circle cx="7" cy="7" r={r} stroke="currentColor" strokeLinecap="round" transform="rotate(-90 7 7)"
+        strokeDasharray={`${(round * Math.min(percent, 100)) / 100} ${round}`} />}
+    </svg>
+  );
+}
+
 const Runs = observer(function Runs({ s }: { s: LiveSession }) {
   const runs = s.meta?.runs;
   if (!runs) return null;

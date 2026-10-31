@@ -58,6 +58,8 @@
   .composer-foot:has(.start-in) .runs .effort { display: none; }
   /* and Manual or Auto waits for its first message, where Auto is picked in its chip (Dock.tsx, Mode) */
   .composer-foot:has(.start-in) .mode { display: none; }
+  /* and the context and the week, which a chat with no message yet has little of */
+  .composer-foot:has(.start-in) .used { display: none; }
 
   /* A phone's Chrome shows a notification only from a service worker, which desk has not; the line offering them
      would turn on nothing. */

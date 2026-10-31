@@ -11,7 +11,7 @@ export interface Model {
   efforts: string[];
 }
 
-interface Window {
+export interface Window {
   percent: number;
   resets: string | null; // null once it reset, until desk hears when it next does
 }
@@ -42,7 +42,7 @@ async function loadUsage(): Promise<Usage | null> {
   return res.ok ? ((await res.json()) as Usage) : null;
 }
 
-interface Context {
+export interface Context {
   tokens: number;
   max: number;
   percent: number;
@@ -54,11 +54,11 @@ async function loadContext(session: string): Promise<Context | null> {
   return res.ok ? ((await res.json()) as Context | null) : null;
 }
 
-const tokens = (n: number) => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1000)}k`);
+export const tokens = (n: number) => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1000)}k`);
 
 // When a window resets, to the nearest minute (it says 05:59:59.9 for 06:00): the time today, or the day and time when
 // it is further off.
-function resets(iso: string): string {
+export function resets(iso: string): string {
   const at = new Date(Math.round(new Date(iso).getTime() / 60_000) * 60_000), time = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
   return at.getTime() - Date.now() < 20 * 3600_000 ? time : `${at.toLocaleDateString([], { weekday: "short" })} ${time}`;
 }
