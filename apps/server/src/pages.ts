@@ -20,7 +20,7 @@ import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
 import { toHtml, toHtmlWithToc } from "./render.ts";
 import * as roster from "./roster.ts";
-import { findProjects, findScored } from "./search.ts";
+import { findProjects, findScored, markRanges } from "./search.ts";
 import * as sessions from "./sessions.ts";
 import * as teams from "./teams.ts";
 import type { Team } from "./teams.ts";
@@ -638,10 +638,12 @@ export function markRows(act: "read" | "unread" | "delete", ids: string[] | null
   return inbox.mark(act, ids ?? every.map((r) => r.id));
 }
 
-// Search's hits, best match first, their matched words marked, as Linear's search page: issues and projects in one list,
-// or one kind (type), narrowed to some teams and to open or closed ones by the filters its @ menu adds. A project ties
-// ahead of an issue, as Linear's "muse" found the project first.
-export async function searchPage(q: string, type = "", team = "", status = "") {
+// Search's hits, as its box lists them: a group per kind, Chats first, each with how many it found. All holds each
+// kind's best 5 ("a group per kind, Chats first, best 5 each", step 1.5), and a kind's tab its whole list, the first
+// 100. Each kind is narrowed to some teams and to open or closed ones by the filters its @ menu adds: a chat by its
+// issue's, and one with no issue is open and in no team (step 1.6). In All, an issue whose chat is listed is left out
+// of Issues, since the chat's row shows it. Issues and projects come best match first.
+export async function searchPage(q: string, kind = "", team = "", status = "") {
   const all = await store.loadAll(), everyTeam = await teams.loadAll();
   // A filter as the lists write theirs: "desk,muse", or "not:desk" for every other value.
   const filter = (text: string) => ({ not: text.startsWith("not:"), values: text.replace(/^not:/, "").split(",").filter(Boolean) });
@@ -649,13 +651,22 @@ export async function searchPage(q: string, type = "", team = "", status = "") {
   const byTeam = filter(team), byStatus = filter(status);
   const kept = (t: string | null, closed: boolean) => passes(byTeam, t ?? "") && passes(byStatus, closed ? "closed" : "open");
   const teamOf = (slug: string | null) => (slug ? { slug, title: everyTeam.get(slug)?.title ?? slug } : null);
-  const projectHits = type === "issues" ? [] : findProjects(await projects.loadAll(), q).filter(([, h]) => kept(h.project.team, projects.CLOSED.has(h.project.status)))
-    .map(([score, { project: p, title, snippet }]) => ({ score, hit: { kind: "project", key: `project/${p.slug}`, title, snippet, team: teamOf(p.team),
-      date: shortDate(p.created), project: { slug: p.slug, status: p.status, progress: Math.round(projects.progress(projects.issuesOf(all, p.slug)) * 100) } } }));
-  const issueHits = type === "projects" ? [] : findScored(all, q).filter(([, h]) => kept(h.issue.team, CLOSED.has(h.issue.state)))
-    .map(([score, { issue, title, snippet }]) => ({ score, hit: { kind: "issue", key: issue.slug, title, snippet, team: teamOf(issue.team), date: shortDate(issue.created), issue: issueJson(issue) } }));
-  const found: { score: number; hit: object }[] = [...projectHits, ...issueHits];
-  return found.sort((a, b) => b.score - a.score).map((f) => f.hit);
+  const limit = (k: string) => (!kind ? 5 : kind === k ? 100 : 0);
+  const chats = await sessions.search(q, (i) => (i ? kept(i.team, CLOSED.has(i.state)) : !byTeam.values.length && passes(byStatus, "open")), limit("chats"));
+  const chatHits = chats.hits.map((c) => ({ kind: "chat", key: `chat/${c.id}`, session: c.id, title: markRanges(c.title, c.marks),
+    snippet: c.sub ? markRanges(c.sub, c.subMarks) : "", folder: c.folder, age: c.age, state: c.state, issue: c.issue && issueJson(c.issue) }));
+  const listed = new Set(kind ? [] : chats.hits.flatMap((c) => (c.issue ? [c.issue.slug] : [])));
+  const issues = findScored(all, q).filter(([, h]) => kept(h.issue.team, CLOSED.has(h.issue.state)));
+  const issueHits = issues.filter(([, h]) => !listed.has(h.issue.slug)).slice(0, limit("issues"))
+    .map(([, { issue, title, snippet }]) => ({ kind: "issue", key: issue.slug, title, snippet, team: teamOf(issue.team), date: shortDate(issue.created), issue: issueJson(issue) }));
+  const found = findProjects(await projects.loadAll(), q).filter(([, h]) => kept(h.project.team, projects.CLOSED.has(h.project.status)));
+  const projectHits = found.slice(0, limit("projects")).map(([, { project: p, title, snippet }]) => ({ kind: "project", key: `project/${p.slug}`, title, snippet,
+    team: teamOf(p.team), date: shortDate(p.created), project: { slug: p.slug, status: p.status, progress: Math.round(projects.progress(projects.issuesOf(all, p.slug)) * 100) } }));
+  return { kinds: [
+    { kind: "chats", count: chats.count, hits: chatHits },
+    { kind: "issues", count: issues.length, hits: issueHits },
+    { kind: "projects", count: found.length, hits: projectHits },
+  ] };
 }
 
 // An issue's own file, by name, when it is one: null for anything outside its folder.

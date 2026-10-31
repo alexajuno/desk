@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const expand = (path: string) => (path.startsWith("~") ? join(homedir(), path.slice(1)) : path);
+export const expand = (path: string) => (path.startsWith("~") ? join(homedir(), path.slice(1)) : path);
 
 export const HOME = homedir();
 export const DATA_DIR = resolve(expand(process.env.DESK_DATA ?? "~/.local/share/desk"));

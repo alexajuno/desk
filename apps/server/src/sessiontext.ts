@@ -150,6 +150,16 @@ export async function find(query: string): Promise<{ sessions: Set<string>; word
   return { sessions: new Set(rows.map((r) => r.session)), words };
 }
 
+// Of the sessions, those whose title as the menu shows it holds every word a search found.
+export async function inTitle(words: string[], sessions: [string, string][]): Promise<Set<string>> {
+  if (!sessions.length) return new Set();
+  const { rows } = await sql().query<{ id: string }>(
+    "select t.id from unnest($1::text[], $2::text[]) as t(id, title) where to_tsvector('desk_words', t.title) @@ $3::tsquery",
+    [sessions.map(([id]) => id), sessions.map(([, title]) => title), words.map((w) => `(${w})`).join(" & ")],
+  );
+  return new Set(rows.map((r) => r.id));
+}
+
 // --- the words marked ------------------------------------------------------------------------------------------------
 
 // What Postgres puts around a word it marks: two characters of Unicode's private use, which no title or prompt holds.

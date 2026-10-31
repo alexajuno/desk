@@ -103,9 +103,10 @@ export const SearchPage = observer(function SearchPage() {
   }, [words, s.type, team, status]);
   useEffect(() => {
     const mine = ++asked.current, keep = ui.focused;
-    const p = new URLSearchParams({ q: words, type: s.type, team, status });
-    fetch(`/api/page/search?${p}`).then((res) => res.json()).then((found: Hit[]) => {
+    const p = new URLSearchParams({ q: words, kind: s.type, team, status });
+    fetch(`/api/page/search?${p}`).then((res) => res.json()).then(({ kinds }: { kinds: { kind: string; hits: Hit[] }[] }) => {
       if (mine !== asked.current) return;
+      const found = kinds.filter((k) => k.kind !== "chats").flatMap((k) => k.hits); // the box lists the chats (step 2.3)
       setHits(found);
       ui.focus(found.some((h) => h.key === keep) ? keep : found[0]?.key ?? null);
     });

@@ -42,6 +42,18 @@ export function markWords(text: string, patterns: RegExp[]): string {
   return out + escape(text.slice(at));
 }
 
+// The text as HTML with the ranges of it marked, as markWords marks a match: a chat's title and line, which the
+// session search marked itself (sessiontext.ts).
+export function markRanges(text: string, ranges: [number, number][] = []): string {
+  let out = "", at = 0;
+  for (const [start, end] of ranges) {
+    if (start < at) continue;
+    out += escape(text.slice(at, start)) + `<mark>${escape(text.slice(start, end))}</mark>`;
+    at = end;
+  }
+  return out + escape(text.slice(at));
+}
+
 // Python's str slicing counts code points; JavaScript's counts UTF-16 units. Titles and descriptions may hold emoji.
 const cp = (text: string) => [...text];
 

@@ -9,7 +9,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, 
 import { dirname, join } from "node:path";
 import * as agents from "./agents.ts";
 import * as chats from "./chats.ts";
-import { HOME } from "./config.ts";
+import { DATA_DIR, expand, HOME } from "./config.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as sessiontext from "./sessiontext.ts";
@@ -233,11 +233,12 @@ export function chatTitleOf(sid: string): string {
   return chats.namedOf(sid) || (row ? row.ai_title || row.first_prompt || "" : "");
 }
 
-// The folder, short: "desk" for ~/projects/desk, "~" for home.
+// The folder, short: "desk" for ~/projects/desk, and for desk's data, where its own chats start; "~" for home.
 export function folder(cwd: string | undefined): string {
   if (!cwd) return "";
-  const path = cwd.replace(/\/+$/, "") || "/";
+  const path = expand(cwd).replace(/\/+$/, "") || "/";
   if (path === HOME) return "~";
+  if (path === DATA_DIR) return "desk";
   if (!path.startsWith(`${HOME}/`)) return cwd;
   return path.slice(HOME.length + 1).replace(/^projects\//, "");
 }
@@ -263,16 +264,19 @@ export const index = () => sessiontext.readIn([...refresh().values()]);
 
 // The sessions, those in progress first, then the one that moved last first ("we should prioritize latest and in
 // progress chats/issues", the user, 29 Oct): in progress while a reply is being written, a question waits on you, or its
-// issue is In progress. With a query, only those it finds (sessiontext.ts). A chat the user deleted is left out.
+// issue is In progress. With a query, only those it finds (sessiontext.ts). A chat the user deleted is left out, and so
+// is a run nobody talked to: `claude -p`'s and background ones (the time-logger, the skill-updater, bench), and tests
+// in /tmp. desk's own chats and those typed in a terminal stay ("it's valid to be accountable", the user, 31 Oct).
 export async function rows(query = "") {
   const t = refresh(), issues = await issuesBySession(), live = await agents.live();
   const desks = new Set(chats.agentChats().map((c) => c.session));
   const deleted = new Set(chats.agentChats().filter((c) => c.deleted).map((c) => c.session)); // out of sight (chats.ts, remove)
+  const run = (row: TableRow) => row.kind === "script" || row.kind === "background" || /^\/tmp(\/|$)/.test(row.cwd ?? "");
   let found: { id: string; title: string; folder: string; moved: Date; state: string; busy: boolean; issue: Issue | null }[] = [];
   for (const row of t.values()) {
-    if (deleted.has(row.id)) continue;
+    if (deleted.has(row.id) || (!desks.has(row.id) && run(row))) continue;
     const sid = row.id, i = issues.get(sid) ?? null, now = state(live.get(sid) ?? {});
-    found.push({ id: sid, title: shown(row, i, desks.has(sid)), folder: folder(row.cwd), moved: new Date((row.moved ?? 0) * 1000), state: now,
+    found.push({ id: sid, title: shown(row, i, desks.has(sid)), folder: folder(i?.folder || row.cwd), moved: new Date((row.moved ?? 0) * 1000), state: now,
       busy: now === "working" || now === "waiting" || i?.state === "running", issue: i });
   }
   // A search finds a session by what the menu shows of it, its issue too, and by its prompts: both kept up to date here.
@@ -294,6 +298,21 @@ export async function rows(query = "") {
 // open panels, took one while the user wrote its first message ("Its folder is gone").
 export async function newSession(base: string): Promise<chats.Chat> {
   return chats.agentChats().find((c) => !c.deleted && chats.empty(c)) ?? (await chats.newChat(base));
+}
+
+// Search's chats (pages.ts, searchPage): those rows() finds that `keep` keeps, by their issue, one for each issue, the
+// first in rows' order; those whose title holds every word first, then those found by what was typed in them ("a match
+// in the title or in what you typed ranks first", step 1.3). How many, and the first `limit`, their words marked.
+export async function search(query: string, keep: (i: Issue | null) => boolean, limit: number) {
+  const { found, words } = await rows(query), issued = new Set<string>();
+  let kept = found.filter((r) => keep(r.issue) && (!r.issue || (!issued.has(r.issue.slug) && !!issued.add(r.issue.slug))));
+  if (words) {
+    const titled = await sessiontext.inTitle(words, kept.map((r) => [r.id, r.title]));
+    kept = [...kept.filter((r) => titled.has(r.id)), ...kept.filter((r) => !titled.has(r.id))];
+  }
+  const first = kept.slice(0, limit);
+  const marks = words ? await sessiontext.marked(words, first.map((r) => [r.id, r.title])) : new Map<string, sessiontext.Marked>();
+  return { count: kept.length, hits: first.map((r) => ({ ...r, age: ago(r.moved), ...marks.get(r.id) })) };
 }
 
 // The corner's history menu: the sessions in rows' order, or those matching what is typed, its words marked.
