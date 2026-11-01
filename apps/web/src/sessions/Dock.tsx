@@ -1454,8 +1454,9 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   );
 });
 
-// The terminal and the globe in the chat's head: the chat's right half, on its terminal or its browser, open or
-// hidden (Half.tsx), each lit while the half shows its view.
+// The terminal and the globe in the chat's head: the chat's right half, on its terminal or its browser, open, switched
+// to the other or hidden (Half.tsx), each lit while the half shows its view. They are the only place it is, as the half
+// has no head of its own ("yeah A", 1 Nov).
 const HALF_BUTTONS = {
   terminal: { icon: GLYPH.terminal, label: "Terminal", key: "Ctrl `" },
   browser: { icon: GLYPH.globe, label: "Browser", key: "Ctrl ⇧ B" },

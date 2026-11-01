@@ -62,9 +62,9 @@
   .composer-foot:has(.start-in) .mode { display: none; }
   /* The context and the week stay in the model menu: with them the foot ran 465px in its 359 at 412 wide (31 Oct). */
   .composer-foot .used { display: none; }
-  /* The head keeps the terminal and leaves out the globe, as the foot did when they were there (1 Nov): the half's own
-     tabs reach the browser from its terminal. */
-  .dock-head .half-browser { display: none; }
+  /* The head keeps the terminal and leaves out the globe, as the foot did when they were there (1 Nov): the Browser
+     opens there only as Claude opens a tab, and the globe shows while it does, to hide it. */
+  .dock-head .half-browser:not(.on) { display: none; }
 
   /* A phone's Chrome shows a notification only from a service worker, which desk has not; the line offering them
      would turn on nothing. */
@@ -88,8 +88,10 @@
   /* The picture viewer's × is a thumb's size. */
   .viewer-close { width: 40px; height: 40px; top: calc(8px + env(safe-area-inset-top)); right: 8px; }
 
-  /* The chat's right half takes the chat's place, with its head and its × to hide it (Half.tsx). */
-  .session-split:has(> .half) > .session-view { display: none; }
+  /* The chat's right half takes the chat's place under its head (Half.tsx), whose terminal button hides it. */
+  .session-split:has(> .half) { flex-direction: column; }
+  .session-split:has(> .half) > .session-view { flex: none; height: auto; min-width: 0; }
+  .session-split:has(> .half) > .session-view > :not(.dock-head) { display: none; }
   .session-split > .half { flex: 1; width: auto !important; min-width: 0; border-left: 0; }
   .half-grip { display: none; }
 }

@@ -1,21 +1,22 @@
 // The right half beside the chat in the middle, which holds what Claude drives (store/dock.ts): the chat's terminal
-// (Terminal.tsx) and its browser (Browser.tsx), each a view of it, picked by the tabs in its head. It runs the window's
-// full height beside the chat, half its width at first, and its left edge drags to resize it. The terminal and globe
-// buttons in the reply box, Ctrl ` and Ctrl ⇧ B open it on their view and hide it; hiding leaves the terminal's session
-// running. On a phone it takes the chat's place.
+// (Terminal.tsx) or its browser (Browser.tsx), each a view of it. It runs the window's full height beside the chat,
+// half its width at first, and its left edge drags to resize it. It has no head of its own: the terminal and globe
+// buttons in the chat's head, Ctrl ` and Ctrl ⇧ B open it on their view, switch it to theirs, and hide it ("we have two
+// duplicated sections: the terminal and browser icons and then, on right sidebar, we have terminal and browser chips",
+// the user, 1 Nov, then "yeah A" on two mockups, over the half's tabs with one button in the head). Hiding leaves the
+// terminal's session running. On a phone it takes the chat's place, under the chat's head.
 import { observer } from "mobx-react-lite";
 import { useCallback, type PointerEvent, type ReactNode } from "react";
 import { dock, type Half as View } from "../store/dock";
-import { GLYPH } from "../ui/icons";
 import { toast } from "../ui/toast";
 import { live } from "./live";
 import { BrowserView } from "./Browser";
 import { TerminalView } from "./Terminal";
 
-// Each view the half can show: its name, for its tab in the head, the key that opens or hides it, and what draws it.
-const VIEWS: Record<View, { label: string; key: string; draw: (session: string, hide: () => void) => ReactNode }> = {
-  terminal: { label: "Terminal", key: "Ctrl `", draw: (session, hide) => <TerminalView session={session} ended={hide} /> },
-  browser: { label: "Browser", key: "Ctrl ⇧ B", draw: (session) => <BrowserView session={session} /> },
+// Each view the half can show: its name and what draws it.
+const VIEWS: Record<View, { label: string; draw: (session: string, hide: () => void) => ReactNode }> = {
+  terminal: { label: "Terminal", draw: (session, hide) => <TerminalView session={session} ended={hide} /> },
+  browser: { label: "Browser", draw: (session) => <BrowserView session={session} /> },
 };
 
 export const Half = observer(function Half({ session, view }: { session: string; view: View }) {
@@ -23,15 +24,6 @@ export const Half = observer(function Half({ session, view }: { session: string;
   return (
     <section className="half" style={{ width: `${dock.halfWidth * 100}%` }} aria-label={VIEWS[view].label}>
       <div className="half-grip" onPointerDown={drag} title="Drag to resize" />
-      <header className="half-head">
-        <div className="dock-tabs" role="tablist">
-          {(Object.keys(VIEWS) as View[]).map((v) => (
-            <button key={v} className={v === view ? "here" : ""} type="button" role="tab" aria-selected={v === view}
-              title={`${VIEWS[v].label}  ${VIEWS[v].key}`} onClick={() => dock.setHalf(session, v, true)}>{VIEWS[v].label}</button>
-          ))}
-        </div>
-        <button className="dock-btn" type="button" title={`Hide  ${VIEWS[view].key}`} onClick={hide}>{GLYPH.close}</button>
-      </header>
       {VIEWS[view].draw(session, hide)}
     </section>
   );

@@ -477,8 +477,8 @@ button.foot-step:hover { background: var(--bg-hover); }
 .dock-pill:hover .dock-pill-x { opacity: 1; }
 
 /* The chat's right half (sessions/Half.tsx), beside it at the window's full height: what Claude drives, its terminal
-   and its browser. Its left edge is a hairline, which drags. Its head, as tall as the chat's, holds a tab for each
-   view, as the chat's head does, and a × that hides it. */
+   or its browser. Its left edge is a hairline, which drags. It has no head: the chat's head picks and hides its view
+   ("yeah A", 1 Nov), and the browser's tabs stand level with that head. */
 .session-split { display: flex; height: 100%; min-height: 0; }
 .session-split > .session-view { flex: 1; min-width: 0; }
 .session-split:has(> .half) > .session-view { min-width: 360px; } /* the half gives way first on a narrow window */
@@ -488,19 +488,17 @@ button.foot-step:hover { background: var(--bg-hover); }
 .half-grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: var(--border-3); opacity: 0; transition: opacity 0.1s; }
 .half-grip:hover::after, .half-dragging .half-grip::after { opacity: 1; }
 .half-dragging, .half-dragging * { cursor: col-resize; user-select: none; }
-.half-head { display: flex; flex: none; align-items: center; gap: 8px; height: 44px; padding: 0 8px; border-bottom: 1px solid var(--border-1); }
-.half-head .dock-tabs { flex: 1; }
 /* The terminal and globe buttons at the chat head's right (Dock.tsx, ChatHead), before the step's buttons, each lit
-   while the half shows its view, as a current control is. */
+   while the half shows its view, as a current control is: the only place the half is opened, switched or hidden. */
 .head-halves { flex: none; display: flex; gap: 2px; }
 .half-btn.on { background: var(--bg-active); color: var(--text-1); }
 
-/* The chat's Browser (Browser.tsx), mockup A ("okay A", 31 Oct): a 40px strip of its session's tabs, pills as the
-   head's tabs, the open one filled as a current tab is; then back, forward, reload and the address, a filled pill;
-   then the page. */
+/* The chat's Browser (Browser.tsx), mockup A ("okay A", 31 Oct): a strip of its session's tabs, as tall as the chat's
+   head beside it, pills as the head's tabs, the open one filled as a current tab is; then a 40px row of back, forward,
+   reload and the address, a filled pill; then the page. */
 .browser { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .browser-tabs, .browser-nav { flex: none; display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 8px; border-bottom: 1px solid var(--border-1); }
-.browser-tabs { overflow-x: auto; scrollbar-width: none; }
+.browser-tabs { height: 44px; overflow-x: auto; scrollbar-width: none; }
 .browser-tab { flex: 0 1 auto; min-width: 72px; max-width: 190px; padding: 0 10px 0 8px; background: transparent; color: var(--text-3); }
 .browser-tab:hover { background: var(--btn-ghost-hover); color: var(--text-2); }
 .browser-tab.here { background: var(--bg-tab-on); color: var(--text-1); box-shadow: 0 0 0 0.5px var(--ring-btn); }
