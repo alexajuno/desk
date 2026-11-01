@@ -47,7 +47,7 @@ class Dock {
     makeObservable(this, {
       session: observable, center: observable, view: observable, details: observable, pill: observable, halves: observable, halfWidth: observable,
       tab: observable, layout: computed, arrange: action, setView: action, setDetails: action, dismiss: action, setHalf: action, setHalfWidth: action,
-      showTab: action, openTab: action,
+      showTab: action, openTab: action, closeBrowser: action,
     });
   }
 
@@ -118,11 +118,19 @@ class Dock {
     this.tab = { ...this.tab, [session]: target };
   }
 
-  // A tab the chat's session just opened, which its Browser shows, open beside it: the agents' Chrome has no window
-  // ("when browser is in use, will the browsre tab show?", the user, 1 Nov).
+  // A tab the chat's session just opened, or works in, which its Browser shows, open beside it: Claude's tabs have no
+  // window ("when browser is in use, will the browsre tab show?", "on using browser, the desk should open the browser
+  // tab", the user, 1 Nov). desk says so once a turn for each tab (the server's tabs.ts).
   openTab(session: string, target: string) {
     this.setHalf(session, "browser");
     this.showTab(session, target);
+  }
+
+  // The chat's session closed its last tab: its Browser, which would show nothing, closes ("after claude is done with
+  // browser usage, it closes the browser but doesn’t close the tab, leaving an empty browser sidebar", the user, 1 Nov).
+  // A half on the terminal stays.
+  closeBrowser(session: string) {
+    if (this.halves[session] === "browser") this.setHalf(session, null);
   }
 
   // × on the pill: the chat you left stops waiting there.

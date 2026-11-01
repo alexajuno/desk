@@ -7,7 +7,7 @@
 //
 //     {"type": "hello", "sessions": [<state>, ...]}    first, on every connect: each session the host holds
 //     {"type": "session", ...<state>}                  one changed; "open": false once its process ended
-//     {"type": "tab", ...} or {"type": "tab-closed", ...}   a session's tab in the agents' Chrome (tabs.ts)
+//     {"type": "tab", ...}, "tab-closed" or "tab-used"   a session's tab in desk's app (tabs.ts)
 //
 // Its hello also says whether its browser relay runs and the tabs it noted, which desk answers (tabs.ts).
 //
@@ -229,8 +229,9 @@ export function connect(ws: WebSocket) {
         await hello(ws, e.sessions ?? []);
         await tabs.hello(ws, e.relay, e.tabs ?? []);
       } else if (e.type === "session" && e.id) kept([await db.write((tx) => upsert(tx, e as State))]);
-      else if (e.type === "tab" && e.target && e.session) await tabs.opened(e as Tab);
+      else if (e.type === "tab" && e.target && e.session) await tabs.opened(e as Tab, prompted(e.session));
       else if (e.type === "tab-closed" && e.target) await tabs.closed(e.target);
+      else if (e.type === "tab-used" && e.target && e.session) tabs.used(e.target, e.session, prompted(e.session));
     }).catch((error) => console.error("desk: the host's word", error));
   });
   // The host is gone, and every process it held, unless desk is the one stopping.

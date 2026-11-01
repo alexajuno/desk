@@ -18,6 +18,10 @@
 //
 // desk also opens a tab for a session itself, a link you clicked in its chat (open, below), which is that session's.
 //
+// It also tells desk which of its tabs a session works in, as it navigates, clicks, types, takes a screenshot or picks
+// the tab (used, below), for desk to open the chat's Browser on it ("on using browser, the desk should open the browser
+// tab", the user, 1 Nov).
+//
 // What it noted lives only as long as the host. desk keeps it (tabs.ts), and gives a new host's relay the tabs a host
 // before it noted (adopt), each of them that session's again while it is open.
 import { createServer, request } from "node:http";
@@ -32,9 +36,13 @@ const OURS = 1e9; // the ids of the relay's own calls on a session's connection,
 const ATTACH = 5000; // ms an answer to Target.createTarget waits for the tab's attach
 const BIGGEST = 512 * 1024 * 1024; // bytes in one message: a full-page screenshot comes back as one
 const EVERY = 2000; // ms between the watcher's asks for every tab
+const AGAIN = 1000; // ms a session works on in the same tab before the relay says so again: less than a turn takes to start
+// What a session sends a tab as it works there. Not reading the page, which Playwright does the same way in every tab it
+// connects to or lists (1 Nov: Runtime.evaluate and callFunctionOn, on connect, a snapshot and browser_tabs list alike).
+const ACTS = /"method":"(Page\.(navigate|reload|navigateToHistoryEntry|bringToFront|captureScreenshot|handleJavaScriptDialog)|Input\.\w+|DOM\.setFileInputFiles)"/;
 
 export interface Tab { target: string; session: string; url: string; title: string }
-export type TabNews = { type: "tab" } & Tab | { type: "tab-closed"; target: string };
+export type TabNews = { type: "tab" } & Tab | { type: "tab-closed"; target: string } | { type: "tab-used"; target: string; session: string };
 
 const pages = new Map<string, { url: string; title: string; opener?: string; said?: string }>(); // the app's open pages, by target id
 const owners = new Map<string, string>(); // the session that opened each tab, by its target id
@@ -64,6 +72,7 @@ function pipe(mcp: WebSocket, session: string) {
   const hidden = new Set<string>(); // desk's pages it was attached to, by CDP session, until they are let go
   const others = new Set<string>(); // desk's pages, by target id
   const heardOf = new Set<string>(); // its tabs whose attach it heard, by target id
+  const tabOf = new Map<string, string>(); // the tab each of its CDP sessions is attached to, by session id
   const waiting = new Map<string, () => void>(); // its answers to Target.createTarget, waiting for the tab's attach
   const listing = new Set<string>(); // its Target.getTargets calls, by CDP session and id
   let attaching = false; // it auto-attaches to new tabs, so each one's attach comes
@@ -92,6 +101,7 @@ function pipe(mcp: WebSocket, session: string) {
     if (m.method === "Target.attachedToTarget" && info) {
       if (info.browserContextId === context) {
         heardOf.add(info.targetId);
+        tabOf.set(m.params!.sessionId as string, info.targetId);
         return false;
       }
       const sessionId = m.params!.sessionId as string;
@@ -101,7 +111,10 @@ function pipe(mcp: WebSocket, session: string) {
       up(JSON.stringify({ id: ours++, ...(m.sessionId ? { sessionId: m.sessionId } : {}), method: "Target.detachFromTarget", params: { sessionId } }));
       return true;
     }
-    if (m.method === "Target.detachedFromTarget") return hidden.delete(m.params!.sessionId as string);
+    if (m.method === "Target.detachedFromTarget") {
+      tabOf.delete(m.params!.sessionId as string);
+      return hidden.delete(m.params!.sessionId as string);
+    }
     if (info) { // Target.targetCreated and targetInfoChanged
       if (info.browserContextId === context) return false;
       others.add(info.targetId);
@@ -117,6 +130,9 @@ function pipe(mcp: WebSocket, session: string) {
       if (m?.method === "Target.createTarget") return make(m);
       if (m?.method === "Target.setAutoAttach" && !m.sessionId) attaching = !!m.params?.autoAttach;
       if (m?.method === "Target.getTargets") listing.add(`${m.sessionId ?? ""} ${m.id}`);
+    } else if (data.length < 10_000 && ACTS.test(data.toString())) {
+      const target = tabOf.get(parse(data)?.sessionId ?? "");
+      if (target) used(target, session);
     }
     up(data);
   });
@@ -192,6 +208,18 @@ export function adopt(known: { target: string; session: string }[]) {
   for (const { target, session } of known) own(target, session);
   if (listed) closeGone();
   else void watch();
+}
+
+// The session works in its tab: said when it moves to another tab, and again each second it goes on in the same,
+// for desk to open its chat's Browser on it once a turn (tabs.ts). Another session's tab, which a session sees too, is
+// not its own.
+const working = new Map<string, { target: string; at: number }>(); // the tab each session works in, by session id
+
+function used(target: string, session: string) {
+  const was = working.get(session);
+  if (owners.get(target) !== session || (was?.target === target && Date.now() - was.at < AGAIN)) return;
+  working.set(session, { target, at: Date.now() });
+  tell({ type: "tab-used", target, session });
 }
 
 function own(target: string, session: string) {

@@ -44,7 +44,6 @@ import type { Issue } from "./issues.ts";
 import * as live from "./live.ts";
 import * as pages from "./pages.ts";
 import * as tabs from "./tabs.ts";
-import type { Tab } from "./relay.ts";
 import * as turns from "./turns.ts";
 
 const listeners = new Set<WebSocket>();
@@ -194,16 +193,23 @@ export function showTerminal(session: string) {
   for (const ws of listeners) if (ws.readyState === ws.OPEN) ws.send(message);
 }
 
-// A tab the session just opened in the agents' Chrome (tabs.ts): every app opens that chat's Browser on it.
-function showBrowser(t: Tab) {
+// A tab the session just opened, or works in (tabs.ts): every app opens that chat's Browser on it.
+function showBrowser(t: { target: string; session: string }) {
   const message = JSON.stringify({ type: "browser", session: t.session, target: t.target });
+  for (const ws of listeners) if (ws.readyState === ws.OPEN) ws.send(message);
+}
+
+// The session closed its last tab (tabs.ts): every app closes that chat's Browser.
+function hideBrowser(session: string) {
+  const message = JSON.stringify({ type: "browser-closed", session });
   for (const ws of listeners) if (ws.readyState === ws.OPEN) ws.send(message);
 }
 
 // Tell the apps each write, and the frame after it and after each word from the host; and the open chats.
 export async function start() {
   db.onWrite(told);
-  tabs.onOpened(showBrowser);
+  tabs.onShow(showBrowser);
+  tabs.onLastClosed(hideBrowser);
   db.onCommit(() => {
     tellAgain();
     live.moved(null);
