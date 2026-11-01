@@ -275,8 +275,10 @@ const ChatSteps = observer(function ChatSteps({ s, here }: { s: LiveSession; her
 
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, then its issue's status and
 // title, with a ⌄ that drops the issue's details open under the head (IssueDetails), its views (Chat, Changes), and
-// at its right the issue's next step, Try and Go or Approve (1 Nov: "the approve button is not there, but i have to
-// tab to issue"); the Inbox, which shows a chat without its head, has its own. Where its work stands is in the steps
+// at its right the terminal and the globe, which open the half beside it (1 Nov: "since terminal and browser are
+// opened in right sidebar, so having these icons in composer doesn't sound valid"), then the issue's next step, Try
+// and Go or Approve (1 Nov: "the approve button is not there, but i have to tab to issue"); the Inbox, which shows a
+// chat without its head, has its own. Where its work stands is in the steps
 // above the composer. A chat with no issue is renamed in its title, and shows its folder, which only an issue's Properties would
 // show otherwise. Whether the chat works shows in the chat itself, its Working… line and its stop button (28 Oct: "the
 // header in chat interface looks kinda tight").
@@ -297,6 +299,7 @@ const ChatHead = observer(function ChatHead({ s, views, view, setView, docked }:
         )}
       </div>
       {views.length > 1 && m?.issue && <ViewTabs slug={m.issue.slug} views={views} view={view} setView={setView} />}
+      {m?.chat && docked && <span className="head-halves"><HalfButton id={s.id} view="terminal" /><HalfButton id={s.id} view="browser" /></span>}
       {here && docked && <HeadStep data={here} />}
     </header>
   );
@@ -1376,7 +1379,6 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
           {GLYPH.plus}
           <input ref={picker} type="file" multiple hidden onChange={(e) => { if (e.target.files) void attach(e.target.files); e.target.value = ""; }} />
         </label>
-        {s.meta?.chat && dock.center && dock.session === s.id && <><HalfButton id={s.id} view="terminal" /><HalfButton id={s.id} view="browser" /></>}
         {fresh(s) && <StartAs s={s} />}
         {fresh(s) && <StartIn s={s} />}
         {stash && (
@@ -1401,7 +1403,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   );
 });
 
-// The terminal and the globe beside the reply box: the chat's right half, on its terminal or its browser, open or
+// The terminal and the globe in the chat's head: the chat's right half, on its terminal or its browser, open or
 // hidden (Half.tsx), each lit while the half shows its view.
 const HALF_BUTTONS = {
   terminal: { icon: GLYPH.terminal, label: "Terminal", key: "Ctrl `" },

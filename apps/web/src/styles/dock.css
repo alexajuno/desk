@@ -472,7 +472,9 @@ button.foot-step:hover { background: var(--bg-hover); }
 .half-dragging, .half-dragging * { cursor: col-resize; user-select: none; }
 .half-head { display: flex; flex: none; align-items: center; gap: 8px; height: 44px; padding: 0 8px; border-bottom: 1px solid var(--border-1); }
 .half-head .dock-tabs { flex: 1; }
-/* The terminal and globe buttons beside Attach a file, each lit while the half shows its view, as a current control is. */
+/* The terminal and globe buttons at the chat head's right (Dock.tsx, ChatHead), before the step's buttons, each lit
+   while the half shows its view, as a current control is. */
+.head-halves { flex: none; display: flex; gap: 2px; }
 .half-btn.on { background: var(--bg-active); color: var(--text-1); }
 
 /* The chat's Browser (Browser.tsx), mockup A ("okay A", 31 Oct): a 40px strip of its session's tabs, pills as the
