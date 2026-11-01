@@ -28,7 +28,7 @@ import { anyCommit, Changes, Counts, useChanges } from "./Changes";
 import { Half } from "./Half";
 import { StepsCard } from "./StepsCard";
 import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
-import { EFFORTS, effortName, loadModels, resets, runsMenu, tokens, warm, type Runs as RunsShown, type Window } from "./models";
+import { EFFORTS, effortName, loadModels, runsMenu, tokens, warm, type Runs as RunsShown } from "./models";
 
 // The chat that takes the cursor: the one openSession opened. It takes it as it comes on screen, which a view transition
 // can make a frame or more after the address changes, or at once when it is there already (SessionView says where).
@@ -1491,24 +1491,26 @@ const Mode = observer(function Mode({ s }: { s: LiveSession }) {
 });
 
 // The chip by Send: the model and effort the session runs on; its menu picks others and shows the usage.
-// The context, the 5 hours and the week, outright beside Manual, each a ring and its number, named on hover, as Claude
-// desktop's ring by its model picker (the user, 31 Oct: "display the current context and weekly usage outright", and
-// 1 Nov: "need to add 5 hour circle similar to the rest of context and weekly"). No colour at any number: "i kinda hate
-// the warning stuff. just gimme the number" (17 Oct). The chip's menu shows the same numbers again.
+// The chat's context, outright beside Manual, as Claude desktop's ring by its model picker (the user, 31 Oct: "display
+// the current context and weekly usage outright"). The 5 hours and the week hold for the whole account, so they sit in
+// the window's bar (frame/StatusBar.tsx; 1 Nov: "so only 5hourly usage and weekly usage move to global status bar").
+// The chip's menu shows all three again.
 const Used = observer(function Used({ s }: { s: LiveSession }) {
-  const { context, hours, week } = s.meta?.usage ?? {};
-  if (!context && !hours && !week) return null;
-  const limit = (name: string, w: Window) => (
-    <span title={`${name} · ${w.resets ? `resets ${resets(w.resets)}` : "just reset"}`}><Ring percent={w.percent} />{w.percent}%</span>
-  );
+  const context = s.meta?.usage?.context;
+  if (!context) return null;
   return (
     <span className="used">
-      {context && <span title={`Context · ${tokens(context.tokens)} of ${tokens(context.max)}`}><Ring percent={context.percent} />{context.percent}%</span>}
-      {hours && limit("5-hour", hours)}
-      {week && limit("Week", week)}
+      <Gauge percent={context.percent} title={`Context · ${tokens(context.tokens)} of ${tokens(context.max)}`} />
     </span>
   );
 });
+
+// A number shown outright: a ring and its percent, after its grey word, named on hover (the composer's context, the
+// window bar's 5 hours and week). No colour at any number: "i kinda hate the warning stuff. just gimme the number"
+// (17 Oct), and "coloring is bad. usually we should use black and white" (1 Nov).
+export function Gauge({ word, percent, title }: { word?: string; percent: number; title: string }) {
+  return <span title={title}>{word && <span className="word">{word}</span>}<Ring percent={percent} />{percent}%</span>;
+}
 
 function Ring({ percent }: { percent: number }) {
   const r = 5.25, round = 2 * Math.PI * r;

@@ -1,6 +1,6 @@
 /* The buttons at the bottom right of every page (corner.html), where Linear keeps Agent and Chat history, as desk's
-   Agent tab measured them on 2026-10-14. */
-.corner { position: fixed; right: 8px; bottom: 4px; z-index: 15; display: flex; gap: 2px; }
+   Agent tab measured them on 2026-10-14: 4px past the panel's bottom edge, which now sits on the window's bar. */
+.corner { position: fixed; right: 8px; bottom: calc(var(--status-bar-h) - 4px); z-index: 15; display: flex; gap: 2px; }
 .corner button { height: 28px; border-color: transparent; background: none; color: var(--text-3); }
 .corner button:hover { background: var(--bg-icon-hover); color: var(--text-1); }
 .corner-new { padding: 0 12px 0 10px; gap: 6px; }

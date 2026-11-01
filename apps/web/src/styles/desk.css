@@ -279,7 +279,7 @@ kbd { font: 500 11px var(--font); color: var(--text-3); border: 1px solid var(--
 /* sidebar */
 /* Linear's sidebar scrolls with a thin scrollbar whose room is always kept, its right padding 2px beside it (measured
    2026-10-19 on /team/OE/all, dark and light): the rows stay as wide with or without it. */
-.side { position: fixed; top: 0; left: 0; bottom: 0; width: 244px; box-sizing: border-box; padding: 12px 2px 12px 12px;
+.side { position: fixed; top: 0; left: 0; bottom: var(--status-bar-h); width: 244px; box-sizing: border-box; padding: 12px 2px 12px 12px;
         overflow: auto; display: flex; flex-direction: column;
         scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; scrollbar-gutter: stable; }
 .side > * { flex: none; }
@@ -349,7 +349,7 @@ a.not-main:hover { background: var(--btn-side-hover); box-shadow: 0 0 0 0.5px va
    Linear's logo fades in at the panel's middle, in 0.4s, only once a load has taken 1s; desk's penguin does the same,
    greyed and faint as Linear's grey logo is. */
 #splash { position: fixed; inset: 0; z-index: 100; background: var(--bg-app); pointer-events: none; transition: opacity 0.1s; }
-.splash-panel { position: absolute; top: 8px; right: 8px; bottom: 8px; left: 244px; display: grid; place-items: center;
+.splash-panel { position: absolute; top: 8px; right: 8px; bottom: var(--status-bar-h); left: 244px; display: grid; place-items: center;
                 background: var(--bg-panel); border: 0.5px solid var(--border-2); border-radius: 12px; box-shadow: var(--shadow-panel); }
 .side-collapsed .splash-panel { left: 8px; }
 @media (max-width: 900px) { .splash-panel { left: 8px; } }
@@ -358,10 +358,17 @@ a.not-main:hover { background: var(--btn-side-hover); box-shadow: 0 0 0 0.5px va
 .splashed #splash { opacity: 0; }
 
 /* the inset panel and its top bar */
-.panel { position: fixed; top: 8px; right: 8px; bottom: 8px; left: 244px; display: flex; flex-direction: column;
+.panel { position: fixed; top: 8px; right: 8px; bottom: var(--status-bar-h); left: 244px; display: flex; flex-direction: column;
          background: var(--bg-panel); border: 0.5px solid var(--border-2); border-radius: 12px;
          box-shadow: var(--shadow-panel); overflow: hidden; transition: left 0.2s ease; }
 .side-collapsed .panel { left: 8px; }
+/* The window's bar (frame/StatusBar.tsx), as VS Code's status bar: on the window's background under the sidebar and
+   the panel, which end where it starts, in the band that was the panel's 8px gap, grown to hold its 24px numbers.
+   A phone has none (phone.css). */
+:root { --status-bar-h: 32px; }
+.status-bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: flex-end;
+              height: var(--status-bar-h); padding: 0 9px; box-sizing: border-box; }
+.status-bar .used > span { height: 24px; }
 .bar { display: flex; align-items: center; gap: 8px; height: 44px; flex: none; padding: 0 16px; border-bottom: 1px solid var(--border-1);
        font-weight: 500; color: var(--text-2); }
 .bar a { text-decoration: none; color: var(--text-3); } .bar a:hover { color: var(--text-1); }
@@ -785,8 +792,8 @@ div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--tex
 @keyframes caret { 50% { opacity: 0; } }
 
 /* a Linear-style toast, bottom right ("bottom right corner", the user, 29 Oct), above the corner's buttons
-   (sessions.css .corner, which end 32px up) */
-.toast { position: fixed; right: 16px; bottom: 40px; z-index: 40; display: flex; align-items: center; gap: 8px; height: 40px;
+   (sessions.css .corner, which end 28px above the window's bar) */
+.toast { position: fixed; right: 16px; bottom: calc(var(--status-bar-h) + 32px); z-index: 40; display: flex; align-items: center; gap: 8px; height: 40px;
          padding: 0 8px 0 14px; background: var(--bg-pop); border: 0.5px solid var(--border-pop); border-radius: 8px;
          box-shadow: var(--shadow-pop); font-size: 13px; color: var(--text-1); }
 .toast:not(:has(button)) { padding-right: 14px; }
@@ -1181,7 +1188,7 @@ button.set-pick svg { color: var(--text-3); }
 .tree .item:hover .select-box, .projects-row:hover .select-box, .item.selected .select-box,
 :root:has(.item.selected) :is(.tree .item, .projects-row) .select-box { opacity: 1; }
 .item.selected .select-box { border-color: var(--accent); background: var(--accent); color: var(--on-accent); } /* as a menu's ticked box */
-.select-bar { position: fixed; bottom: 24px; left: calc(244px + (100vw - 252px) / 2); translate: -50% 0; z-index: 30; display: flex;
+.select-bar { position: fixed; bottom: calc(var(--status-bar-h) + 16px); left: calc(244px + (100vw - 252px) / 2); translate: -50% 0; z-index: 30; display: flex;
               align-items: center; gap: 4px; height: 40px; padding: 0 6px 0 14px; box-sizing: border-box; background: var(--bg-pop);
               border: 0.5px solid var(--border-pop); border-radius: 10px; box-shadow: var(--shadow-pop); white-space: nowrap; }
 .side-collapsed .select-bar { left: 50%; }

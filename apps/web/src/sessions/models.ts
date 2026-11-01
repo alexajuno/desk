@@ -16,7 +16,7 @@ export interface Window {
   resets: string | null; // null once it reset, until desk hears when it next does
 }
 
-interface Usage {
+export interface Usage {
   five_hour: Window | null;
   seven_day: Window | null;
 }
@@ -37,7 +37,8 @@ export function loadModels(): Promise<Model[]> {
   return models;
 }
 
-async function loadUsage(): Promise<Usage | null> {
+// The plan's 5 hours and week, for the menu and the window's bar (frame/StatusBar.tsx).
+export async function loadUsage(): Promise<Usage | null> {
   const res = await fetch("/api/usage");
   return res.ok ? ((await res.json()) as Usage) : null;
 }

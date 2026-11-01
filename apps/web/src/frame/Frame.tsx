@@ -30,6 +30,7 @@ import { Catcher } from "../search/catcher";
 import { openSearch, search, SearchHost } from "../search/SearchBox";
 import { deleteReadKey, deleteRow, markAllKey, toggleRead } from "../inbox/actions";
 import { Corner } from "./Corner";
+import { StatusBar } from "./StatusBar";
 import { CreatorHost } from "./Creator";
 import { ProjectCreatorHost } from "./ProjectCreator";
 import { TeamCreatorHost } from "./TeamCreator";
@@ -386,6 +387,7 @@ export const Frame = observer(function Frame() {
       <Dock />
       <Catcher />
       <Corner />
+      <StatusBar />
       <Tabs />
       <KeysPanel />
       <SelectionBar />
