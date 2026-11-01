@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=desk
+Comment=Your workspace: issues, chats and the Inbox, in its own window
+Exec=/home/ajuno/projects/desk/bin/desk-app
+Icon=desk
+Terminal=false
+Categories=Office;
+StartupWMClass=desk

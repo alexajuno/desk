@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# desk's own window, the Electron app in apps/desktop, which the launcher's desk entry (apps/desktop/desk.desktop) runs.
+# Wayland where there is one, X11 otherwise.
+top=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+exec "$top/apps/desktop/node_modules/.bin/electron" "$top/apps/desktop" --ozone-platform-hint=auto "$@"
