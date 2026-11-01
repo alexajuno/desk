@@ -9,7 +9,7 @@
 //
 // It also holds Claude's tabs (tabs.ts), which Claude drives over the DevTools protocol on its port, and which a chat's
 // Browser in desk's page shows in its place, through what the page gets from the app (preload.cjs).
-import { app, BrowserWindow, ipcMain, shell, type Rectangle, type WebContents } from "electron";
+import { app, BrowserWindow, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent, type Rectangle, type WebContents } from "electron";
 import { join } from "node:path";
 import { shortcut } from "./keys.ts";
 import * as tabs from "./tabs.ts";
@@ -43,11 +43,11 @@ else {
     return tabs.start();
   }).catch((e: Error) => console.log(`no tabs for Claude: ${e.message}`));
   app.on("before-quit", tabs.quit);
-  ipcMain.on("tab", (e, target: unknown, at: unknown) => {
-    const host = BrowserWindow.fromWebContents(e.sender);
-    if (!host || e.senderFrame !== e.sender.mainFrame || site(e.sender.getURL()) !== site(HOME.href)) return;
-    tabs.show(host, typeof target === "string" ? target : null, place(at, e.sender.getZoomFactor()));
+  ipcMain.on("tab", (e, target: unknown, at: unknown, aside: unknown) => {
+    const host = desks(e);
+    if (host) tabs.show(host, typeof target === "string" ? target : null, place(at, e.sender.getZoomFactor()), aside === true);
   });
+  ipcMain.handle("still", (e, target: unknown) => (desks(e) && typeof target === "string" ? tabs.still(target) : null));
   app.on("window-all-closed", () => app.quit());
 }
 
@@ -64,6 +64,12 @@ function open() {
   win.on("closed", () => { win = null; });
   keep(win.webContents);
   void win.loadURL(HOME.href);
+}
+
+// The window of desk's page that asks, which only desk's page itself, not a frame in it, may ask for Claude's tabs.
+function desks(e: IpcMainEvent | IpcMainInvokeEvent) {
+  const host = BrowserWindow.fromWebContents(e.sender);
+  return host && e.senderFrame === e.sender.mainFrame && site(e.sender.getURL()) === site(HOME.href) ? host : null;
 }
 
 // A page of desk's own stays in desk, in a window of its own when it asks for one; any other site opens in the user's

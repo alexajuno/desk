@@ -102,8 +102,11 @@ function shelve(view: WebContentsView) {
 }
 
 // The tab at the place in one of desk's windows, in its pixels, or none: the tab the window showed goes back to its own
-// window on SCREEN. A tab another window shows comes to this one, the last to ask.
-export function show(host: BrowserWindow, target: string | null, at?: Rectangle) {
+// window on SCREEN. A tab another window shows comes to this one, the last to ask. Aside, it keeps the place's size but
+// stands out of sight, left of the window, while desk shows a picture of it (still, below) under a menu of its own,
+// which the tab would cover: the page goes on drawing, for Claude's screenshots, and keeps its size, so nothing in it
+// moves.
+export function show(host: BrowserWindow, target: string | null, at?: Rectangle, aside = false) {
   const tab = target ? all.get(target) : undefined, was = showing.get(host);
   if (was && was !== tab) {
     leave(was);
@@ -119,7 +122,27 @@ export function show(host: BrowserWindow, target: string | null, at?: Rectangle)
     showing.set(host, tab);
     watch(host);
   }
-  tab.view.setBounds(at);
+  tab.view.setBounds(aside ? { ...at, x: -at.width - 100 } : at);
+}
+
+// A picture of the tab as it shows, for desk to show in its place while the tab stands aside: a BMP, the pixels as they
+// are, which takes 1 ms to make where a PNG took 42 (1 Nov), top row first.
+export async function still(target: string) {
+  const image = await all.get(target)?.view.webContents.capturePage();
+  const scale = image?.getScaleFactors()[0] ?? 1, { width, height } = image?.getSize(scale) ?? { width: 0, height: 0 };
+  const pixels = image?.toBitmap({ scaleFactor: scale }); // blue, green, red and alpha, each a byte, as BMP keeps them
+  if (!pixels || !width || pixels.length !== width * height * 4) return null;
+  const head = Buffer.alloc(54);
+  head.write("BM");
+  head.writeUInt32LE(54 + pixels.length, 2);
+  head.writeUInt32LE(54, 10);
+  head.writeUInt32LE(40, 14);
+  head.writeInt32LE(width, 18);
+  head.writeInt32LE(-height, 22); // top row first
+  head.writeUInt16LE(1, 26);
+  head.writeUInt16LE(32, 28);
+  head.writeUInt32LE(pixels.length, 34);
+  return Buffer.concat([head, pixels]);
 }
 
 const leave = (tab: Tab) => {

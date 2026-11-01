@@ -6,7 +6,9 @@ import { observer } from "mobx-react-lite";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { dock } from "../store/dock";
 import { issues, type Tab } from "../store/issues";
+import { ui } from "../store/ui";
 import { GLYPH } from "../ui/icons";
+import { toasts } from "../ui/toast";
 
 export const BrowserView = observer(function BrowserView({ session }: { session: string }) {
   const tabs = issues.tabsOf(session);
@@ -35,8 +37,18 @@ type Dialog = { type: "alert" | "confirm" | "prompt" | "beforeunload"; message: 
 type Chooser = { multiple: boolean };
 type Told = { dialog?: Dialog | null; held?: boolean; chooser?: Chooser | null; back?: boolean; forward?: boolean };
 const BIGGEST = 100 * 1024 * 1024; // bytes in one file given a page: one message on desk's socket, as ws takes at most
-// desk's app (apps/desktop), which lays the tab itself over its box in the Browser (its preload.cjs), or nothing in a browser
-const APP = (window as { deskApp?: { show(target: string | null, at?: object): void } }).deskApp;
+// desk's app (apps/desktop), which lays the tab itself over its box in the Browser, or aside, and gives a picture of it
+// (its preload.cjs), or nothing in a browser
+const APP = (window as { deskApp?: { show(target: string | null, at?: object, aside?: boolean): void; still(target: string): Promise<Uint8Array | null> } }).deskApp;
+// desk's own layers, which the tab would cover where they meet its box: its menus and popovers, search and the command
+// menu, the @ menu, the boxes that create, the image viewer, the toast, a tooltip, a list's display options and its
+// selection bar, the Browser's own cards, and the shortcuts panel (#keys). Each is a list the page keeps up to date,
+// which costs nothing to read each frame (0.003 ms, where a query took 0.37, 1 Nov).
+const LAYERS = ["menu", "at-menu", "creator", "viewer", "toast", "tip", "display-panel", "select-bar", "browser-held"].map((name) => document.getElementsByClassName(name));
+const layered = (r: DOMRect) => [...LAYERS.flatMap((list) => [...list]), document.getElementById("keys")].some((el) => {
+  const l = el?.getBoundingClientRect();
+  return l && l.width && l.height && l.left < r.right && r.left < l.right && l.top < r.bottom && r.top < l.bottom;
+});
 const sizeOf = (box: HTMLElement) => ({ w: Math.round(box.clientWidth * devicePixelRatio), h: Math.round(box.clientHeight * devicePixelRatio) });
 
 // The tab's back, forward, reload and address, then its picture, live (the server's cast.ts), fit into the half: the tab
@@ -66,7 +78,7 @@ function Page({ tab }: { tab: Tab }) {
       onMouseDown={(e) => e.preventDefault()} onClick={() => go({ nav })}>{glyph}</button>
   );
   useEffect(() => {
-    const img = shot.current, keys = typed.current, pick = picker.current!, box = area.current!;
+    const img = APP ? null : shot.current, keys = typed.current, pick = picker.current!, box = area.current!;
     const refocus = () => keys?.focus({ preventScroll: true }); // your keys back to the page's picture
     let socket: WebSocket | null = null, gone = false, tries = 0, retry = 0, shown = "", next = "";
     // Each picture shows once it has loaded, and the one before it is let go then; one that came before it loaded is
@@ -299,34 +311,67 @@ function Page({ tab }: { tab: Tab }) {
   }, [tab.target]);
 
   // In desk's app, the tab itself over the box, where the box is each frame: the app lays it there (its tabs.ts), and
-  // puts it back as the Browser goes or while a card here waits on you, which the tab would cover. Ctrl L in the tab
-  // comes here, the tab hands it on, and edits the address.
-  const covered = Boolean(dialog || held || chooser);
+  // puts it back as the Browser goes. While one of desk's own layers meets the box, a menu or a card here, which the tab
+  // would cover, a picture of the tab shows in the box, and the tab stands aside, out of sight at its size, until the
+  // layer goes: a still page under the layer, as Chrome's own menus leave it. A click on the picture puts away what
+  // covers it, as a click beside a menu does, and the tab comes back. Ctrl L in the tab comes here, the tab hands it on,
+  // and edits the address.
   useEffect(() => {
-    if (!APP || covered) return;
-    const box = area.current!;
-    let frame = 0, was = "";
+    if (!APP) return;
+    const box = area.current!, img = shot.current!;
+    let frame = 0, was = "", over = false, still = false, asked = 0, hide = 0;
+    // The picture shows once drawn, and the tab stands aside two frames later, once the window shows it in its place; one
+    // that comes after the layer went is dropped.
+    const freeze = async () => {
+      const n = ++asked, bmp = await APP!.still(tab.target);
+      if (n !== asked || !bmp) return;
+      URL.revokeObjectURL(img.src);
+      img.src = URL.createObjectURL(new Blob([bmp as Uint8Array<ArrayBuffer>], { type: "image/bmp" }));
+      await img.decode().catch(() => {});
+      if (n !== asked) return;
+      clearTimeout(hide);
+      img.hidden = false; // the app's picture is shown and hidden here, not by React, which drew it hidden
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+      if (n === asked) still = true;
+    };
+    // The tab comes back over the picture, which goes once it is surely covered.
+    const thaw = () => {
+      asked++;
+      still = false;
+      hide = window.setTimeout(() => { img.hidden = true; }, 100);
+    };
     const place = () => {
       frame = requestAnimationFrame(place);
-      const r = box.getBoundingClientRect(), at = { x: r.left, y: r.top, width: r.width, height: r.height }, now = JSON.stringify(at);
+      const r = box.getBoundingClientRect(), shows = Boolean(r.width && r.height), under = shows && layered(r);
+      if (under !== over) void ((over = under) ? freeze() : thaw());
+      const at = { x: r.left, y: r.top, width: r.width, height: r.height }, now = JSON.stringify([at, still]);
       if (now === was) return;
       was = now;
-      APP!.show(r.width && r.height ? tab.target : null, at);
+      APP!.show(shows ? tab.target : null, at, still);
     };
     place();
+    const back = () => {
+      toasts.hide();
+      ui.setKeys(false);
+    };
     const key = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.shiftKey || e.code !== "KeyL") return;
       e.preventDefault();
       e.stopPropagation();
       setEditing(true);
     };
+    img.addEventListener("mousedown", back);
     box.addEventListener("keydown", key);
     return () => {
       cancelAnimationFrame(frame);
+      clearTimeout(hide);
+      asked++;
+      img.removeEventListener("mousedown", back);
       box.removeEventListener("keydown", key);
+      URL.revokeObjectURL(img.src);
       APP!.show(null);
     };
-  }, [tab.target, covered]);
+  }, [tab.target]);
   const host = where(tab.url).host;
   const answer = (yes: boolean, text?: string) => {
     say.current({ answer: yes, ...(text === undefined ? {} : { text }) });
@@ -351,7 +396,7 @@ function Page({ tab }: { tab: Tab }) {
         <Address tab={tab} editing={editing} edit={setEditing} open={(url) => go({ open: url })} />
       </div>
       <div ref={area} className="browser-page" data-tab={APP ? tab.target : undefined}>
-        {!APP && <img ref={shot} className="browser-shot" alt={tab.title || tab.url} draggable={false} hidden={stand === "waiting"} />}
+        <img ref={shot} className="browser-shot" alt={tab.title || tab.url} draggable={false} hidden={APP ? true : stand === "waiting"} />
         {!APP && <textarea ref={typed} className="browser-keys" aria-label="Keys to the page" autoComplete="off" autoCorrect="off" spellCheck={false} />}
         {(stand === "away" || stand === "failed") && <p className="term-note">{stand === "away" ? "Reconnecting…" : "desk does not answer."}</p>}
         {dialog && <DialogCard key={`${dialog.type} ${dialog.message}`} dialog={dialog} host={host} answer={answer} />}

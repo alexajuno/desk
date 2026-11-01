@@ -3,8 +3,11 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("deskApp", {
-  // The tab at the place, {x, y, width, height} in the page's pixels, or none when the target is null.
-  show: (target, at) => ipcRenderer.send("tab", target, at),
+  // The tab at the place, {x, y, width, height} in the page's pixels, or none when the target is null; aside, at the
+  // place's size but out of sight.
+  show: (target, at, aside) => ipcRenderer.send("tab", target, at, aside === true),
+  // A picture of the tab as it shows, a BMP's bytes.
+  still: (target) => ipcRenderer.invoke("still", target),
 });
 
 // A key of desk's pressed in a tab desk shows, which the tab hands back (tabs.ts): desk's page hears it where the tab
