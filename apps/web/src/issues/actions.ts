@@ -56,6 +56,11 @@ export async function setFolder(slug: string, folder: string) {
 }
 
 export async function copy(text: string, done: string) {
+  await toClipboard(text);
+  toast(done);
+}
+
+export async function toClipboard(text: string) {
   try {
     await navigator.clipboard.writeText(text);
   } catch {
@@ -65,7 +70,6 @@ export async function copy(text: string, done: string) {
     document.execCommand("copy");
     box.remove();
   }
-  toast(done);
 }
 
 // Deleted issues wait in desk's trash; the undo list lives in sessionStorage, so Ctrl+Z still works after you move

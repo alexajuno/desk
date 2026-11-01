@@ -16,6 +16,7 @@ import { seenPage, usePage } from "../api/page";
 import { HeadStatus, IssueDetails, landSkip, Lands, StepButtons, Title, useStep, type IssuePageData } from "../issues/IssueView";
 import { useLive as useIssueLive } from "../issues/useLive";
 import { folderMenu } from "../issues/menus";
+import { toClipboard } from "../issues/actions";
 import { dock, type Layout, type View } from "../store/dock";
 import { issues } from "../store/issues";
 import { lineKey } from "../store/frame";
@@ -603,6 +604,7 @@ function You({ text, images, files, queued, lost, onSend, onSendNow }: { text: s
         {text}
       </div>
       {long && <button className="you-more" type="button" onClick={() => setAll(true)}>Show all</button>}
+      {text && <CopyMessage text={text} />}
       {queued && (
         <span className="you-queued">
           {GLYPH.clock}Queued
@@ -619,11 +621,31 @@ function You({ text, images, files, queued, lost, onSend, onSendNow }: { text: s
   );
 }
 
-// A reply, marked with where it is (at).
+// A reply, marked with where it is (at), with Copy under it once it has all its words.
 const Reply = function Reply({ at, text, streaming = false }: { at?: string; text: string; streaming?: boolean }) {
   const html = useMemo(() => markdown(text), [text]);
-  return <div className={`reply body${streaming ? " streaming" : ""}`} data-at={at} dangerouslySetInnerHTML={{ __html: html }} />;
+  const body = <div className={`reply body${streaming ? " streaming" : ""}`} data-at={at} dangerouslySetInnerHTML={{ __html: html }} />;
+  return streaming ? body : <div className="said">{body}<CopyMessage text={text} /></div>;
 };
+
+// A message's Copy, as claude.ai's (measured 1 Nov): a quiet 24px icon under it that puts its text on the clipboard,
+// a reply's as its Markdown, and shows a tick for 2 s. It shows while the mouse is on the message, in room kept for it,
+// so nothing moves ("add a copy msg button under the msg similar to claude", the user, 1 Nov).
+function CopyMessage({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(t);
+  }, [copied]);
+  return (
+    <div className="msg-actions">
+      <button className={`msg-copy${copied ? " copied" : ""}`} type="button" title="Copy" onClick={() => void toClipboard(text).then(() => setCopied(true))}>
+        {copied ? GLYPH.check : GLYPH.copy}
+      </button>
+    </div>
+  );
+}
 
 // Draws again each second while on, for a time that runs.
 function useTick(on = true) {

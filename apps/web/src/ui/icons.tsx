@@ -208,6 +208,9 @@ export const GLYPH = {
   // The composer's Manual and Auto (sessions/Dock.tsx, Mode): a play that stops at a bar, and a fast-forward, desk's own.
   manual: glyph(<><path d="M4 3.5v9l6-4.5z" /><path d="M12.5 3.5v9" /></>),
   auto: glyph(<><path d="M2 3.5v9l6-4.5z" /><path d="M8 3.5v9l6-4.5z" /></>),
+  // A chat message's Copy, and the tick it shows once copied, drawn as claude.ai's (1 Nov).
+  copy: glyph(<><rect x="5.75" y="5.75" width="8" height="8" rx="1.75" /><path d="M10.25 5.75V4A1.75 1.75 0 0 0 8.5 2.25H4A1.75 1.75 0 0 0 2.25 4v4.5c0 .97.78 1.75 1.75 1.75h1.75" /></>),
+  check: glyph(<path d="M3.5 8.25l3 3 6-6.5" />),
 };
 
 export const TICK = (
