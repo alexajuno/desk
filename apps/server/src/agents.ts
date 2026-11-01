@@ -3,7 +3,8 @@
 //
 //   Plan       a session in the session host (host.ts), in the issue's folder: the repo's own rules say where the
 //              session works. The session plans by the issue's protocol and keeps the plan in the issue's Plan section.
-//   "go"       said in its panel: the same session carries out the plan, then writes its review card in the Result.
+//   "go"       said in its panel: the same session carries out the plan, then writes its review card in the Result, or
+//              on a design issue reports its last step, with no card.
 //   Approve    the same session lands the work by the repo's rules: desk sends it the message, which waits its turn
 //              when the session is working.
 //

@@ -34,10 +34,10 @@ const done = (steps: Step[]) => steps.filter((s) => s.state === "done").length;
 export function noted(i: { slug: string; plan_steps: string | null }, before: string | null, reviewOf?: string | null) {
   const session = chats.sessionOfIssue(i.slug), steps = leaves(parsed(i.plan_steps));
   if (!session) return;
-  if (reviewOf === "result") breaks.set(session, "The Result was just sent: keep what its review and the landing need.");
+  if (reviewOf === "result") breaks.set(session, "The work was just handed over: keep what its review and the landing need.");
   else if (done(steps) > done(leaves(parsed(before)))) {
     const next = steps.find((s) => s.state !== "done");
-    breaks.set(session, next ? `The work goes on to the next step, "${next.title}": keep what it needs.` : "Every step is done: keep what the Result needs.");
+    breaks.set(session, next ? `The work goes on to the next step, "${next.title}": keep what it needs.` : "Every step is done: keep what its review and the landing need.");
   }
 }
 

@@ -91,8 +91,8 @@ const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // --- the document ------------------------------------------------------------------------------------------------
 // An issue's body is its one document: ## Context, the ask; ## Plan, which its session keeps while the user plans with
-// it; ## Result, its review card and write-up. "seemingly we don't need multiple files. instead having a single content
-// for the issue would be better" (the user, 19 Oct). Sessions write a section at a time through the API, so the user's
+// it; ## Result, its review card and write-up, which a design issue does without. "seemingly we don't need multiple
+// files. instead having a single content for the issue would be better" (the user, 19 Oct). Sessions write a section at a time through the API, so the user's
 // edit to one and a session's to another never overwrite each other.
 
 export const ORDER = ["Context", "Plan", "Result"];
