@@ -26,6 +26,7 @@ import { isDrawn, type PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { anyCommit, Changes, Counts, useChanges } from "./Changes";
+import { rising } from "./glide";
 import { Half } from "./Half";
 import { StepsCard } from "./StepsCard";
 import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
@@ -194,7 +195,8 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   const lastTop = useRef(0);
   const onScroll = () => {
     const el = scroller.current!;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) stuck.current = true;
+    if (rising(el)) stuck.current = false; // J, K, Ctrl U and the rest, up (glide.ts)
+    else if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) stuck.current = true;
     else if (el.scrollTop < lastTop.current) stuck.current = false;
     lastTop.current = el.scrollTop;
     setAway((a) => (stuck.current ? false : a || "quiet"));
@@ -210,7 +212,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   };
   const streamed = s.partial.reduce((n, b) => n + b.text.length, 0);
   useLayoutEffect(() => {
-    if (stuck.current) scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
+    if (stuck.current && !rising(scroller.current!)) scroller.current!.scrollTo({ top: scroller.current!.scrollHeight });
   }, [s.items.length, streamed, s.pending.length, s.asks.length, s.working, s.loaded]);
   useEffect(() => {
     if (!stuck.current) setAway((a) => a && "fresh");
@@ -220,7 +222,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   // with the window.
   useEffect(() => {
     const el = scroller.current!;
-    const keep = new ResizeObserver(() => { if (stuck.current) el.scrollTo({ top: el.scrollHeight }); });
+    const keep = new ResizeObserver(() => { if (stuck.current && !rising(el)) el.scrollTo({ top: el.scrollHeight }); });
     keep.observe(el);
     keep.observe(el.firstElementChild!); // the conversation itself, as words stream and steps unfold
     keep.observe(el.lastElementChild!); // the foot: the composer and any question card

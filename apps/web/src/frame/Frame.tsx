@@ -25,6 +25,7 @@ import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openNearest, openPicture, stepViewer, viewerOpen } from "../ui/viewer";
 import { commentKey, dropPick } from "../sessions/Changes";
 import { arrange, Dock, focusComposer, newSession, openSession, viewKey } from "../sessions/Dock";
+import { ease, glide, jump, letGo, LINE } from "../sessions/glide";
 import { toggleHalf } from "../sessions/Half";
 import { Catcher } from "../search/catcher";
 import { openSearch, search, SearchHost } from "../search/SearchBox";
@@ -86,13 +87,12 @@ const chatHere = () =>
   (document.activeElement?.closest(".session-view")?.querySelector<HTMLElement>(".dock-scroll") ?? document.querySelector<HTMLElement>(".chat-center .dock .dock-scroll"));
 // The chat the other scroll keys move: that one, else the one open beside the Inbox's list.
 const chatView = () => chatHere() ?? document.querySelector<HTMLElement>(".chat-open .dock-scroll");
-// How far J, K, ↑ and ↓ scroll the chat, as Vimium's: a few lines.
-const LINE = 60;
 
-// Vim's Ctrl D and Ctrl U: the chat half a screen down or up. False when no chat is open, for the browser's own key.
+// Vim's Ctrl D and Ctrl U: the chat half a screen down or up, in 0.2 s. False when no chat is open, for the browser's own
+// key.
 function halfPage(by: 1 | -1) {
   const view = chatView();
-  view?.scrollBy({ top: (by * view.clientHeight) / 2 });
+  if (view) ease(view, (by * view.clientHeight) / 2, 200);
   return Boolean(view);
 }
 // A row's key in ui.focused: an issue row's slug, or another row's own key (a team's, a session's).
@@ -141,7 +141,7 @@ function onKeyDown(e: KeyboardEvent) {
   // Ctrl End and Ctrl Home, as in Claude Code: the chat to its end or its start, from its composer too. At the end it
   // follows the reply again, as the chat does while you stay at its bottom (Dock).
   const view = e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && (e.key === "End" || e.key === "Home") && chatView();
-  if (view) { view.scrollTo({ top: e.key === "End" ? view.scrollHeight : 0 }); e.preventDefault(); return; }
+  if (view) { jump(view, e.key === "End" ? view.scrollHeight : 0); e.preventDefault(); return; }
   // Linear's Ctrl ⇧ 1-9: the team in that place under Your teams. The key, not the character, which Shift makes "!".
   const digit = (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && /^Digit([1-9])$/.exec(e.code);
   if (digit) {
@@ -200,11 +200,11 @@ function onKeyDown(e: KeyboardEvent) {
 
   // Vim's Shift G: the chat to its end, where it follows the reply again, as Ctrl End; G alone starts G then a key.
   const end = key === "g" && e.shiftKey && chatView();
-  if (end) { gPressed = 0; end.scrollTo({ top: end.scrollHeight }); return; }
+  if (end) { gPressed = 0; jump(end, end.scrollHeight); return; }
   if (gPressed && Date.now() - gPressed < 1500) {
     gPressed = 0;
     // Vim's G G: the chat to its start.
-    if (key === "g") { chatView()?.scrollTo({ top: 0 }); return; }
+    if (key === "g") { const view = chatView(); if (view) jump(view, 0); return; }
     // Linear's G E, G A and G B for its Issues tabs, and G P for Projects.
     const to = { e: "/issues", a: "/issues/active", b: "/issues/backlog", i: "/inbox", p: "/projects" }[key];
     if (to) go(to);
@@ -239,10 +239,12 @@ function onKeyDown(e: KeyboardEvent) {
     if (selectable(ui.focused)) ui.select([ui.focused!]);
     e.preventDefault();
   }
-  // J, K, ↑ and ↓ scroll a chat, as Vimium's, and move through a list's rows elsewhere.
+  // J, K, ↑ and ↓ scroll a chat, as Vimium's, a few lines a tap and gliding while held, and move through a list's rows
+  // elsewhere.
   else if (key === "j" || e.key === "ArrowDown" || key === "k" || e.key === "ArrowUp") {
     const down = key === "j" || e.key === "ArrowDown", chat = chatHere();
-    if (chat) chat.scrollBy({ top: down ? LINE : -LINE });
+    if (chat && e.repeat) glide(chat, down ? 1 : -1, key);
+    else if (chat) ease(chat, down ? LINE : -LINE, 100);
     else {
       moveFocus(down ? 1 : -1);
       const now = focusedRow();
@@ -354,6 +356,10 @@ function onKeyDown(e: KeyboardEvent) {
   }
 }
 
+// A held J, K, ↑ or ↓ glides the chat until let go, or until the window loses the keys, whose keyup it would not hear.
+const onKeyUp = (e: KeyboardEvent) => letGo(e.key.toLowerCase());
+const onBlur = () => letGo();
+
 function onClick(e: MouseEvent) {
   const t = e.target as Element;
   if (t.closest(".menu")) return;
@@ -395,10 +401,14 @@ export const Frame = observer(function Frame() {
   useEffect(() => firstDrawn(), []); // the splash goes once the parts drawn are whole
   useEffect(() => {
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
     document.addEventListener("click", onClick);
     document.addEventListener("mousemove", onMouseMove);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
       document.removeEventListener("click", onClick);
       document.removeEventListener("mousemove", onMouseMove);
     };
