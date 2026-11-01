@@ -14,7 +14,7 @@
 // screenshots took 1.4 s or never came, on a screen 0.3 s, and under another tab in the same window 1.2 s or never
 // (1 Nov). Hyprland's config (~/.config/hypr/hyprland.lua, "desk's app") puts the screen out of the mouse's reach and
 // the tabs' windows on it, and the user's screen scripts leave it out. The tabs keep their logins apart from desk's
-// page, in PARTITION.
+// page, in PARTITION, which takes the user's own Chrome's as the app starts (logins.ts).
 import { BaseWindow, session, WebContentsView, type BrowserWindow, type Input, type Rectangle, type WebContents } from "electron";
 import { execFile } from "node:child_process";
 import { rmSync } from "node:fs";
@@ -24,6 +24,7 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import { shortcut } from "./keys.ts";
+import * as logins from "./logins.ts";
 
 export const PORT = Number(process.env.DESK_CHROME_PORT) || 9337; // a second desk app for testing takes another
 const RUN = process.env.XDG_RUNTIME_DIR || tmpdir();
@@ -52,6 +53,10 @@ export async function start() {
 
   const probe = new WebContentsView({ webPreferences: { partition: PARTITION } });
   context = (await info(probe.webContents)).browserContextId;
+  await logins.bring(probe.webContents).then(
+    (n) => console.log(`your logins: ${n} cookies from your Chrome`),
+    (e: Error) => console.log(`no logins from your Chrome: ${e.message}`),
+  );
   probe.webContents.close();
   listen();
 }
