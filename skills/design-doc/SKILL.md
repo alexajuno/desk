@@ -44,7 +44,8 @@ A design issue's plan lives on its steps, which desk keeps ("i think we need dat
 
 - **The diagram** is the thing itself, not the progress: what exists and what this step changes, Today and After, a table as a table, the part being worked on with a double border. Where the work stands is a few words in your report, such as "Build, 2 of 3" ("maybe we don't even need progress diagram at all?", 27 Oct). It holds only what has been said, about a dozen shapes at most; a part or a term the talk goes into opens inside the part it belongs to, once it is talked about, not before.
 - **The decisions** are the record: one line per decision, with the user's reason in their words and dated; your own picks stay marked as yours until the user takes them. When the user decides without a reason, ask for one line. A decision that changes is rewritten in place, on its step.
-- **The Plan section** holds only **Done when** and **Decide alone**, which you work from and the review card checks: no diagram, no Now line, no title. They come once the shape is settled, before "go". The chat shows a send of the Plan as a line, never drawn, and the user reads it on the chat's Issue tab ("never go go all or anything", 27 Oct).
+- **The Plan section** holds only **Done when** and **Decide alone**, which you work from and your last step's report checks: no diagram, no Now line, no title. They come once the shape is settled, before "go". The chat shows a send of the Plan as a line, never drawn, and the user reads it on the chat's Issue tab ("never go go all or anything", 27 Oct).
+- **No review card at the end.** The user saw each step's diagram, its mockups and its diff as it went, so the last build step's report ends the issue: it marks each line of Done when ✓, ✗ or ?, with its evidence, and sends the steps that land the work, as desk's prompt says ("we have mockups before building, which means, i don't need review card anymore, since they will be the same as mockup", 1 Nov).
 
 ### Outside desk: a plan.md
 
@@ -69,7 +70,7 @@ One file on one screen, under about 250 words outside the diagrams, with a `# <w
 
 - **<The decision, in a few words.>** "<the user's reason, in their words>" (<date>).
 
-**Done when:** <what the review card will check>.
+**Done when:** <what the finished work is checked against>.
 
 **Decide alone:** <what you settle yourself>.
 ~~~
