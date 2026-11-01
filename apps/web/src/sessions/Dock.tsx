@@ -465,6 +465,9 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
   // queued since go below.
   const starts = s.pending.reduce((n, p, i) => (p.mid ? n : i + 1), 0);
   const tail = s.working && !starts; // the last fold is the reply's own, and takes its tool calls streaming now
+  // A design issue hands its work over with no card to hold the steps Approve runs (prompts.ts, STEPS), so they show
+  // under its last step's report: that is the last turn while the issue waits on Approve, since your reply moves it on.
+  const unheld = page?.reviewing && !page.card && !page.result ? page.lands?.steps ?? null : null;
   const you = (p: (typeof s.pending)[number]) => (
     <You key={p.key} text={p.text} images={p.attached.filter((a) => a.url).length} files={p.attached.filter((a) => !a.url).map((a) => a.name)} queued={s.working && p.mid && !p.lost} lost={p.lost} onSend={() => void s.resend(p)}
       onSendNow={p === lastQueued ? () => void s.sendNow("", []) : undefined} />
@@ -490,6 +493,7 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
       {s.pending.slice(0, starts).map(you)}
       {liveSteps.length > 0 && !(tail && last?.kind === "steps") && <Steps s={s} items={[]} running={liveSteps} live />}
       {liveText.map((b) => <Reply key={`${b.msg}:${b.index}`} text={b.text} streaming />)}
+      {page && unheld && <LandsSent slug={page.issue.slug} steps={unheld} />}
       {s.pending.slice(starts).map(you)}
       {s.working && !liveText.length && !s.asks.length && <Working since={s.since} status={s.status} />}
     </>
@@ -520,6 +524,13 @@ const Sent = observer(function Sent({ at, page, section, latest }: { at: string;
       )}
     </div>
   );
+});
+
+// The steps Approve runs under the report that handed the work over, when no card holds them: you untick one there as on
+// the issue's page, and the Approve in the chat's head skips it too.
+const LandsSent = observer(function LandsSent({ slug, steps }: { slug: string; steps: string[] }) {
+  const [skip, setSkip] = landSkip(slug, steps);
+  return <div className="sent lands-sent"><Lands steps={steps} skip={skip} setSkip={setSkip} /></div>;
 });
 
 // The step a send names: by its title from desk's answer, else by its place in the list as it stands.
