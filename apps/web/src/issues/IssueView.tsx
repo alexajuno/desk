@@ -144,8 +144,9 @@ export const IssueView = observer(function IssueView({ data, inInbox = false, pa
           <Title title={p.title} save={(t) => setField(p.slug, "title", t)} />
           <Chips p={p} team={data.team} project={data.project} milestone={data.milestone} />
           {/* In review the card comes first, right under the title, beside the Approve that decides on it. A plan to
-              say go to shows as the plan, below. */}
-          {p.state === "review" && data.reviewing && (
+              say go to shows as the plan, below. A design issue has no card, since the user saw each step as it went:
+              its Review holds only what Approve runs, above its Steps. */}
+          {p.state === "review" && data.reviewing && (data.card || data.result || steps) && (
             <div className="review">
               <div className="section-label" style={{ marginTop: 0 }}>Review</div>
               {data.card ? (
@@ -154,8 +155,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false, pa
                   {steps && <Lands steps={steps} skip={skip} setSkip={setSkip} />}
                   <details className="review-details"><summary>Details</summary><Html className="body" html={data.card[1]} /></details>
                 </>
-              ) : data.result ? <Html className="body" html={data.result_html} />
-                : <p className="muted">No result: this was done in a chat, so check the work itself.</p>}
+              ) : data.result && <Html className="body" html={data.result_html} />}
               {steps && !data.card && <Lands steps={steps} skip={skip} setSkip={setSkip} />}
             </div>
           )}

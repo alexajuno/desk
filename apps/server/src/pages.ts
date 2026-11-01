@@ -370,7 +370,9 @@ export function step(i: Issue, asks: Set<string>, hasPlan: boolean, hasResult: b
     if (of === "plan") return { text: "Plan ready: press Go, or reply in its chat", button: { label: "Go", action: "go" } };
     if (of === "question") return { text: "Asks you something: answer in its chat", button: chat };
     if (of === "reply") return { text: "Replied: your turn in its chat", button: chat };
-    return { text: hasResult ? "In review" : "In review, no card", button: { label: "Approve", action: "approve" } };
+    // A design issue has no card: its last step's report hands the work over (prompts.ts, STEPS).
+    const carded = hasResult || runs(i) === "design";
+    return { text: carded ? "In review" : "In review, no card", button: { label: "Approve", action: "approve" } };
   }
   if (i.state === "done" && i.landed) {
     // The session's own words on where it landed: the commit, or the pull request.
