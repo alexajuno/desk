@@ -230,7 +230,9 @@ table.diff .diff-hunk td { padding: 4px 12px 4px 48px; font: 400 11px var(--mono
 
 /* A message's Copy (Dock.tsx, CopyMessage), as claude.ai's (measured 1 Nov, dark): a 24px square with 6px corners in
    the quiet grey, brighter with a ghost fill under the mouse, in a row under the message that keeps its room and shows
-   only while the mouse is on the message, or the copy just made, and always on a phone. */
+   only while the mouse is on the message, or the copy just made, and always on a phone. The message's time shares the
+   row at its outer edge, before a reply's Copy and after yours, 12px in the dimmest grey (picked from three mockups,
+   "B", 1 Nov). */
 .said { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .said > .reply { align-self: stretch; }
 .msg-actions { display: flex; height: 24px; margin-left: -6px; opacity: 0; transition: opacity 0.1s; }
@@ -240,6 +242,8 @@ table.diff .diff-hunk td { padding: 4px 12px 4px 48px; font: 400 11px var(--mono
 button.msg-copy { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-3);
                   display: grid; place-items: center; }
 button.msg-copy:hover { background: var(--btn-ghost-hover); color: var(--text-1); }
+.msg-time { padding: 0 6px; font: 450 12px/24px var(--font); color: var(--text-4); white-space: nowrap; }
+.you .msg-time { order: 1; }
 .reply.body { font-size: 15px; line-height: 24px; color: var(--text-1); overflow-wrap: anywhere; }
 .reply p, .reply ul, .reply ol, .reply pre, .reply table, .reply blockquote { margin: 0 0 10px; }
 .reply > :last-child { margin-bottom: 0; }

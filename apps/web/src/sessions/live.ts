@@ -17,7 +17,7 @@ export interface Item {
   summary?: string;
   input?: string;
   command?: string; // a Bash call's command, whole
-  at?: number; // when a tool call was made
+  at?: number; // when a message or a tool call was made
   more?: number; // a command's output cut to its end: how many of its lines came before
   error?: boolean;
   images?: number;

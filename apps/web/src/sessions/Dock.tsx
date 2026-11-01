@@ -492,8 +492,8 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
     <>
       {rows.map((r, n) => {
         // One typed mid-turn is in the transcript once Claude takes it in, at its next step: by then it's sent, not queued.
-        if (r.kind === "you") return <You key={r.item.key} text={r.item.text ?? ""} images={r.item.images} files={r.item.files} />;
-        if (r.kind === "text") return <Reply key={r.item.key} at={r.item.key} text={r.item.text ?? ""} />;
+        if (r.kind === "you") return <You key={r.item.key} text={r.item.text ?? ""} images={r.item.images} files={r.item.files} when={r.item.at} />;
+        if (r.kind === "text") return <Reply key={r.item.key} at={r.item.key} text={r.item.text ?? ""} when={r.item.at} />;
         if (r.kind === "sent") return <Sent key={r.key} at={r.key} page={page} section={r.section} latest={n === latest[r.section]} />;
         if (r.kind === "step") {
           const step = stepNamed(steps, r);
@@ -591,8 +591,8 @@ const StepSent = function StepSent({ at, step, top, latest }: { at: string; step
 
 const LONG = 600; // characters past which a message shows its first lines only, as claude.ai shows a long paste
 
-function You({ text, images, files, queued, lost, onSend, onSendNow }: { text: string; images?: number; files?: string[]; queued?: boolean; lost?: boolean;
-  onSend?: () => void; onSendNow?: () => void }) {
+function You({ text, images, files, when, queued, lost, onSend, onSendNow }: { text: string; images?: number; files?: string[]; when?: number;
+  queued?: boolean; lost?: boolean; onSend?: () => void; onSendNow?: () => void }) {
   const [all, setAll] = useState(false);
   const long = text.length > LONG && !all;
   return (
@@ -604,7 +604,7 @@ function You({ text, images, files, queued, lost, onSend, onSendNow }: { text: s
         {text}
       </div>
       {long && <button className="you-more" type="button" onClick={() => setAll(true)}>Show all</button>}
-      {text && <CopyMessage text={text} />}
+      {text && <CopyMessage text={text} when={when} />}
       {queued && (
         <span className="you-queued">
           {GLYPH.clock}Queued
@@ -621,17 +621,18 @@ function You({ text, images, files, queued, lost, onSend, onSendNow }: { text: s
   );
 }
 
-// A reply, marked with where it is (at), with Copy under it once it has all its words.
-const Reply = function Reply({ at, text, streaming = false }: { at?: string; text: string; streaming?: boolean }) {
+// A reply, marked with where it is (at), with its time (when) and Copy under it once it has all its words.
+const Reply = function Reply({ at, text, when, streaming = false }: { at?: string; text: string; when?: number; streaming?: boolean }) {
   const html = useMemo(() => markdown(text), [text]);
   const body = <div className={`reply body${streaming ? " streaming" : ""}`} data-at={at} dangerouslySetInnerHTML={{ __html: html }} />;
-  return streaming ? body : <div className="said">{body}<CopyMessage text={text} /></div>;
+  return streaming ? body : <div className="said">{body}<CopyMessage text={text} when={when} /></div>;
 };
 
 // A message's Copy, as claude.ai's (measured 1 Nov): a quiet 24px icon under it that puts its text on the clipboard,
 // a reply's as its Markdown, and shows a tick for 2 s. It shows while the mouse is on the message, in room kept for it,
-// so nothing moves ("add a copy msg button under the msg similar to claude", the user, 1 Nov).
-function CopyMessage({ text }: { text: string }) {
+// so nothing moves ("add a copy msg button under the msg similar to claude", the user, 1 Nov). The message's time shows
+// beside it, at the message's outer edge, the whole date in its tooltip ("i want timestamp under each msg", 1 Nov).
+function CopyMessage({ text, when }: { text: string; when?: number }) {
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -640,6 +641,7 @@ function CopyMessage({ text }: { text: string }) {
   }, [copied]);
   return (
     <div className="msg-actions">
+      {when ? <time className="msg-time" dateTime={new Date(when).toISOString()} title={whole(when)}>{sent(when)}</time> : null}
       <button className={`msg-copy${copied ? " copied" : ""}`} type="button" title="Copy" onClick={() => void toClipboard(text).then(() => setCopied(true))}>
         {copied ? GLYPH.check : GLYPH.copy}
       </button>
@@ -668,6 +670,19 @@ const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-dig
 // A moment as its time today, and with its weekday on another day: 18:40, Thu 04:00.
 const moment = (ms: number) =>
   new Date(ms).toDateString() === new Date().toDateString() ? clock(ms) : `${new Date(ms).toLocaleDateString([], { weekday: "short" })} ${clock(ms)}`;
+
+// When a message was sent: its time today, with its weekday this past week, and with its day and month before:
+// 12:07, Thu 12:07, 28 Oct 12:07.
+function sent(ms: number): string {
+  const d = new Date(ms), midnight = new Date().setHours(0, 0, 0, 0);
+  if (ms >= midnight) return clock(ms);
+  if (ms >= midnight - 6 * 86400_000) return `${d.toLocaleDateString([], { weekday: "short" })} ${clock(ms)}`;
+  return `${d.getDate()} ${d.toLocaleDateString([], { month: "short" })} ${clock(ms)}`;
+}
+
+// A moment whole, for a tooltip: Sunday, November 1, 2026, 15:55.
+const whole = (ms: number) =>
+  `${new Date(ms).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long", year: "numeric" })}, ${clock(ms)}`;
 
 // Each of the plan's limits, by rate_limit_info's rateLimitType.
 const limits: Record<string, string> = {
