@@ -1,25 +1,24 @@
 // A tab's picture, live, for a chat's Browser (Browser.tsx), from the agents' Chrome over its DevTools protocol: one
 // connection to the tab's own endpoint for each Browser that shows it, which leaves what the session does there alone.
 //
-//     Browser ── /api/tabs/<target>/screen ──► desk ── ws://127.0.0.1:9334/devtools/page/<target> ──► the tab
+//     Browser ── /api/tabs/<target>/screen ──► desk ── ws://127.0.0.1:9333/devtools/page/<target> ──► the tab
 //             ◄── each picture, a JPEG, as one binary message ──
 //
-// Chrome draws only the tab in front of its window, so its screencast sends that one's pictures as they change, and none
-// of a tab behind it (1 Nov: 45 in 3 s in front, 0 behind). The screencast's are the size the Browser shows them at, in
-// the screen's pixels, which it says as it opens and as it resizes, {"w": 1436, "h": 1476}: Chrome draws at the screen's
-// scale, so a tab 1365 wide came at 2760 (1 Nov). Each is acknowledged once the Browser's socket took it, so a slow one
-// gets fewer, not a queue.
+// The Chrome runs headless, so the Browser is its only screen, and it goes through the proxy, which keeps the Chrome
+// running while you watch, as a session's connection does. Chrome draws only the tab in front of each window, and each
+// tab a session opens is in front of its own (relay.ts), so its screencast sends its pictures as they change. The
+// screencast's are the size the Browser shows them at, in the screen's pixels, which it says as it opens and as it
+// resizes, {"w": 1436, "h": 1476}. Each is acknowledged once the Browser's socket took it, so a slow one gets fewer, not
+// a queue.
 //
-// Chrome draws a tab behind when asked, so four times a second desk asks the tab whether it is hidden, and a hidden one
-// for a screenshot, sent on when it changed. Once one has been still for STILL looks, it is looked at once a second,
-// until it changes or you act on it: four whole screenshots a second cost the agents' Chrome most of a core (1 Nov).
-// And Chrome draws one only while its window draws, which a still tab in front stops, so desk keeps the tab in front
-// drawing meanwhile (keepDrawing, below), and gives up on a screenshot that takes longer than WAIT. Each is the whole
-// window at the screen's scale, about 230 kB, which the Browser shrinks itself: a screenshot cropped or scaled resizes
-// the page while it is taken, and two at once, desk's or Claude's own, leave it shrunk for good (1 Nov: 1380x815 to
-// 9x6, and clearing its emulation did not put it back), while whole ones at once left it alone. What the screencast
-// sends while a screenshot wakes the tab is the wrong size (1064x586, 592x326), so a hidden tab's screencast pictures
-// are dropped.
+// A tab a page opened, a popup or a link to a new tab, comes in front of its opener's window, and the opener goes
+// behind, where it draws only when asked. So four times a second desk asks the tab whether it is hidden, and a hidden
+// one for a screenshot, sent on when it changed, which headless Chrome takes in about 50 ms (1 Nov). Once one has been
+// still for STILL looks, it is looked at once a second, until it changes or you act on it: four whole screenshots a
+// second cost the Chrome most of a core (1 Nov, windowed). Each is the whole window at the screen's scale, about 230
+// kB, which the Browser shrinks itself: a screenshot cropped or scaled resizes the page while it is taken, which left a
+// windowed Chrome's page shrunk for good (1 Nov). What the screencast sends of a tab behind is the wrong size (1064x586,
+// 592x326), so a hidden tab's screencast pictures are dropped.
 //
 // The Browser sends back your mouse and keys, each a message: {"mouse": "down" | "up" | "move", "x", "y", "n", "held"},
 // {"wheel": [dx, dy], "x", "y"} and {"key": "down" | "up", "k", "code", "kc", "text"}, each with "mods", Chrome's
@@ -34,13 +33,39 @@
 // history and navigation take, as its toolbar's buttons would; Claude's own calls in the tab are left as they are. desk
 // tells the Browser whether the tab can go back and forward, {"back": true, "forward": false}, as a text message, when
 // the socket opens and when the tab moves.
-import { WebSocket } from "ws";
+//
+// What Chrome draws outside the page, which no picture holds and headless shows nowhere, desk tells the Browser to draw:
+// - An alert box, a confirm, a prompt or "Leave site?" holds the page until it is answered, its pictures and every
+//   answer to desk's asks with it. desk tells {"dialog": {"type": "alert" | "confirm" | "prompt" | "beforeunload",
+//   "message", "prompt": "<its text at first>"}}, and {"dialog": null} once it closed, answered by you or by Claude:
+//   both hear it, and the first answer closes it (1 Nov). You answer with {"answer": true | false, "text": "..."}.
+//   Only a connection that heard it open can answer it, and one that joins after hears nothing and gets no answer
+//   from the page, Page.enable's included; a box whose every listener left holds the page for good, until it moves (1
+//   Nov: Page.navigate closed it). So a box your click opened is cancelled once you stop watching, as closing Chrome's
+//   window would, and when the page has not answered Page.enable within HELD, desk tells {"held": true}, a box it
+//   cannot read, which {"nav": "reload"} frees, and {"held": false} once the page answers after all, as when Claude's
+//   own answer closes it, and starts the screencast again.
+// - A file chooser opened by your click or key, within PRESSED of it, which desk takes from Chrome as Claude's tool
+//   does: both hear it and either may give the files (1 Nov). One Claude opened is Claude's. desk tells {"chooser":
+//   {"multiple": true | false}}; the Browser sends {"files": ["<name>", ...]}, then each file, a binary message, in
+//   order, which desk keeps in UPLOADS and gives the page, or {"files": []} for none. desk tells {"chooser": null} as
+//   it is done.
+// A <select>'s list is drawn in the page headless (1 Nov), so it needs nothing.
+import { randomUUID } from "node:crypto";
+import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
+import { WebSocket, type RawData } from "ws";
+import { HOME } from "./config.ts";
 import * as db from "./db.ts";
 
-const CHROME = "ws://127.0.0.1:9334"; // the Chrome itself, as the relay's watcher reaches it (relay.ts): watching keeps it up no longer than a session does
+const CHROME = `ws://127.0.0.1:${process.env.DESK_CHROME_PORT || 9333}`; // through the proxy, as the header says; a second desk for testing points at another Chrome with DESK_CHROME_PORT
 const EVERY = 250; // ms between looks at the tab
 const STILL = 8; // looks at a tab behind that found it as it was, 2 s, after which it is looked at once a second
 const WAIT = 3000; // ms an answer from the tab is waited for, after which it is let go: a dialog open in the page holds them
+const PRESSED = 3000; // ms after your click or key in which a dialog or a file chooser the page opens is yours
+const HELD = 2000; // ms the page may take to answer Page.enable before desk takes it for held by a box it cannot read
+const UPLOADS = join(HOME, ".cache", "desk", "uploads"); // the files you gave a page, a folder each time, kept a day
+const KEPT = 24 * 3600_000; // ms
 export const TARGET = /^[0-9A-F]{32}$/; // Chrome's id of a tab
 // What a look asks the tab: whether it is hidden, and its window's size
 const VIEW = "JSON.stringify([document.visibilityState, innerWidth, innerHeight])";
@@ -49,9 +74,10 @@ const num = (n: unknown, or = 0) => (typeof n === "number" && Number.isFinite(n)
 const str = (s: unknown) => (typeof s === "string" ? s.slice(0, 32) : "");
 const ADDRESS = /^(https?:\/\/\S+|about:blank)$/i; // where a typed address may take the tab
 
-type Said = { w?: number; h?: number; nav?: string; open?: string; insert?: string; mouse?: string; wheel?: [number, number]; key?: string; x?: number; y?: number; n?: number; held?: boolean; mods?: number; k?: string; code?: string; kc?: number; text?: string };
+type Said = { w?: number; h?: number; nav?: string; open?: string; insert?: string; mouse?: string; wheel?: [number, number]; key?: string; x?: number; y?: number; n?: number; held?: boolean; mods?: number; k?: string; code?: string; kc?: number; text?: string; answer?: boolean; files?: unknown[] };
 type History = { currentIndex: number; entries: { id: number }[] };
 type Mouse = { type: string; x: number; y: number; button?: string; buttons?: number; modifiers: number; deltaX?: number; deltaY?: number };
+type Dialog = { type: string; message: string; defaultPrompt?: string };
 
 export async function watch(browser: WebSocket, target: string, w: number, h: number) {
   if (!(await db.sql().query("select 1 from tabs where target = $1", [target])).rows.length) return browser.close(4404, "That tab is not open.");
@@ -60,6 +86,10 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
   const waiting = new Map<number, (result: unknown) => void>();
   let asked = 0, sent = "", told = "", looking = false, again = false, behind = true, still = 0, size = fit(w, h);
   let whole = { w: 0, h: 0 }; // the tab's window, in its CSS pixels, as a look measured it last
+  let pressed = 0; // when you last clicked or pressed a key in the tab
+  let dialog: { mine: boolean } | null = null; // the box open in the page, and whether your click or key opened it
+  let chooser: number | null = null; // the file input whose chooser waits on you, by Chrome's id of its node
+  let upload: { names: string[]; paths: string[]; written: Promise<unknown>[]; dir: string } | null = null; // the files you are giving it, as they come
 
   // A call to the tab, answered with its result, or with nothing once the tab is gone or, given a time, once it passed;
   // an answer that comes after is dropped.
@@ -70,6 +100,7 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
     chrome.send(JSON.stringify({ id, method, params }));
     if (ms) setTimeout(() => waiting.delete(id) && done(undefined), ms);
   });
+  const tell = (said: object) => browser.readyState === WebSocket.OPEN && browser.send(JSON.stringify(said));
   const show = (jpeg: string, then?: () => void) => {
     if (jpeg === sent || browser.readyState !== WebSocket.OPEN) return then?.();
     sent = jpeg;
@@ -82,13 +113,10 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
     if (view) {
       const [hidden, width, height] = JSON.parse(view.result.value ?? "[]") as [string, number, number];
       behind = hidden === "hidden";
-      wake(browser, behind);
       if (width && height) whole = { w: width, h: height };
     }
     if (behind) {
-      drawing++;
       const shot = await ask<{ data: string }>("Page.captureScreenshot", { format: "jpeg", quality: 50 }, WAIT); // whole, as the header says
-      drawing--;
       still = shot?.data === sent ? still + 1 : 0;
       if (shot) show(shot.data);
     }
@@ -154,6 +182,7 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
     } else if (said.mouse === "down" || said.mouse === "up") {
       moves.drop(); // a press or a release says where it is itself, and a move held back would come after it
       const down = said.mouse === "down";
+      pressed = Date.now();
       void ask("Input.dispatchMouseEvent", { type: down ? "mousePressed" : "mouseReleased", x, y, button: "left", buttons: down ? 1 : 0, clickCount: Math.min(Math.max(num(said.n, 1), 1), 3), modifiers });
     } else if (Array.isArray(said.wheel)) {
       wheels.send({ type: "mouseWheel", x, y, deltaX: num(said.wheel[0]) * whole.w, deltaY: num(said.wheel[1]) * whole.h, modifiers });
@@ -162,15 +191,57 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
     } else if (said.key === "down" || said.key === "up") {
       const key = str(said.k), text = str(said.text), code = str(said.code), kc = num(said.kc);
       const type = said.key === "up" ? "keyUp" : text ? "keyDown" : "rawKeyDown"; // as Playwright's keyboard sends them
+      pressed = Date.now();
       void ask("Input.dispatchKeyEvent", { type, key, code, text, unmodifiedText: text, windowsVirtualKeyCode: kc, nativeVirtualKeyCode: kc, modifiers });
     } else return;
+    soon();
+  };
+
+  // The files you chose for the chooser, as the header says: their names, then each file, which may come before the
+  // folder for them is made, and each written as it comes; the page gets them once the last is written.
+  const files = (said: Said) => {
+    const names = (said.files ?? []).map((n) => basename(String(n)).replace(/\0/g, "").slice(0, 200) || "file");
+    if (chooser === null || !names.length) {
+      chooser = upload = null;
+      return tell({ chooser: null });
+    }
+    void sweep();
+    const dir = join(UPLOADS, randomUUID());
+    upload = { names, paths: [], written: [mkdir(dir, { recursive: true })], dir };
+  };
+  const file = async (data: Buffer) => {
+    const u = upload, node = chooser;
+    if (!u || node === null || u.paths.length >= u.names.length) return;
+    // two files of one name each keep theirs, the second in a folder of its own
+    const i = u.paths.length, name = u.names[i], path = u.names.indexOf(name) < i ? join(u.dir, String(i), name) : join(u.dir, name);
+    u.paths.push(path);
+    const made = u.written[0];
+    u.written.push(made.then(() => mkdir(join(path, ".."), { recursive: true })).then(() => writeFile(path, data)));
+    if (u.paths.length < u.names.length) return;
+    await Promise.all(u.written);
+    if (upload !== u) return;
+    await ask("DOM.setFileInputFiles", { files: u.paths, backendNodeId: node });
+    chooser = upload = null;
+    tell({ chooser: null });
     soon();
   };
 
   chrome.on("open", () => {
     void cast();
     void look();
-    void ask("Page.enable").then(moved); // for the tab's moves, below
+    let enabled = false, held = false;
+    const late = setTimeout(() => !enabled && (held = true) && tell({ held: true }), HELD);
+    void ask("Page.enable").then(() => { // for the tab's moves and its dialogs, below
+      enabled = true;
+      clearTimeout(late);
+      if (held) { // the screencast asked for meanwhile never started (1 Nov)
+        tell({ held: false });
+        sent = "";
+        void ask("Page.stopScreencast").then(cast);
+      }
+      void moved();
+    });
+    void ask("Page.setInterceptFileChooserDialog", { enabled: true });
   });
   chrome.on("message", (data: Buffer) => {
     const m = JSON.parse(String(data)) as { id?: number; result?: unknown; method?: string; params?: { data: string; sessionId: number; frame?: { parentId?: string } } };
@@ -182,6 +253,21 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
       if (behind) ack();
       else show(m.params.data, ack);
     } else if ((m.method === "Page.frameNavigated" && !m.params?.frame?.parentId) || m.method === "Page.navigatedWithinDocument") void moved();
+    else if (m.method === "Page.javascriptDialogOpening") {
+      const d = m.params as unknown as Dialog;
+      dialog = { mine: Date.now() - pressed < PRESSED };
+      tell({ dialog: { type: d.type, message: d.message, prompt: d.defaultPrompt ?? "" } });
+    } else if (m.method === "Page.javascriptDialogClosed") {
+      dialog = null;
+      tell({ dialog: null });
+      soon();
+    } else if (m.method === "Page.fileChooserOpened" && Date.now() - pressed < PRESSED) {
+      const c = m.params as unknown as { mode: string; backendNodeId?: number };
+      if (typeof c.backendNodeId !== "number") return;
+      chooser = c.backendNodeId;
+      upload = null;
+      tell({ chooser: { multiple: c.mode === "selectMultiple" } });
+    }
   });
   chrome.on("error", () => {}); // it closes next
   chrome.on("close", () => {
@@ -189,7 +275,8 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
     for (const done of waiting.values()) done(undefined);
     if (browser.readyState === WebSocket.OPEN) browser.close(4404, "The tab closed.");
   });
-  browser.on("message", (data: Buffer) => {
+  browser.on("message", (data: RawData, binary: boolean) => {
+    if (binary) return void file(Buffer.isBuffer(data) ? data : Buffer.concat(Array.isArray(data) ? data : [Buffer.from(data)])).catch(() => tell({ chooser: null }));
     let said: Said;
     try {
       said = JSON.parse(String(data)) as Said;
@@ -202,111 +289,23 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
       sent = "";
       void ask("Page.stopScreencast").then(cast);
     } else if (said.nav || said.open) void nav(said);
+    else if (typeof said.answer === "boolean") void ask("Page.handleJavaScriptDialog", { accept: said.answer, ...(typeof said.text === "string" ? { promptText: said.text.slice(0, 100_000) } : {}) });
+    else if (Array.isArray(said.files)) files(said);
     else if (whole.w) input(said);
   });
   browser.on("close", () => {
     clearInterval(timer);
-    wake(browser, false);
-    chrome.close();
+    if (!dialog?.mine) return chrome.close();
+    void ask("Page.handleJavaScriptDialog", { accept: false }, WAIT).finally(() => chrome.close()); // as the header says
   });
 }
 
-// The tab in front of the window, kept drawing while a Browser shows a tab behind it. Chrome draws a tab behind only
-// while its window draws, and the window draws only while the tab in front changes: behind a still one, a screenshot
-// took 1 to 3 s, and some never came (1 Nov), though the agents' Chrome runs with its backgrounding off. A highlight
-// with nothing in it, shown and hidden on the tab in front every frame, keeps the window drawing, which brought them to
-// 0.1 to 0.5 s; it is drawn over the page, not in it, so neither the page nor Claude's calls see it. A screencast of the
-// tab in front draws nothing new, and bringing the watched tab to the front would take it from Claude's.
-//
-// One connection to the Chrome attaches to each tab and asks every second which are in front, one a window, while a
-// Browser shows a tab behind, and the highlight is drawn only while a screenshot of one is on its way.
-const FRAME = 16; // ms between the highlight's shows and hides, a frame at 60 Hz
-const NOTHING = { x: 0, y: 0, width: 1, height: 1, color: { r: 0, g: 0, b: 0, a: 0 } };
-const showing = new Set<WebSocket>(); // the Browsers showing a tab behind
-let drawing = 0; // their screenshots on their way
-let waker: { stop: () => void } | undefined;
-
-function wake(browser: WebSocket, behind: boolean) {
-  if (behind) showing.add(browser);
-  else showing.delete(browser);
-  if (showing.size && !waker) waker = keepDrawing();
-  else if (!showing.size && waker) {
-    waker.stop();
-    waker = undefined;
+// The folders of files given a page more than KEPT ago: a page reads a file when it uploads it, which may be a while
+// after it was chosen.
+async function sweep() {
+  for (const name of await readdir(UPLOADS).catch(() => [] as string[])) {
+    const dir = join(UPLOADS, name);
+    const at = (await stat(dir).catch(() => null))?.mtimeMs;
+    if (at !== undefined && Date.now() - at > KEPT) await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
-}
-
-function keepDrawing() {
-  let chrome: WebSocket | undefined, asked = 0, on = false, busy = false, stopped = false;
-  const tabs = new Map<string, { session: string; front: boolean; ready: boolean }>(); // by target
-  const waiting = new Map<number, (result: unknown) => void>();
-  const ask = <T>(method: string, params: object = {}, sessionId?: string) => new Promise<T | undefined>((done) => {
-    if (chrome?.readyState !== WebSocket.OPEN) return done(undefined);
-    const id = ++asked;
-    waiting.set(id, done as (result: unknown) => void);
-    chrome.send(JSON.stringify({ id, method, params, sessionId }));
-    setTimeout(() => waiting.delete(id) && done(undefined), WAIT);
-  });
-  const connect = async () => {
-    const res = await fetch(`${CHROME.replace("ws", "http")}/json/version`, { signal: AbortSignal.timeout(WAIT) }).catch(() => undefined);
-    const url = res?.ok ? ((await res.json()) as { webSocketDebuggerUrl?: string }).webSocketDebuggerUrl : undefined;
-    if (!url || stopped) return;
-    const ws = chrome = new WebSocket(url, { maxPayload: 64 * 1024 * 1024 });
-    ws.on("message", (data: Buffer) => {
-      const m = JSON.parse(String(data)) as { id?: number; result?: unknown };
-      if (!m.id) return;
-      waiting.get(m.id)?.(m.result);
-      waiting.delete(m.id);
-    });
-    ws.on("error", () => {}); // it closes next
-    ws.on("close", () => {
-      if (chrome === ws) chrome = undefined;
-      tabs.clear();
-      for (const done of waiting.values()) done(undefined);
-      waiting.clear();
-    });
-    await new Promise((done) => ws.once("open", done).once("close", done));
-  };
-  // which tabs are in front, each made ready for the highlight once it is
-  const find = async () => {
-    const all = await ask<{ targetInfos: { targetId: string; type: string }[] }>("Target.getTargets");
-    if (!all) return;
-    const pages = all.targetInfos.filter((t) => t.type === "page").map((t) => t.targetId);
-    for (const target of tabs.keys()) if (!pages.includes(target)) tabs.delete(target);
-    await Promise.all(pages.map(async (target) => {
-      let tab = tabs.get(target);
-      if (!tab) {
-        const got = await ask<{ sessionId: string }>("Target.attachToTarget", { targetId: target, flatten: true });
-        if (!got) return;
-        tabs.set(target, (tab = { session: got.sessionId, front: false, ready: false }));
-      }
-      const seen = await ask<{ result: { value?: string } }>("Runtime.evaluate", { expression: "document.visibilityState" }, tab.session);
-      tab.front = seen?.result.value === "visible";
-      if (tab.front && !tab.ready) tab.ready = Boolean((await ask("DOM.enable", {}, tab.session)) && (await ask("Overlay.enable", {}, tab.session)));
-    }));
-  };
-  const tick = () => {
-    if (busy) return;
-    busy = true;
-    void (chrome ? find() : connect().then(find)).finally(() => { busy = false; });
-  };
-  const second = setInterval(tick, 1000);
-  tick();
-  const frame = setInterval(() => {
-    if (!drawing) return;
-    on = !on;
-    for (const tab of tabs.values()) {
-      if (!tab.front || !tab.ready || chrome?.readyState !== WebSocket.OPEN) continue;
-      chrome.send(JSON.stringify({ id: ++asked, sessionId: tab.session, method: on ? "Overlay.highlightRect" : "Overlay.hideHighlight", params: on ? NOTHING : {} }));
-    }
-  }, FRAME);
-  return {
-    // closing the connection lets go of each tab, and its highlight with it
-    stop: () => {
-      stopped = true;
-      clearInterval(second);
-      clearInterval(frame);
-      chrome?.close();
-    },
-  };
 }

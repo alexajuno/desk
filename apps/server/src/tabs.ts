@@ -14,10 +14,20 @@ import * as db from "./db.ts";
 import type { Tab } from "./relay.ts";
 
 const keep = (tx: Transaction, t: Tab) =>
-  tx.query(`insert into tabs (target, session, url, title, opened) values ($1, $2, $3, $4, $5)
-    on conflict (target) do update set url = excluded.url, title = excluded.title`, [t.target, t.session, t.url ?? "", t.title ?? "", new Date().toISOString()]);
+  tx.query<{ fresh: boolean }>(`insert into tabs (target, session, url, title, opened) values ($1, $2, $3, $4, $5)
+    on conflict (target) do update set url = excluded.url, title = excluded.title returning (xmax = 0) as fresh`,
+    [t.target, t.session, t.url ?? "", t.title ?? "", new Date().toISOString()]);
 
-export const opened = (t: Tab) => db.write((tx) => keep(tx, t));
+// A tab the session opened, or one that moved. One just opened is told to those listening, which open its chat's
+// Browser on it in every app (sync.ts): the Chrome has no window, and the Browser is where you see what Claude does
+// there ("when browser is in use, will the browsre tab show?", the user, 1 Nov).
+const listeners = new Set<(t: Tab) => void>();
+export const onOpened = (fn: (t: Tab) => void) => { listeners.add(fn); };
+
+export async function opened(t: Tab) {
+  const fresh = await db.write(async (tx) => (await keep(tx, t)).rows[0]?.fresh);
+  if (fresh) for (const fn of listeners) fn(t);
+}
 
 export const closed = (target: string) => db.write((tx) => tx.query("delete from tabs where target = $1", [target]));
 

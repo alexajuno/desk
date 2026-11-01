@@ -47,7 +47,7 @@ class Dock {
     makeObservable(this, {
       session: observable, center: observable, view: observable, details: observable, pill: observable, halves: observable, halfWidth: observable,
       tab: observable, layout: computed, arrange: action, setView: action, setDetails: action, dismiss: action, setHalf: action, setHalfWidth: action,
-      showTab: action,
+      showTab: action, openTab: action,
     });
   }
 
@@ -116,6 +116,13 @@ class Dock {
   // The tab the chat's Browser shows, picked in its strip.
   showTab(session: string, target: string) {
     this.tab = { ...this.tab, [session]: target };
+  }
+
+  // A tab the chat's session just opened, which its Browser shows, open beside it: the agents' Chrome has no window
+  // ("when browser is in use, will the browsre tab show?", the user, 1 Nov).
+  openTab(session: string, target: string) {
+    this.setHalf(session, "browser");
+    this.showTab(session, target);
   }
 
   // × on the pill: the chat you left stops waiting there.

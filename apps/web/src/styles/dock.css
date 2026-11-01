@@ -501,6 +501,12 @@ button.foot-step:hover { background: var(--bg-hover); }
 .browser-shot { display: block; width: 100%; height: 100%; object-fit: contain; object-position: top center; user-select: none; }
 .browser-keys { position: absolute; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; resize: none; pointer-events: none; }
 .browser-empty { margin: 48px 12px; text-align: center; font-size: 13px; color: var(--text-3); }
+/* what the page asks of you, which Chrome draws outside it (Browser.tsx): the picture dimmed as under a modal, and the
+   chat's question card (.ask) at its top, where Chrome puts its own dialogs */
+.browser-held { position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 16px; background: var(--overlay); }
+.browser-ask { width: min(440px, calc(100% - 32px)); margin: 0; box-shadow: var(--shadow-pop); }
+.browser-ask .ask-what { white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 450; }
+.browser-prompt { display: block; box-sizing: border-box; width: 100%; }
 
 /* The terminal (Terminal.tsx): xterm.js, in the mono font, its cells filling the half less a margin; its sixteen
    colours are VS Code's Dark+ and Light+ terminal ones (terminalColorRegistry.ts, read 31 Oct), and its ground and

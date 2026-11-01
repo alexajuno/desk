@@ -82,6 +82,13 @@ function changed(sessions: string[] | null, ended: string[] = []) {
 
 export const reports = () => reporting;
 
+// A tab for the session at the address, which the host's relay opens (relay.ts): false with no host to ask.
+export function openTab(session: string, url: string): boolean {
+  if (!host || host.readyState !== host.OPEN) return false;
+  host.send(JSON.stringify({ type: "open", session, url }));
+  return true;
+}
+
 // Whether a turn of the session runs now.
 export function working(session: string): boolean {
   if (!reporting) return sessions.working(session);

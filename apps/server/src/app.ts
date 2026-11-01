@@ -854,6 +854,15 @@ export async function create(): Promise<FastifyInstance> {
       throw error;
     }
   });
+  // A link clicked in the chat, opened in its Browser: a tab for its session in the agents' Chrome, which the host's
+  // relay opens (relay.ts), and which then shows like any tab the session opened (tabs.ts).
+  app.post("/api/live/:id/browse", async (req: Req) => {
+    mustBePage(req);
+    const url = String((req.body as { url?: unknown } | undefined)?.url ?? "");
+    if (!/^https?:\/\/\S+$/i.test(url) || url.length > 8192) throw new HttpError(422, "Only an http or https address opens in the Browser.");
+    if (!turns.openTab(sessionOf(req), url)) throw new HttpError(503, "The session host is not running.");
+    return {};
+  });
   // A tab's site icon, for its pill in the chat's Browser (tabs.ts); ?site= is only for the browser's cache, which a tab
   // that moves to another site leaves behind.
   app.get("/api/tabs/:target/icon", async (req: Req, reply) => {

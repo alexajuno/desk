@@ -5,18 +5,25 @@
 //
 //     chrome MCP ── ws://127.0.0.1:<port>/cdp/<session id> ──► relay ──► 9333, the socket proxy ──► the agents' Chrome
 //
-// It passes each session's CDP through as it is, and reads only Chrome's answer to its Target.createTarget: the tab made
-// for it. A tab opened from a session's tab, a popup or a link to a new tab, is that session's too, which the relay's own
-// watcher sees: one connection straight to the Chrome on 9334. Unlike one through the proxy, it does not keep the Chrome
-// running once no session uses it (the chrome skill, "How it behaves"), and it ends as the Chrome stops, its tabs with it.
+// It passes each session's CDP through as it is but for its Target.createTarget, which it asks for in a window of its
+// own, and reads Chrome's answer to it: the tab made for it. The Chrome runs headless, with desk's Browser its only
+// screen, and draws only the tab in front of each window (1 Nov: in one window, an older tab sent 1 picture in 3 s and
+// the newest 31, and a wheel on the older one had no answer), so each tab a session opens is in front of its own, where
+// it draws live; Playwright asks for none (its coreBundle.js, Target.createTarget). A tab opened from a session's tab, a
+// popup or a link to a new tab, is that session's too, in its opener's window, which the relay's own watcher sees: one
+// connection straight to the Chrome on 9334. Unlike one through the proxy, it does not keep the Chrome running once no
+// session uses it (the chrome skill, "How it behaves"), and it ends as the Chrome stops, its tabs with it.
+//
+// desk also opens a tab for a session itself, a link you clicked in its chat (open, below), which is that session's.
 //
 // What it noted lives only as long as the host. desk keeps it (tabs.ts), and gives a new host's relay the tabs a host
 // before it noted (adopt), each of them that session's again while it is open.
 import { createServer } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 
-const PROXY = "http://127.0.0.1:9333"; // starts the Chrome on its first connection, and stops it 5 minutes after the last
-const CHROME = "http://127.0.0.1:9334"; // the Chrome itself, which refuses while it is down
+// A second desk for testing points both at another Chrome with DESK_CHROME_PORT.
+const PROXY = `http://127.0.0.1:${process.env.DESK_CHROME_PORT || 9333}`; // starts the Chrome on its first connection, and stops it 5 minutes after the last
+const CHROME = `http://127.0.0.1:${process.env.DESK_CHROME_PORT || 9334}`; // the Chrome itself, which refuses while it is down
 const BIGGEST = 512 * 1024 * 1024; // bytes in one message: a full-page screenshot comes back as one
 const EVERY = 2000; // ms between the watcher's asks for every tab
 
@@ -52,7 +59,10 @@ function pipe(mcp: WebSocket, session: string) {
   mcp.on("message", (data: Buffer) => {
     if (data.includes("Target.createTarget")) {
       const m = parse(data);
-      if (m?.method === "Target.createTarget") asked.add(`${m.sessionId ?? ""} ${m.id}`);
+      if (m?.method === "Target.createTarget") {
+        asked.add(`${m.sessionId ?? ""} ${m.id}`);
+        data = Buffer.from(JSON.stringify({ ...m, params: { ...m.params, newWindow: true } }));
+      }
     }
     if (chrome?.readyState === WebSocket.OPEN) chrome.send(data, { binary: false });
     else held.push(data);
@@ -76,6 +86,23 @@ function pipe(mcp: WebSocket, session: string) {
     ws.on("close", () => mcp.close());
     ws.on("error", () => {}); // it closes next
   }, () => mcp.close(1011, "The agents' Chrome did not start"));
+}
+
+// A tab desk opens for the session at the address, in a window of its own, through the proxy, which starts the Chrome
+// when it is down.
+export async function open(session: string, url: string) {
+  const ws = new WebSocket(await browserUrl(PROXY), { perMessageDeflate: false });
+  ws.on("error", () => {}); // it closes next
+  ws.on("open", () => {
+    void watch();
+    ws.send(JSON.stringify({ id: 1, method: "Target.createTarget", params: { url, newWindow: true } }));
+  });
+  ws.on("message", (data: Buffer) => {
+    const target = parse(data)?.result?.targetId;
+    if (target) own(target, session);
+    ws.close();
+  });
+  setTimeout(() => ws.close(), 20_000);
 }
 
 // The tabs it knows the session of, as they are now.

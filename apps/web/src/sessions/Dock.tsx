@@ -150,6 +150,18 @@ const Dot = observer(function Dot({ s }: { s: LiveSession }) {
 const quiet = (s: LiveSession) => !s.items.length && !s.pending.length && !s.working;
 
 // A chat as the middle shows it; the Inbox draws one in its right pane too.
+// A link to another site, clicked in the chat in the middle, opens in its Browser: a tab for its session in the agents'
+// Chrome, beside the chat ("i want everything on chrome that desk opens sit inside desk. e.g. open a link from agent's
+// result", the user, 1 Nov). Ctrl, Shift, Alt or the middle button opens it in your own browser, as before.
+function browse(e: React.MouseEvent, session: string) {
+  const a = (e.target as Element).closest?.("a[href]") as HTMLAnchorElement | null;
+  if (!a || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+  if (!/^https?:$/.test(a.protocol) || a.origin === location.origin) return;
+  e.preventDefault();
+  dock.setHalf(session, "browser", true);
+  void postJson(`/api/live/${session}/browse`, { url: a.href }).then(async (res) => res.ok || toast(await reason(res)));
+}
+
 export const SessionView = observer(function SessionView({ id }: { id: string }) {
   const s = useLive(id)!;
   useSplash(!s.loaded); // desk opening on a chat shows it with its conversation, never "Connecting…"
@@ -236,7 +248,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
         {here && docked && dock.details && <IssueDetails data={here} />}
         <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>
           {here && shown === "changes" && <ChangesOf slug={here.issue.slug} />}
-          <div className="convo" hidden={shown !== "chat"}>
+          <div className="convo" hidden={shown !== "chat"} onClick={docked && m?.chat ? (e) => browse(e, id) : undefined}>
             {!s.loaded ? <p className="convo-empty">Connecting…</p>
               : quiet(s) ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
                 : m?.chat && m.issue ? "This issue's chat. Write to carry the issue on: it starts from the issue's document."

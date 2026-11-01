@@ -12,6 +12,7 @@
 //     {"type": "files", "slugs": [<slug>, ...]}                   its other files changed
 //     {"type": "page", "slug": "<slug>", "page": <page>}         the issue the app shows, then each time it changed
 //     {"type": "terminal", "session": "<session>"}               Claude started that chat's terminal: open it (terminal.ts)
+//     {"type": "browser", "session": "<session>", "target": "<tab>"} that chat's session opened a tab: show it (tabs.ts)
 //
 // The app sends one message, {"type": "show", "slug": "<slug>"}, or "slug": null, naming the issue it shows, as the
 // Inbox's right pane does: desk answers with its <page>, the issue as its page draws it (pages.ts, issuePageJson), or
@@ -42,6 +43,8 @@ import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as live from "./live.ts";
 import * as pages from "./pages.ts";
+import * as tabs from "./tabs.ts";
+import type { Tab } from "./relay.ts";
 import * as turns from "./turns.ts";
 
 const listeners = new Set<WebSocket>();
@@ -191,9 +194,16 @@ export function showTerminal(session: string) {
   for (const ws of listeners) if (ws.readyState === ws.OPEN) ws.send(message);
 }
 
+// A tab the session just opened in the agents' Chrome (tabs.ts): every app opens that chat's Browser on it.
+function showBrowser(t: Tab) {
+  const message = JSON.stringify({ type: "browser", session: t.session, target: t.target });
+  for (const ws of listeners) if (ws.readyState === ws.OPEN) ws.send(message);
+}
+
 // Tell the apps each write, and the frame after it and after each word from the host; and the open chats.
 export async function start() {
   db.onWrite(told);
+  tabs.onOpened(showBrowser);
   db.onCommit(() => {
     tellAgain();
     live.moved(null);

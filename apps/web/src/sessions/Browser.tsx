@@ -29,17 +29,29 @@ export const BrowserView = observer(function BrowserView({ session }: { session:
   );
 });
 
+// What the page asks of you that Chrome would draw outside it (cast.ts): an alert box, a confirm, a prompt or "Leave
+// site?", and a file chooser your click opened.
+type Dialog = { type: "alert" | "confirm" | "prompt" | "beforeunload"; message: string; prompt: string };
+type Chooser = { multiple: boolean };
+type Told = { dialog?: Dialog | null; held?: boolean; chooser?: Chooser | null; back?: boolean; forward?: boolean };
+const BIGGEST = 100 * 1024 * 1024; // bytes in one file given a page: one message on desk's socket, as ws takes at most
+
 // The tab's back, forward, reload and address, then its picture, live (the server's cast.ts), fit into the half: the tab
-// is in the agents' Chrome's window, the size Claude works in, which stays as it is. The tab in front of that window
-// comes at the size the half shows it, in the screen's pixels, and a tab behind it whole, at the screen's scale (cast.ts
+// is in a window of the agents' Chrome, the size Claude works in, which stays as it is. A tab in front of its window
+// comes at the size the half shows it, in the screen's pixels, and a tab behind whole, at the screen's scale (cast.ts
 // says why). desk restarting drops the socket, so it watches again, once a second for a minute, the last picture kept
 // meanwhile.
 function Page({ tab }: { tab: Tab }) {
-  const shot = useRef<HTMLImageElement>(null), typed = useRef<HTMLTextAreaElement>(null);
+  const shot = useRef<HTMLImageElement>(null), typed = useRef<HTMLTextAreaElement>(null), picker = useRef<HTMLInputElement>(null);
   const [stand, setStand] = useState<"waiting" | "on" | "away" | "failed">("waiting");
   const [moves, setMoves] = useState({ back: false, forward: false }); // where the tab can go in its history, as desk says
   const [editing, setEditing] = useState(false);
+  const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [chooser, setChooser] = useState<Chooser | null>(null);
+  const [held, setHeld] = useState(false); // a box open in the page since before desk looked, which it cannot read
+  const [giving, setGiving] = useState(""); // what is being given the page, while it goes
   const say = useRef<(said: object) => void>(() => {});
+  const give = useRef<(files: File[]) => void>(() => {});
   // the tab's toolbar, as Chrome's: its buttons leave your keys with the page, and an address typed takes them back there
   const go = (said: object) => {
     say.current(said);
@@ -50,7 +62,7 @@ function Page({ tab }: { tab: Tab }) {
       onMouseDown={(e) => e.preventDefault()} onClick={() => go({ nav })}>{glyph}</button>
   );
   useEffect(() => {
-    const img = shot.current!, keys = typed.current!, box = img.parentElement!;
+    const img = shot.current!, keys = typed.current!, pick = picker.current!, box = img.parentElement!;
     const size = () => ({ w: Math.round(box.clientWidth * devicePixelRatio), h: Math.round(box.clientHeight * devicePixelRatio) });
     let socket: WebSocket | null = null, gone = false, tries = 0, retry = 0, shown = "", next = "";
     // Each picture shows once it has loaded, and the one before it is let go then; one that came before it loaded is
@@ -66,7 +78,7 @@ function Page({ tab }: { tab: Tab }) {
       ws.binaryType = "blob";
       ws.onopen = () => { tries = 0; };
       ws.onmessage = (e) => {
-        if (typeof e.data === "string") return setMoves(JSON.parse(e.data) as { back: boolean; forward: boolean });
+        if (typeof e.data === "string") return told(JSON.parse(e.data) as Told);
         if (next) URL.revokeObjectURL(next);
         img.src = next = URL.createObjectURL(e.data as Blob);
         setStand("on");
@@ -78,19 +90,59 @@ function Page({ tab }: { tab: Tab }) {
         else setStand("failed");
       };
     };
+    // What desk tells besides pictures: where the tab can go, and what the page asks of you, which takes your keys while
+    // it waits and gives them back to the page once it is answered. A chooser opens your own file chooser at once, as
+    // your click in the picture still lets the page do (a browser lets a page open one only just after a click).
+    let asking = false; // a box or a chooser waits on you, which keeps the socket while desk is out of sight (cast.ts)
+    const told = (m: Told) => {
+      if ("dialog" in m) {
+        setDialog(m.dialog ?? null);
+        asking = Boolean(m.dialog);
+        if (!m.dialog) keys.focus({ preventScroll: true });
+      } else if ("held" in m) setHeld(Boolean(m.held));
+      else if ("chooser" in m) {
+        setChooser(m.chooser ?? null);
+        setGiving("");
+        if (m.chooser) {
+          pick.multiple = m.chooser.multiple;
+          pick.click();
+        } else keys.focus({ preventScroll: true });
+      } else setMoves({ back: Boolean(m.back), forward: Boolean(m.forward) });
+    };
     watch();
-    // desk out of sight lets go of the tab, which leaves Chrome's window still for nobody (cast.ts), and takes it back
-    // once you look again
+    // desk out of sight lets go of the tab, and takes it back once you look again
     const seen = () => {
-      if (!document.hidden) return void (socket || watch());
+      if (!document.hidden) return void (socket || gone || watch());
+      if (asking) return;
       const ws = socket;
       socket = null;
       clearTimeout(retry);
       ws?.close();
     };
     document.addEventListener("visibilitychange", seen);
+    // desk's page put away whole, which a browser may keep with its sockets open for Back: let go of the tab, so that a
+    // box your click opened is cancelled rather than left holding the page (cast.ts)
+    const away = () => {
+      const ws = socket;
+      socket = null;
+      ws?.close();
+    };
+    addEventListener("pagehide", away);
     const send = (said: object) => socket?.readyState === WebSocket.OPEN && socket.send(JSON.stringify(said));
     say.current = send;
+    // the files for the chooser: their names, then each, as cast.ts takes them
+    give.current = (files) => {
+      if (socket?.readyState !== WebSocket.OPEN) return;
+      socket.send(JSON.stringify({ files: files.map((f) => f.name) }));
+      for (const f of files) socket.send(f);
+    };
+    // your own file chooser closed with none picked: none for the page either
+    const cancelled = () => {
+      send({ files: [] });
+      setChooser(null);
+      keys.focus({ preventScroll: true });
+    };
+    pick.addEventListener("cancel", cancelled);
     // a half dragged wider, or the window, gets its pictures at the new size
     let wait = 0;
     const sized = new ResizeObserver(() => {
@@ -101,7 +153,7 @@ function Page({ tab }: { tab: Tab }) {
 
     // Your mouse and wheel on the picture go to the tab (the server's cast.ts), a place or a distance as a fraction of the
     // picture as drawn, which is fit into the box at its top. Only the left button: the right one would open Chrome's own
-    // menu, out of sight on workspace 8. Moves and wheels go once a frame, added up.
+    // menu, which a headless Chrome draws nowhere. Moves and wheels go once a frame, added up.
     const spot = (e: MouseEvent) => {
       const r = img.getBoundingClientRect(), k = Math.min(r.width / (img.naturalWidth || 1), r.height / (img.naturalHeight || 1));
       const w = img.naturalWidth * k, h = img.naturalHeight * k, x = (e.clientX - r.left - (r.width - w) / 2) / w, y = (e.clientY - r.top) / h;
@@ -218,6 +270,8 @@ function Page({ tab }: { tab: Tab }) {
       cancelAnimationFrame(frame);
       sized.disconnect();
       document.removeEventListener("visibilitychange", seen);
+      removeEventListener("pagehide", away);
+      pick.removeEventListener("cancel", cancelled);
       removeEventListener("mousemove", drag);
       removeEventListener("mouseup", up);
       for (const [name, on] of [["mousedown", down], ["mousemove", hover], ["wheel", wheel], ["contextmenu", menu]] as const) img.removeEventListener(name, on as EventListener);
@@ -226,6 +280,21 @@ function Page({ tab }: { tab: Tab }) {
       for (const url of [shown, next]) if (url) URL.revokeObjectURL(url);
     };
   }, [tab.target]);
+  const host = where(tab.url).host;
+  const answer = (yes: boolean, text?: string) => {
+    say.current({ answer: yes, ...(text === undefined ? {} : { text }) });
+    setDialog(null);
+  };
+  const chosen = (files: File[]) => {
+    const big = files.find((f) => f.size > BIGGEST);
+    if (big) return setGiving(`${big.name} is over 100 MB, more than desk gives a page.`);
+    setGiving(files.length ? `Giving the page ${files.length === 1 ? files[0].name : `${files.length} files`}…` : "");
+    if (files.length) give.current(files);
+    else {
+      say.current({ files: [] });
+      setChooser(null);
+    }
+  };
   return (
     <>
       <div className="browser-nav">
@@ -238,9 +307,99 @@ function Page({ tab }: { tab: Tab }) {
         <img ref={shot} className="browser-shot" alt={tab.title || tab.url} draggable={false} hidden={stand === "waiting"} />
         <textarea ref={typed} className="browser-keys" aria-label="Keys to the page" autoComplete="off" autoCorrect="off" spellCheck={false} />
         {(stand === "away" || stand === "failed") && <p className="term-note">{stand === "away" ? "Reconnecting…" : "desk does not answer."}</p>}
+        {dialog && <DialogCard key={`${dialog.type} ${dialog.message}`} dialog={dialog} host={host} answer={answer} />}
+        {held && !dialog && <HeldCard host={host} reload={() => { setHeld(false); go({ nav: "reload" }); }} />}
+        {chooser && !dialog && <ChooserCard chooser={chooser} host={host} giving={giving} choose={() => picker.current?.click()} cancel={() => chosen([])} />}
+        <input ref={picker} type="file" hidden onChange={(e) => {
+          const files = [...(e.currentTarget.files ?? [])];
+          e.currentTarget.value = "";
+          if (files.length) chosen(files);
+        }} />
       </div>
     </>
   );
+}
+
+// An alert box, a confirm, a prompt or "Leave site?", which holds the page until it is answered, drawn over its picture
+// as the card of what waits on you (the chat's question card, .ask), in Chrome's words: "<site> says", then OK, and
+// Cancel for all but an alert. Enter is OK and Esc Cancel; Claude may answer it first, which takes it away.
+function DialogCard({ dialog, host, answer }: { dialog: Dialog; host: string; answer: (yes: boolean, text?: string) => void }) {
+  const [text, setText] = useState(dialog.prompt);
+  const card = useRef<HTMLFormElement>(null);
+  useEffect(() => takeKeys(card.current!), []);
+  const leave = dialog.type === "beforeunload";
+  return (
+    <div className="browser-held">
+      <form ref={card} className="ask browser-ask" role="alertdialog" aria-label={leave ? "Leave site?" : `${host || "This page"} says`}
+        onSubmit={(e) => {
+          e.preventDefault();
+          answer(true, dialog.type === "prompt" ? text : undefined);
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation(); // the card's keys are its own, not desk's: Esc would leave the chat
+          if (e.key !== "Escape") return;
+          e.preventDefault();
+          answer(dialog.type === "alert");
+        }}>
+        <span className="ask-header">{leave ? "Leave site?" : `${host || "This page"} says`}</span>
+        <p className="ask-what">{leave ? "Changes you made may not be saved." : dialog.message}</p>
+        {dialog.type === "prompt" && <input className="ask-other browser-prompt" value={text} onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => setText(e.currentTarget.value)} aria-label="Answer" />}
+        <div className="ask-buttons">
+          {dialog.type !== "alert" && <button className="ghost" type="button" onClick={() => answer(false)}>Cancel</button>}
+          <button className="primary" type="submit">{leave ? "Leave" : "OK"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// A box open in the page since before desk looked at it, which only the connection that heard it open can answer
+// (cast.ts): the page answers nothing until it closes, and a reload closes it.
+function HeldCard({ host, reload }: { host: string; reload: () => void }) {
+  const card = useRef<HTMLDivElement>(null);
+  useEffect(() => takeKeys(card.current!), []);
+  return (
+    <div className="browser-held">
+      <div ref={card} className="ask browser-ask" role="alertdialog" aria-label="The page waits" onKeyDown={(e) => e.stopPropagation()}>
+        <span className="ask-header">{host || "This page"}</span>
+        <p className="ask-what">The page waits on a box that opened before desk looked at it, which desk cannot read. Claude may answer it; a reload closes it.</p>
+        <div className="ask-buttons">
+          <button className="primary" type="button" onClick={reload}>Reload page</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// A file chooser your click opened, which opened your own as well: this card stays for when it did not (a browser lets a
+// page open one only just after a click), and says how giving the files goes.
+function ChooserCard({ chooser, host, giving, choose, cancel }: { chooser: Chooser; host: string; giving: string; choose: () => void; cancel: () => void }) {
+  const card = useRef<HTMLDivElement>(null);
+  useEffect(() => takeKeys(card.current!), []);
+  return (
+    <div className="browser-held">
+      <div ref={card} className="ask browser-ask" role="dialog" aria-label="File chooser" onKeyDown={(e) => {
+        e.stopPropagation(); // the card's keys are its own, not desk's: Esc would leave the chat
+        if (e.key === "Escape") cancel();
+      }}>
+        <span className="ask-header">{host || "This page"}</span>
+        <p className="ask-what">{giving || (chooser.multiple ? "The page asks for files." : "The page asks for a file.")}</p>
+        <div className="ask-buttons">
+          <button className="ghost" type="button" onClick={cancel}>Cancel</button>
+          <button className="primary" type="button" disabled={giving.startsWith("Giving")} onClick={choose}>{chooser.multiple ? "Choose files…" : "Choose file…"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// A card over the page takes your keys, on its field or its primary button, when they were in the Browser, not while
+// you type in the chat beside it: Claude's own call may be what opened it.
+function takeKeys(card: HTMLElement) {
+  const was = document.activeElement;
+  if (was && was !== document.body && !was.closest(".half")) return;
+  card.querySelector<HTMLElement>("input, button.primary")?.focus({ preventScroll: true });
 }
 
 // The address as Chrome's bar shows it: the host brighter than the rest, any other address, such as data: or

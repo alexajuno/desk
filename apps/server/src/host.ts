@@ -399,15 +399,18 @@ function reach() {
     ws.send(JSON.stringify({ type: "hello", sessions: [...sessions.values()].filter((s) => !s.closed).map(stateOf),
       relay: relaying, tabs: relaying ? relay.tabs() : [] }));
   });
-  // desk answers with the tabs a host before this one noted, as {"type": "owners", "tabs": [{target, session}, ...]}.
+  // desk answers with the tabs a host before this one noted, as {"type": "owners", "tabs": [{target, session}, ...]}, and
+  // asks for a tab for a session, a link clicked in its chat, as {"type": "open", "session", "url"}.
   ws.on("message", (data: Buffer) => {
-    let m: { type?: string; tabs?: { target: string; session: string }[] };
+    let m: { type?: string; tabs?: { target: string; session: string }[]; session?: string; url?: string };
     try {
       m = JSON.parse(data.toString());
     } catch {
       return;
     }
     if (m.type === "owners" && relaying && Array.isArray(m.tabs)) relay.adopt(m.tabs);
+    else if (m.type === "open" && relaying && typeof m.session === "string" && typeof m.url === "string" && /^https?:\/\//.test(m.url))
+      relay.open(m.session, m.url).catch((e: Error) => console.log(`no tab for ${m.url}: ${e.message}`));
   });
   ws.on("close", () => {
     if (desk === ws) desk = null;
