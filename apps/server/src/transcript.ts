@@ -31,7 +31,7 @@ export interface Item {
   summary?: string;
   input?: string;
   command?: string; // a Bash call's command, whole, which the chat draws as a terminal does
-  at?: number; // when a tool call was made, from which the chat counts a running command's seconds
+  at?: number; // when a message or a tool call was made, shown under a message and counted from for a running command's seconds
   more?: number; // a command's output cut to its end: how many of its lines came before, which resultOf gives whole
   error?: boolean;
   images?: number;
@@ -187,9 +187,9 @@ function typed(text: string): string {
 }
 
 // What the user wrote, with the files attached to it by path as their names.
-function you(key: string, typed: string): Item {
+function you(key: string, typed: string, at: number): Item {
   const { text, files } = uploads.split(typed);
-  return { t: "you", key, text, ...(files.length ? { files } : {}) };
+  return { t: "you", key, text, ...(files.length ? { files } : {}), at };
 }
 
 // What Claude Code itself tells Claude in a user message that the user should see too, as a note: a task it ran beside
@@ -229,9 +229,11 @@ export function itemsOf(e: Entry): Item[] {
 // The items of an event, the conversation's or a subagent's own.
 function entryItems(e: Entry): Item[] {
   const uuid = String(e.uuid ?? "");
+  // The host's stream carries no time: what it sends is made as it comes.
+  const at = Date.parse(e.timestamp ?? "") || Date.now();
   if (e.type === "attachment" && e.attachment?.type === "queued_command" && typeof e.attachment.prompt === "string") {
     const note = notice(e.attachment.prompt);
-    return note !== null ? noted(uuid, note) : [{ ...you(uuid, e.attachment.prompt), queued: true }];
+    return note !== null ? noted(uuid, note) : [{ ...you(uuid, e.attachment.prompt, at), queued: true }];
   }
   if (e.type === "system" && e.subtype === "compact_boundary") return [{ t: "note", key: uuid, text: "Compacted the conversation" }];
   // A slash command's output, which the transcript records after the command (Claude Code 2.1.285). The host's stream
@@ -255,7 +257,7 @@ function entryItems(e: Entry): Item[] {
       if (push) return [{ t: "note", key: uuid, text: `Sent by ${push[1]}` }];
       const text = typed(content);
       if (text === "[Request interrupted by user]") return [{ t: "note", key: uuid, text: "Stopped" }];
-      return text ? [you(uuid, text)] : [];
+      return text ? [you(uuid, text, at)] : [];
     }
     const items: Item[] = [];
     const texts: string[] = [];
@@ -272,19 +274,17 @@ function entryItems(e: Entry): Item[] {
         else if (text) texts.push(text);
       } else if (b.type === "image") images++;
     });
-    if (texts.length || images) items.unshift({ ...you(uuid, texts.join("\n\n")), ...(images ? { images } : {}) });
+    if (texts.length || images) items.unshift({ ...you(uuid, texts.join("\n\n"), at), ...(images ? { images } : {}) });
     return items;
   }
   const msg = String(e.message?.id ?? "");
   return (content as Entry[] ?? []).flatMap((b, n): Item[] => {
     const key = `${uuid}:${n}`;
-    if (b.type === "text" && b.text?.trim()) return [{ t: "text", key, msg, text: b.text }];
+    if (b.type === "text" && b.text?.trim()) return [{ t: "text", key, msg, text: b.text, at }];
     if (b.type === "thinking" && b.thinking?.trim()) return [{ t: "thinking", key, msg, text: b.thinking }];
     if (b.type === "tool_use") {
       const input = (b.input ?? {}) as Record<string, unknown>;
       const command = b.name === "Bash" && typeof input.command === "string" ? { command: cut(input.command, 3000) } : {};
-      // The host's stream carries no time: a call it sends is made as it comes.
-      const at = Date.parse(e.timestamp ?? "") || Date.now();
       return [{ t: "tool", key, msg, id: b.id, name: b.name, summary: summary(b.name, input), input: cut(JSON.stringify(input, null, 1), 3000), ...command, at }];
     }
     return [];
