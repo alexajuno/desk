@@ -80,9 +80,21 @@ function followMiddle(now: ReturnType<typeof middle>, before: ReturnType<typeof 
 
 // The issue this page shows, on an issue page.
 const page = () => (document.querySelector(".issue") as HTMLElement | null)?.dataset;
-// The chat the cursor is in, else the chat in the middle.
-const chatView = () =>
+// The chat the cursor is in, else the chat in the middle: the one J, K, ↑ and ↓ scroll, which leave the Inbox's list its
+// own until you click into the chat beside it.
+const chatHere = () =>
   (document.activeElement?.closest(".session-view")?.querySelector<HTMLElement>(".dock-scroll") ?? document.querySelector<HTMLElement>(".chat-center .dock .dock-scroll"));
+// The chat the other scroll keys move: that one, else the one open beside the Inbox's list.
+const chatView = () => chatHere() ?? document.querySelector<HTMLElement>(".chat-open .dock-scroll");
+// How far J, K, ↑ and ↓ scroll the chat, as Vimium's: a few lines.
+const LINE = 60;
+
+// Vim's Ctrl D and Ctrl U: the chat half a screen down or up. False when no chat is open, for the browser's own key.
+function halfPage(by: 1 | -1) {
+  const view = chatView();
+  view?.scrollBy({ top: (by * view.clientHeight) / 2 });
+  return Boolean(view);
+}
 // A row's key in ui.focused: an issue row's slug, or another row's own key (a team's, a session's).
 const keyOfRow = (row: HTMLElement) => row.dataset.slug ?? row.dataset.key ?? null;
 const focusedRow = () => ui.focused
@@ -169,6 +181,8 @@ function onKeyDown(e: KeyboardEvent) {
     if (step) { step.click(); e.preventDefault(); }
     // Ctrl ⌫ on the sidebar's chat under the mouse deletes it, not the issue in focus or open.
     else if (chatKey(e)) e.preventDefault();
+    // Out of its composer, which keeps Ctrl U and Ctrl D its own (Dock).
+    else if ((key === "d" || key === "u") && halfPage(key === "d" ? 1 : -1)) e.preventDefault();
     else if (key === "z" && undoList().length) { undo(); e.preventDefault(); }
     // Linear's Ctrl A: the whole list on screen, filtered as it is.
     else if (key === "a" && document.querySelector(".tree .item[data-slug], .projects-row")) { selectAll(); e.preventDefault(); }
@@ -184,8 +198,13 @@ function onKeyDown(e: KeyboardEvent) {
   if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === "KeyU" && markAllKey()) { e.preventDefault(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
 
+  // Vim's Shift G: the chat to its end, where it follows the reply again, as Ctrl End; G alone starts G then a key.
+  const end = key === "g" && e.shiftKey && chatView();
+  if (end) { gPressed = 0; end.scrollTo({ top: end.scrollHeight }); return; }
   if (gPressed && Date.now() - gPressed < 1500) {
     gPressed = 0;
+    // Vim's G G: the chat to its start.
+    if (key === "g") { chatView()?.scrollTo({ top: 0 }); return; }
     // Linear's G E, G A and G B for its Issues tabs, and G P for Projects.
     const to = { e: "/issues", a: "/issues/active", b: "/issues/backlog", i: "/inbox", p: "/projects" }[key];
     if (to) go(to);
@@ -220,10 +239,15 @@ function onKeyDown(e: KeyboardEvent) {
     if (selectable(ui.focused)) ui.select([ui.focused!]);
     e.preventDefault();
   }
+  // J, K, ↑ and ↓ scroll a chat, as Vimium's, and move through a list's rows elsewhere.
   else if (key === "j" || e.key === "ArrowDown" || key === "k" || e.key === "ArrowUp") {
-    moveFocus(key === "j" || e.key === "ArrowDown" ? 1 : -1);
-    const now = focusedRow();
-    if (now?.classList.contains("inbox-row")) go(now.getAttribute("href")!); // Linear's Inbox opens as you move
+    const down = key === "j" || e.key === "ArrowDown", chat = chatHere();
+    if (chat) chat.scrollBy({ top: down ? LINE : -LINE });
+    else {
+      moveFocus(down ? 1 : -1);
+      const now = focusedRow();
+      if (now?.classList.contains("inbox-row")) go(now.getAttribute("href")!); // Linear's Inbox opens as you move
+    }
     e.preventDefault();
   }
   else if (e.key === "Enter" && focused) {
