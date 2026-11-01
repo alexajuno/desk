@@ -884,7 +884,8 @@ export async function create(): Promise<FastifyInstance> {
     if (!found) throw new HttpError(404, "No icon for that tab");
     return reply.type(found.type).header("cache-control", "max-age=86400").send(found.body);
   });
-  // The tab's picture, live, for the chat's Browser (cast.ts).
+  // The tab's picture, live, for the chat's Browser (cast.ts), or with ?frames=0 all of it but the picture, for desk's
+  // app, which shows the tab itself.
   app.get("/api/tabs/:target/screen", {
     websocket: true,
     preValidation: async (req, reply) => {
@@ -892,7 +893,7 @@ export async function create(): Promise<FastifyInstance> {
     },
   }, (socket, req) => {
     const q = req.query as Record<string, string | undefined>;
-    void cast.watch(socket, (req.params as { target: string }).target, Number(q.w), Number(q.h));
+    void cast.watch(socket, (req.params as { target: string }).target, Number(q.w), Number(q.h), q.frames !== "0");
   });
   app.get("/api/live/:id/terminal/screen", {
     websocket: true,

@@ -35,14 +35,18 @@ type Dialog = { type: "alert" | "confirm" | "prompt" | "beforeunload"; message: 
 type Chooser = { multiple: boolean };
 type Told = { dialog?: Dialog | null; held?: boolean; chooser?: Chooser | null; back?: boolean; forward?: boolean };
 const BIGGEST = 100 * 1024 * 1024; // bytes in one file given a page: one message on desk's socket, as ws takes at most
+// desk's app (apps/desktop), which lays the tab itself over its box in the Browser (its preload.cjs), or nothing in a browser
+const APP = (window as { deskApp?: { show(target: string | null, at?: object): void } }).deskApp;
+const sizeOf = (box: HTMLElement) => ({ w: Math.round(box.clientWidth * devicePixelRatio), h: Math.round(box.clientHeight * devicePixelRatio) });
 
 // The tab's back, forward, reload and address, then its picture, live (the server's cast.ts), fit into the half: the tab
 // is in a window of the agents' Chrome, the size Claude works in, which stays as it is. A tab in front of its window
 // comes at the size the half shows it, in the screen's pixels, and a tab behind whole, at the screen's scale (cast.ts
 // says why). desk restarting drops the socket, so it watches again, once a second for a minute, the last picture kept
-// meanwhile.
+// meanwhile. In desk's app the tab itself shows in the picture's place, and the socket brings the rest, with no pictures.
 function Page({ tab }: { tab: Tab }) {
   const shot = useRef<HTMLImageElement>(null), typed = useRef<HTMLTextAreaElement>(null), picker = useRef<HTMLInputElement>(null);
+  const area = useRef<HTMLDivElement>(null);
   const [stand, setStand] = useState<"waiting" | "on" | "away" | "failed">("waiting");
   const [moves, setMoves] = useState({ back: false, forward: false }); // where the tab can go in its history, as desk says
   const [editing, setEditing] = useState(false);
@@ -62,23 +66,27 @@ function Page({ tab }: { tab: Tab }) {
       onMouseDown={(e) => e.preventDefault()} onClick={() => go({ nav })}>{glyph}</button>
   );
   useEffect(() => {
-    const img = shot.current!, keys = typed.current!, pick = picker.current!, box = img.parentElement!;
-    const size = () => ({ w: Math.round(box.clientWidth * devicePixelRatio), h: Math.round(box.clientHeight * devicePixelRatio) });
+    const img = shot.current, keys = typed.current, pick = picker.current!, box = area.current!;
+    const refocus = () => keys?.focus({ preventScroll: true }); // your keys back to the page's picture
     let socket: WebSocket | null = null, gone = false, tries = 0, retry = 0, shown = "", next = "";
     // Each picture shows once it has loaded, and the one before it is let go then; one that came before it loaded is
     // dropped for the next.
-    img.onload = () => {
+    if (img) img.onload = () => {
       if (shown) URL.revokeObjectURL(shown);
       shown = next;
       next = "";
     };
     const watch = () => {
-      const { w, h } = size();
-      const ws = socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/tabs/${tab.target}/screen?w=${w}&h=${h}`);
+      const { w, h } = sizeOf(box);
+      const ws = socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/tabs/${tab.target}/screen?${APP ? "frames=0" : `w=${w}&h=${h}`}`);
       ws.binaryType = "blob";
-      ws.onopen = () => { tries = 0; };
+      ws.onopen = () => {
+        tries = 0;
+        if (APP) setStand("on");
+      };
       ws.onmessage = (e) => {
         if (typeof e.data === "string") return told(JSON.parse(e.data) as Told);
+        if (!img) return;
         if (next) URL.revokeObjectURL(next);
         img.src = next = URL.createObjectURL(e.data as Blob);
         setStand("on");
@@ -98,7 +106,7 @@ function Page({ tab }: { tab: Tab }) {
       if ("dialog" in m) {
         setDialog(m.dialog ?? null);
         asking = Boolean(m.dialog);
-        if (!m.dialog) keys.focus({ preventScroll: true });
+        if (!m.dialog) refocus();
       } else if ("held" in m) setHeld(Boolean(m.held));
       else if ("chooser" in m) {
         setChooser(m.chooser ?? null);
@@ -106,7 +114,7 @@ function Page({ tab }: { tab: Tab }) {
         if (m.chooser) {
           pick.multiple = m.chooser.multiple;
           pick.click();
-        } else keys.focus({ preventScroll: true });
+        } else refocus();
       } else setMoves({ back: Boolean(m.back), forward: Boolean(m.forward) });
     };
     watch();
@@ -140,14 +148,30 @@ function Page({ tab }: { tab: Tab }) {
     const cancelled = () => {
       send({ files: [] });
       setChooser(null);
-      keys.focus({ preventScroll: true });
+      refocus();
     };
     pick.addEventListener("cancel", cancelled);
+    return () => {
+      gone = true;
+      clearTimeout(retry);
+      document.removeEventListener("visibilitychange", seen);
+      removeEventListener("pagehide", away);
+      pick.removeEventListener("cancel", cancelled);
+      socket?.close();
+      for (const url of [shown, next]) if (url) URL.revokeObjectURL(url);
+    };
+  }, [tab.target]);
+
+  // In a browser, the picture's size, and your mouse and keys on it.
+  useEffect(() => {
+    if (APP) return;
+    const img = shot.current!, keys = typed.current!, box = area.current!;
+    const send = (said: object) => say.current(said);
     // a half dragged wider, or the window, gets its pictures at the new size
     let wait = 0;
     const sized = new ResizeObserver(() => {
       clearTimeout(wait);
-      wait = window.setTimeout(() => send(size()), 300);
+      wait = window.setTimeout(() => send(sizeOf(box)), 300);
     });
     sized.observe(box);
 
@@ -264,22 +288,45 @@ function Page({ tab }: { tab: Tab }) {
     keys.addEventListener("compositionend", write);
     keys.addEventListener("paste", paste);
     return () => {
-      gone = true;
-      clearTimeout(retry);
       clearTimeout(wait);
       cancelAnimationFrame(frame);
       sized.disconnect();
-      document.removeEventListener("visibilitychange", seen);
-      removeEventListener("pagehide", away);
-      pick.removeEventListener("cancel", cancelled);
       removeEventListener("mousemove", drag);
       removeEventListener("mouseup", up);
       for (const [name, on] of [["mousedown", down], ["mousemove", hover], ["wheel", wheel], ["contextmenu", menu]] as const) img.removeEventListener(name, on as EventListener);
       for (const [name, on] of [["keydown", key], ["keyup", key], ["input", write], ["compositionend", write], ["paste", paste]] as const) keys.removeEventListener(name, on as EventListener);
-      socket?.close();
-      for (const url of [shown, next]) if (url) URL.revokeObjectURL(url);
     };
   }, [tab.target]);
+
+  // In desk's app, the tab itself over the box, where the box is each frame: the app lays it there (its tabs.ts), and
+  // puts it back as the Browser goes or while a card here waits on you, which the tab would cover. Ctrl L in the tab
+  // comes here, the tab hands it on, and edits the address.
+  const covered = Boolean(dialog || held || chooser);
+  useEffect(() => {
+    if (!APP || covered) return;
+    const box = area.current!;
+    let frame = 0, was = "";
+    const place = () => {
+      frame = requestAnimationFrame(place);
+      const r = box.getBoundingClientRect(), at = { x: r.left, y: r.top, width: r.width, height: r.height }, now = JSON.stringify(at);
+      if (now === was) return;
+      was = now;
+      APP!.show(r.width && r.height ? tab.target : null, at);
+    };
+    place();
+    const key = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.shiftKey || e.code !== "KeyL") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setEditing(true);
+    };
+    box.addEventListener("keydown", key);
+    return () => {
+      cancelAnimationFrame(frame);
+      box.removeEventListener("keydown", key);
+      APP!.show(null);
+    };
+  }, [tab.target, covered]);
   const host = where(tab.url).host;
   const answer = (yes: boolean, text?: string) => {
     say.current({ answer: yes, ...(text === undefined ? {} : { text }) });
@@ -303,9 +350,9 @@ function Page({ tab }: { tab: Tab }) {
         {button("Reload", GLYPH.reload, "Ctrl R", true, "reload")}
         <Address tab={tab} editing={editing} edit={setEditing} open={(url) => go({ open: url })} />
       </div>
-      <div className="browser-page">
-        <img ref={shot} className="browser-shot" alt={tab.title || tab.url} draggable={false} hidden={stand === "waiting"} />
-        <textarea ref={typed} className="browser-keys" aria-label="Keys to the page" autoComplete="off" autoCorrect="off" spellCheck={false} />
+      <div ref={area} className="browser-page" data-tab={APP ? tab.target : undefined}>
+        {!APP && <img ref={shot} className="browser-shot" alt={tab.title || tab.url} draggable={false} hidden={stand === "waiting"} />}
+        {!APP && <textarea ref={typed} className="browser-keys" aria-label="Keys to the page" autoComplete="off" autoCorrect="off" spellCheck={false} />}
         {(stand === "away" || stand === "failed") && <p className="term-note">{stand === "away" ? "Reconnecting…" : "desk does not answer."}</p>}
         {dialog && <DialogCard key={`${dialog.type} ${dialog.message}`} dialog={dialog} host={host} answer={answer} />}
         {held && !dialog && <HeldCard host={host} reload={() => { setHeld(false); go({ nav: "reload" }); }} />}

@@ -161,7 +161,7 @@ export async function open(session: string, url: string) {
 const tab = (url: string) => call<{ target: string }>("PUT", "/tabs", { url }).then((r) => r.target);
 
 // A call to desk's app on its socket (apps/desktop/src/tabs.ts), answered with its JSON.
-function call<T>(method: "GET" | "PUT", path: string, body?: object): Promise<T> {
+export function call<T>(method: "GET" | "PUT", path: string, body?: object): Promise<T> {
   return new Promise((done, fail) => {
     const req = request({ socketPath: SOCKET, method, path, timeout: 20_000, headers: { "content-type": "application/json" } }, (res) => {
       let text = "";

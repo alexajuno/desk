@@ -50,12 +50,17 @@
 //   order, which desk keeps in UPLOADS and gives the page, or {"files": []} for none. desk tells {"chooser": null} as
 //   it is done.
 // A <select>'s list is drawn in the page headless (1 Nov), so it needs nothing.
+//
+// In desk's app the Browser shows the tab itself, which takes your mouse and keys (apps/desktop/src/tabs.ts), and asks
+// with ?frames=0 for the rest only: the tab's moves, its boxes and its file choosers, and no pictures. desk hears
+// nothing of your clicks there, so a box or a chooser is yours when the app says your keys are in the tab.
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { WebSocket, type RawData } from "ws";
 import { HOME } from "./config.ts";
 import * as db from "./db.ts";
+import { call } from "./relay.ts";
 
 const CHROME = `ws://127.0.0.1:${process.env.DESK_CHROME_PORT || 9337}`; // desk's app, as the header says; a second desk for testing points at another app with DESK_CHROME_PORT
 const EVERY = 250; // ms between looks at the tab
@@ -78,7 +83,7 @@ type History = { currentIndex: number; entries: { id: number }[] };
 type Mouse = { type: string; x: number; y: number; button?: string; buttons?: number; modifiers: number; deltaX?: number; deltaY?: number };
 type Dialog = { type: string; message: string; defaultPrompt?: string };
 
-export async function watch(browser: WebSocket, target: string, w: number, h: number) {
+export async function watch(browser: WebSocket, target: string, w: number, h: number, frames = true) {
   if (!(await db.sql().query("select 1 from tabs where target = $1", [target])).rows.length) return browser.close(4404, "That tab is not open.");
   if (browser.readyState !== WebSocket.OPEN) return;
   const chrome = new WebSocket(`${CHROME}/devtools/page/${target}`, { maxPayload: 64 * 1024 * 1024 });
@@ -100,6 +105,9 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
     if (ms) setTimeout(() => waiting.delete(id) && done(undefined), ms);
   });
   const tell = (said: object) => browser.readyState === WebSocket.OPEN && browser.send(JSON.stringify(said));
+  // Whether your click or key opened what the page opens now, as the header says
+  const yours = async () => frames ? Date.now() - pressed < PRESSED
+    : Boolean((await call<{ focused?: boolean }>("GET", `/tabs/${target}`).catch(() => null))?.focused);
   const show = (jpeg: string, then?: () => void) => {
     if (jpeg === sent || browser.readyState !== WebSocket.OPEN) return then?.();
     sent = jpeg;
@@ -127,14 +135,14 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
   };
   // a look right after your input to a hidden tab, which lands it and shows what it did
   const soon = () => {
-    if (!behind) return;
+    if (!behind || !frames) return;
     still = 0;
     if (looking) again = true;
     else void look();
   };
   let ticks = 0;
-  const timer = setInterval(() => (still < STILL || ++ticks % 4 === 0) && void look(), EVERY);
-  const cast = () => ask("Page.startScreencast", { format: "jpeg", quality: 70, maxWidth: size.w, maxHeight: size.h });
+  const timer = frames ? setInterval(() => (still < STILL || ++ticks % 4 === 0) && void look(), EVERY) : undefined;
+  const cast = () => frames && ask("Page.startScreencast", { format: "jpeg", quality: 70, maxWidth: size.w, maxHeight: size.h });
 
   // One move or one wheel on its way at a time, as the header says: the next held back, merged into the one held.
   const lane = (merge: (held: Mouse, next: Mouse) => Mouse) => {
@@ -227,7 +235,7 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
 
   chrome.on("open", () => {
     void cast();
-    void look();
+    if (frames) void look();
     let enabled = false, held = false;
     const late = setTimeout(() => !enabled && (held = true) && tell({ held: true }), HELD);
     void ask("Page.enable").then(() => { // for the tab's moves and its dialogs, below
@@ -236,7 +244,7 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
       if (held) { // the screencast asked for meanwhile never started (1 Nov)
         tell({ held: false });
         sent = "";
-        void ask("Page.stopScreencast").then(cast);
+        if (frames) void ask("Page.stopScreencast").then(cast);
       }
       void moved();
     });
@@ -253,19 +261,22 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
       else show(m.params.data, ack);
     } else if ((m.method === "Page.frameNavigated" && !m.params?.frame?.parentId) || m.method === "Page.navigatedWithinDocument") void moved();
     else if (m.method === "Page.javascriptDialogOpening") {
-      const d = m.params as unknown as Dialog;
-      dialog = { mine: Date.now() - pressed < PRESSED };
+      const d = m.params as unknown as Dialog, opened: { mine: boolean } = dialog = { mine: false };
+      void yours().then((mine) => { opened.mine = mine; });
       tell({ dialog: { type: d.type, message: d.message, prompt: d.defaultPrompt ?? "" } });
     } else if (m.method === "Page.javascriptDialogClosed") {
       dialog = null;
       tell({ dialog: null });
       soon();
-    } else if (m.method === "Page.fileChooserOpened" && Date.now() - pressed < PRESSED) {
-      const c = m.params as unknown as { mode: string; backendNodeId?: number };
-      if (typeof c.backendNodeId !== "number") return;
-      chooser = c.backendNodeId;
-      upload = null;
-      tell({ chooser: { multiple: c.mode === "selectMultiple" } });
+    } else if (m.method === "Page.fileChooserOpened") {
+      const c = m.params as unknown as { mode: string; backendNodeId?: number }, node = c.backendNodeId;
+      if (typeof node !== "number") return;
+      void yours().then((mine) => {
+        if (!mine) return;
+        chooser = node;
+        upload = null;
+        tell({ chooser: { multiple: c.mode === "selectMultiple" } });
+      });
     }
   });
   chrome.on("error", () => {}); // it closes next
@@ -284,6 +295,7 @@ export async function watch(browser: WebSocket, target: string, w: number, h: nu
     }
     if (!said || typeof said !== "object") return;
     if (said.w && said.h) {
+      if (!frames) return;
       size = fit(said.w, said.h);
       sent = "";
       void ask("Page.stopScreencast").then(cast);

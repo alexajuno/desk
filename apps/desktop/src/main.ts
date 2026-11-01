@@ -7,8 +7,11 @@
 // the window keeps what that gave: one window, links to other sites in the user's browser, reload, zoom, back and
 // forward, and the developer tools.
 //
-// It also holds Claude's tabs (tabs.ts), which Claude drives over the DevTools protocol on its port.
-import { app, BrowserWindow, shell, type WebContents } from "electron";
+// It also holds Claude's tabs (tabs.ts), which Claude drives over the DevTools protocol on its port, and which a chat's
+// Browser in desk's page shows in its place, through what the page gets from the app (preload.cjs).
+import { app, BrowserWindow, ipcMain, shell, type Rectangle, type WebContents } from "electron";
+import { join } from "node:path";
+import { shortcut } from "./keys.ts";
 import * as tabs from "./tabs.ts";
 
 const HOME = new URL(process.env.DESK_URL || "http://localhost:8790/inbox");
@@ -17,6 +20,8 @@ const site = (url: string) => {
   const u = URL.parse(url);
   return u && `${u.protocol}//${u.hostname === "127.0.0.1" ? "localhost" : u.hostname}:${u.port}`;
 };
+
+const PRELOAD = join(import.meta.dirname, "preload.cjs");
 
 let win: BrowserWindow | null = null;
 
@@ -35,6 +40,11 @@ else {
     return tabs.start();
   }).catch((e: Error) => console.log(`no tabs for Claude: ${e.message}`));
   app.on("before-quit", tabs.quit);
+  ipcMain.on("tab", (e, target: unknown, at: unknown) => {
+    const host = BrowserWindow.fromWebContents(e.sender);
+    if (!host || e.senderFrame !== e.sender.mainFrame || site(e.sender.getURL()) !== site(HOME.href)) return;
+    tabs.show(host, typeof target === "string" ? target : null, place(at, e.sender.getZoomFactor()));
+  });
   app.on("window-all-closed", () => app.quit());
 }
 
@@ -45,7 +55,7 @@ function open() {
     height: 900,
     frame: false, // desk's page has its own head, and Hyprland tiles the window
     backgroundColor: "#121213", // desk's dark background, until the page draws
-    webPreferences: { spellcheck: true },
+    webPreferences: { spellcheck: true, preload: PRELOAD },
   });
   win.removeMenu();
   win.on("closed", () => { win = null; });
@@ -58,7 +68,7 @@ function open() {
 function keep(page: WebContents) {
   const ours = (url: string) => site(url) === site(HOME.href);
   page.setWindowOpenHandler(({ url }) => {
-    if (ours(url)) return { action: "allow", overrideBrowserWindowOptions: { frame: false, backgroundColor: "#121213" } };
+    if (ours(url)) return { action: "allow", overrideBrowserWindowOptions: { frame: false, backgroundColor: "#121213", webPreferences: { preload: PRELOAD } } };
     if (/^https?:/.test(url)) void shell.openExternal(url);
     return { action: "deny" };
   });
@@ -75,17 +85,9 @@ function keep(page: WebContents) {
   });
 }
 
-// Chrome's keys that went with its menu, which the window has none of.
-function shortcut(page: WebContents, key: Electron.Input): boolean {
-  const ctrl = key.control || key.meta;
-  if ((ctrl && key.code === "KeyR") || key.code === "F5") page.reload();
-  else if (ctrl && key.shift && key.code === "KeyI") page.toggleDevTools();
-  else if (key.code === "F12") page.toggleDevTools();
-  else if (ctrl && (key.code === "Equal" || key.code === "NumpadAdd")) page.setZoomLevel(page.getZoomLevel() + 0.5);
-  else if (ctrl && (key.code === "Minus" || key.code === "NumpadSubtract")) page.setZoomLevel(page.getZoomLevel() - 0.5);
-  else if (ctrl && (key.code === "Digit0" || key.code === "Numpad0")) page.setZoomLevel(0);
-  else if (key.alt && key.code === "ArrowLeft" && page.navigationHistory.canGoBack()) page.navigationHistory.goBack();
-  else if (key.alt && key.code === "ArrowRight" && page.navigationHistory.canGoForward()) page.navigationHistory.goForward();
-  else return false;
-  return true;
+// The place desk's page gives a tab, in its own pixels, in the window's, which desk's zoom makes bigger or smaller.
+function place(at: unknown, zoom: number): Rectangle | undefined {
+  const { x, y, width, height } = (at ?? {}) as Record<string, unknown>;
+  const all = [x, y, width, height].map((n) => (typeof n === "number" && Number.isFinite(n) ? Math.round(n * zoom) : NaN));
+  return all.every((n) => !Number.isNaN(n)) && all[2] > 0 && all[3] > 0 ? { x: all[0], y: all[1], width: all[2], height: all[3] } : undefined;
 }
