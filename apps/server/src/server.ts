@@ -47,8 +47,12 @@ await web.build();
 const app = await create();
 await sync.start();
 auto.start(); // Auto says next for the user as a turn ends
-// A session host left from older code gives way to one of this code once none of its sessions works.
-setInterval(() => void hosted.keepCurrent().catch(() => {}), 60_000);
+// A session host left from older code gives way to one of this code once none of its sessions works: at once, and
+// soon after it goes quiet, so that the swap's few seconds fall on no new chat, whose start would wait for it (1 Nov:
+// "i start a new chat from ctrl shift o and there was a few seconds delay").
+const keepCurrent = () => void hosted.keepCurrent().catch(() => {});
+keepCurrent();
+setInterval(keepCurrent, 10_000);
 setInterval(() => void db.prune().catch((error) => console.error("pruning the log", error)), 3600_000);
 if (process.env.DESK_CLOCK !== "0") {
   land.start(); // the line for desk's own checkout moves on its own

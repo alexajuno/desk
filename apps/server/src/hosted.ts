@@ -116,20 +116,27 @@ export async function standing(): Promise<"none" | "current" | "older"> {
   return !v ? "none" : v === current() ? "current" : "older";
 }
 
+// The check under way, one at a time: a session's start and desk's tick could otherwise swap the host together, and
+// the second host would take the first one's socket and leave it running with no way in.
 let starting: Promise<void> | null = null;
 
-// A host of the code checked out now, started if none answers.
-export function ensure(): Promise<void> {
+function check(launchIfNone: boolean): Promise<void> {
   starting ??= (async () => {
     try {
       const v = await version();
       if (v && v !== current()) await replace();
-      else if (!v) await launch();
+      else if (!v && launchIfNone) await launch();
     } finally {
       starting = null;
     }
   })();
   return starting;
+}
+
+// A host of the code checked out now, started if none answers. It waits out the tick's check, which starts none.
+export async function ensure(): Promise<void> {
+  while (starting) await starting;
+  return check(true);
 }
 
 // Swap a host running older code for one of the code checked out now, but only while none of its sessions works or
@@ -145,11 +152,8 @@ async function replace(): Promise<boolean> {
   return true;
 }
 
-// Called now and then: a host left over from older code is replaced once it is idle.
-export async function keepCurrent() {
-  const v = await version();
-  if (v && v !== current()) await replace();
-}
+// desk's tick: a host left over from older code is replaced once it is idle.
+export const keepCurrent = (): Promise<void> => starting ?? check(false);
 
 let cached: [number, HostRow[]] = [0, []];
 
