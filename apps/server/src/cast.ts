@@ -1,13 +1,12 @@
-// A tab's picture, live, for a chat's Browser (Browser.tsx), from the agents' Chrome over its DevTools protocol: one
-// connection to the tab's own endpoint for each Browser that shows it, which leaves what the session does there alone.
+// A tab's picture, live, for a chat's Browser (Browser.tsx), from desk's app, which holds Claude's tabs (relay.ts),
+// over its DevTools protocol: one connection to the tab's own endpoint for each Browser that shows it, which leaves what
+// the session does there alone.
 //
-//     Browser ── /api/tabs/<target>/screen ──► desk ── ws://127.0.0.1:9333/devtools/page/<target> ──► the tab
+//     Browser ── /api/tabs/<target>/screen ──► desk ── ws://127.0.0.1:9337/devtools/page/<target> ──► the tab
 //             ◄── each picture, a JPEG, as one binary message ──
 //
-// The Chrome runs headless, so the Browser is its only screen, and it goes through the proxy, which keeps the Chrome
-// running while you watch, as a session's connection does. Chrome draws only the tab in front of each window, and each
-// tab a session opens is in front of its own (relay.ts), so its screencast sends its pictures as they change. The
-// screencast's are the size the Browser shows them at, in the screen's pixels, which it says as it opens and as it
+// Each tab draws in a window of its own on a virtual screen nobody sees (apps/desktop/src/tabs.ts), so its screencast
+// sends its pictures as they change. The screencast's are the size the Browser shows them at, in the screen's pixels, which it says as it opens and as it
 // resizes, {"w": 1436, "h": 1476}. Each is acknowledged once the Browser's socket took it, so a slow one gets fewer, not
 // a queue.
 //
@@ -58,7 +57,7 @@ import { WebSocket, type RawData } from "ws";
 import { HOME } from "./config.ts";
 import * as db from "./db.ts";
 
-const CHROME = `ws://127.0.0.1:${process.env.DESK_CHROME_PORT || 9333}`; // through the proxy, as the header says; a second desk for testing points at another Chrome with DESK_CHROME_PORT
+const CHROME = `ws://127.0.0.1:${process.env.DESK_CHROME_PORT || 9337}`; // desk's app, as the header says; a second desk for testing points at another app with DESK_CHROME_PORT
 const EVERY = 250; // ms between looks at the tab
 const STILL = 8; // looks at a tab behind that found it as it was, 2 s, after which it is looked at once a second
 const WAIT = 3000; // ms an answer from the tab is waited for, after which it is let go: a dialog open in the page holds them

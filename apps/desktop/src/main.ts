@@ -6,7 +6,10 @@
 // Until 1 Nov desk opened as the user's Chrome in app mode (google-chrome-stable --app=http://localhost:8790/inbox), so
 // the window keeps what that gave: one window, links to other sites in the user's browser, reload, zoom, back and
 // forward, and the developer tools.
+//
+// It also holds Claude's tabs (tabs.ts), which Claude drives over the DevTools protocol on its port.
 import { app, BrowserWindow, shell, type WebContents } from "electron";
+import * as tabs from "./tabs.ts";
 
 const HOME = new URL(process.env.DESK_URL || "http://localhost:8790/inbox");
 // desk's own address, which a link may give as localhost or as 127.0.0.1, as the agents' API does.
@@ -17,6 +20,8 @@ const site = (url: string) => {
 
 let win: BrowserWindow | null = null;
 
+app.commandLine.appendSwitch("remote-debugging-port", String(tabs.PORT)); // on 127.0.0.1 only
+
 // One desk at a time: opening it again brings back the window it has.
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
@@ -25,7 +30,11 @@ else {
     if (win.isMinimized()) win.restore();
     win.focus();
   });
-  app.whenReady().then(open);
+  app.whenReady().then(() => {
+    open();
+    return tabs.start();
+  }).catch((e: Error) => console.log(`no tabs for Claude: ${e.message}`));
+  app.on("before-quit", tabs.quit);
   app.on("window-all-closed", () => app.quit());
 }
 

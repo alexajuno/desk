@@ -1,36 +1,42 @@
-// The browser relay, which every desk session's chrome MCP reaches the agents' Chrome through, so that desk knows which
+// The browser relay, which every desk session's chrome MCP reaches Claude's tabs through, so that desk knows which
 // session opened each tab and can show a chat its own ("i can view tabs per sessions directly on what it's doing", the
 // user, 31 Oct). It runs in the session host (host.ts), which outlives desk's restarts, so a Try cuts no session's
 // browser. The host gives each session the address of its own way in, which ~/.local/bin/chrome-mcp.sh connects to:
 //
-//     chrome MCP ── ws://127.0.0.1:<port>/cdp/<session id> ──► relay ──► 9333, the socket proxy ──► the agents' Chrome
+//     chrome MCP ── ws://127.0.0.1:<port>/cdp/<session id> ──► relay ──► desk's app, on its DevTools port
 //
-// It passes each session's CDP through as it is but for its Target.createTarget, which it asks for in a window of its
-// own, and reads Chrome's answer to it: the tab made for it. The Chrome runs headless, with desk's Browser its only
-// screen, and draws only the tab in front of each window (1 Nov: in one window, an older tab sent 1 picture in 3 s and
-// the newest 31, and a wheel on the older one had no answer), so each tab a session opens is in front of its own, where
-// it draws live; Playwright asks for none (its coreBundle.js, Target.createTarget). A tab opened from a session's tab, a
-// popup or a link to a new tab, is that session's too, in its opener's window, which the relay's own watcher sees: one
-// connection straight to the Chrome on 9334. Unlike one through the proxy, it does not keep the Chrome running once no
-// session uses it (the chrome skill, "How it behaves"), and it ends as the Chrome stops, its tabs with it.
+// Claude's tabs live in desk's app (apps/desktop/src/tabs.ts), the Chrome that shows them in a chat's Browser (1 Nov).
+// The relay passes each session's CDP through as it is but for two things:
+// - Its Target.createTarget, which Electron answers with "Not supported": the relay asks the app for the tab instead,
+//   on the app's socket, and answers with it once the session heard the tab attach, as Chrome's own answer would come
+//   (Playwright looks the new tab up by the answer's id: its coreBundle.js, doCreateNewPage).
+// - desk's own pages, its window and its developer tools, which the same Chrome holds: the session hears only of tabs
+//   in the context Claude's tabs keep their logins in, and the relay lets go of any other it was attached to, freeing
+//   one Playwright's auto-attach holds before it runs (waitForDebuggerOnStart).
+// A tab opened from a session's tab, a popup or a link to a new tab, is that session's too, which the relay's own watcher
+// sees: one connection straight to the app, which ends as the app stops, its tabs with it.
 //
 // desk also opens a tab for a session itself, a link you clicked in its chat (open, below), which is that session's.
 //
 // What it noted lives only as long as the host. desk keeps it (tabs.ts), and gives a new host's relay the tabs a host
 // before it noted (adopt), each of them that session's again while it is open.
-import { createServer } from "node:http";
+import { createServer, request } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
 
-// A second desk for testing points both at another Chrome with DESK_CHROME_PORT.
-const PROXY = `http://127.0.0.1:${process.env.DESK_CHROME_PORT || 9333}`; // starts the Chrome on its first connection, and stops it 5 minutes after the last
-const CHROME = `http://127.0.0.1:${process.env.DESK_CHROME_PORT || 9334}`; // the Chrome itself, which refuses while it is down
+// A second desk for testing points both at another desk app with DESK_CHROME_PORT and DESK_APP_SOCKET.
+const APP = `http://127.0.0.1:${process.env.DESK_CHROME_PORT || 9337}`; // its DevTools, which refuse while it is down
+const SOCKET = process.env.DESK_APP_SOCKET || join(process.env.XDG_RUNTIME_DIR || tmpdir(), "desk-app.sock"); // where it opens a tab
+const OURS = 1e9; // the ids of the relay's own calls on a session's connection, above any Playwright reaches
+const ATTACH = 5000; // ms an answer to Target.createTarget waits for the tab's attach
 const BIGGEST = 512 * 1024 * 1024; // bytes in one message: a full-page screenshot comes back as one
 const EVERY = 2000; // ms between the watcher's asks for every tab
 
 export interface Tab { target: string; session: string; url: string; title: string }
 export type TabNews = { type: "tab" } & Tab | { type: "tab-closed"; target: string };
 
-const pages = new Map<string, { url: string; title: string; opener?: string; said?: string }>(); // the Chrome's open tabs, by target id
+const pages = new Map<string, { url: string; title: string; opener?: string; said?: string }>(); // the app's open pages, by target id
 const owners = new Map<string, string>(); // the session that opened each tab, by its target id
 let tell: (news: TabNews) => void = () => {};
 
@@ -44,65 +50,134 @@ export function start(port: number, told: (news: TabNews) => void): Promise<void
     if (!session) return void socket.destroy();
     wss.handleUpgrade(req, socket, head, (mcp) => pipe(mcp, session));
   });
-  void watch(); // the Chrome may be up already, with tabs a host before this one noted
+  void watch(); // the app may be up already, with tabs a host before this one noted
   return new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, "127.0.0.1", () => resolve());
   });
 }
 
-// One session's connection: through to the Chrome's, both ways, the tabs Chrome makes for it noted on the way.
+// One session's connection: through to the app's, both ways, its new tabs asked of the app, and desk's own pages kept
+// from it, as the header says.
 function pipe(mcp: WebSocket, session: string) {
-  const asked = new Set<string>(); // its Target.createTarget calls still waiting on Chrome's answer, by CDP session and id
-  const held: Buffer[] = []; // what it sent before the Chrome answered
-  let chrome: WebSocket | null = null;
-  mcp.on("message", (data: Buffer) => {
-    if (data.includes("Target.createTarget")) {
-      const m = parse(data);
-      if (m?.method === "Target.createTarget") {
-        asked.add(`${m.sessionId ?? ""} ${m.id}`);
-        data = Buffer.from(JSON.stringify({ ...m, params: { ...m.params, newWindow: true } }));
+  const held: Buffer[] = []; // what it sent before the app answered
+  const hidden = new Set<string>(); // desk's pages it was attached to, by CDP session, until they are let go
+  const others = new Set<string>(); // desk's pages, by target id
+  const heardOf = new Set<string>(); // its tabs whose attach it heard, by target id
+  const waiting = new Map<string, () => void>(); // its answers to Target.createTarget, waiting for the tab's attach
+  const listing = new Set<string>(); // its Target.getTargets calls, by CDP session and id
+  let attaching = false; // it auto-attaches to new tabs, so each one's attach comes
+  let ours = OURS, context = "";
+  let app: WebSocket | null = null;
+  const down = (m: object) => mcp.readyState === WebSocket.OPEN && mcp.send(JSON.stringify(m));
+  const up = (data: Buffer | string) => {
+    if (app?.readyState === WebSocket.OPEN) app.send(data, { binary: false });
+    else held.push(Buffer.from(data));
+  };
+  const make = (m: Cdp) => {
+    const to = m.sessionId ? { sessionId: m.sessionId } : {};
+    tab(String(m.params?.url || "about:blank")).then((target) => {
+      own(target, session);
+      const answer = () => down({ id: m.id, ...to, result: { targetId: target } });
+      if (!attaching || heardOf.has(target)) return answer();
+      waiting.set(target, answer);
+      setTimeout(() => waiting.delete(target) && answer(), ATTACH);
+    }, (e: Error) => down({ id: m.id, ...to, error: { code: -32000, message: `desk's app made no tab: ${e.message}` } }));
+  };
+  // Whether a message from the app is about desk's own pages, which the session never hears: true drops it.
+  const theirs = (m: Cdp): boolean => {
+    const info = m.params?.targetInfo as TargetInfo | undefined;
+    if (m.id !== undefined && m.id >= OURS) return true;
+    if (m.sessionId && hidden.has(m.sessionId)) return true;
+    if (m.method === "Target.attachedToTarget" && info) {
+      if (info.browserContextId === context) {
+        heardOf.add(info.targetId);
+        return false;
       }
+      const sessionId = m.params!.sessionId as string;
+      hidden.add(sessionId);
+      others.add(info.targetId);
+      if (m.params!.waitingForDebugger) up(JSON.stringify({ id: ours++, sessionId, method: "Runtime.runIfWaitingForDebugger" }));
+      up(JSON.stringify({ id: ours++, ...(m.sessionId ? { sessionId: m.sessionId } : {}), method: "Target.detachFromTarget", params: { sessionId } }));
+      return true;
     }
-    if (chrome?.readyState === WebSocket.OPEN) chrome.send(data, { binary: false });
-    else held.push(data);
+    if (m.method === "Target.detachedFromTarget") return hidden.delete(m.params!.sessionId as string);
+    if (info) { // Target.targetCreated and targetInfoChanged
+      if (info.browserContextId === context) return false;
+      others.add(info.targetId);
+      return true;
+    }
+    if (m.method === "Target.targetDestroyed" || m.method === "Target.targetCrashed") return others.has(m.params!.targetId as string);
+    if (m.result?.targetInfos && listing.delete(`${m.sessionId ?? ""} ${m.id}`)) m.result.targetInfos = m.result.targetInfos.filter((t) => t.browserContextId === context);
+    return false;
+  };
+  mcp.on("message", (data: Buffer) => {
+    if (data.includes("Target.")) {
+      const m = parse(data);
+      if (m?.method === "Target.createTarget") return make(m);
+      if (m?.method === "Target.setAutoAttach" && !m.sessionId) attaching = !!m.params?.autoAttach;
+      if (m?.method === "Target.getTargets") listing.add(`${m.sessionId ?? ""} ${m.id}`);
+    }
+    up(data);
   });
-  mcp.on("close", () => chrome?.close());
+  mcp.on("close", () => app?.close());
   mcp.on("error", () => {}); // it closes next
-  browserUrl(PROXY).then((url) => {
+  Promise.all([call<{ context: string }>("GET", "/"), browserUrl(APP)]).then(([about, url]) => {
     if (mcp.readyState !== WebSocket.OPEN) return;
-    const ws = (chrome = new WebSocket(url, { perMessageDeflate: false, maxPayload: BIGGEST }));
+    context = about.context;
+    const ws = (app = new WebSocket(url, { perMessageDeflate: false, maxPayload: BIGGEST }));
     ws.on("open", () => {
       for (const data of held.splice(0)) ws.send(data, { binary: false });
-      void watch(); // the Chrome runs now, if it did not before
+      void watch(); // the app runs now, if it did not before
     });
     ws.on("message", (data: Buffer) => {
-      if (asked.size && data.length < 1000) {
+      // Only a small message, or one about targets, can be about desk's pages: a screenshot is neither, and is not parsed
+      if (data.length < 2000 || data.includes("Target.") || data.includes("targetInfos")) {
         const m = parse(data);
-        if (m && asked.delete(`${m.sessionId ?? ""} ${m.id}`) && m.result?.targetId) own(m.result.targetId, session);
+        if (m && theirs(m)) return;
+        if (m?.result?.targetInfos) data = Buffer.from(JSON.stringify(m));
+        if (m?.method === "Target.attachedToTarget") {
+          if (mcp.readyState === WebSocket.OPEN) mcp.send(data, { binary: false });
+          const target = (m.params!.targetInfo as TargetInfo).targetId;
+          waiting.get(target)?.();
+          waiting.delete(target);
+          return;
+        }
       }
       if (mcp.readyState === WebSocket.OPEN) mcp.send(data, { binary: false });
     });
     ws.on("close", () => mcp.close());
     ws.on("error", () => {}); // it closes next
-  }, () => mcp.close(1011, "The agents' Chrome did not start"));
+  }, () => mcp.close(1011, "desk's app is not running"));
 }
 
-// A tab desk opens for the session at the address, in a window of its own, through the proxy, which starts the Chrome
-// when it is down.
+// A tab desk opens for the session at the address, which the app makes.
 export async function open(session: string, url: string) {
-  const ws = new WebSocket(await browserUrl(PROXY), { perMessageDeflate: false });
-  ws.on("error", () => {}); // it closes next
-  ws.on("open", () => {
-    void watch();
-    ws.send(JSON.stringify({ id: 1, method: "Target.createTarget", params: { url, newWindow: true } }));
+  own(await tab(url), session);
+  void watch();
+}
+
+// A new tab of Claude's at the address, made by desk's app, and its target id.
+const tab = (url: string) => call<{ target: string }>("PUT", "/tabs", { url }).then((r) => r.target);
+
+// A call to desk's app on its socket (apps/desktop/src/tabs.ts), answered with its JSON.
+function call<T>(method: "GET" | "PUT", path: string, body?: object): Promise<T> {
+  return new Promise((done, fail) => {
+    const req = request({ socketPath: SOCKET, method, path, timeout: 20_000, headers: { "content-type": "application/json" } }, (res) => {
+      let text = "";
+      res.on("data", (d: Buffer) => { text += d; }).on("end", () => {
+        try {
+          const answer = JSON.parse(text) as T & { detail?: string };
+          if (res.statusCode === 200) done(answer);
+          else fail(new Error(answer.detail ?? `HTTP ${res.statusCode}`));
+        } catch (e) {
+          fail(e as Error);
+        }
+      });
+    });
+    req.on("error", fail).on("timeout", () => req.destroy(new Error("desk's app did not answer")));
+    req.end(body ? JSON.stringify(body) : undefined);
   });
-  ws.on("message", (data: Buffer) => {
-    const target = parse(data)?.result?.targetId;
-    if (target) own(target, session);
-    ws.close();
-  });
-  setTimeout(() => ws.close(), 20_000);
 }
 
 // The tabs it knows the session of, as they are now.
@@ -112,7 +187,7 @@ export const tabs = (): Tab[] => [...owners].flatMap(([target, session]) => {
 });
 
 // The tabs desk keeps that this relay did not note, which a host before it did: each still open is that session's again,
-// and the rest are told closed, once the watcher has the Chrome's every tab.
+// and the rest are told closed, once the watcher has the app's every page.
 export function adopt(known: { target: string; session: string }[]) {
   for (const { target, session } of known) own(target, session);
   if (listed) closeGone();
@@ -135,9 +210,9 @@ function say(target: string) {
 }
 
 let watching = false;
-let listed = false; // the watcher has heard of every tab the Chrome had when it connected
+let listed = false; // the watcher has heard of every page the app had when it connected
 
-// Each tab noted whose page is not open: once listed, or with the Chrome down, a tab adopted that closed meanwhile.
+// Each tab noted whose page is not open: once listed, or with the app down, a tab adopted that closed meanwhile.
 function closeGone() {
   for (const target of [...owners.keys()]) if (!pages.has(target)) {
     owners.delete(target);
@@ -145,13 +220,13 @@ function closeGone() {
   }
 }
 
-// The watcher: every tab's opening, address, title and closing, as the Chrome tells them. It tells no title a page sets
+// The watcher: every tab's opening, address, title and closing, as the app tells them. It tells no title a page sets
 // once it has loaded (1 Nov: code.claude.com's, and one set from a script, both left the strip showing the address), so
 // the watcher also asks for every tab every 2 s, and says each that changed.
 async function watch() {
   if (watching) return;
   watching = true;
-  const url = await browserUrl(CHROME).catch(() => null);
+  const url = await browserUrl(APP).catch(() => null);
   if (!url) {
     watching = false;
     return closeGone();
@@ -166,14 +241,14 @@ async function watch() {
   ws.on("close", () => {
     clearInterval(timer);
     watching = listed = false;
-    for (const target of owners.keys()) tell({ type: "tab-closed", target }); // the Chrome stopped, and its tabs with it
+    for (const target of owners.keys()) tell({ type: "tab-closed", target }); // the app stopped, and its tabs with it
     owners.clear();
     pages.clear();
   });
   ws.on("error", () => {}); // it closes next
 }
 
-interface TargetInfo { targetId: string; type: string; url: string; title: string; openerId?: string }
+interface TargetInfo { targetId: string; type: string; url: string; title: string; openerId?: string; browserContextId?: string }
 
 function heard(m: Cdp | null) {
   if (m?.id === 1) { // Target.setDiscoverTargets answers after it told every tab open
@@ -210,7 +285,7 @@ function parse(data: Buffer): Cdp | null {
   }
 }
 
-// The Chrome's own WebSocket, as /json/version gives it: through the proxy, its address names the proxy's port.
+// The app's own WebSocket, as /json/version gives it.
 async function browserUrl(base: string): Promise<string> {
   const res = await fetch(`${base}/json/version`, { signal: AbortSignal.timeout(20_000) });
   return ((await res.json()) as { webSocketDebuggerUrl: string }).webSocketDebuggerUrl;
