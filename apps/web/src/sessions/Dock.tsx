@@ -6,7 +6,7 @@
 // half, beside it, holds what Claude drives: its terminal (Half.tsx).
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { postJson, reason } from "../api/http";
 import { go } from "../app/nav";
@@ -166,7 +166,8 @@ function browse(e: React.MouseEvent, session: string) {
   void postJson(`/api/live/${session}/browse`, { url: a.href }).then(async (res) => res.ok || toast(await reason(res)));
 }
 
-export const SessionView = observer(function SessionView({ id }: { id: string }) {
+// above: what the conversation follows, the thread a chat from a thread's Inbox row is on (inbox/Thread.tsx).
+export const SessionView = observer(function SessionView({ id, above }: { id: string; above?: ReactNode }) {
   const s = useLive(id)!;
   useSplash(!s.loaded); // desk opening on a chat shows it with its conversation, never "Connecting…"
   const scroller = useRef<HTMLDivElement>(null);
@@ -255,7 +256,8 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
         <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>
           {here && shown === "changes" && <ChangesOf slug={here.issue.slug} />}
           <div className="convo" hidden={shown !== "chat"} onClick={docked && m?.chat ? (e) => browse(e, id) : undefined}>
-            {!s.loaded ? <p className="convo-empty">Connecting…</p>
+            {above}
+            {above ? null : !s.loaded ? <p className="convo-empty">Connecting…</p>
               : quiet(s) ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
                 : m?.chat && m.issue ? "This issue's chat. Write to carry the issue on: it starts from the issue's document."
                 : m?.bare || (m?.chat && s.startAs === "chat") ? `Just Claude, as claude runs in a terminal ${startsIn(s) === "~" ? "from your home folder" : `in ${startsIn(s)}`}: no issue and no desk instructions.`

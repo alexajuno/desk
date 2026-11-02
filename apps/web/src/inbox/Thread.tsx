@@ -3,9 +3,18 @@
 // (the desk issue "desk as my notification center", 2 Nov; its row is InboxPage.tsx's ThreadRow). It lists the thread's
 // messages as desk got them, oldest first, under the firewall's line on why it reached you, with Open in Slack or Gmail
 // for the rest of it: your own replies are no notices, so they are not here.
+//
+// A composer under it starts a chat with Claude on the thread, which only you see (the server's threads.ts: "pops up
+// and carry it on with me", the user, 2 Nov); from then on the row opens on that chat, the thread above its
+// conversation, picked from two mockups on 2 Nov over one with Draft a reply, File an issue and Mark done above the box.
+import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
+import { useState } from "react";
+import { postJson, reason } from "../api/http";
 import { usePage } from "../api/page";
+import { SessionView } from "../sessions/Dock";
 import type { InboxRow } from "../store/issues";
+import { toast } from "../ui/toast";
 
 interface Notice {
   id: string;
@@ -46,8 +55,71 @@ function kindOf(n: Notice) {
 // The door's whys (the server's notices.ts, RULED), as the line on why it reached you says them.
 const RULED: Record<string, string> = { "a DM": "a DM to you", "a group DM": "a group DM with you", "@you": "it mentions you", "a reply in your thread": "a reply in your thread" };
 
-// The thread open on the right, asked of desk each time its row moves (the app holds no notices).
+const SEND = <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" /></svg>;
+
+// The chat each thread started from this tab, by thread, until its row says so itself.
+const started = observable.map<string, string>();
+
+// The session of the thread's chat, or null while you have not written in it.
+export const chatOf = (row: InboxRow) => row.session ?? started.get(row.slug) ?? null;
+
+// The thread open on the right: the thread with a composer under it, or once you wrote, the chat on it.
 export const ThreadView = observer(function ThreadView({ row }: { row: InboxRow }) {
+  const session = chatOf(row);
+  if (session) return <SessionView id={session} above={<><ThreadBody row={row} /><p className="convo-note thread-private">With Claude: only you see this</p></>} />;
+  return (
+    <div className="thread-pane">
+      <ThreadBody row={row} />
+      <ThreadComposer row={row} />
+    </div>
+  );
+});
+
+// The box under a thread no chat is on yet: what you write starts the chat, and the pane turns to it.
+function ThreadComposer({ row }: { row: InboxRow }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    const res = await postJson("/api/threads/chat", { thread: row.slug, text });
+    if (!res.ok) {
+      toast(await reason(res));
+      setBusy(false);
+      return;
+    }
+    const { session } = (await res.json()) as { session: string };
+    runInAction(() => started.set(row.slug, session));
+  };
+  return (
+    <div className="dock-foot">
+      <div className="composer">
+        <div className="composer-text">
+          <textarea rows={1} value={text} spellCheck={false} disabled={busy} placeholder="Ask Claude about it: draft a reply, file it, look into it"
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return; // a Vietnamese or other IME word still being typed
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation(); // the frame's Esc would also leave the page: that is the next Esc's to do
+                e.currentTarget.blur();
+              }
+            }} />
+        </div>
+        <div className="composer-foot" onMouseDown={(e) => e.preventDefault()}>
+          <span className="spacer" />
+          <button className="send" type="button" title="Send  Enter" disabled={!text.trim() || busy} onClick={() => void send()}>{SEND}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// The thread itself, asked of desk each time its row moves (the app holds no notices).
+const ThreadBody = observer(function ThreadBody({ row }: { row: InboxRow }) {
   const { data } = usePage<{ notices: Notice[] }>(`/api/page/thread?id=${encodeURIComponent(row.slug)}`, row.at);
   const all = data?.notices ?? [];
   const last = all[all.length - 1];

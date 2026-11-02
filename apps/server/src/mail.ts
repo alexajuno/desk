@@ -103,6 +103,38 @@ async function notice(id: string): Promise<notices.Notice> {
   };
 }
 
+// ---- A thread, whole
+
+const LONG = 6000; // characters of a mail's text a chat gets
+
+// A mail's text: its text/plain part, else its HTML's words, quoted replies left in, as the user would scroll them.
+function bodyOf(part: Record<string, any> | undefined): string {
+  if (!part) return "";
+  const decode = (data: string) => Buffer.from(data, "base64url").toString("utf8");
+  const find = (p: Record<string, any>, type: string): string | null =>
+    p.mimeType === type && p.body?.data ? decode(p.body.data) : (p.parts ?? []).map((q: Record<string, any>) => find(q, type)).find((t: string | null) => t) ?? null;
+  const text = find(part, "text/plain");
+  if (text) return text;
+  const html = find(part, "text/html") ?? "";
+  return html.replace(/<(style|script)[\s\S]*?<\/\1>/gi, "").replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d)>/gi, "\n").replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+
+// A mail thread as Gmail holds it now, for a chat on its Inbox row (threads.ts): each mail, the user's own too, as
+// "you", oldest first, its subject over its text, cut at LONG characters.
+export async function thread(id: string): Promise<{ who: string; at: number; text: string }[]> {
+  const t = await call(`threads/${id.slice("mail:".length)}`, { format: "full" });
+  return (t.messages ?? []).map((m: Record<string, any>) => {
+    const h = Object.fromEntries((m.payload?.headers ?? []).map((x: { name: string; value: string }) => [x.name.toLowerCase(), x.value]));
+    const text = bodyOf(m.payload).replace(INVISIBLE, "").replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim();
+    return {
+      who: (m.labelIds ?? []).includes("SENT") ? "you" : sender(h.from ?? ""),
+      at: Math.floor(Number(m.internalDate) / 1000),
+      text: `${h.subject || "(no subject)"}\n${text.length > LONG ? `${text.slice(0, LONG)}…` : text}`,
+    };
+  });
+}
+
 // One poll: the mail that came since the newest written, each new one written as a notice. Returns the ones written.
 export async function poll(): Promise<notices.Notice[]> {
   const now = Math.floor(Date.now() / 1000);

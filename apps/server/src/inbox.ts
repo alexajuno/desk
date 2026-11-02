@@ -75,8 +75,8 @@ export function listed(keep = ""): Row[] {
   return [...rows.values()].filter((r) => r.read === null || r.waits || r.slug === keep).sort((a, b) => b.at - a.at);
 }
 
-// Whether the session said something you have not read.
-export const unread = (session: string) => rows.get(session)?.read === null;
+// Whether the session said something you have not read, on its own row or its thread's.
+export const unread = (session: string) => [...rows.values()].some((r) => r.session === session && r.read === null);
 
 export const unreadCount = () => [...rows.values()].filter((r) => r.read === null).length;
 
@@ -134,11 +134,12 @@ export function take(wanted: Want[]): Promise<void> {
   });
 }
 
-// You read the session's row: now, unless already read.
+// You read the session's row, or the thread's row whose chat it is: now, unless already read.
 export async function read(by: { session: string }) {
-  if (rows.get(by.session)?.read !== null) return;
+  const row = [...rows.values()].find((r) => r.session === by.session && r.read === null);
+  if (!row) return;
   const done = await db.write((tx) => tx.query<Row>(`update inbox set read = $1, marked = null where id = $2 and read is null
-    returning ${COLUMNS.join(", ")}`, [Date.now() / 1000, by.session]));
+    returning ${COLUMNS.join(", ")}`, [Date.now() / 1000, row.id]));
   for (const r of done.rows) rows.set(r.id, r);
 }
 

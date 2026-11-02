@@ -35,7 +35,7 @@ import { GLYPH, StateIcon } from "../ui/icons";
 import { toggled } from "../ui/menu";
 import { DISPLAY_ICON, FILTER_ICON, inboxMenu, MORE_ICON, rowHref, UNREADS_ICON } from "./actions";
 import { listing } from "./listing";
-import { badgeOf, initial, ThreadView } from "./Thread";
+import { badgeOf, chatOf, initial, ThreadView } from "./Thread";
 
 // A due date's notifications (the server's pages.ts), which no session sent.
 const DEADLINE = new Set(["due soon", "overdue"]);
@@ -153,7 +153,7 @@ export const InboxPage = observer(function InboxPage() {
                 return issue && <IssueNotice key={n.id} n={n} issue={issue} open={i} query={query} />;
               })}
             </div>
-            <div className={`inbox-open${chat ? " chat-open" : ""}`} data-keep-scroll="same" ref={pane}>
+            <div className={`inbox-open${chat || (thread && chatOf(thread)) ? " chat-open" : ""}`} data-keep-scroll="same" ref={pane}>
               {thread ? <ThreadView key={thread.slug} row={thread} /> : chat ? <SessionView key={chat.session} id={chat.session!} /> : open ? <IssueView data={open} inInbox /> : !waiting && (
                 <div className="inbox-empty">
                   {/* Linear's empty Inbox drawing, its strokes in desk's own text colours */}

@@ -48,6 +48,7 @@ export interface Chat {
   named?: string; // the title the user gave it, or its automation's, over Claude Code's
   from?: string; // the script whose message started it (push)
   automation?: string; // the automation whose run it is, by slug (automations.ts)
+  thread?: string; // the Slack thread, DM or mail thread whose Inbox row it was started from (threads.ts)
   seen?: number; // when the user last looked at it, in seconds, until 19 Oct: the inbox table keeps it since (inbox.ts)
   deleted?: string; // when the user deleted it (remove)
   [key: string]: unknown; // what else its file held, such as the messages of a chat from before the panel
@@ -479,6 +480,16 @@ export function push(agent: Agent, text: string, from: string): Promise<Chat> {
   const message = `<desk-push from="${who}">\n${text.trim()}\n</desk-push>\n\n${who} sent this for the user. desk opens a chat with you for it: your ` +
     "reply is the first thing the user reads, and they may answer you there. Tell them what matters in it, briefly.";
   return agentChat(agent, message, { from: who });
+}
+
+// A chat on a Slack thread's, DM's or mail thread's Inbox row (threads.ts): a bare one, named after the thread, which
+// starts on the message.
+export const onThread = (thread: string, title: string, message: string) => agentChat(null, message, { thread, named: title });
+
+// The thread's chat, the newest the user kept, or null.
+export function ofThread(thread: string): Chat | null {
+  const found = [...all().values()].filter((c) => c.thread === thread && !c.deleted).sort((a, b) => b.created.localeCompare(a.created))[0];
+  return found ? structuredClone(found) : null;
 }
 
 // An automation's run (automations.ts): a chat with its agent, or a bare one, named after it, which starts on the

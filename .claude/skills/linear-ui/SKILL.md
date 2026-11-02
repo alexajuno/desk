@@ -112,6 +112,8 @@ Each one cost a redo. Check your work against them.
 
 - **A view laid over another** (28 Oct). The plan and the issue came as a sheet over the dimmed chat, a ] away; the same day the user: "i don't like the plan and issue as a separate panel. rather than that, all could be on a single screen". They became tabs in the chat's head, each in the chat's place. Before drawing a panel, sheet or modal over a screen, ask whether it is another view of the same thing.
 
+- **A composer under the corner's pills** (2 Nov). The corner (sessions.css, `.corner`: a docked chat's pill and New session) is fixed over the bottom right of the window, and a composer at the foot of the Inbox's pane, a chat row's or a thread's, sat under it, its send button covered. The Inbox's composer now keeps 30px below it (`.inbox-open .composer`). Anything new at the foot of a pane, look at it with a chat docked.
+
 ## Keep this current
 
 The user wants this to grow ("we'll update that skill gradually", 18 Oct). When you finish UI work:

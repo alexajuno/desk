@@ -57,7 +57,7 @@ const TYPES: Record<string, string> = { deadline: "Reminders and deadlines", pla
   now: "Messages that need you", later: "Messages that wait" };
 function typeOf(r: InboxRow): string {
   const why = r.why;
-  if (r.source) return why === "now" ? "now" : "later";
+  if (r.source && (why === "now" || why === "later")) return why; // else its chat's reply or question, as a chat's
   if (why === "plan ready") return "plan";
   if (why === "result ready" || why === "check it") return "result";
   if (why === "asks you" || why === "waiting for you") return "question";

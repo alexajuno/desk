@@ -225,6 +225,20 @@ async function plain(text: string) {
     .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
 
+// ---- A message's parts
+
+const fromApp = (m: Message) => Boolean(m.bot_id) || m.subtype === "bot_message" || m.user === "USLACKBOT";
+
+// Its words as Slack holds them: its text, else an app's attachments.
+const rawOf = (m: Message) =>
+  m.text || m.attachments?.map((a) => [a.pretext, a.title, a.text || a.fallback].filter(Boolean).join("\n")).join("\n") || "";
+
+// Its words as the user reads them, with the files it shares named.
+async function textOf(m: Message) {
+  const files = m.files?.map((f) => `[file: ${f.title || f.name}]`).join(" ") ?? "";
+  return [await plain(rawOf(m)), files].filter(Boolean).join("\n").slice(0, 4000);
+}
+
 // ---- The door
 
 // What a message may be: a plain one, an app's, a file shared, a reply also sent to the channel, a /me. Every other
@@ -242,9 +256,7 @@ export async function take(m: Message): Promise<notices.Notice | null> {
   }
   const at = await place(m.channel);
   if (at.nonWork) return null;
-  const app = Boolean(m.bot_id) || m.subtype === "bot_message" || m.user === "USLACKBOT";
-  const raw = m.text || m.attachments?.map((a) => [a.pretext, a.title, a.text || a.fallback].filter(Boolean).join("\n")).join("\n") || "";
-  const files = m.files?.map((f) => `[file: ${f.title || f.name}]`).join(" ") ?? "";
+  const app = fromApp(m), raw = rawOf(m);
   const verdict =
     !app && at.kind === "dm" ? "a DM"
     : !app && at.kind === "group" ? "a group DM"
@@ -257,13 +269,31 @@ export async function take(m: Message): Promise<notices.Notice | null> {
     thread: at.kind === "channel" ? `slack:${m.channel}:${m.thread_ts ?? m.ts}` : `slack:${m.channel}`,
     place: at.name,
     who: app ? await appOf(m) : await nameOf(m.user ?? ""),
-    text: [await plain(raw), files].filter(Boolean).join("\n").slice(0, 4000),
+    text: await textOf(m),
     link: `${WORKSPACE}/archives/${m.channel}/p${m.ts.replace(".", "")}` + (reply ? `?thread_ts=${m.thread_ts}&cid=${m.channel}` : ""),
     at: Number(m.ts),
     verdict: verdict ? "now" : null,
     why: verdict ?? "",
   };
   return (await notices.add(n)) ? n : null;
+}
+
+// ---- A thread, whole
+
+// A thread as Slack holds it now, for a chat on its Inbox row (threads.ts): every message the door would keep, the
+// user's own too, as "you", oldest first. A channel's thread is its replies, a DM's or group DM's its last DM_LAST.
+const DM_LAST = 30;
+
+export async function thread(id: string): Promise<{ who: string; at: number; text: string }[]> {
+  const [, channel, ts] = id.split(":");
+  if (!login) await signIn();
+  const r = ts ? await call("conversations.replies", { channel, ts, limit: "200" }) : await call("conversations.history", { channel, limit: String(DM_LAST) });
+  const kept = (r.messages as Message[]).filter((m) => !m.hidden && KEPT.has(m.subtype)).sort((a, b) => Number(a.ts) - Number(b.ts));
+  return Promise.all(kept.map(async (m) => ({
+    who: m.user === login!.me ? "you" : fromApp(m) ? await appOf(m) : await nameOf(m.user ?? ""),
+    at: Number(m.ts),
+    text: await textOf(m),
+  })));
 }
 
 // ---- The socket

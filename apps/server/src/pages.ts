@@ -25,6 +25,7 @@ import * as roster from "./roster.ts";
 import { findScored, findThings, markRanges, type Found } from "./search.ts";
 import * as sessions from "./sessions.ts";
 import * as teams from "./teams.ts";
+import * as threads from "./threads.ts";
 import type { Team } from "./teams.ts";
 import * as turns from "./turns.ts";
 import * as updates from "./updates.ts";
@@ -218,6 +219,7 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
   const asks = await asking();
   const marks = inbox.filling() ? inbox.before() : null, now = Date.now() / 1000;
   const wanted: inbox.Want[] = [];
+  const onThreads = new Map<string, inbox.Want>(); // a thread's chat's row, by thread: its thread's row says it (threadRow)
   for (const h of held(all)) {
     const i = h.issue, replied = turns.replied(h.session);
     let why = "", waits = true;
@@ -229,12 +231,14 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
       waits = false;
     }
     if (!why) continue;
-    wanted.push({
+    const want: inbox.Want = {
       id: h.session, slug: i?.slug ?? h.chat!.id, issue: Boolean(i), session: h.session, title: i ? i.title : chatTitle(h.chat!),
       agent: i ? null : h.chat!.agent ?? null, why, says: saysOf(why, i), kind: i?.state === "review" && REVIEWED.has(why) ? "review" : "needs",
       waits, at: waits ? null : replied, looked: live_.watching(h.session) ? now : turns.prompted(h.session) ?? 0,
       seed: marks && !waits ? readBefore(h, replied!, marks) : null, source: null, who: null,
-    });
+    };
+    if (h.chat?.thread) onThreads.set(h.chat.thread, want);
+    else wanted.push(want);
   }
   // Linear's due date notifications: one the day before an open issue is due, and one the day after it passed, each
   // from 09:00 (linear.app/docs/issue-property#due-date-notifications; the hour is desk's).
@@ -253,7 +257,7 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
     if (i.state === "triage" && !sessionOf(i))
       wanted.push({ id: i.slug, slug: i.slug, issue: true, session: null, title: i.title, agent: null, why: "no chat", says: saysOf("no chat", i),
         kind: "needs", waits: true, at: parseLocal(i.created).getTime() / 1000, looked: 0, seed: null, source: null, who: null });
-  for (const n of await notices.threads()) wanted.push(threadRow(n));
+  for (const n of await notices.threads()) wanted.push(threadRow(n, onThreads.get(n.thread), now));
   await inbox.take(wanted);
   return inbox.listed(keep);
 }
@@ -263,16 +267,21 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
 // from you as the firewall's Claude put it, or the message itself where a rule let it through ("a DM" says nothing).
 // Its why is the notice's verdict, now or later, which the app's pop-up reads (store/inbox.ts). Opening it reads it,
 // as any row; it leaves the Inbox once its notices are pruned (notices.ts, KEEP_DAYS).
-function threadRow(n: notices.Notice): inbox.Want {
+//
+// Once you wrote in it, the row opens on its chat (threads.ts), and is that chat's row too: Claude's reply or question
+// newer than the thread's newest notice says it, as a chat's own row would, the row keeping its place, avatar and title.
+function threadRow(n: notices.Notice, chat: inbox.Want | undefined, now: number): inbox.Want {
   const [first, ...rest] = n.text.split("\n");
   const said = (n.source === "mail" ? rest.join(" ") : first).trim() || first;
   const what = n.why && !notices.RULED.has(n.why) ? n.why : said;
-  const title = n.source === "mail" ? first || "(no subject)" : n.place === "DM" ? n.who : n.place.replace(/^group DM with /, "");
-  return {
-    id: n.thread, slug: n.thread, issue: false, session: null, title, agent: null, why: n.verdict!,
-    says: n.place === "DM" ? what : `${n.who}: ${what}`, kind: "needs", waits: false, at: n.at, looked: 0, seed: null,
-    source: n.source, who: n.who,
+  const session = chats.ofThread(n.thread)?.session ?? null;
+  const row: inbox.Want = {
+    id: n.thread, slug: n.thread, issue: false, session, title: threads.titleOf(n), agent: null, why: n.verdict!,
+    says: n.place === "DM" ? what : `${n.who}: ${what}`, kind: "needs", waits: false, at: n.at,
+    looked: session && live_.watching(session) ? now : 0, seed: null, source: n.source, who: n.who,
   };
+  if (!chat || !(chat.waits || chat.at! > n.at)) return row;
+  return { ...row, why: chat.why, says: `Claude ${chat.says}`, waits: chat.waits, at: chat.at, looked: chat.looked, seed: chat.seed };
 }
 
 // The Inbox's rows, newest first, as /api/inbox lists them, each named by who: a row from a chat with no issue names

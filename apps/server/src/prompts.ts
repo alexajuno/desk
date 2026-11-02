@@ -60,6 +60,10 @@ export const HANDED_TODO = "Work it by its protocol, as the rules above say, fro
 export const HANDED_ON = "<desk-push from=\"{who}\">\n{note}\n</desk-push>\n\n{Who} handed this on to you, for this chat's issue{where}. Carry on with it by the issue's protocol, as the rules above say, and tell the user in a line what it changes.";
 export const HANDED_WHERE = ", and its whole conversation is in {path}, for what the note leaves out";
 
+// A chat from a thread's Inbox row (threads.ts): the user's words, then, in a block the panel leaves out
+// (transcript.ts, THREAD), what the thread is, what Claude may do with it, and the thread itself.
+export const ON_THREAD = "{text}\n\n<desk-thread id=\"{id}\">\ndesk's firewall let {kind} through to the user, as {verdict}: {why}. The user opened it in desk's Inbox and wrote the words above to you about it, in a chat of its own that only they see: help them with it, such as by answering, looking into it, drafting a reply, or filing the work as a desk issue (the desk skill). The thread may move on as you talk: read it again as it stands now with `{read}`. Nothing goes to {where} without the user's word: never post, send or react there yourself. Show a reply as you would send it, and the user sends it.\n\nThe thread, oldest first, as {where} holds it now:\n\n{thread}\n</desk-thread>";
+
 // A plan written by whoever started the chat, carried out at once (api.ts, /start with a plan).
 export const GO_FIRST: Record<string, string> = {
   design: "Carry out its plan now, one step at a time with the user, as the rules above say: do its first step, report it, and end your turn.",

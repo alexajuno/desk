@@ -39,11 +39,11 @@ interface TableRow {
 const table = new Map<string, TableRow>();
 
 // What the user typed in a user event, on one line: not a tool's result, nor a slash command's own lines
-// ("<command-name>"), nor what desk pushed ("<desk-push ...>").
+// ("<command-name>"), nor what desk pushed ("<desk-push ...>"), nor the thread a chat from an Inbox row carries.
 export function promptOf(event: { message?: { content?: unknown } }): string {
   let content = event.message?.content;
   if (Array.isArray(content)) content = content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n");
-  const text = uploads.split(String(content ?? "")).text.split(/\s+/).filter(Boolean).join(" "); // without the files' paths
+  const text = uploads.split(String(content ?? "").replace(transcripts.THREAD, "")).text.split(/\s+/).filter(Boolean).join(" "); // without the files' paths, nor a thread's block
   return text.startsWith("<") ? "" : text;
 }
 

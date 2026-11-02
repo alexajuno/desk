@@ -189,6 +189,10 @@ function summary(name: string, input: Record<string, unknown>): string {
 // user reads; the panel says only who sent it.
 export const PUSH = /^<desk-push from="([^"]*)">/;
 
+// What desk adds after the user's first words in a chat from a thread's Inbox row (threads.ts): the thread and what
+// Claude may do with it, which the panel leaves out, showing only the words.
+export const THREAD = /\s*<desk-thread id="[^"]*">[\s\S]*<\/desk-thread>\s*$/;
+
 const resultText = (content: unknown): string =>
   typeof content === "string" ? content
     : Array.isArray(content) ? content.map((b) => (b.type === "text" ? b.text : b.type === "image" ? "[image]" : "")).join("\n") : "";
@@ -196,7 +200,7 @@ const resultText = (content: unknown): string =>
 // What the user typed, or nothing for what Claude Code itself put in a user message: a slash command's own lines, a
 // reminder. A slash command reads as itself.
 function typed(text: string): string {
-  const t = text.trim();
+  const t = text.replace(THREAD, "").trim();
   const command = /^<command-name>(\/?[^<]*)<\/command-name>/.exec(t) ?? /<command-name>(\/?[^<]*)<\/command-name>/.exec(t);
   if (command) {
     const args = /<command-args>([\s\S]*?)<\/command-args>/.exec(t)?.[1]?.trim();

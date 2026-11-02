@@ -26,6 +26,7 @@ import { HttpError } from "./pages.ts";
 import * as sessions from "./sessions.ts";
 import * as notices from "./notices.ts";
 import * as sync from "./sync.ts";
+import * as threads from "./threads.ts";
 import { tailnetName } from "./tailnet.ts";
 import * as teams from "./teams.ts";
 import * as tabs from "./tabs.ts";
@@ -336,6 +337,20 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/api/inbox", async () => pages.inboxRows());
   // A Slack thread's or a mail thread's messages, as its Inbox row opens them: the app holds no notices.
   app.get("/api/page/thread", async (req: Req) => pages.threadPage(req.query.id ?? ""));
+  // Writing in a thread's open row starts its chat, which carries the thread (threads.ts); the row opens on the chat.
+  app.post("/api/threads/chat", async (req: Req) => {
+    if (!fromPage(req)) throw new HttpError(403, "Only desk’s page starts a thread’s chat.");
+    const { thread, text } = (req.body ?? {}) as { thread?: string; text?: string };
+    const chat = await threads.startChat(String(thread ?? ""), String(text ?? ""));
+    sync.frameChanged();
+    return { chat: chat.id, session: chat.session };
+  });
+  // The thread as it stands now, for its chat's Claude to read again: from Slack or Gmail, the user's own messages too.
+  app.get("/api/threads/:id", async (req: Req, reply: FastifyReply) => {
+    const id = req.params.id;
+    if (!threads.IS.test(id) || !(await notices.ofThread(id)).length) throw new HttpError(404, "No such thread.");
+    return reply.type("text/plain; charset=utf-8").send(threads.asText(await threads.whole(id)));
+  });
   // A made-up notice, on a test desk alone, which connects to neither Slack nor Gmail (config.ts, CONNECT): a test of
   // the Inbox's rows and pop-ups writes its own. 8790's come only from its connectors.
   app.post("/api/notices", async (req: Req) => {
