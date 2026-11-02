@@ -183,6 +183,15 @@ create table if not exists trying (
   since double precision not null, -- seconds
   pid integer -- the desk that switched it
 );
+-- The pool of test desks (pool.ts): each issue whose session asked for one, in the order it asked, with the port of
+-- its slot once it has one (null while it waits in line), and when it was told so (null until then).
+create table if not exists tests (
+  slug text primary key,
+  branch text not null,
+  asked double precision not null, -- seconds
+  port integer,
+  told double precision -- seconds
+);
 create table if not exists copies (path text primary key, text text); -- each file copies.ts last wrote out, null once removed
 create table if not exists sessions ( -- what each session does, as the session host tells desk (turns.ts)
   id text primary key,

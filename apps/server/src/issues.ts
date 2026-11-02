@@ -454,7 +454,7 @@ async function follow(tx: Db, i: Issue): Promise<boolean> {
   }
   for (const r of (await linking("projects")).rows) await tx.query("update projects set body = $2 where slug = $1", [r.slug, relink(r.body)]);
   for (const told of renamed) await told(tx, from, to);
-  for (const table of ["line", "tries", "trying"]) await tx.query(`update ${table} set slug = $2 where slug = $1`, [from, to]);
+  for (const table of ["line", "tries", "trying", "tests"]) await tx.query(`update ${table} set slug = $2 where slug = $1`, [from, to]);
   await tx.query("update trashed set row = jsonb_set(row, '{parent}', to_jsonb($2::text)) where row ->> 'parent' = $1", [from, to]);
   return true;
 }

@@ -49,11 +49,12 @@ import * as automations from "./automations.ts";
 import type { Automation } from "./automations.ts";
 import * as chats from "./chats.ts";
 import * as compact from "./compact.ts";
-import { HOME } from "./config.ts";
+import { HOME, TEST } from "./config.ts";
 import * as store from "./issues.ts";
 import { byRank, type Issue } from "./issues.ts";
 import * as land from "./land.ts";
 import * as periods from "./periods.ts";
+import * as pool from "./pool.ts";
 import { HttpError } from "./pages.ts";
 import * as updates from "./updates.ts";
 import * as projects from "./projects.ts";
@@ -818,6 +819,26 @@ export function routes(app: FastifyInstance) {
       if (error instanceof land.Blocked) throw new HttpError(409, error.message);
       throw error;
     }
+  });
+
+  // A test desk for the issue's branch: desk runs it from its worktree on a port of its own, on a fresh copy of the
+  // data, or puts the issue in line for one (pool.ts). 8790 keeps running main.
+  app.post("/api/issues/:slug/test", async (req: Req) => {
+    if (TEST) throw new HttpError(403, "A test desk hands out no test desks: ask 8790.");
+    const branch = ((req.body ?? {}) as Record<string, unknown>).branch;
+    if (typeof branch !== "string" || !branch) throw new HttpError(400, 'Name the branch to test: {"branch": "feat/<name>"}.');
+    try {
+      return await pool.ask(await loadIssue(req.params.slug), branch);
+    } catch (error) {
+      if (error instanceof pool.Refused) throw new HttpError(409, error.message);
+      throw error;
+    }
+  });
+
+  // The issue is done with its test desk, or with waiting for one: it stops, its copy goes, and the next in line gets it.
+  app.delete("/api/issues/:slug/test", async (req: Req) => {
+    if (TEST) throw new HttpError(403, "A test desk hands out no test desks: ask 8790.");
+    return { message: await pool.release(req.params.slug) };
   });
 
   // The issue is done with its folder's checkout: put it back on the branch it was on before try, and take the issue

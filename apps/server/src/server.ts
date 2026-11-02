@@ -13,6 +13,7 @@ import * as store from "./issues.ts";
 import * as land from "./land.ts";
 import * as models from "./models.ts";
 import * as pins from "./pins.ts";
+import * as pool from "./pool.ts";
 import * as projects from "./projects.ts";
 import * as sessions from "./sessions.ts";
 import * as settings from "./settings.ts";
@@ -57,6 +58,7 @@ setInterval(() => void db.prune().catch((error) => console.error("pruning the lo
 if (!TEST) {
   land.start(); // the line for desk's own checkout moves on its own
   automations.startClock(); // each automation whose time came fires
+  pool.start(); // the test desks' line moves on its own
 }
 
 let stopping = false;
