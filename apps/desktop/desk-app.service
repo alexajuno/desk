@@ -11,7 +11,9 @@ ConditionEnvironment=WAYLAND_DISPLAY
 
 [Service]
 Type=simple
-ExecStart=%h/projects/desk/apps/desktop/node_modules/electron/dist/electron %h/projects/desk/apps/desktop --ozone-platform=wayland --hidden
+# Electron runs from its copy outside node_modules (../fuses.ts, the postinstall), which desk's own pnpm install can
+# never delete under the running app, as it did on 2 Nov
+ExecStart=%h/.cache/desk/electron/electron %h/projects/desk/apps/desktop --ozone-platform=wayland --hidden
 Restart=on-failure
 RestartSec=2
 # Electron quits in a tenth of a second on its own SIGTERM, but with every one of its processes sent one at once, as

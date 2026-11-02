@@ -2,7 +2,8 @@
 # desk's own window, the Electron app in apps/desktop, which the launcher's desk entry (apps/desktop/desk.desktop) runs.
 # The app runs all the time as desk-app.service, which Hyprland starts at login with no window, so that Claude's tabs
 # work with desk's window closed: this starts it if it is not running and asks it for its window, on its socket. With no
-# such service it runs the app itself, as before 2 Nov, Wayland where there is one and X11 otherwise.
+# such service it runs the app itself, as before 2 Nov, Wayland where there is one and X11 otherwise, from
+# Electron's copy outside node_modules (apps/desktop/fuses.ts).
 top=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 if systemctl --user cat desk-app.service >/dev/null 2>&1; then
 	systemctl --user start desk-app.service
@@ -13,4 +14,4 @@ if systemctl --user cat desk-app.service >/dev/null 2>&1; then
 	echo "desk-app: the app did not answer; see journalctl --user -u desk-app" >&2
 	exit 1
 fi
-exec "$top/apps/desktop/node_modules/.bin/electron" "$top/apps/desktop" --ozone-platform-hint=auto "$@"
+exec ~/.cache/desk/electron/electron "$top/apps/desktop" --ozone-platform-hint=auto "$@"
