@@ -9,6 +9,10 @@
 //
 // It also holds Claude's tabs (tabs.ts), which Claude drives over the DevTools protocol on its port, and which a chat's
 // Browser in desk's page shows in its place, through what the page gets from the app (preload.cjs).
+//
+// It runs all the time, so that Claude's tabs work with desk's window closed, as an overnight automation needs (2 Nov):
+// desk-app.service starts it with --hidden at login, with no window, bin/desk-app asks it for its window on its socket,
+// and closing the window hides it, as it was left.
 import { app, BrowserWindow, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent, type Rectangle, type WebContents } from "electron";
 import { join } from "node:path";
 import { shortcut } from "./keys.ts";
@@ -24,6 +28,7 @@ const site = (url: string) => {
 const PRELOAD = join(import.meta.dirname, "preload.cjs");
 
 let win: BrowserWindow | null = null;
+let quitting = false;
 
 app.commandLine.appendSwitch("remote-debugging-port", String(tabs.PORT)); // on 127.0.0.1 only
 // The cookies' key in the user's keyring, as their Chrome's (logins.ts); on a desktop it does not know, as Hyprland,
@@ -33,22 +38,30 @@ app.commandLine.appendSwitch("password-store", "gnome-libsecret");
 // One desk at a time: opening it again brings back the window it has.
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on("second-instance", () => {
-    if (!win) return open();
-    if (win.isMinimized()) win.restore();
-    win.focus();
-  });
+  app.on("second-instance", show);
   app.whenReady().then(() => {
-    open();
-    return tabs.start();
+    if (!process.argv.includes("--hidden")) open();
+    return tabs.start(show);
   }).catch((e: Error) => console.log(`no tabs for Claude: ${e.message}`));
-  app.on("before-quit", tabs.quit);
+  app.on("before-quit", () => {
+    quitting = true;
+    tabs.quit();
+  });
+  // A hidden window holds no tab, which would stop drawing there: desk's page gives it again as it shows (Browser.tsx).
   ipcMain.on("tab", (e, target: unknown, at: unknown, aside: unknown) => {
-    const host = desks(e);
-    if (host) tabs.show(host, typeof target === "string" ? target : null, place(at, e.sender.getZoomFactor()), aside === true);
+    const host = desks(e), shows = host?.isVisible() && typeof target === "string";
+    if (host) tabs.show(host, shows ? target : null, place(at, e.sender.getZoomFactor()), aside === true);
   });
   ipcMain.handle("still", (e, target: unknown) => (desks(e) && typeof target === "string" ? tabs.still(target) : null));
-  app.on("window-all-closed", () => app.quit());
+  app.on("window-all-closed", () => {}); // the app runs on with no window, for Claude's tabs
+}
+
+// desk's window, made, or shown again as it was left.
+function show() {
+  if (!win) return open();
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
 }
 
 function open() {
@@ -61,6 +74,12 @@ function open() {
     webPreferences: { spellcheck: true, preload: PRELOAD },
   });
   win.removeMenu();
+  // Closed, it only hides, desk's page running on behind it, and the tab it showed goes back to its own window (tabs.ts)
+  win.on("close", (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    win?.hide();
+  });
   win.on("closed", () => { win = null; });
   keep(win.webContents);
   void win.loadURL(HOME.href);

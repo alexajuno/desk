@@ -350,6 +350,9 @@ function Page({ tab }: { tab: Tab }) {
       APP!.show(shows ? tab.target : null, at, still);
     };
     place();
+    // A window hidden let go of its tab (main.ts), which it gets again as it shows.
+    const seen = () => { if (document.visibilityState === "visible") was = ""; };
+    document.addEventListener("visibilitychange", seen);
     const back = () => {
       toasts.hide();
       ui.setKeys(false);
@@ -368,6 +371,7 @@ function Page({ tab }: { tab: Tab }) {
       asked++;
       img.removeEventListener("mousedown", back);
       box.removeEventListener("keydown", key);
+      document.removeEventListener("visibilitychange", seen);
       URL.revokeObjectURL(img.src);
       APP!.show(null);
     };

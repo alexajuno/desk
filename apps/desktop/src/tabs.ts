@@ -6,6 +6,7 @@
 //     relay ── PUT /tabs {"url"} ──► SOCKET ──► a tab in a window of its own ──► {"target": "<its DevTools id>"}
 //     relay ── GET / ──► SOCKET ──► {"context": "<the tabs' DevTools browser context>"}, the only one the relay shows Claude
 //     desk ── GET /tabs/<id> ──► SOCKET ──► {"focused": true}, whether your keys are in the tab, which a chat's Browser shows
+//     bin/desk-app ── POST /window ──► SOCKET ──► desk's window, made or shown again (main.ts)
 //
 // A chat's Browser shows a tab itself, in desk's window over the Browser's box for it (show, below), at that box's size,
 // as a Chrome tab takes its window's; your mouse and keys go straight to it, but for desk's own, which it hands back.
@@ -42,7 +43,8 @@ const watched = new WeakSet<BrowserWindow>();
 let context = "";
 let quitting = false;
 
-export async function start() {
+// The tabs' screen, logins and socket, on which a call for desk's window brings it (main.ts).
+export async function start(showWindow: () => void) {
   await screen();
   const agents = session.fromPartition(PARTITION);
   // As Chrome's, without Electron's and the app's names, which some sites refuse
@@ -58,7 +60,7 @@ export async function start() {
     (e: Error) => console.log(`no logins from your Chrome: ${e.message}`),
   );
   probe.webContents.close();
-  listen();
+  listen(showWindow);
 }
 
 export const quit = () => { quitting = true; };
@@ -153,12 +155,15 @@ const leave = (tab: Tab) => {
 };
 
 // desk's window lets go of its tab as its page goes, which says nothing as it goes: reloaded, gone to another site, or
-// the window closed.
+// the window closed, or its page closed it, as window.close() does with no close of the window's; and as it hides, where
+// the tab would stop drawing.
 function watch(host: BrowserWindow) {
   if (watched.has(host)) return;
   watched.add(host);
   const away = () => show(host, null);
   host.on("close", away);
+  host.on("hide", away);
+  host.webContents.once("destroyed", away);
   host.webContents.on("did-start-navigation", (d) => d.isMainFrame && !d.isSameDocument && away());
   host.webContents.on("render-process-gone", away);
 }
@@ -186,17 +191,18 @@ async function info(page: WebContents): Promise<{ targetId: string; browserConte
   }
 }
 
-function listen() {
+function listen(showWindow: () => void) {
   rmSync(SOCKET, { force: true }); // left by an app that crashed: only the one app holding the lock gets here
   createServer((req, res) => {
     const reply = (status: number, body: object) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
     if (req.method === "GET" && req.url === "/") return reply(200, { context, port: PORT });
+    if (req.method === "POST" && req.url === "/window") return (showWindow(), reply(200, {})); // bin/desk-app's
     const id = req.method === "GET" && /^\/tabs\/([0-9A-F]{32})$/.exec(req.url ?? "")?.[1];
     if (id) {
       const tab = all.get(id);
       return tab ? reply(200, { focused: Boolean(tab.host?.isFocused() && tab.view.webContents.isFocused()) }) : reply(404, { detail: "No such tab" });
     }
-    if (req.method !== "PUT" || req.url !== "/tabs") return reply(404, { detail: "GET /, GET /tabs/<id> or PUT /tabs" });
+    if (req.method !== "PUT" || req.url !== "/tabs") return reply(404, { detail: "GET /, GET /tabs/<id>, PUT /tabs or POST /window" });
     read(req).then((body) => {
       const url = (JSON.parse(body) as { url?: unknown }).url ?? "about:blank";
       if (typeof url !== "string" || !ADDRESS.test(url)) return reply(400, { detail: "An http or https address, or about:blank" });
