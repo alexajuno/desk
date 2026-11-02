@@ -50,10 +50,9 @@ export function moved(sessions: string[] | null) {
   for (const [id, look] of panels.values()) if (!sessions || sessions.includes(id)) look();
 }
 
-// A new count of the 5 hours or the week moves every panel, and of a session's context its own.
+// A new count of a session's context moves its panels.
 models.onHeard((name) => {
-  if (name === "usage") moved(null);
-  else if (name.startsWith("context:")) moved([name.slice("context:".length)]);
+  if (name.startsWith("context:")) moved([name.slice("context:".length)]);
 });
 
 // Whether a panel the user looks at shows the session now.

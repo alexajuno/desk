@@ -1,13 +1,13 @@
-// The model and effort each session runs on, which the composer's chip shows and changes, and the account's usage,
-// which the chip's menu shows. A session's pick is kept in the session_models table, by session id, so it holds when
+// The model and effort each session runs on, which the composer's chip shows and changes, and the live profile's usage,
+// as seat reads it, which the chip's menu shows. A session's pick is kept in the session_models table, by session id, so it holds when
 // the host starts the session again. A desk chat and an issue's session start on Settings > Preferences (settings.ts) and
 // keep it as their pick; a session with no pick, such as one from a terminal, runs on Claude Code's own default
 // (~/.claude/settings.json).
 //
-// The list of models and the usage come from Claude Code itself, asked by one started only for the question (as the
-// SDK's supportedModels and the call behind /usage), with no message, no settings and no transcript, so it costs
-// nothing and leaves no trace. desk asks it here rather than in the session host, which may still run older code, and
-// keeps the answers, with each reply's usage and each session's context, so the menu never waits on one.
+// The list of models comes from Claude Code itself, asked by one started only for the question (as the SDK's
+// supportedModels), with no message, no settings and no transcript, so it costs nothing and leaves no trace. desk asks
+// it here rather than in the session host, which may still run older code, and keeps the answers, with each session's
+// context, so the menu never waits on one.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { query, type ModelInfo, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
@@ -16,6 +16,8 @@ import * as copies from "./copies.ts";
 import * as db from "./db.ts";
 import { sql } from "./db.ts";
 import * as hosted from "./hosted.ts";
+import * as seat from "./seat.ts";
+import type { Window } from "./seat.ts";
 import { run, which } from "./proc.ts";
 import * as settings from "./settings.ts";
 import * as turns from "./turns.ts";
@@ -139,14 +141,14 @@ export async function change(session: string, pick: Pick): Promise<void> {
 // --- what Claude Code said -------------------------------------------------------------------------------------------
 // The chip's menu opens at once, with what desk last heard (the user, 20 Oct: "make sure they don't take seconds to
 // press that button", and "the number of usage flipping won't be much, so it needs not to be exact. we prioritize
-// speed here"). The models, the plan's usage and each session's context are kept in the heard table, and asked again
+// speed here"). The models and each session's context are kept in the heard table, and asked again
 // only in the background, never while the menu waits: on 20 Oct the usage, asked on every open a minute after the last,
 // held the menu up 2 to 4 s while a Claude Code started only for it.
 
 const heard = new Map<string, { value: any; at: number }>(); // at in ms
 const hearers = new Set<(name: string) => void>();
 
-// Told each time desk hears something new, by its name in the heard table, such as "usage" or "context:<session>".
+// Told each time desk hears something new, by its name in the heard table, such as "context:<session>".
 export const onHeard = (fn: (name: string) => void) => { hearers.add(fn); };
 
 async function hear(name: string, value: unknown) {
@@ -233,49 +235,21 @@ export async function menu(): Promise<Model[]> {
 }
 
 // --- the usage -------------------------------------------------------------------------------------------------------
-// Every reply of a session says the plan's usage, in Claude Code's rate-limit event, which the host passes on (turns.ts,
-// heardUsage). desk asks Claude Code itself only once no session has said it for a while, as when none works.
+// The live profile's 5-hour and weekly usage, as seat last read them (seat.ts): seat is the one source of the numbers,
+// since on api Claude Code has no plan usage to give (1 Nov).
 
-export interface Window {
-  percent: number;
-  resets: string | null; // ISO 8601; null once the window reset, until desk hears when it next does
-}
+export type { Window } from "./seat.ts";
 
 export interface Usage {
   five_hour: Window | null;
   seven_day: Window | null;
 }
 
-const STALE = 15 * 60_000; // ms with no word of the usage, after which desk asks Claude Code in the background
-const RETRY = 60_000; // ms after an ask before the next, so a failing one is not started on every open
-let usageAsked = 0;
-
-// How much of the plan's 5-hour and weekly limits is used, as last heard; none for an API key, which has no plan
-// limits, or before desk heard any. A window whose reset passed since is unused.
+// How much of the live plan's 5-hour and weekly limits is used; none on api, which has no plan limits, or before desk
+// read seat.
 export function used(): Usage {
-  const kept = heard.get("usage");
-  if ((!kept || Date.now() - kept.at > STALE) && Date.now() - usageAsked > RETRY) {
-    usageAsked = Date.now();
-    const window = (w?: { utilization: number | null; resets_at: string | null } | null): Window | null =>
-      w && w.utilization !== null && w.resets_at ? { percent: Math.round(w.utilization), resets: w.resets_at } : null;
-    void ask((q) => q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }))
-      .then((u) => hear("usage", { five_hour: window(u.rate_limits?.five_hour), seven_day: window(u.rate_limits?.seven_day) }))
-      .catch((error) => console.error("desk: asking Claude Code the usage", error));
-  }
-  const now = (w?: Window | null): Window | null => (!w ? null : w.resets && Date.parse(w.resets) > Date.now() ? w : { percent: 0, resets: null });
-  return { five_hour: now(kept?.value.five_hour), seven_day: now(kept?.value.seven_day) };
-}
-
-// A session's reply said the usage: its rate-limit event's unifiedWindows, which the SDK's types do not name yet, with
-// each window's utilization from 0 to 1. Written down only when a number moved.
-function heardUsage(windows: Record<string, { utilization?: number; resetsAt?: number } | undefined>) {
-  const window = (w?: { utilization?: number; resetsAt?: number }): Window | null =>
-    w && typeof w.utilization === "number" && w.resetsAt ? { percent: Math.round(w.utilization * 100), resets: new Date(w.resetsAt * 1000).toISOString() } : null;
-  const said: Usage = { five_hour: window(windows?.five_hour), seven_day: window(windows?.seven_day) };
-  if (!said.five_hour && !said.seven_day) return;
-  const kept = heard.get("usage"), same = (a?: Window | null, b?: Window | null) => a?.percent === b?.percent && a?.resets === b?.resets;
-  if (kept && same(kept.value.five_hour, said.five_hour) && same(kept.value.seven_day, said.seven_day)) kept.at = Date.now();
-  else void hear("usage", said).catch((error) => console.error("desk: keeping the usage", error));
+  const live = seat.now()?.profiles.find((p) => p.active);
+  return { five_hour: live?.five_hour ?? null, seven_day: live?.week ?? null };
 }
 
 // --- the context -----------------------------------------------------------------------------------------------------
@@ -307,17 +281,16 @@ export function context(session: string): Context | null {
 }
 
 // What the composer shows outright, beside Manual (the user, 31 Oct: "display the current context and weekly usage
-// outright", and 1 Nov: "need to add 5 hour circle"): the session's context, the 5 hours and the week, as last heard.
-// It counts nothing again itself, since the panels ask it again each time desk hears something new (live.ts), and a
-// count asked from there would never end.
-export function outright(session: string): { context: Context | null; hours: Window | null; week: Window | null } {
-  const { five_hour, seven_day } = used();
-  return { context: heard.get(`context:${session}`)?.value ?? null, hours: five_hour, week: seven_day };
+// outright"): the session's context, as last counted; the 5 hours and the week moved to the status bar on 1 Nov. It
+// counts nothing again itself, since the panels ask it again each time desk hears something new (live.ts), and a count
+// asked from there would never end.
+export function outright(session: string): { context: Context | null } {
+  return { context: heard.get(`context:${session}`)?.value ?? null };
 }
 
 // --- start ----------------------------------------------------------------------------------------------------------
 
-// What desk last heard, as it starts, then the host's word of each turn's end and each reply's usage.
+// What desk last heard, as it starts, then the host's word of each turn's end.
 async function listen() {
   const rows = (await sql().query<{ name: string; value: unknown; at: number }>("select name, value, at from heard")).rows;
   for (const r of rows) heard.set(r.name, { value: r.value, at: r.at * 1000 });
@@ -325,5 +298,4 @@ async function listen() {
   if (models) [list, listedBy] = [models.models, models.version];
   void all().catch(() => {}); // looks at Claude Code's version now
   turns.onChange((_sessions, ended) => { for (const session of ended) recount(session); });
-  turns.onUsage(heardUsage);
 }

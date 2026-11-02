@@ -20,6 +20,7 @@ import * as models from "./models.ts";
 import * as pages from "./pages.ts";
 import * as periods from "./periods.ts";
 import * as pins from "./pins.ts";
+import * as seat from "./seat.ts";
 import * as projects from "./projects.ts";
 import { HttpError } from "./pages.ts";
 import * as sessions from "./sessions.ts";
@@ -817,6 +818,19 @@ export async function create(): Promise<FastifyInstance> {
     }
   });
   app.get("/api/usage", async () => models.used());
+  // seat's profiles for the status bar: each with its numbers, the live one, and whether seat switches on its own
+  // (seat.ts); null when seat is missing or failed. Its menu switches the live one, and turns Auto switch on or off.
+  app.get("/api/seat", async () => seat.profiles());
+  app.post("/api/seat/switch", async (req: Req) => {
+    const { name } = (req.body ?? {}) as unknown as { name?: string };
+    if (!name) throw new HttpError(422, "Send the profile’s name, as {\"name\": \"work\"}.");
+    return seat.use(name);
+  });
+  app.post("/api/seat/auto", async (req: Req) => {
+    const { on } = (req.body ?? {}) as unknown as { on?: boolean };
+    if (typeof on !== "boolean") throw new HttpError(422, "Send whether seat switches on its own, as {\"on\": true}.");
+    return seat.auto(on);
+  });
   app.get("/api/live/:id/files", async (req: Req) => live.files(sessionOf(req), req.query.q ?? ""));
   app.get("/api/live/:id/commands", async (req: Req) => live.commands(sessionOf(req)));
   // What one of the session's subagents did, by the Agent call that started it: its steps, for that step's fold.

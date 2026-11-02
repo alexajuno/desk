@@ -7,7 +7,6 @@
 //
 //     {"type": "hello", "sessions": [<state>, ...]}    first, on every connect: each session the host holds
 //     {"type": "session", ...<state>}                  one changed; "open": false once its process ended
-//     {"type": "usage", "windows": {...}}             a reply said the plan's usage (models.ts, heardUsage)
 //     {"type": "tab", ...} or {"type": "tab-closed", ...}   a session's tab in the agents' Chrome (tabs.ts)
 //
 // Its hello also says whether its browser relay runs and the tabs it noted, which desk answers (tabs.ts).
@@ -59,7 +58,6 @@ let reporting = false;
 let host: WebSocket | null = null; // the host's socket now
 let stopping = false;
 const listeners = new Set<Listener>();
-const usageListeners = new Set<(windows: Record<string, any>) => void>();
 const waiters = new Set<() => void>(); // settled's, each looking again at every change
 
 const COLUMNS = `id, open, working, asks, extract(epoch from prompted)::float8 as prompted, extract(epoch from replied)::float8 as replied,
@@ -71,7 +69,6 @@ type Listener = (sessions: string[] | null, ended: string[]) => void;
 
 // Each change, as the host says it: sync.ts sends the frame and the open chats again, and the line looks (land.ts).
 export const onChange = (fn: Listener) => { listeners.add(fn); };
-export const onUsage = (fn: (windows: Record<string, any>) => void) => { usageListeners.add(fn); };
 
 function changed(sessions: string[] | null, ended: string[] = []) {
   for (const fn of listeners) fn(sessions, ended);
@@ -221,14 +218,10 @@ async function hello(ws: WebSocket, states: State[]) {
 export function connect(ws: WebSocket) {
   let heard = Promise.resolve();
   ws.on("message", (data) => {
-    let e: { type?: string; sessions?: State[]; windows?: Record<string, any>; relay?: boolean; tabs?: Tab[]; target?: string } & Partial<State> & Partial<Tab>;
+    let e: { type?: string; sessions?: State[]; relay?: boolean; tabs?: Tab[]; target?: string } & Partial<State> & Partial<Tab>;
     try {
       e = JSON.parse(data.toString());
     } catch {
-      return;
-    }
-    if (e.type === "usage" && e.windows) {
-      for (const fn of usageListeners) fn(e.windows);
       return;
     }
     heard = heard.then(async () => {
