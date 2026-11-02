@@ -22,12 +22,13 @@ export type View = "chat" | "changes";
 // What the right half beside it shows: the chat's terminal, or its browser, the tabs its session has open.
 export type Half = "terminal" | "browser";
 
-// The right half's share of the chat's width at first, and the least and most it takes when dragged.
-export const HALF = { start: 0.5, min: 0.25, max: 0.75 };
+// The chat's width while its right half is open beside it, a column, the half taking all the rest ("ok. A", 2 Nov, on
+// three mockups, over a Widen button and the page over the whole window), and the least a drag on the half's edge leaves it.
+export const CHAT = { start: 480, min: 360 };
 
 const saved = (() => {
   try {
-    return JSON.parse(localStorage.dock ?? "{}") as { session?: string; pill?: boolean; halves?: Record<string, Half>; halfWidth?: number };
+    return JSON.parse(localStorage.dock ?? "{}") as { session?: string; pill?: boolean; halves?: Record<string, Half>; chatWidth?: number };
   } catch {
     return {};
   }
@@ -40,19 +41,19 @@ class Dock {
   details = false; // its issue's details dropped open under its head; each chat comes with them folded
   pill = saved.pill ?? false; // the chat you left, at the bottom right
   halves: Record<string, Half> = saved.halves ?? {}; // the chats whose right half is open, and on which view
-  halfWidth = saved.halfWidth ?? HALF.start; // the right half's share of the chat's width
+  chatWidth = saved.chatWidth ?? CHAT.start; // the chat's width in px while its right half is open, which gets the rest
   tab: Record<string, string> = {}; // the tab each chat's Browser shows, by Chrome's id, once you picked one
 
   constructor() {
     makeObservable(this, {
-      session: observable, center: observable, view: observable, details: observable, pill: observable, halves: observable, halfWidth: observable,
-      tab: observable, layout: computed, arrange: action, setView: action, setDetails: action, dismiss: action, setHalf: action, setHalfWidth: action,
+      session: observable, center: observable, view: observable, details: observable, pill: observable, halves: observable, chatWidth: observable,
+      tab: observable, layout: computed, arrange: action, setView: action, setDetails: action, dismiss: action, setHalf: action, setChatWidth: action,
       showTab: action, openTab: action, closeBrowser: action,
     });
   }
 
   private save() {
-    localStorage.dock = JSON.stringify({ session: this.session, pill: this.pill, halves: this.halves, halfWidth: this.halfWidth });
+    localStorage.dock = JSON.stringify({ session: this.session, pill: this.pill, halves: this.halves, chatWidth: this.chatWidth });
   }
 
   get layout(): Layout {
@@ -108,8 +109,8 @@ class Dock {
     return yes;
   }
 
-  setHalfWidth(share: number) {
-    this.halfWidth = Math.min(HALF.max, Math.max(HALF.min, share));
+  setChatWidth(px: number) {
+    this.chatWidth = Math.max(CHAT.min, Math.round(px));
     this.save();
   }
 

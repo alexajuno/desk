@@ -477,12 +477,14 @@ button.foot-step:hover { background: var(--bg-hover); }
 .dock-pill:hover .dock-pill-x { opacity: 1; }
 
 /* The chat's right half (sessions/Half.tsx), beside it at the window's full height: what Claude drives, its terminal
-   or its browser. Its left edge is a hairline, which drags. It has no head: the chat's head picks and hides its view
-   ("yeah A", 1 Nov), and the browser's tabs stand level with that head. */
+   or its browser. It takes all the room the chat leaves, the chat a column of --chat-w, 480px until its edge is
+   dragged ("ok. A", 2 Nov), so a wider window widens only the half. Its left edge is a hairline, which drags. It has
+   no head: the chat's head picks and hides its view ("yeah A", 1 Nov), and the browser's tabs stand level with that
+   head. */
 .session-split { display: flex; height: 100%; min-height: 0; }
 .session-split > .session-view { flex: 1; min-width: 0; }
-.session-split:has(> .half) > .session-view { min-width: 360px; } /* the half gives way first on a narrow window */
-.half { position: relative; flex: 0 1 auto; min-width: 320px; min-height: 0; display: flex; flex-direction: column;
+.session-split:has(> .half) > .session-view { flex: 0 1 var(--chat-w, 480px); min-width: 360px; } /* the chat gives way to 360 on a narrow window */
+.half { position: relative; flex: 1 1 0; min-width: 320px; min-height: 0; display: flex; flex-direction: column;
         border-left: 0.5px solid var(--border-2); background: var(--bg-panel); }
 .half-grip { position: absolute; z-index: 2; top: 0; bottom: 0; left: -4px; width: 8px; cursor: col-resize; touch-action: none; }
 .half-grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: var(--border-3); opacity: 0; transition: opacity 0.1s; }

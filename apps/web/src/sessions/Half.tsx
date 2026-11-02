@@ -1,10 +1,11 @@
 // The right half beside the chat in the middle, which holds what Claude drives (store/dock.ts): the chat's terminal
-// (Terminal.tsx) or its browser (Browser.tsx), each a view of it. It runs the window's full height beside the chat,
-// half its width at first, and its left edge drags to resize it. It has no head of its own: the terminal and globe
-// buttons in the chat's head, Ctrl ` and Ctrl ⇧ B open it on their view, switch it to theirs, and hide it ("we have two
-// duplicated sections: the terminal and browser icons and then, on right sidebar, we have terminal and browser chips",
-// the user, 1 Nov, then "yeah A" on two mockups, over the half's tabs with one button in the head). Hiding leaves the
-// terminal's session running. On a phone it takes the chat's place, under the chat's head.
+// (Terminal.tsx) or its browser (Browser.tsx), each a view of it. It runs the window's full height beside the chat, and
+// takes all the room the chat leaves, the chat a 480px column until its left edge is dragged ("ok. A", 2 Nov), so a
+// wider window widens only the half. It has no head of its own: the terminal and globe buttons in the chat's head,
+// Ctrl ` and Ctrl ⇧ B open it on their view, switch it to theirs, and hide it ("we have two duplicated sections: the
+// terminal and browser icons and then, on right sidebar, we have terminal and browser chips", the user, 1 Nov, then
+// "yeah A" on two mockups, over the half's tabs with one button in the head). Hiding leaves the terminal's session
+// running. On a phone it takes the chat's place, under the chat's head.
 import { observer } from "mobx-react-lite";
 import { useCallback, type PointerEvent, type ReactNode } from "react";
 import { dock, type Half as View } from "../store/dock";
@@ -22,19 +23,20 @@ const VIEWS: Record<View, { label: string; draw: (session: string, hide: () => v
 export const Half = observer(function Half({ session, view }: { session: string; view: View }) {
   const hide = useCallback(() => dock.setHalf(session, null), [session]);
   return (
-    <section className="half" style={{ width: `${dock.halfWidth * 100}%` }} aria-label={VIEWS[view].label}>
+    <section className="half" aria-label={VIEWS[view].label}>
       <div className="half-grip" onPointerDown={drag} title="Drag to resize" />
       {VIEWS[view].draw(session, hide)}
     </section>
   );
 });
 
-// Dragging the half's left edge: its share of the chat's width follows the pointer.
+// Dragging the half's left edge: the chat ends where the pointer is, leaving the half at least its min-width (dock.css).
 function drag(e: PointerEvent<HTMLDivElement>) {
   const grip = e.currentTarget, whole = grip.closest(".session-split")!.getBoundingClientRect();
+  const most = whole.width - parseFloat(getComputedStyle(grip.parentElement!).minWidth);
   grip.setPointerCapture(e.pointerId);
   document.documentElement.classList.add("half-dragging");
-  const move = (m: globalThis.PointerEvent) => dock.setHalfWidth((whole.right - m.clientX) / whole.width);
+  const move = (m: globalThis.PointerEvent) => dock.setChatWidth(Math.min(most, m.clientX - whole.left));
   const end = () => {
     grip.removeEventListener("pointermove", move);
     document.documentElement.classList.remove("half-dragging");

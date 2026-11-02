@@ -92,6 +92,6 @@
   .session-split:has(> .half) { flex-direction: column; }
   .session-split:has(> .half) > .session-view { flex: none; height: auto; min-width: 0; }
   .session-split:has(> .half) > .session-view > :not(.dock-head) { display: none; }
-  .session-split > .half { flex: 1; width: auto !important; min-width: 0; border-left: 0; }
+  .session-split > .half { flex: 1; min-width: 0; border-left: 0; }
   .half-grip { display: none; }
 }

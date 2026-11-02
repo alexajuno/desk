@@ -6,7 +6,7 @@
 // half, beside it, holds what Claude drives: its terminal (Half.tsx).
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
 import { postJson, reason } from "../api/http";
 import { go } from "../app/nav";
@@ -242,10 +242,11 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   }, [take]);
 
   // The composer lies over the conversation's end, as claude.ai's does: the foot sticks to the bottom of the view, and
-  // the conversation runs on behind it (dock.css). The chat in the middle may have its right half open beside it.
+  // the conversation runs on behind it (dock.css). The chat in the middle may have its right half open beside it, the
+  // chat then as wide as you dragged it (--chat-w), the half all the rest.
   const half = docked && m?.chat ? dock.halves[id] : undefined;
   return (
-    <div className="session-split">
+    <div className="session-split" style={half ? ({ "--chat-w": `${dock.chatWidth}px` } as CSSProperties) : undefined}>
       <div className="session-view">
         <ChatHead s={s} views={views} view={shown} setView={setView} docked={docked} />
         {here && docked && dock.details && <IssueDetails data={here} />}
