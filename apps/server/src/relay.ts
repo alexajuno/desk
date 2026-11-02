@@ -88,7 +88,7 @@ function pipe(mcp: WebSocket, session: string) {
   const held: Buffer[] = []; // what it sent before the app answered
   const hidden = new Set<string>(); // desk's pages it was attached to, by CDP session, until they are let go
   const others = new Set<string>(); // desk's pages, by target id
-  const heardOf = new Set<string>(); // its tabs whose attach it heard, by target id
+  const passed = new Set<string>(); // its tabs whose attach it was given, once the tab answered, by target id
   const tabOf = new Map<string, string>(); // the tab each of its CDP sessions is attached to, by session id
   const waiting = new Map<string, () => void>(); // its answers to Target.createTarget, waiting for the tab's attach
   const listing = new Set<string>(); // its Target.getTargets calls, by CDP session and id
@@ -109,7 +109,8 @@ function pipe(mcp: WebSocket, session: string) {
     tab(String(m.params?.url || "about:blank"), session).then((target) => {
       own(target, session);
       const answer = () => down({ id: m.id, ...to, result: { targetId: target } });
-      if (!attaching || heardOf.has(target)) return answer();
+      // Playwright looks the tab up by the answer's target id among the attaches it was given, which wait on the tab's answer
+      if (!attaching || passed.has(target)) return answer();
       waiting.set(target, answer);
       setTimeout(() => waiting.delete(target) && answer(), ATTACH);
     }, (e: Error) => down({ id: m.id, ...to, error: { code: -32000, message: `desk's app made no tab: ${e.message}` } }));
@@ -141,6 +142,7 @@ function pipe(mcp: WebSocket, session: string) {
       return;
     }
     if (mcp.readyState === WebSocket.OPEN) mcp.send(data, { binary: false });
+    passed.add(info.targetId);
     waiting.get(info.targetId)?.();
     waiting.delete(info.targetId);
   };
@@ -173,7 +175,6 @@ function pipe(mcp: WebSocket, session: string) {
     if (m.sessionId && hidden.has(m.sessionId)) return true;
     if (m.method === "Target.attachedToTarget" && info) {
       if (info.browserContextId === context) {
-        heardOf.add(info.targetId);
         tabOf.set(m.params!.sessionId as string, info.targetId);
         return false;
       }
