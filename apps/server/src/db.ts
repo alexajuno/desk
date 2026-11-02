@@ -16,7 +16,7 @@
 import { PGlite, type Transaction } from "@electric-sql/pglite";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { unaccent } from "@electric-sql/pglite/contrib/unaccent";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DB_DIR } from "./config.ts";
 
@@ -271,7 +271,11 @@ export async function open(): Promise<PGlite> {
   // The data folder is a git repo of its own, for the issues: the database stays out of it.
   const ignore = join(dirname(DB_DIR), ".gitignore");
   if (!process.env.DESK_DB && !existsSync(ignore)) writeFileSync(ignore, "*\n");
-  const opened = await PGlite.create(DB_DIR, { extensions: { pg_trgm, unaccent } });
+  // A test desk starts on a dump of 8790's database (pool.ts, copy), loaded once into its new folder.
+  const from = process.env.DESK_DB_FROM && !existsSync(join(DB_DIR, "PG_VERSION")) ? process.env.DESK_DB_FROM : null;
+  const opened = await PGlite.create(DB_DIR, {
+    extensions: { pg_trgm, unaccent }, ...(from ? { loadDataDir: new Blob([readFileSync(from)]) } : {}),
+  });
   await toTeams(opened);
   await opened.exec(SCHEMA);
   // Since 20 Oct, an issue's project is Linear's (projects.ts), as its team is what its project was before.
