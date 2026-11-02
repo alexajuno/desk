@@ -95,12 +95,18 @@ export async function use(name: string): Promise<Seat | null> {
   const seat = await profiles();
   if (!seat?.profiles.some((p) => p.name === name)) throw new HttpError(404, `seat has no profile named ${name}.`);
   await ask(["switch", name]);
-  return read();
+  return fresh();
 }
 
 // Turns seat's own switching on or off, as `seat auto on|off` does.
 export async function auto(on: boolean): Promise<Seat | null> {
   await ask(["auto", on ? "on" : "off"]);
+  return fresh();
+}
+
+// The profiles read after a change, past a reading begun before it, which would give them as they were.
+async function fresh(): Promise<Seat | null> {
+  await reading;
   return read();
 }
 

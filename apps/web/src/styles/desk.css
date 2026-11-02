@@ -708,6 +708,10 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .menu.actions { width: 224px; } .menu.actions ul { padding-top: 4px; }
 .menu.help { width: 248px; }
 .menu.wide { width: 340px; } .menu.wide ul { max-height: 300px; overflow: auto; }
+/* seat's profiles, from the window's bar (frame/StatusBar.tsx): wide enough for a plan's two numbers, over the corner's
+   chat pill, which sits just above the bar and drew over its last row, and Auto switch's box always shown, since it is a
+   setting rather than a value to filter by, as the mockup the user picked drew it (2 Nov). */
+.menu.profiles { z-index: 16; width: 300px; } .menu.profiles li .check { visibility: visible; }
 
 /* Linear's command menu, as O then T, P and I open it, measured on linear.app on 2026-10-21 (an issue page, dark and light,
    at 2x): 720px wide, centred, 106px down an 815px window (taken as 13vh: not checked at another height), with no
