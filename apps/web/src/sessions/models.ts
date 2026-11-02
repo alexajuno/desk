@@ -1,7 +1,8 @@
-// The composer's chip: the session's model and effort, and a menu to pick others, with the plan's 5-hour and weekly
-// usage at its foot, as numbers only (the user, 17 Oct: "i kinda hate the warning stuff. just gimme the number").
-// The server answers each from what it last heard from Claude Code, at once (models.ts there).
+// The composer's chip: the session's model and effort, and a menu to pick others, with the live profile's numbers and
+// the context at its foot, as numbers only (the user, 17 Oct: "i kinda hate the warning stuff. just gimme the number").
+// The server answers each from what it last heard from Claude Code, or seat, at once (models.ts and seat.ts there).
 import { reason } from "../api/http";
+import { meters, seats } from "../frame/seat";
 import { openMenu, type MenuItem } from "../ui/menu";
 import { toast } from "../ui/toast";
 
@@ -9,16 +10,6 @@ export interface Model {
   value: string;
   name: string;
   efforts: string[];
-}
-
-export interface Window {
-  percent: number;
-  resets: string | null; // null once it reset, until desk hears when it next does
-}
-
-export interface Usage {
-  five_hour: Window | null;
-  seven_day: Window | null;
 }
 
 export const EFFORTS: [string, string][] = [["low", "Low"], ["medium", "Medium"], ["high", "High"], ["xhigh", "Extra high"], ["max", "Max"]];
@@ -37,12 +28,6 @@ export function loadModels(): Promise<Model[]> {
   return models;
 }
 
-// The plan's 5 hours and week, for the menu and the window's bar (frame/StatusBar.tsx).
-export async function loadUsage(): Promise<Usage | null> {
-  const res = await fetch("/api/usage");
-  return res.ok ? ((await res.json()) as Usage) : null;
-}
-
 export interface Context {
   tokens: number;
   max: number;
@@ -57,35 +42,31 @@ async function loadContext(session: string): Promise<Context | null> {
 
 export const tokens = (n: number) => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1000)}k`);
 
-// When a window resets, to the nearest minute (it says 05:59:59.9 for 06:00): the time today, or the day and time when
-// it is further off.
-export function resets(iso: string): string {
-  const at = new Date(Math.round(new Date(iso).getTime() / 60_000) * 60_000), time = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-  return at.getTime() - Date.now() < 20 * 3600_000 ? time : `${at.toLocaleDateString([], { weekday: "short" })} ${time}`;
-}
-
 export interface Runs {
   model: string;
   name: string;
   effort: string;
 }
 
-// The menu under the chip: the models, the efforts the current one takes, and the usage, with how full the session's
-// context is.
+// The menu under the chip: the models, the efforts the current one takes, and the usage: the live profile by name, as
+// seat says, its own numbers, a plan's 5-hour and Week or api's credits, as the window's bar shows them, and how full
+// the session's context is. A phone has no bar, so this is where it reads them.
 export function runsMenu(anchor: Element, session: string, runs: Runs, pick: (set: { model?: string; effort?: string }, shown?: Partial<Runs>) => void) {
   openMenu({
     anchor, className: "runs-menu",
     items: async () => {
-      const [list, usage, context] = await Promise.all([loadModels().catch((e) => (toast((e as Error).message), [] as Model[])), loadUsage().catch(() => null),
+      const [list, , context] = await Promise.all([loadModels().catch((e) => (toast((e as Error).message), [] as Model[])), seats.load(),
         loadContext(session).catch(() => null)]);
       const now = list.find((m) => m.value === runs.model || m.name === runs.name);
       const items: MenuItem[] = list.map((m) => ({ label: m.name, group: 1, heading: "Model", current: m === now, run: () => pick({ model: m.value }, { name: m.name, ...(m.efforts.length ? {} : { effort: "" }) }) }));
       const efforts = now ? now.efforts : EFFORTS.map(([value]) => value);
       for (const [value, label] of EFFORTS)
         if (efforts.includes(value)) items.push({ label, group: 2, heading: "Effort", current: value === runs.effort, run: () => pick({ effort: value }) });
-      const windows: [string, Window | null | undefined][] = [["5-hour", usage?.five_hour], ["Week", usage?.seven_day]];
-      for (const [label, w] of windows)
-        if (w) items.push({ label: `${label} · ${w.percent}%`, hint: w.resets ? `resets ${resets(w.resets)}` : undefined, group: 3, heading: "Usage", info: true });
+      const seat = seats.seat, live = seat?.profiles.find((p) => p.active);
+      if (live) {
+        items.push({ label: `Profile · ${live.name}`, hint: seat?.auto ? "Auto switch on" : undefined, group: 3, heading: "Usage", info: true });
+        for (const m of meters(live)) items.push({ label: `${m.word} · ${m.text}`, hint: m.about, group: 3, heading: "Usage", info: true });
+      }
       if (context) items.push({ label: `Context · ${Math.round(context.percent)}%`, hint: `${tokens(context.tokens)} of ${tokens(context.max)}`, group: 3, heading: "Usage", info: true });
       return items;
     },
@@ -93,4 +74,4 @@ export function runsMenu(anchor: Element, session: string, runs: Runs, pick: (se
 }
 
 // Fetched ahead when the pointer nears the chip, so the menu opens at once.
-export const warm = () => void Promise.all([loadModels().catch(() => {}), loadUsage().catch(() => {})]);
+export const warm = () => void Promise.all([loadModels().catch(() => {}), seats.load()]);

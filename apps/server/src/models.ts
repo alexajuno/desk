@@ -1,8 +1,7 @@
-// The model and effort each session runs on, which the composer's chip shows and changes, and the live profile's usage,
-// as seat reads it, which the chip's menu shows. A session's pick is kept in the session_models table, by session id, so it holds when
-// the host starts the session again. A desk chat and an issue's session start on Settings > Preferences (settings.ts) and
-// keep it as their pick; a session with no pick, such as one from a terminal, runs on Claude Code's own default
-// (~/.claude/settings.json).
+// The model and effort each session runs on, which the composer's chip shows and changes. A session's pick is kept in
+// the session_models table, by session id, so it holds when the host starts the session again. A desk chat and an
+// issue's session start on Settings > Preferences (settings.ts) and keep it as their pick; a session with no pick, such
+// as one from a terminal, runs on Claude Code's own default (~/.claude/settings.json).
 //
 // The list of models comes from Claude Code itself, asked by one started only for the question (as the SDK's
 // supportedModels), with no message, no settings and no transcript, so it costs nothing and leaves no trace. desk asks
@@ -16,8 +15,6 @@ import * as copies from "./copies.ts";
 import * as db from "./db.ts";
 import { sql } from "./db.ts";
 import * as hosted from "./hosted.ts";
-import * as seat from "./seat.ts";
-import type { Window } from "./seat.ts";
 import { run, which } from "./proc.ts";
 import * as settings from "./settings.ts";
 import * as turns from "./turns.ts";
@@ -232,24 +229,6 @@ export async function menu(): Promise<Model[]> {
   const families = new Set<string>();
   return (await all()).filter((m) => m.value !== "default" && !families.has(m.displayName.split(" ")[0]) && families.add(m.displayName.split(" ")[0]))
     .map((m) => ({ value: m.value, name: m.displayName, efforts: m.supportedEffortLevels ?? [] }));
-}
-
-// --- the usage -------------------------------------------------------------------------------------------------------
-// The live profile's 5-hour and weekly usage, as seat last read them (seat.ts): seat is the one source of the numbers,
-// since on api Claude Code has no plan usage to give (1 Nov).
-
-export type { Window } from "./seat.ts";
-
-export interface Usage {
-  five_hour: Window | null;
-  seven_day: Window | null;
-}
-
-// How much of the live plan's 5-hour and weekly limits is used; none on api, which has no plan limits, or before desk
-// read seat.
-export function used(): Usage {
-  const live = seat.now()?.profiles.find((p) => p.active);
-  return { five_hour: live?.five_hour ?? null, seven_day: live?.week ?? null };
 }
 
 // --- the context -----------------------------------------------------------------------------------------------------

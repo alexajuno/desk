@@ -817,9 +817,9 @@ export async function create(): Promise<FastifyInstance> {
       throw new HttpError(502, `Claude Code did not list its models: ${(error as Error).message}`);
     }
   });
-  app.get("/api/usage", async () => models.used());
-  // seat's profiles for the status bar: each with its numbers, the live one, and whether seat switches on its own
-  // (seat.ts); null when seat is missing or failed. Its menu switches the live one, and turns Auto switch on or off.
+  // seat's profiles for the status bar and the model menu's Usage: each with its numbers, the live one, and whether seat
+  // switches on its own (seat.ts); null when seat is missing or failed. The bar's menu switches the live one, and turns
+  // Auto switch on or off.
   app.get("/api/seat", async () => seat.profiles());
   app.post("/api/seat/switch", async (req: Req) => {
     const { name } = (req.body ?? {}) as unknown as { name?: string };

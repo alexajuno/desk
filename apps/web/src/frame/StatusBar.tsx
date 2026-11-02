@@ -3,14 +3,13 @@
 // own numbers, each after its grey word: a plan's 5-hour and Week, or api's credits left ("A", the user, 2 Nov, on
 // three mockups, over every profile's numbers and one number each). The name opens the profiles, each with its numbers,
 // to make one live, and Auto switch, seat's own switching. desk asks the server again each minute while the page is
-// shown, and the server reads seat at most each half minute (seat.ts there). A phone has no bar: its model menu shows
-// them (phone.css).
+// shown, and the server reads seat at most each half minute (seat.ts there). A phone has no bar (phone.css): its model
+// menu shows the live one (sessions/models.ts).
 import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
 import { Gauge } from "../sessions/Dock";
-import { resets, type Window } from "../sessions/models";
 import { openMenu, toggled, type MenuItem } from "../ui/menu";
-import { dollars, seats, spent, type Profile } from "./seat";
+import { dollars, meters, seats, type Profile, type Window } from "./seat";
 
 export const StatusBar = observer(function StatusBar() {
   useEffect(() => {
@@ -41,18 +40,9 @@ export const StatusBar = observer(function StatusBar() {
   );
 });
 
-// A profile's own numbers. A meter seat could not read shows a dash, rather than leaving its word out.
+// A profile's own numbers, each a ring after its grey word.
 function Numbers({ p }: { p: Profile }) {
-  if (p.kind === "api") {
-    const c = p.credits;
-    if (!c) return <Gauge word="Credits" percent={0} text="–" title="Credits · seat has not counted them" />;
-    return <Gauge word="Credits" percent={spent(c)} text={c.out ? "out" : `${dollars(c.budget - c.spent)} left`}
-      title={c.out ? "Credits · the API said they are gone" : `Credits · $${c.spent.toFixed(2)} of ${dollars(c.budget)} spent`} />;
-  }
-  const limit = (word: string, w: Window | null) =>
-    w ? <Gauge word={word} percent={w.percent} title={`${word} · ${w.resets ? `resets ${resets(w.resets)}` : "not started"}`} />
-      : <Gauge word={word} percent={0} text="–" title={`${word} · seat has no number for it`} />;
-  return <>{limit("5-hour", p.five_hour)}{limit("Week", p.week)}</>;
+  return <>{meters(p).map((m) => <Gauge key={m.word} word={m.word} percent={m.percent} text={m.text} title={`${m.word} · ${m.about}`} />)}</>;
 }
 
 // The same numbers in a line, for a profile's row in the menu: "5-hour 67% · Week 59%", "$64 of $100 left".
