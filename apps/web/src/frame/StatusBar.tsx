@@ -1,5 +1,7 @@
-// The bar along the window's bottom, as VS Code's status bar (1 Nov: "a bottom status bar like vs code"): what holds for
-// the whole account rather than one chat, at its right end. It shows seat's live profile by name, then that profile's
+// The bar along the window's bottom, as VS Code's status bar (1 Nov: "a bottom status bar like vs code"): the Help
+// menu's ? at its left end, where Linear keeps its Help button ("A. proceed", the user, 2 Nov, on two mockups, over the
+// bar under the page only, which hid the ? with the sidebar), and what holds for the whole account rather than one
+// chat, at its right end. It shows seat's live profile by name, then that profile's
 // own numbers, each after its grey word: a plan's 5-hour and Week, or api's credits left ("A", the user, 2 Nov, on
 // three mockups, over every profile's numbers and one number each). The name opens the profiles, each with its numbers,
 // to make one live, and Auto switch, seat's own switching. desk asks the server again each minute while the page is
@@ -9,6 +11,7 @@ import { observer } from "mobx-react-lite";
 import { useEffect } from "react";
 import { Gauge } from "../sessions/Dock";
 import { openMenu, toggled, type MenuItem } from "../ui/menu";
+import { HelpButton } from "./help";
 import { dollars, meters, seats, type Profile, type Window } from "./seat";
 
 export const StatusBar = observer(function StatusBar() {
@@ -27,6 +30,7 @@ export const StatusBar = observer(function StatusBar() {
   const live = seats.seat?.profiles.find((p) => p.active);
   return (
     <div className="status-bar">
+      <HelpButton />
       {live && (
         <span className="used">
           <button className="profile" type="button" title="Switch profile" onClick={(e) => openProfiles(e.currentTarget)}>

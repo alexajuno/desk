@@ -16,10 +16,10 @@ import { ui } from "../store/ui";
 import { deleteChat, pinChat, renameChat } from "../sessions/live";
 import { GLYPH, Ring, SIDE_ICON, StateIcon, TRIANGLE } from "../ui/icons";
 import { keyOf } from "../lib/keys";
-import { openMenu, toggled, type MenuOptions } from "../ui/menu";
+import { openMenu, type MenuOptions } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { openSearch } from "../search/SearchBox";
-import { helpMenu } from "./help";
+import { HelpButton } from "./help";
 import { toggleSide } from "./side";
 
 // The links' hovers say where they go and their keys, as Linear's sidebar does; Issues' lists its tabs, as Linear's
@@ -211,16 +211,13 @@ export const Sidebar = observer(function Sidebar() {
       {d && d.pinned.length > 0 && <Fold name="Pinned" folded={folded} toggle={toggle}>{d.pinned.map((c) => chatRow(c, true))}</Fold>}
       {d && d.chats.length > 0 && <Fold name="Chats" folded={folded} toggle={toggle}>{d.chats.map((c) => chatRow(c, false))}</Fold>}
       {/* The foot stays at the sidebar's bottom while the chats scroll under it ("sticky to the bottom", the user, 28
-          Oct). Over Linear's Help button, measured 2026-10-15 as a 24px circle, a card says while desk's checkout runs
-          a branch, not main: a session's test or your Try. It informs, it is no chat ("it's just a way of informing
-          that we are running a version that's not on desk's main yet", "so don't build it like a chat", the user, 28
-          Oct), and says who waits in line for 8790 only as a count; its tooltip names them. */}
+          Oct). A card says while desk's checkout runs a branch, not main: a session's test or your Try. It informs, it
+          is no chat ("it's just a way of informing that we are running a version that's not on desk's main yet", "so
+          don't build it like a chat", the user, 28 Oct), and says who waits in line for 8790 only as a count; its
+          tooltip names them. The ? under it shows only on a phone, which has no window bar to hold it (phone.css). */}
       <div className="side-foot">
         {d?.trying && <NotMain trying={d.trying} line={d.line} />}
-        <button className="side-icon help-open" type="button" title="Help, shortcuts and settings"
-          onClick={(e) => { if (!toggled(e.currentTarget)) helpMenu(e.currentTarget); }}>
-          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M7.569 9.75c-.332 0-.614-.27-.578-.6.021-.188.061-.372.136-.62q.158-.51.447-.82a3.4 3.4 0 0 1 .703-.577q.284-.182.507-.396.229-.219.358-.486a1.4 1.4 0 0 0 .13-.606 1.2 1.2 0 0 0-.171-.653 1.2 1.2 0 0 0-.466-.429 1.36 1.36 0 0 0-.647-.152q-.33 0-.628.148a1.23 1.23 0 0 0-.587.622c-.123.295-.367.555-.686.555h-.472c-.337 0-.616-.28-.55-.611q.103-.513.363-.905a2.55 2.55 0 0 1 1.08-.915A3.6 3.6 0 0 1 7.998 3q.888 0 1.563.32.68.319 1.057.91.382.586.382 1.392 0 .543-.172.972a2.4 2.4 0 0 1-.48.763 3.5 3.5 0 0 1-.74.595 3.2 3.2 0 0 0-.62.496 1.7 1.7 0 0 0-.353.605l-.034.106c-.1.316-.35.591-.682.591zM8.75 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0" /></svg>
-        </button>
+        <HelpButton />
       </div>
     </aside>
   );

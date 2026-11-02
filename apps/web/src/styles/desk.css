@@ -319,10 +319,13 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
 /* desk running a branch for a review, a row that is no link when no issue is known to have switched it */
 .nav-item.static { cursor: default; } .nav-item.static:hover { background: none; color: var(--text-3); }
 /* Linear's Help button, measured 2026-10-15: a 24px circle 10px in from the window's bottom left corner,
-   level with the Agent button, its 16px question mark text-3 until hovered. The foot stays at the sidebar's bottom
-   while the chats scroll under it, fading out over its first 14px (28 Oct); the sidebar still scrolls as one. */
+   level with the Agent button, its 16px question mark text-3 until hovered. desk's sits in the window's bar, at its
+   left end (2 Nov, below); the sidebar's foot keeps it only on a phone, which has no bar (phone.css), so on a wider
+   screen the foot shows only while it holds the Not on main card. The foot stays at the sidebar's bottom while the
+   chats scroll under it, fading out over its first 14px (28 Oct); the sidebar still scrolls as one. */
 .side-foot { position: sticky; bottom: -12px; display: flex; flex-direction: column; gap: 6px; margin: auto 0 -12px;
              padding: 14px 0 10px; background: linear-gradient(to bottom, transparent, var(--bg-app) 14px); }
+.side-foot:not(:has(.not-main)), .side-foot > .help-open { display: none; }
 .side-icon.help-open { width: 24px; height: 24px; margin-left: -2px; background: none; }
 /* desk's checkout runs a branch, not main: a card in the New issue button's fill and ring, no chat row (28 Oct) */
 .not-main { display: flex; align-items: flex-start; gap: 8px; padding: 7px 9px 8px 6px; border-radius: 8px; color: var(--text-3);
@@ -363,12 +366,15 @@ a.not-main:hover { background: var(--btn-side-hover); box-shadow: 0 0 0 0.5px va
          box-shadow: var(--shadow-panel); overflow: hidden; transition: left 0.2s ease; }
 .side-collapsed .panel { left: 8px; }
 /* The window's bar (frame/StatusBar.tsx), as VS Code's status bar: on the window's background under the sidebar and
-   the panel, which end where it starts, in the band that was the panel's 8px gap, grown to hold its 24px numbers.
+   the panel, which end where it starts, in the band that was the panel's 8px gap, grown to hold its 24px numbers,
+   with the Help menu's ? at its left end.
    A phone has none (phone.css). */
 :root { --status-bar-h: 32px; }
 .status-bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: flex-end;
               height: var(--status-bar-h); padding: 0 9px; box-sizing: border-box; }
 .status-bar .used > span { height: 24px; }
+/* The Help menu's ? at the bar's left end, 10px in, where Linear's Help button sits ("A. proceed", the user, 2 Nov) */
+.status-bar .help-open { margin: 0 auto 0 1px; }
 /* seat's live profile by name, before its own numbers ("A", the user, 2 Nov): a quiet chip, filled only under the mouse,
    in the numbers' height, its name a step brighter than them. Linear has no such bar, so nothing here is measured. */
 .status-bar button.profile { gap: 4px; height: 24px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); }

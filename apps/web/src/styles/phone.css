@@ -27,6 +27,9 @@
   /* No window bar (frame/StatusBar.tsx): the model menu shows the 5 hours and the week ("A", the user, 1 Nov). */
   :root { --status-bar-h: 0px; }
   .status-bar { display: none; }
+  /* so the Help menu's ? stays at the sidebar's foot, as before the bar (desk.css) */
+  .side-foot:not(:has(.not-main)) { display: flex; }
+  .side-foot > .help-open { display: grid; }
 
   .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 7; display: flex; box-sizing: border-box; height: var(--tabs-h);
           padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--border-1); background: var(--bg-panel); }
