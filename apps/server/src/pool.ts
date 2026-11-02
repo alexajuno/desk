@@ -6,9 +6,10 @@
 // data, starts a desk from the session's worktree on it, as the unit desk-test-<port>, and answers with its address;
 // when none is, the session waits in line, in the tests table, and desk messages it once its desk runs (look). The
 // slot goes back with DELETE (release), or on its own once the session's turn ends, LINE_GRACE after it was told, and
-// its copy goes with it. Like the line on 8790 before it, the pool looks on each word from the session host and when
-// a grace runs out, never on a clock.
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
+// its copy goes with it. As many slots run at once as Settings says (test_slots), and a slot opens only while more than
+// NEED of memory is free; while one waits on memory, the pool looks again each minute. Otherwise, like the line on 8790
+// before it, the pool looks on each word from the session host and when a grace runs out, never on a clock.
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join, relative, resolve } from "node:path";
 import * as agents from "./agents.ts";
@@ -19,11 +20,13 @@ import { sql } from "./db.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import { run } from "./proc.ts";
+import * as settings from "./settings.ts";
 import * as turns from "./turns.ts";
 
 const FIRST = 8791; // the slots' ports count up from here
-const SLOTS = 1; // how many test desks run at once
 const LINE_GRACE = 120; // seconds a slot stays its session's after it was told, whatever its turns do
+const NEED = 4 * 1024 ** 3; // bytes of memory free, at least, for a slot to open (2 Nov, "depends on the current machine state")
+const RECHECK = 60; // seconds between looks while one waits on memory
 
 // Where a slot's copy lives, in the cache, out of the data repo and out of the user's way.
 export const dataOf = (port: number) => join(HOME, ".cache", "desk", `test-${port}`);
@@ -47,6 +50,17 @@ function locked<T>(fn: () => Promise<T>): Promise<T> {
   queue = next.catch(() => {});
   return next;
 }
+
+// The memory free for a new process, in bytes, as the kernel counts it (MemAvailable).
+async function memoryFree(): Promise<number> {
+  const kb = /^MemAvailable:\s+(\d+) kB$/m.exec(await readFile("/proc/meminfo", "utf8"));
+  return kb ? Number(kb[1]) * 1024 : 0;
+}
+const gb = (bytes: number) => (Math.max(0, bytes) / 1024 ** 3).toFixed(1);
+
+// Why the first in line still waits, after the last time slots were handed out: the slots are taken, or memory is
+// short, and then how much was free.
+let short: number | null = null;
 
 const rows = async () => (await sql().query<Test>("select slug, branch, asked, port, told from tests order by asked")).rows;
 const now = () => Date.now() / 1000;
@@ -111,14 +125,21 @@ async function stop(port: number) {
   await run(["systemctl", "--user", "reset-failed", unitOf(port)]);
 }
 
-// Hand each free slot to the first in line: copy the data and start its desk. Returns the rows it gave a slot, and
-// those whose desk could not start, which lose their place.
+// Hand each free slot to the first in line, while memory lasts: copy the data and start its desk. A desk just started
+// has not grown yet, so each one counts NEED against what is free. Returns the rows it gave a slot, and those whose
+// desk could not start, which lose their place.
 async function serve(): Promise<{ given: Test[]; failed: { t: Test; error: string }[] }> {
   const all = await rows(), given: Test[] = [], failed: { t: Test; error: string }[] = [];
   const held = new Set(all.flatMap((t) => (t.port === null ? [] : [t.port])));
+  short = null;
   for (const t of all) {
     if (t.port !== null) continue;
-    if (held.size >= SLOTS) break;
+    if (held.size >= settings.load().test_slots) break;
+    const left = (await memoryFree()) - given.length * NEED;
+    if (left <= NEED) {
+      short = left;
+      break;
+    }
     let worktree: string;
     try {
       worktree = await worktreeOf(t.branch);
@@ -153,7 +174,7 @@ export async function ask(i: Issue, branch: string): Promise<{ message: string; 
     if (mine?.port != null) {
       await sql().query("update tests set branch = $2, told = $3 where slug = $1", [i.slug, branch, now()]);
       await launch(mine.port, worktree);
-      return { t: { ...mine, branch }, again: true };
+      return { t: { ...mine, branch }, again: true, short: null };
     }
     if (!mine) await sql().query("insert into tests (slug, branch, asked) values ($1, $2, $3)", [i.slug, branch, now()]);
     else await sql().query("update tests set branch = $2 where slug = $1", [i.slug, branch]);
@@ -162,7 +183,7 @@ export async function ask(i: Issue, branch: string): Promise<{ message: string; 
     if (failed) throw new Refused(failed.error);
     const given = served.given.find((t) => t.slug === i.slug);
     if (given) await sql().query("update tests set told = $2 where slug = $1", [i.slug, now()]); // this answer tells it
-    return { t: given ?? null, again: false };
+    return { t: given ?? null, again: false, short };
   });
   look(); // its grace starts now, or another got a slot
   if (reply.t) {
@@ -173,10 +194,11 @@ export async function ask(i: Issue, branch: string): Promise<{ message: string; 
   const waiting = (await rows()).filter((t) => t.port === null);
   const place = waiting.findIndex((t) => t.slug === i.slug) + 1;
   if (i.state === "running") await store.move(i, { state: "waiting", waiting_on: "a test desk" });
-  return {
-    message: `Queued, number ${place} in line: the ${SLOTS === 1 ? "test desk is" : `${SLOTS} test desks are`} taken. End your turn; desk messages you here once a test desk runs ${branch}.`,
-    place,
-  };
+  const slots = settings.load().test_slots;
+  const why = reply.short !== null
+    ? `only ${gb(reply.short)} GB of memory is free, and a test desk opens with more than ${gb(NEED)} GB; desk looks again each minute`
+    : `the ${slots === 1 ? "test desk is" : `${slots} test desks are`} taken`;
+  return { message: `Queued, number ${place} in line: ${why}. End your turn; desk messages you here once a test desk runs ${branch}.`, place };
 }
 
 // The issue is done with its test desk, or with waiting for one: its desk stops, its copy goes, and the next in line
@@ -197,6 +219,7 @@ export async function release(slug: string): Promise<string> {
 }
 
 let look: () => void = () => {}; // start's, once the pool runs
+export const poke = () => look(); // the slots setting changed
 
 // Run tick now, on each word from the session host, and when a grace runs out; one at a time, and one more after it
 // when asked meanwhile.
@@ -227,13 +250,14 @@ export function start() {
 
 // The pool's look: hand free slots to those in line, message each session whose desk runs and that was not told yet,
 // and take a slot back from a session whose turn ended once its grace ran out, or whose issue is gone. Returns when,
-// in seconds, the next grace runs out, for a look then; null when none runs.
+// in seconds, to look next: when the next grace runs out, or in a minute while one waits on memory; null when neither.
 export async function tick(): Promise<number | null> {
   for (const { t, error } of (await locked(serve)).failed) {
     if (await store.exists(t.slug)) await agents.say(await store.load(t.slug), `desk could not start your test desk for ${t.branch}: ${error} Ask again once that is fixed.`).catch(() => {});
   }
   let next: number | null = null;
   const later = (at: number) => (next = next === null ? at : Math.min(next, at));
+  if (short !== null) later(now() + RECHECK);
   for (const t of await rows()) {
     if (t.port === null) continue;
     const i = (await store.exists(t.slug)) ? await store.load(t.slug) : null;
