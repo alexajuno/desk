@@ -73,6 +73,9 @@ export async function startChat(thread: string, text: string): Promise<chats.Cha
   const message = fill(ON_THREAD, {
     text: text.trim(), id: thread, kind: kindOf(newest), verdict: judged?.verdict ?? "later", why: judged?.why || "no reason given",
     where: newest.source === "mail" ? "Gmail" : "Slack", read: `curl -s "${BASE}/api/threads/${encodeURIComponent(thread)}"`,
+    draft: `curl -s "${BASE}/api/threads/${encodeURIComponent(thread)}/draft" -X PUT --data-binary @<the file>`,
+    markup: newest.source === "mail" ? "the mail's plain text, its greeting and sign-off too" : "Slack's markup: *bold*, _italic_, <url|text> for a link, and a person as @ and their name as the thread shows it",
+    whom: newest.source === "mail" ? "from their Gmail to the thread's last sender, under its subject with Re:" : newest.place === "DM" || newest.place.startsWith("group DM") ? "as them, in the DM" : "as them, in the thread",
     thread: asText(await whole(thread)),
   });
   return chats.onThread(thread, titleOf(newest), message);

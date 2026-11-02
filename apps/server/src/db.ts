@@ -36,6 +36,7 @@ const HELD: Record<string, { key: string; hidden: string[] }> = {
   chats: { key: "id", hidden: ["folder", "cwd", "seen", "extra"] },
   inbox: { key: "id", hidden: [] },
   tabs: { key: "target", hidden: [] },
+  replies: { key: "id", hidden: [] },
 };
 
 // The row as the app holds it, in SQL, from a row named t.
@@ -215,6 +216,18 @@ create table if not exists notices ( -- each Slack message and mail that came in
   why text not null default '' -- the firewall's line, or a mail's topic
 );
 create index if not exists notices_thread on notices (thread, at);
+create table if not exists replies ( -- each reply to a thread as the user (replies.ts): Claude's draft, then what the user's Send posted
+  id text primary key, -- reply-<random>
+  thread text not null, -- the Slack thread, DM or mail thread it answers, as notices.thread
+  source text not null, -- slack or mail
+  text text not null, -- what goes out, as the user left it on the card
+  whom text not null default '', -- where it goes, as the card says: in #imagenhub, in minhnt's thread; to Talent team <talent@…>
+  state text not null, -- draft, sending, sent, failed, or kept: a test desk sends nothing
+  at double precision not null, -- when Claude drafted it, in seconds
+  sent double precision, -- when it went
+  link text not null default '', -- opens it in Slack or Gmail, once sent
+  error text not null default '' -- why Slack or Gmail refused it
+);
 create table if not exists inbox ( -- the Inbox's rows (inbox.ts): what each session last did for you, and each issue to settle
   id text primary key, -- the session's id, or the slug of an issue in Triage with no session
   slug text not null, -- what the row opens: the issue's slug, or the id of a chat with no issue

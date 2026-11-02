@@ -25,6 +25,7 @@ import * as roster from "./roster.ts";
 import { findScored, findThings, markRanges, type Found } from "./search.ts";
 import * as sessions from "./sessions.ts";
 import * as teams from "./teams.ts";
+import * as replies from "./replies.ts";
 import * as threads from "./threads.ts";
 import type { Team } from "./teams.ts";
 import * as turns from "./turns.ts";
@@ -296,7 +297,10 @@ export async function threadPage(thread: string) {
   if (!/^(slack|mail):/.test(thread)) throw new HttpError(404, "No such thread.");
   const found = await notices.ofThread(thread);
   if (!found.length) throw new HttpError(404, "No such thread.");
-  return { thread, notices: found.map(({ id, source, place, who, text, link, at, verdict, why }) => ({ id, source, place, who, text, link, at, verdict, why })) };
+  // What the user sent in it from desk shows among them, as "you" (replies.ts)
+  const sent = (await replies.sentIn(thread)).map((r) => ({ id: r.id, source: r.source, place: found[0].place, who: "you", text: r.text, link: r.link, at: r.sent ?? r.at, verdict: null, why: "", mine: true }));
+  const all = [...found.map(({ id, source, place, who, text, link, at, verdict, why }) => ({ id, source, place, who, text, link, at, verdict, why, mine: false })), ...sent];
+  return { thread, notices: all.sort((a, b) => a.at - b.at) };
 }
 
 // The sidebar's Pinned and Chats, each session with its issue's state, whether it works now, and whether Auto carries it

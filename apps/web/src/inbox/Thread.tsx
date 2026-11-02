@@ -7,13 +7,16 @@
 // A composer under it starts a chat with Claude on the thread, which only you see (the server's threads.ts: "pops up
 // and carry it on with me", the user, 2 Nov); from then on the row opens on that chat, the thread above its
 // conversation, picked from two mockups on 2 Nov over one with Draft a reply, File an issue and Mark done above the box.
+//
+// A reply the chat's Claude drafted waits on a card above the composer (ReplyCard; the server's replies.ts), yours to
+// edit, and only your Send there posts it to Slack or sends it from Gmail as you: Claude has no call that sends.
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { useState } from "react";
 import { postJson, reason } from "../api/http";
 import { usePage } from "../api/page";
 import { SessionView } from "../sessions/Dock";
-import type { InboxRow } from "../store/issues";
+import { issues, type InboxRow, type Reply } from "../store/issues";
 import { toast } from "../ui/toast";
 
 interface Notice {
@@ -26,6 +29,7 @@ interface Notice {
   at: number;
   verdict: "now" | "later" | null;
   why: string;
+  mine: boolean; // a reply you sent from desk
 }
 
 const HASH = <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6.5 2.5l-1 11M10.5 2.5l-1 11M3 6h10.5M2.5 10H13" /></svg>;
@@ -66,7 +70,7 @@ export const chatOf = (row: InboxRow) => row.session ?? started.get(row.slug) ??
 // The thread open on the right: the thread with a composer under it, or once you wrote, the chat on it.
 export const ThreadView = observer(function ThreadView({ row }: { row: InboxRow }) {
   const session = chatOf(row);
-  if (session) return <SessionView id={session} above={<><ThreadBody row={row} /><p className="convo-note thread-private">With Claude: only you see this</p></>} />;
+  if (session) return <SessionView id={session} above={<><ThreadBody row={row} /><p className="convo-note thread-private">With Claude: only you see this</p></>} foot={<ReplyCard thread={row.slug} />} />;
   return (
     <div className="thread-pane">
       <ThreadBody row={row} />
@@ -74,6 +78,67 @@ export const ThreadView = observer(function ThreadView({ row }: { row: InboxRow 
     </div>
   );
 });
+
+// The thread's reply not sent yet, the newest: Claude's draft, or one Slack or Gmail refused.
+const unsent = (thread: string): Reply | null =>
+  [...issues.replies.values()].filter((r) => r.thread === thread && r.state !== "sent" && r.state !== "kept").sort((a, b) => b.at - a.at)[0] ?? null;
+
+// The card above the composer, mockup A of two (2 Nov) over one in the conversation, which scrolls away. A newer draft
+// starts it afresh, what you typed in it gone with the one it replaced.
+const ReplyCard = observer(function ReplyCard({ thread }: { thread: string }) {
+  const r = unsent(thread);
+  return r ? <ReplyBox key={`${r.id}:${r.at}`} reply={r} /> : null;
+});
+
+function ReplyBox({ reply }: { reply: Reply }) {
+  const [text, setText] = useState(reply.text);
+  const [busy, setBusy] = useState(false);
+  const where = reply.source === "mail" ? "Gmail" : "Slack";
+  const sending = busy || reply.state === "sending";
+  const send = async () => {
+    if (!text.trim() || sending) return;
+    setBusy(true);
+    const res = await postJson(`/api/replies/${reply.id}/send`, { text });
+    setBusy(false);
+    if (!res.ok) return toast(await reason(res));
+    const { state } = (await res.json()) as { state: Reply["state"] };
+    if (state === "sent") toast(reply.source === "mail" ? "Sent from Gmail" : "Sent to Slack");
+    else if (state === "kept") toast("Kept: a test desk sends nothing");
+  };
+  const discard = async () => {
+    const res = await fetch(`/api/replies/${reply.id}`, { method: "DELETE" });
+    if (!res.ok) toast(await reason(res));
+  };
+  return (
+    <div className="reply-card">
+      <div className="reply-head">
+        <span className="reply-icon">{reply.source === "mail" ? ENVELOPE : reply.whom.startsWith("in #") ? HASH : BUBBLE}</span>
+        <span className="reply-as">Reply as you</span>
+        <span className="reply-whom">{reply.whom}</span>
+      </div>
+      <textarea className="reply-text" value={text} spellCheck={false} disabled={sending} onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            void send();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation(); // the frame's Esc would also leave the page
+            e.currentTarget.blur();
+          }
+        }} />
+      <div className="reply-foot">
+        {reply.state === "failed"
+          ? <span className="reply-note failed">{where} refused it: {reply.error}</span>
+          : <span className="reply-note">Claude’s draft, yours to edit. Only Send posts it.</span>}
+        <button className="ghost" type="button" disabled={sending} onClick={() => void discard()}>Discard</button>
+        <button className="primary" type="button" title={`Send  Ctrl Enter`} disabled={!text.trim() || sending} onClick={() => void send()}>
+          {sending ? "Sending…" : reply.source === "mail" ? "Send from Gmail" : "Send to Slack"}</button>
+      </div>
+    </div>
+  );
+}
 
 // The box under a thread no chat is on yet: what you write starts the chat, and the pane turns to it.
 function ThreadComposer({ row }: { row: InboxRow }) {
@@ -93,6 +158,7 @@ function ThreadComposer({ row }: { row: InboxRow }) {
   };
   return (
     <div className="dock-foot">
+      <ReplyCard thread={row.slug} />
       <div className="composer">
         <div className="composer-text">
           <textarea rows={1} value={text} spellCheck={false} disabled={busy} placeholder="Ask Claude about it: draft a reply, file it, look into it"
@@ -118,9 +184,10 @@ function ThreadComposer({ row }: { row: InboxRow }) {
   );
 }
 
-// The thread itself, asked of desk each time its row moves (the app holds no notices).
+// The thread itself, asked of desk each time its row moves, or a reply you sent goes into it (the app holds no notices).
 const ThreadBody = observer(function ThreadBody({ row }: { row: InboxRow }) {
-  const { data } = usePage<{ notices: Notice[] }>(`/api/page/thread?id=${encodeURIComponent(row.slug)}`, row.at);
+  const sent = [...issues.replies.values()].filter((r) => r.thread === row.slug && (r.state === "sent" || r.state === "kept")).length;
+  const { data } = usePage<{ notices: Notice[] }>(`/api/page/thread?id=${encodeURIComponent(row.slug)}`, `${row.at}:${sent}`);
   const all = data?.notices ?? [];
   const last = all[all.length - 1];
   // Why it reached you: its newest ask that needs you, though a later reply came after it, else its newest message's
@@ -148,7 +215,7 @@ const ThreadBody = observer(function ThreadBody({ row }: { row: InboxRow }) {
             <div className="thread-msg" key={n.id}>
               <span className="thread-avatar">{initial(n.who)}</span>
               <div className="thread-body">
-                <div className="thread-meta"><span className="thread-who">{n.who}</span><span className="thread-at">{when(n.at)}</span></div>
+                <div className="thread-meta"><span className="thread-who">{n.who}</span><span className="thread-at">{when(n.at)}{n.mine && (n.link ? " · from desk" : " · kept, a test desk sends nothing")}</span></div>
                 {n.source === "mail"
                   ? <div className="thread-text"><strong>{first}</strong>{rest.length > 0 && <>{"\n"}{rest.join("\n")}</>}</div>
                   : <div className="thread-text">{n.text}</div>}

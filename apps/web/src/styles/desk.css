@@ -938,6 +938,20 @@ button.thread-out { flex: none; gap: 6px; }
 .convo-note.thread-private { margin-bottom: 4px; }
 /* The Inbox's pane ends where the corner's pills begin (sessions.css, .corner): a composer there sits clear above them. */
 .inbox-open .composer { margin-bottom: 30px; }
+/* A thread's reply waiting for your Send, above its chat's composer, as a question card sits (dock.css, .ask), picked
+   from two mockups on 2 Nov over one in the conversation: where it goes, the text yours to edit, Discard and Send. */
+.reply-card { flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); margin: 0 auto 8px; padding: 10px 12px;
+              border: 1px solid var(--border-2); border-radius: 12px; background: var(--bg-raised); animation: dock-rise 0.18s ease; }
+.reply-head { display: flex; align-items: center; gap: 6px; min-width: 0; margin-bottom: 6px; font: 500 12px var(--font); color: var(--text-3); }
+.reply-icon { flex: none; display: flex; }
+.reply-as { flex: none; color: var(--text-1); }
+.reply-whom { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 450; }
+.reply-text { display: block; width: 100%; box-sizing: border-box; min-height: 40px; max-height: 240px; padding: 8px 10px; border: 1px solid var(--border-2);
+              border-radius: 8px; outline: 0; resize: none; field-sizing: content; background: var(--bg-panel); font: 450 13.5px/20px var(--font); color: var(--text-1); }
+.reply-text:focus { border-color: var(--border-3); }
+.reply-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.reply-note { flex: 1; min-width: 0; font: 450 12px var(--font); color: var(--text-4); }
+.reply-note.failed { color: var(--text-error); }
 /* The line offering desktop notifications (desk.js), above the rows, until Chrome has your answer. */
 .notify-ask { display: flex; align-items: center; gap: 8px; margin: 0 10px 8px; padding: 6px 6px 6px 10px;
               border: 1px solid var(--border-2); border-radius: 8px; font: 500 13px var(--font); color: var(--text-2); }

@@ -296,6 +296,32 @@ export async function thread(id: string): Promise<{ who: string; at: number; tex
   })));
 }
 
+// ---- A reply, as the user
+
+// The reply as Slack takes it: &, < and > escaped, as Slack asks, but in its own <…> markup (a link, a mention, a
+// channel), and a name the thread showed as @name (plain, from Slack's <@U…>) made Slack's mention of them again, for
+// the people desk has named; any other @word stays as it was.
+const MARKUP = /(<(?:https?:|mailto:|[@#!])[^<>]*>)/;
+function asSlack(text: string) {
+  const ids = new Map([...names].filter(([id]) => /^[UW]/.test(id)).map(([id, name]) => [name.toLowerCase(), id]));
+  return text.split(MARKUP).map((part, i) => i % 2 ? part : part
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/(^|[\s(])@([\w.-]*\w)/g, (all, before: string, name: string) => {
+      const id = ids.get(name.toLowerCase());
+      return id ? `${before}<@${id}>` : all;
+    })).join("");
+}
+
+// The reply posted as the user: in the thread, or a DM's straight in the DM. The user's Send on its card in desk said so
+// (replies.ts). Its link.
+export async function post(id: string, text: string): Promise<string> {
+  const [, channel, ts] = id.split(":");
+  if (!login) await signIn();
+  if (text.includes("@")) await thread(id); // names its people, for their mentions, after a restart too
+  const r = await call("chat.postMessage", { channel, text: asSlack(text), ...(ts ? { thread_ts: ts } : {}) });
+  return `${WORKSPACE}/archives/${channel}/p${String(r.ts).replace(".", "")}` + (ts ? `?thread_ts=${ts}&cid=${channel}` : "");
+}
+
 // ---- The socket
 
 // One socket's life: signed in, the places read, rtm.connect's socket open until it closes. Resolves when it does.

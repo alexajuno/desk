@@ -14,6 +14,7 @@ import * as mail from "./mail.ts";
 import * as store from "./issues.ts";
 import * as models from "./models.ts";
 import * as notices from "./notices.ts";
+import * as replies from "./replies.ts";
 import * as pins from "./pins.ts";
 import * as pool from "./pool.ts";
 import * as projects from "./projects.ts";
@@ -58,6 +59,7 @@ keepCurrent();
 setInterval(keepCurrent, 10_000);
 setInterval(() => void db.prune().catch((error) => console.error("pruning the log", error)), 3600_000);
 notices.onJudged(sync.frameChanged); // a notice let through makes or moves its thread's Inbox row (pages.ts)
+await replies.recover(); // a reply a stop caught on its way says so on its card
 setInterval(() => void notices.prune().catch((error) => console.error("pruning the notices", error)), 3600_000);
 if (!TEST) {
   automations.startClock(); // each automation whose time came fires

@@ -26,6 +26,7 @@ import { HttpError } from "./pages.ts";
 import * as sessions from "./sessions.ts";
 import * as notices from "./notices.ts";
 import * as sync from "./sync.ts";
+import * as replies from "./replies.ts";
 import * as threads from "./threads.ts";
 import { tailnetName } from "./tailnet.ts";
 import * as teams from "./teams.ts";
@@ -350,6 +351,30 @@ export async function create(): Promise<FastifyInstance> {
     const id = req.params.id;
     if (!threads.IS.test(id) || !(await notices.ofThread(id)).length) throw new HttpError(404, "No such thread.");
     return reply.type("text/plain; charset=utf-8").send(threads.asText(await threads.whole(id)));
+  });
+  // A reply to the thread, as the user, only on their word (replies.ts): its chat's Claude puts its reply on the card above
+  // the user's composer, the text as the request's body, as a section's; the user's Send on it, from desk's page alone,
+  // posts it, the text as they left it. Claude has no call that sends.
+  app.register(async (raw) => {
+    raw.removeContentTypeParser("application/x-www-form-urlencoded");
+    raw.addContentTypeParser("*", { parseAs: "string" }, (_req, body, done) => done(null, body));
+    raw.put("/api/threads/:id/draft", async (req: Req) => {
+      const id = req.params.id;
+      if (!threads.IS.test(id)) throw new HttpError(404, "No such thread.");
+      const text = typeof req.body === "string" ? req.body : String(((req.body ?? {}) as { text?: unknown }).text ?? "");
+      const r = await replies.draft(id, text);
+      return { reply: r.id, whom: r.whom, says: `It is on the card above the user's composer, ${r.whom}, with Send: only their press sends it, and they may edit it first. A newer one you put replaces it.` };
+    });
+  });
+  app.post("/api/replies/:id/send", async (req: Req) => {
+    if (!fromPage(req)) throw new HttpError(403, "Only your Send on its card in desk sends a reply.");
+    const r = await replies.send(req.params.id, String(((req.body ?? {}) as { text?: unknown }).text ?? ""));
+    return { state: r.state, link: r.link, error: r.error };
+  });
+  app.delete("/api/replies/:id", async (req: Req) => {
+    if (!fromPage(req)) throw new HttpError(403, "Only its card in desk discards a reply.");
+    await replies.discard(req.params.id);
+    return { discarded: true };
   });
   // A made-up notice, on a test desk alone, which connects to neither Slack nor Gmail (config.ts, CONNECT): a test of
   // the Inbox's rows and pop-ups writes its own. 8790's come only from its connectors.

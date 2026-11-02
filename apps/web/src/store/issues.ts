@@ -105,11 +105,26 @@ export interface Tab {
   opened: string; // when desk first heard of it
 }
 
+// A reply to a Slack thread, DM or mail thread, as the user (the server's replies.ts): Claude's draft on the card above
+// the thread's composer, then what the user's Send posted.
+export interface Reply {
+  id: string;
+  thread: string; // the thread's Inbox row's slug
+  source: "slack" | "mail";
+  text: string;
+  whom: string; // where it goes: "in #imagenhub, in minhnt's thread", "to Talent team <talent@…>"
+  state: "draft" | "sending" | "sent" | "failed" | "kept"; // kept: a test desk sends nothing
+  at: number;
+  sent: number | null;
+  link: string;
+  error: string;
+}
+
 // One change from desk's log: the row as it is now, or null once deleted. kind is its table.
 interface Change { seq: number; kind: string; key: string; row: Record<string, unknown> | null }
 
 export type SyncMessage =
-  | { type: "snapshot"; log: string; seq: number; rows: { issues: Issue[]; teams?: Team[]; projects?: Project[]; milestones?: Milestone[]; chats?: Chat[]; inbox?: InboxRow[]; tabs?: Tab[] } }
+  | { type: "snapshot"; log: string; seq: number; rows: { issues: Issue[]; teams?: Team[]; projects?: Project[]; milestones?: Milestone[]; chats?: Chat[]; inbox?: InboxRow[]; tabs?: Tab[]; replies?: Reply[] } }
   | { type: "changes"; after: number; changes: Change[] }
   | { type: "files"; slugs: string[] };
 
@@ -124,6 +139,7 @@ export class IssueStore {
   chats = observable.map<string, Chat>(); // by id
   inbox = observable.map<string, InboxRow>(); // by id
   tabs = observable.map<string, Tab>(); // by target
+  replies = observable.map<string, Reply>(); // by id
   files = observable.map<string, number>(); // slug: how many times its other files changed (a plan, a result)
   connected = false;
   log = ""; // the name of desk's log these rows follow
@@ -148,12 +164,13 @@ export class IssueStore {
       this.chats.replace((message.rows.chats ?? []).map((c) => [c.id, c])); // none from a desk before the table
       this.inbox.replace((message.rows.inbox ?? []).map((r) => [r.id, r]));
       this.tabs.replace((message.rows.tabs ?? []).map((t) => [t.target, t]));
+      this.replies.replace((message.rows.replies ?? []).map((r) => [r.id, r]));
       this.log = message.log;
       this.seq = message.seq;
       return true;
     }
     if (message.after !== this.seq) return false;
-    const tables: Record<string, Map<string, unknown>> = { issues: this.bySlug, teams: this.teams, projects: this.projects, milestones: this.milestones, chats: this.chats, inbox: this.inbox, tabs: this.tabs };
+    const tables: Record<string, Map<string, unknown>> = { issues: this.bySlug, teams: this.teams, projects: this.projects, milestones: this.milestones, chats: this.chats, inbox: this.inbox, tabs: this.tabs, replies: this.replies };
     for (const c of message.changes) {
       const table = tables[c.kind]; // a table this app does not hold yet is a newer desk's
       if (table && c.row) table.set(c.key, c.row);

@@ -166,8 +166,9 @@ function browse(e: React.MouseEvent, session: string) {
   void postJson(`/api/live/${session}/browse`, { url: a.href }).then(async (res) => res.ok || toast(await reason(res)));
 }
 
-// above: what the conversation follows, the thread a chat from a thread's Inbox row is on (inbox/Thread.tsx).
-export const SessionView = observer(function SessionView({ id, above }: { id: string; above?: ReactNode }) {
+// above: what the conversation follows, the thread a chat from a thread's Inbox row is on (inbox/Thread.tsx); foot:
+// what sits over its composer, that thread's reply waiting for your Send.
+export const SessionView = observer(function SessionView({ id, above, foot }: { id: string; above?: ReactNode; foot?: ReactNode }) {
   const s = useLive(id)!;
   useSplash(!s.loaded); // desk opening on a chat shows it with its conversation, never "Connecting…"
   const scroller = useRef<HTMLDivElement>(null);
@@ -277,6 +278,7 @@ export const SessionView = observer(function SessionView({ id, above }: { id: st
             {here && shown === "chat" && <ChatSteps s={s} here={here} />}
             <Running s={s} />
             {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
+            {foot}
             <Composer s={s} />
           </div>
         </div>

@@ -50,11 +50,16 @@ async function token(): Promise<string> {
   return access.token;
 }
 
-async function call(path: string, params: Record<string, string | string[]>): Promise<Record<string, any>> {
+// A Gmail API call: a GET with its query, or with a body, a POST of it as JSON.
+async function call(path: string, params: Record<string, string | string[]>, body?: unknown): Promise<Record<string, any>> {
   const query = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) for (const one of [v].flat()) query.append(k, one);
   for (let tries = 0; ; tries++) {
-    const r = await fetch(`${API}${path}?${query}`, { headers: { authorization: `Bearer ${await token()}` }, signal: AbortSignal.timeout(60_000) });
+    const r = await fetch(`${API}${path}?${query}`, {
+      headers: { authorization: `Bearer ${await token()}`, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+      ...(body === undefined ? {} : { method: "POST", body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(60_000),
+    });
     if (r.status === 401 && tries === 0) {
       access = null; // taken back before its time: ask for another once
       continue;
@@ -133,6 +138,72 @@ export async function thread(id: string): Promise<{ who: string; at: number; tex
       text: `${h.subject || "(no subject)"}\n${text.length > LONG ? `${text.slice(0, LONG)}…` : text}`,
     };
   });
+}
+
+// ---- A reply, as the user
+
+const headersOf = (m: Record<string, any>): Record<string, string> =>
+  Object.fromEntries((m.payload?.headers ?? []).map((x: { name: string; value: string }) => [x.name.toLowerCase(), x.value]));
+
+// What a reply to the thread answers, as Gmail's Reply does: its newest mail not the user's, to its Reply-To, else its
+// From (or the user's own newest, to whom it went), under its subject with "Re:", in its thread.
+async function answering(id: string) {
+  const t = await call(`threads/${id.slice("mail:".length)}`, { format: "metadata", metadataHeaders: ["From", "Reply-To", "To", "Subject", "Message-ID", "References"] });
+  const all = (t.messages ?? []) as Record<string, any>[];
+  const mine = (m: Record<string, any>) => (m.labelIds ?? []).includes("SENT");
+  const m = all.filter((m) => !mine(m)).pop() ?? all[all.length - 1];
+  if (!m) throw new Error("Gmail gave an empty thread");
+  const h = headersOf(m), subject = h.subject ?? "";
+  return {
+    to: (mine(m) ? h.to : h["reply-to"] || h.from) ?? "",
+    subject: /^re:/i.test(subject) ? subject : `Re: ${subject}`,
+    inReplyTo: h["message-id"] ?? "",
+    references: [h.references, h["message-id"]].filter(Boolean).join(" "),
+  };
+}
+
+// Who a reply to the thread goes to, as its card says it: "Talent team <talent@acme.example>".
+export const recipient = async (id: string) => (await answering(id)).to;
+
+// A header's words, as RFC 2047 encodes what is not ASCII.
+const word = (s: string) => (/^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${Buffer.from(s, "utf8").toString("base64")}?=`);
+
+// An address list, each name encoded and each address as it was.
+const addresses = (list: string) =>
+  [...list.matchAll(/(?:"([^"]*)"|([^<>,"]*?))\s*<([^>]+)>|([^\s,<>"]+@[^\s,<>"]+)/g)]
+    .map(([, quoted, plain, address, bare]) => bare ?? ((quoted ?? plain ?? "").trim() ? `${word((quoted ?? plain).trim())} <${address}>` : address))
+    .join(", ");
+
+// The user, as their mail says them: Gmail's primary send-as, its name too.
+async function me(): Promise<string> {
+  const as = ((await call("settings/sendAs", {})).sendAs ?? []) as { sendAsEmail: string; displayName?: string; isPrimary?: boolean }[];
+  const p = as.find((a) => a.isPrimary) ?? as[0];
+  if (!p) return (await call("profile", {})).emailAddress as string;
+  return p.displayName ? `${word(p.displayName)} <${p.sendAsEmail}>` : p.sendAsEmail;
+}
+
+// The reply as Gmail takes it: an RFC 2822 mail, its text in UTF-8, base64url, with the thread it goes in.
+export async function compose(id: string, text: string): Promise<{ raw: string; threadId: string }> {
+  const a = await answering(id);
+  if (!a.to) throw new Error("the thread names nobody to answer");
+  const lines = [
+    `From: ${await me()}`,
+    `To: ${addresses(a.to)}`,
+    `Subject: ${word(a.subject)}`,
+    ...(a.inReplyTo ? [`In-Reply-To: ${a.inReplyTo}`, `References: ${a.references}`] : []),
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    Buffer.from(text.replace(/\r?\n/g, "\r\n"), "utf8").toString("base64").replace(/.{76}/g, "$&\r\n"),
+  ];
+  return { raw: Buffer.from(lines.join("\r\n"), "utf8").toString("base64url"), threadId: id.slice("mail:".length) };
+}
+
+// The reply sent, as the user, in its thread: the user's Send on its card in desk said so (replies.ts). Its link.
+export async function send(id: string, text: string): Promise<string> {
+  const sent = await call("messages/send", {}, await compose(id, text));
+  return `https://mail.google.com/mail/u/0/#sent/${sent.id}`;
 }
 
 // One poll: the mail that came since the newest written, each new one written as a notice. Returns the ones written.
