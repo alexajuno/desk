@@ -1,9 +1,9 @@
-// The browser relay, which every desk session's chrome MCP reaches Claude's tabs through, so that desk knows which
+// The browser relay, which every desk session's desk-browser MCP reaches Claude's tabs through, so that desk knows which
 // session opened each tab and can show a chat its own ("i can view tabs per sessions directly on what it's doing", the
 // user, 31 Oct). It runs in the session host (host.ts), which outlives desk's restarts, so a restart cuts no
-// session's browser. The host gives each session the address of its own way in, which ~/.local/bin/chrome-mcp.sh connects to:
+// session's browser. The host gives each session the address of its own way in, as its desk-browser MCP server:
 //
-//     chrome MCP ── ws://127.0.0.1:<port>/cdp/<session id> ──► relay ──► desk's app, on its DevTools port
+//     desk-browser MCP ── ws://127.0.0.1:<port>/cdp/<session id> ──► relay ──► desk's app, on its DevTools port
 //
 // Claude's tabs live in desk's app (apps/desktop/src/tabs.ts), the Chrome that shows them in a chat's Browser (1 Nov).
 // The relay passes each session's CDP through as it is but for two things:

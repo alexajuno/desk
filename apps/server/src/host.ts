@@ -221,9 +221,12 @@ function start(o: StartOptions): Session {
       ...(o.settings ? { settings: o.settings } : {}),
       includePartialMessages: true,
       pathToClaudeCodeExecutable: CLAUDE,
-      // DESK_CDP_ENDPOINT: the session's own way into the agents' Chrome, which chrome-mcp.sh connects its chrome MCP to.
-      env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "desk", BASH_MAX_TIMEOUT_MS: LONGEST_COMMAND,
-        ...(relayPort ? { DESK_CDP_ENDPOINT: `ws://127.0.0.1:${relayPort}/cdp/${id}` } : {}) },
+      env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "desk", BASH_MAX_TIMEOUT_MS: LONGEST_COMMAND },
+      // desk-browser: the session's own logged-out browser, its tabs in desk's app and shown in its chat's Browser, which
+      // it reaches through the relay; the user's chrome server, for logged-in work in the agents' Chrome, stays as it is
+      // ("probably it's mostly used for non login stuff. like, testing", the user, 2 Nov).
+      ...(relayPort ? { mcpServers: { "desk-browser": { type: "stdio" as const, command: "playwright-mcp",
+        args: ["--cdp-endpoint", `ws://127.0.0.1:${relayPort}/cdp/${id}`] } } } : {}),
       // A tool call Claude Code wants a yes for, and every AskUserQuestion, waits here for the user's answer in the panel.
       canUseTool: (tool, input, { signal, toolUseID }) => new Promise<PermissionResult>((resolve) => {
         const askId = toolUseID ?? randomUUID();
