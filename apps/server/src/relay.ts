@@ -10,6 +10,8 @@
 // - Its Target.createTarget, which Electron answers with "Not supported": the relay asks the app for the tab instead,
 //   on the app's socket, and answers with it once the session heard the tab attach, as Chrome's own answer would come
 //   (Playwright looks the new tab up by the answer's id: its coreBundle.js, doCreateNewPage).
+// - Its Page.captureScreenshot of one of its tabs, which the relay asks the app for instead (snap, below): Chrome's own
+//   waits for the screen to show the page, which a locked screen never does, and hung there for minutes (2 Nov).
 // - desk's own pages, its window and its developer tools, which the same Chrome holds: the session hears only of tabs
 //   in the context Claude's tabs keep their logins in, and the relay lets go of any other it was attached to, freeing
 //   one Playwright's auto-attach holds before it runs (waitForDebuggerOnStart).
@@ -76,6 +78,7 @@ function pipe(mcp: WebSocket, session: string) {
   const waiting = new Map<string, () => void>(); // its answers to Target.createTarget, waiting for the tab's attach
   const listing = new Set<string>(); // its Target.getTargets calls, by CDP session and id
   let attaching = false; // it auto-attaches to new tabs, so each one's attach comes
+  const mine = new Map<number, (m: Cdp) => void>(); // the relay's own calls on it, waiting for their answers
   let ours = OURS, context = "";
   let app: WebSocket | null = null;
   const down = (m: object) => mcp.readyState === WebSocket.OPEN && mcp.send(JSON.stringify(m));
@@ -93,10 +96,38 @@ function pipe(mcp: WebSocket, session: string) {
       setTimeout(() => waiting.delete(target) && answer(), ATTACH);
     }, (e: Error) => down({ id: m.id, ...to, error: { code: -32000, message: `desk's app made no tab: ${e.message}` } }));
   };
+  // A call of the relay's own on the session's connection, answered with the app's answer.
+  const ask = (sessionId: string | undefined, method: string, params: object = {}) => new Promise<Cdp>((done) => {
+    const id = ours++;
+    mine.set(id, done);
+    up(JSON.stringify({ id, ...(sessionId ? { sessionId } : {}), method, params }));
+  });
+  // Its screenshot of the tab, from the app (tabs.ts, shot), answered as Chrome would. Playwright gives the place in the
+  // page's own pixels, from its corner (its coreBundle.js, takeScreenshot): the app takes it from where the tab is scrolled
+  // to, which it asks the tab as Playwright did, or from the page's corner for a place beyond the tab, as a full page is.
+  const snap = async (m: Cdp, target: string) => {
+    const p = (m.params ?? {}) as Snap, to = m.sessionId ? { sessionId: m.sessionId } : {};
+    try {
+      // In CSS pixels: the older visualViewport gives its size in the screen's (2 Nov, at scale 2)
+      const { cssVisualViewport: at } = (await ask(m.sessionId, "Page.getLayoutMetrics")).result as unknown as { cssVisualViewport: Viewport };
+      const beyond = !!p.captureBeyondViewport, clip = p.clip ?? { x: at.pageX, y: at.pageY, width: at.clientWidth, height: at.clientHeight, scale: 1 };
+      const place = beyond ? clip : { ...clip, x: clip.x - at.pageX, y: clip.y - at.pageY };
+      const { data } = await call<{ data: string }>("POST", `/tabs/${target}/shot`, { ...place, format: p.format ?? "png", quality: p.quality, beyond });
+      down({ id: m.id, ...to, result: { data } });
+      // The tab grown for a place beyond it is no longer scrolled once it is back, where Chrome's is
+      if (beyond && (at.pageX || at.pageY)) up(JSON.stringify({ id: ours++, ...to, method: "Runtime.evaluate", params: { expression: `scrollTo(${at.pageX}, ${at.pageY})` } }));
+    } catch (e) {
+      down({ id: m.id, ...to, error: { code: -32000, message: `desk's app took no screenshot: ${(e as Error).message}` } });
+    }
+  };
   // Whether a message from the app is about desk's own pages, which the session never hears: true drops it.
   const theirs = (m: Cdp): boolean => {
     const info = m.params?.targetInfo as TargetInfo | undefined;
-    if (m.id !== undefined && m.id >= OURS) return true;
+    if (m.id !== undefined && m.id >= OURS) {
+      mine.get(m.id)?.(m);
+      mine.delete(m.id);
+      return true;
+    }
     if (m.sessionId && hidden.has(m.sessionId)) return true;
     if (m.method === "Target.attachedToTarget" && info) {
       if (info.browserContextId === context) {
@@ -131,8 +162,9 @@ function pipe(mcp: WebSocket, session: string) {
       if (m?.method === "Target.setAutoAttach" && !m.sessionId) attaching = !!m.params?.autoAttach;
       if (m?.method === "Target.getTargets") listing.add(`${m.sessionId ?? ""} ${m.id}`);
     } else if (data.length < 10_000 && ACTS.test(data.toString())) {
-      const target = tabOf.get(parse(data)?.sessionId ?? "");
+      const m = parse(data), target = tabOf.get(m?.sessionId ?? "");
       if (target) used(target, session);
+      if (target && m?.method === "Page.captureScreenshot" && [undefined, "png", "jpeg"].includes((m.params as Snap | undefined)?.format)) return void snap(m, target);
     }
     up(data);
   });
@@ -147,8 +179,9 @@ function pipe(mcp: WebSocket, session: string) {
       void watch(); // the app runs now, if it did not before
     });
     ws.on("message", (data: Buffer) => {
-      // Only a small message, or one about targets, can be about desk's pages: a screenshot is neither, and is not parsed
-      if (data.length < 2000 || data.includes("Target.") || data.includes("targetInfos")) {
+      // Only a small message, or one about targets, can be about desk's pages or answer the relay: a screenshot is
+      // neither, and is not parsed
+      if (data.length < 2000 || data.includes("Target.") || data.includes("targetInfos") || (mine.size && data.length < 10_000)) {
         const m = parse(data);
         if (m && theirs(m)) return;
         if (m?.result?.targetInfos) data = Buffer.from(JSON.stringify(m));
@@ -177,7 +210,7 @@ export async function open(session: string, url: string) {
 const tab = (url: string) => call<{ target: string }>("PUT", "/tabs", { url }).then((r) => r.target);
 
 // A call to desk's app on its socket (apps/desktop/src/tabs.ts), answered with its JSON.
-export function call<T>(method: "GET" | "PUT", path: string, body?: object): Promise<T> {
+export function call<T>(method: "GET" | "PUT" | "POST", path: string, body?: object): Promise<T> {
   return new Promise((done, fail) => {
     const req = request({ socketPath: SOCKET, method, path, timeout: 20_000, headers: { "content-type": "application/json" } }, (res) => {
       let text = "";
@@ -302,6 +335,9 @@ function changed(info: TargetInfo) {
   if (by && !owners.has(info.targetId)) own(info.targetId, by);
   else say(info.targetId);
 }
+
+interface Snap { format?: string; quality?: number; clip?: { x: number; y: number; width: number; height: number; scale: number }; captureBeyondViewport?: boolean }
+interface Viewport { pageX: number; pageY: number; clientWidth: number; clientHeight: number }
 
 interface Cdp { id?: number; method?: string; sessionId?: string; params?: Record<string, unknown>; result?: { targetId?: string; targetInfos?: TargetInfo[] } }
 

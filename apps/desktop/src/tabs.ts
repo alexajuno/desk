@@ -6,6 +6,7 @@
 //     relay ── PUT /tabs {"url"} ──► SOCKET ──► a tab in a window of its own ──► {"target": "<its DevTools id>"}
 //     relay ── GET / ──► SOCKET ──► {"context": "<the tabs' DevTools browser context>"}, the only one the relay shows Claude
 //     desk ── GET /tabs/<id> ──► SOCKET ──► {"focused": true}, whether your keys are in the tab, which a chat's Browser shows
+//     relay ── POST /tabs/<id>/shot {place, scale, format} ──► SOCKET ──► {"data": "<base64>"}, Claude's screenshot (shot)
 //     bin/desk-app ── POST /window ──► SOCKET ──► desk's window, made or shown again (main.ts)
 //
 // A chat's Browser shows a tab itself, in desk's window over the Browser's box for it (show, below), at that box's size,
@@ -16,7 +17,7 @@
 // (1 Nov). Hyprland's config (~/.config/hypr/hyprland.lua, "desk's app") puts the screen out of the mouse's reach and
 // the tabs' windows on it, and the user's screen scripts leave it out. The tabs keep their logins apart from desk's
 // page, in PARTITION, which takes the user's own Chrome's as the app starts (logins.ts).
-import { BaseWindow, session, WebContentsView, type BrowserWindow, type Input, type Rectangle, type WebContents } from "electron";
+import { BaseWindow, nativeImage, session, WebContentsView, type BrowserWindow, type Input, type NativeImage, type Rectangle, type WebContents } from "electron";
 import { execFile } from "node:child_process";
 import { rmSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
@@ -35,6 +36,7 @@ const SCREEN = "desk-tabs"; // the virtual screen's name, which Hyprland's confi
 const TITLE = "desk tabs"; // the tabs' windows', which Hyprland's rule knows them by
 const SIZE = { width: 1440, height: 900 }; // a tab's, about the agents' Chrome's window, as the rule sizes it
 const ADDRESS = /^(https?:\/\/\S+|about:blank)$/i; // where a new tab may start
+const BIGGEST = 16384; // CSS px on a side of a screenshot beyond the view, about as big as a picture Chrome draws may be
 
 type Tab = { id: string; view: WebContentsView; shelf: BaseWindow; host?: BrowserWindow };
 const all = new Map<string, Tab>(); // Claude's tabs, by their DevTools id
@@ -147,6 +149,52 @@ export async function still(target: string) {
   return Buffer.concat([head, pixels]);
 }
 
+// A screenshot of the tab for Claude, which the relay asks for in place of Chrome's own: Chrome's waits for the screen
+// to show the frame, which a locked screen never does, and hung there, once for over 4 minutes, while this answered in
+// 26 to 103 ms (2 Nov). The part of the page at the place, in its CSS pixels from the view's corner, or from the page's
+// for one beyond the view, as a full page is, sized and encoded as Chrome's: its width times the scale times the screen's.
+export interface Shot { x: number; y: number; width: number; height: number; scale: number; format: "png" | "jpeg"; quality?: number; beyond?: boolean }
+
+export async function shot(target: string, o: Shot) {
+  const tab = all.get(target);
+  if (!tab) throw new Error("No such tab");
+  const { view } = tab, was = view.getBounds();
+  const rect = { x: Math.round(o.x), y: Math.round(o.y), width: Math.round(o.width), height: Math.round(o.height) };
+  // Beyond the view, the view grows to hold the place for the moment, as Chrome's own grows the page, its page then not
+  // scrolled. One desk shows grows where it is, over the Browser's foot: out of the window it never drew at its new size
+  // (2 Nov). A place bigger than the view, grown or not, gives what the view holds: a page taller than it may grow gives
+  // its top.
+  const grow = o.beyond && (rect.x + rect.width > was.width || rect.y + rect.height > was.height);
+  const width = grow ? Math.min(Math.max(was.width, rect.x + rect.width), BIGGEST) : was.width;
+  const height = grow ? Math.min(Math.max(was.height, rect.y + rect.height), BIGGEST) : was.height;
+  if (grow) view.setBounds({ x: tab.host ? was.x : 0, y: tab.host ? was.y : 0, width, height });
+  rect.width = Math.max(1, Math.min(rect.width, width - rect.x));
+  rect.height = Math.max(1, Math.min(rect.height, height - rect.y));
+  try {
+    // The first picture under a locked screen is the frame before the page's last change (2 Nov): the second is as it is.
+    // A view grown takes a few frames to draw at its new size: until it does, its picture is cut to its old size, and
+    // it has the place's shape only once it has.
+    const pixels = (image: NativeImage) => image.getSize(image.getScaleFactors()[0] ?? 1);
+    let image = await view.webContents.capturePage(rect);
+    for (let i = 0; i < (grow ? 20 : 1); i++) {
+      image = await view.webContents.capturePage(rect);
+      const { width, height } = pixels(image);
+      if (!grow || Math.abs(height / width - rect.height / rect.width) < 0.01) break;
+      await sleep(50);
+    }
+    // The picture is in the screen's pixels, which Electron calls scale 1 (2 Nov, at the laptop's scale 2): the screen's
+    // scale is its width over the place's, and it is sized from there as one picture at scale 1, never stretched: a
+    // view that did not grow in time gives what it had.
+    const size = pixels(image), screen = size.width / rect.width;
+    image = nativeImage.createFromBitmap(image.toBitmap({ scaleFactor: image.getScaleFactors()[0] ?? 1 }), size);
+    const want = { width: Math.max(1, Math.round(rect.width * o.scale * screen)), height: Math.max(1, Math.round(Math.min(rect.height, size.height / screen) * o.scale * screen)) };
+    if (want.width !== size.width || want.height !== size.height) image = image.resize({ ...want, quality: "best" });
+    return (o.format === "jpeg" ? image.toJPEG(o.quality ?? 80) : image.toPNG()).toString("base64");
+  } finally {
+    if (grow) view.setBounds(was);
+  }
+}
+
 const leave = (tab: Tab) => {
   const host = tab.host!;
   if (!host.isDestroyed()) host.contentView.removeChildView(tab.view);
@@ -202,7 +250,12 @@ function listen(showWindow: () => void) {
       const tab = all.get(id);
       return tab ? reply(200, { focused: Boolean(tab.host?.isFocused() && tab.view.webContents.isFocused()) }) : reply(404, { detail: "No such tab" });
     }
-    if (req.method !== "PUT" || req.url !== "/tabs") return reply(404, { detail: "GET /, GET /tabs/<id>, PUT /tabs or POST /window" });
+    const shooting = req.method === "POST" && /^\/tabs\/([0-9A-F]{32})\/shot$/.exec(req.url ?? "")?.[1];
+    if (shooting) { // the relay's, for Claude's screenshot
+      return read(req).then((body) => shot(shooting, JSON.parse(body) as Shot)).then((data) => reply(200, { data }))
+        .catch((e: Error) => reply(e.message === "No such tab" ? 404 : 500, { detail: e.message }));
+    }
+    if (req.method !== "PUT" || req.url !== "/tabs") return reply(404, { detail: "GET /, GET /tabs/<id>, PUT /tabs, POST /tabs/<id>/shot or POST /window" });
     read(req).then((body) => {
       const url = (JSON.parse(body) as { url?: unknown }).url ?? "about:blank";
       if (typeof url !== "string" || !ADDRESS.test(url)) return reply(400, { detail: "An http or https address, or about:blank" });
