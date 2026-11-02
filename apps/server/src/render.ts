@@ -85,6 +85,34 @@ export function takePictures(text: string): { pictures: StepPicture[]; rest: str
 export const picturesText = (pictures: StepPicture[]) =>
   pictures.map((p) => `\`\`\`d2${p.caption ? ` ${p.caption}` : ""}\n${p.d2}\n\`\`\``).join("\n\n");
 
+// A design step written as parts, from the basics up, each its own text and diagram, which the chat shows as the text on
+// the left and the diagram of the part being read on the right: "text equals to voice on the left and diagrams equals to
+// video on the right" (the user, 3 Nov). Each ### heading outside a code block starts a part, and a ### Decisions heading
+// the decisions, read last. null when the text has no ### heading, a step written as one diagram and its decisions.
+export type StepPart = { title: string; text?: string; pictures?: StepPicture[] };
+export const DECISIONS = "Decisions";
+export function takeParts(text: string): { parts: StepPart[]; said: string; before: string } | null {
+  const lines = text.split("\n"), heads: number[] = [];
+  let fence = "";
+  lines.forEach((line, n) => {
+    const mark = /^[ \t]*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (mark && (!fence || (mark[0] === fence[0] && mark.length >= fence.length))) fence = fence ? "" : mark;
+    else if (!fence && /^###[ \t]+\S/.test(line)) heads.push(n);
+  });
+  if (!heads.length) return null;
+  const parts: StepPart[] = [], said: string[] = [];
+  heads.forEach((at, k) => {
+    const title = lines[at].replace(/^###[ \t]+/, "").replace(/[ \t]+#+[ \t]*$/, "").trim();
+    const body = lines.slice(at + 1, heads[k + 1]).join("\n");
+    if (title.toLowerCase() === DECISIONS.toLowerCase()) return void said.push(body.trim());
+    const { pictures, rest } = takePictures(body);
+    parts.push({ title, ...(rest ? { text: rest } : {}), ...(pictures.length ? { pictures } : {}) });
+  });
+  return { parts, said: said.filter(Boolean).join("\n\n"), before: lines.slice(0, heads[0]).join("\n").trim() };
+}
+export const partsText = (parts: StepPart[]) =>
+  parts.map((p) => [`### ${p.title}`, p.text ?? "", picturesText(p.pictures ?? [])].filter(Boolean).join("\n\n")).join("\n\n");
+
 // Linear's group triangle, so a section folds the way a list group does.
 const TRIANGLE = "M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613" +
   "L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z";
