@@ -5,7 +5,7 @@ import { create } from "./app.ts";
 import * as auto from "./auto.ts";
 import * as automations from "./automations.ts";
 import * as chats from "./chats.ts";
-import { PORT, TEST } from "./config.ts";
+import { CONNECT, PORT, TEST } from "./config.ts";
 import * as db from "./db.ts";
 import * as hosted from "./hosted.ts";
 import * as inbox from "./inbox.ts";
@@ -17,6 +17,7 @@ import * as pool from "./pool.ts";
 import * as projects from "./projects.ts";
 import * as sessions from "./sessions.ts";
 import * as settings from "./settings.ts";
+import * as slack from "./slack.ts";
 import * as sync from "./sync.ts";
 import * as teams from "./teams.ts";
 import * as turns from "./turns.ts";
@@ -59,6 +60,7 @@ if (!TEST) {
   automations.startClock(); // each automation whose time came fires
   pool.start(); // the test desks' line moves on its own
 }
+if (CONNECT) slack.start(); // Slack's messages come in as notices (notices.ts)
 
 let stopping = false;
 async function stop() {
@@ -67,6 +69,7 @@ async function stop() {
   // Sockets stay open as long as a tab does: close them, and the pages reconnect to the desk that comes next.
   sync.closeAll();
   turns.stop();
+  slack.stop();
   const late = setTimeout(() => process.exit(0), 5000);
   try {
     await app.close();

@@ -26,6 +26,9 @@ export const PORT = Number(process.env.PORT ?? 8790);
 // its own (2 Nov: "usually people name it app environment = prod, local ... here probably we have main and test").
 export const ENV = process.env.DESK_ENV === "test" ? "test" : "main";
 export const TEST = ENV === "test";
+// Whether desk connects to Slack and Gmail and listens (slack.ts): the user's desk does, and a test desk only when told
+// with DESK_CONNECT=1, so that two desks never pop the same message up twice. DESK_CONNECT=0 keeps any desk off them.
+export const CONNECT = process.env.DESK_CONNECT ? process.env.DESK_CONNECT === "1" : !TEST;
 // The session host's browser relay (relay.ts), which a desk moves with DESK_RELAY_PORT, or turns off with 0, as a test
 // desk does unless told. 9335 and 9336 are the phone's mobile-mcp.
 export const RELAY_PORT = Number(process.env.DESK_RELAY_PORT ?? (TEST ? 0 : 9340));
