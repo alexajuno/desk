@@ -14,9 +14,10 @@
 //     {"t": "note", "key": …, "text": "Stopped"}                                 the user stopped the turn, or it compacted,
 //                                                                                or a script sent the agent a message for the user,
 //                                                                                or a task ended, or a command printed a line
+import { createHash } from "node:crypto";
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { HOME } from "./config.ts";
+import { DB_DIR, HOME, TEST } from "./config.ts";
 import * as uploads from "./uploads.ts";
 
 export const PROJECTS = join(HOME, ".claude", "projects");
@@ -67,8 +68,26 @@ function reindex() {
 
 const listed = (session: string) => (index.get(session) ?? []).filter((p) => existsSync(p));
 
-// The session's transcript, the newest when it ran in several folders (a chat desk moved resumes in the next).
+// The session's transcript, the newest when it ran in several folders (a chat desk moved resumes in the next). On a test
+// desk, its fork's once the fork has run.
 export function pathOf(session: string): string | null {
+  return TEST ? (find(forkOf(session)) ?? find(session)) : find(session);
+}
+
+// On a test desk a session runs as a fork of its own, so that the user's transcript stays as it was ("a message forks
+// it", 2 Nov): the host resumes the session under this id, forked from the session's own transcript on its first run
+// (hosted.ts, start). The id is made from the session's and the copy's database, so it is the same on every start of
+// this copy's desk, and new with the next copy.
+let copy: string | null = null;
+
+export function forkOf(session: string): string {
+  copy ??= `${DB_DIR}:${statSync(DB_DIR).birthtimeMs}`; // read once the database is open, which makes its folder
+  const h = createHash("sha1").update(`${copy}:${session}`).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${((parseInt(h[16], 16) & 3) | 8).toString(16)}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
+// The session's own transcript, wherever desk runs.
+export function find(session: string): string | null {
   let paths: string[];
   try {
     const stale = Date.now() - indexed > 1000;

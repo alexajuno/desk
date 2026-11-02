@@ -6,9 +6,9 @@ import { request as httpRequest } from "node:http";
 import { dirname, join } from "node:path";
 import { spawn } from "node:child_process";
 import { WebSocket } from "ws";
-import { HOME, PORT, RELAY_PORT, REPO } from "./config.ts";
+import { HOME, PORT, RELAY_PORT, REPO, TEST } from "./config.ts";
 import { sleep, which } from "./proc.ts";
-import { pathOf } from "./transcript.ts";
+import { find, forkOf, pathOf } from "./transcript.ts";
 
 export const SOCKET = join(process.env.XDG_RUNTIME_DIR || "/tmp", `desk-host-${PORT}.sock`);
 const HOST = join(REPO, "apps", "server", "src", "host.ts");
@@ -42,6 +42,10 @@ export interface StartOptions {
   agent?: string;
   settings?: Record<string, unknown>;
   message?: Content;
+  // On a test desk, the id the session runs as in Claude Code (transcript.ts, forkOf), resumed, or with fork, forked
+  // from the session's own transcript, which stays as it was.
+  as?: string;
+  fork?: boolean;
 }
 
 // The version a host of the code checked out now would report (host.ts computes it the same way).
@@ -176,12 +180,17 @@ export async function holds(id: string | null | undefined): Promise<HostRow | nu
 }
 
 export async function start(o: StartOptions): Promise<HostRow> {
-  // A session that never got a message has no transcript to resume: it starts afresh, under the same id.
-  if (o.resume && o.id && !pathOf(o.id)) o = { ...o, resume: false };
+  if (TEST && o.id) {
+    // On a test desk a session runs as its fork: resumed once the fork has run, forked from the session's transcript
+    // before that, or started under the fork's id when the session never got a message.
+    const as = forkOf(o.id), ran = Boolean(find(as));
+    o = { ...o, as, resume: ran, fork: !ran && Boolean(find(o.id)) };
+  } else if (o.resume && o.id && !pathOf(o.id)) o = { ...o, resume: false }; // never got a message: starts afresh, under the same id
   await ensure();
-  // A host of older code drops what it does not know, and would run an agent's chat as a plain session.
-  if (o.agent && (await version()) !== current())
-    throw new HostError("desk's session host runs older code, which cannot start an agent yet. It updates itself once no session has worked for 10 minutes; try again then.", 503);
+  // A host of older code drops what it does not know: it would run an agent's chat as a plain session, and resume the
+  // user's own session where a test desk forks it.
+  if ((o.agent || o.as) && (await version()) !== current())
+    throw new HostError(`desk's session host runs older code, which cannot ${o.as ? "fork a session" : "start an agent"} yet. It updates itself once no session has worked for 10 minutes; try again then.`, 503);
   const row = await call<HostRow>("POST", "/sessions", o);
   cached = [0, []];
   return row;

@@ -10,7 +10,7 @@ import * as agents from "./agents.ts";
 import * as api from "./api.ts";
 import * as cast from "./cast.ts";
 import * as chats from "./chats.ts";
-import { HOME } from "./config.ts";
+import { HOME, TEST } from "./config.ts";
 import * as fields from "./fields.ts";
 import * as store from "./issues.ts";
 import { byRank, CLOSED, runs } from "./issues.ts";
@@ -592,6 +592,12 @@ export async function create(): Promise<FastifyInstance> {
     const before = fromInbox ? (await pages.notifications(await store.loadAll(), slug)).map((n) => n.slug) : []; // with the one open
     const stay = (message: string | null = null, trust = false) => back(reply, slug, message, trust, fromInbox);
     if (i.state !== "review") return stay("Only an issue in review can be approved.");
+    // A test desk runs no landing step and wakes no session to land it: either would land the work in the user's real
+    // repos. The issue moves as Approve would move it, so the button can be tested.
+    if (TEST) {
+      await store.move(i, { ...(await store.landedState(i)), landed: "nothing ran, on a test desk" });
+      return fromInbox ? onward(reply, before, slug, `Approved on a test desk: ${i.title}`) : back(reply, slug);
+    }
     let message = `Approved: ${i.title}`;
     const lands = land.landsOf(i);
     if (lands) {

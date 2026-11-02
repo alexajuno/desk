@@ -2,6 +2,7 @@
 // $100 of API credits. desk reads its numbers for the status bar and asks it to switch (the user, 1 Nov: "seat, is a
 // separate module from desk. which handles auto routing between profiles ... and we'll write a seat connection in desk.
 // which will display seat's related numbers"). `seat ls --json` is the contract: desk never reads seat's files.
+import { TEST } from "./config.ts";
 import { run } from "./proc.ts";
 import { HttpError } from "./httperror.ts";
 
@@ -111,6 +112,8 @@ async function fresh(): Promise<Seat | null> {
 }
 
 async function ask(args: string[]) {
+  // Switch and Auto switch change the profile every running session uses, the user's included.
+  if (TEST) throw new HttpError(403, "seat is read-only on a test desk.");
   const r = await run(["seat", ...args], { timeout: 30 }).catch((error: Error) => {
     throw new HttpError(502, `seat did not run: ${error.message}`);
   });

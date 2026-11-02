@@ -13,11 +13,12 @@ import { spawn as spawnPty } from "node-pty";
 import type { WebSocket } from "ws";
 import * as agents from "./agents.ts";
 import * as chats from "./chats.ts";
-import { HOME } from "./config.ts";
+import { HOME, PORT, TEST } from "./config.ts";
 import * as store from "./issues.ts";
 import { run, which } from "./proc.ts";
 
-const SOCKET = "agent";
+// A test desk's chats have the same ids as the user's, so its terminals live on a tmux server of their own.
+const SOCKET = TEST ? `agent-${PORT}` : "agent";
 // tt's config, read once as the server starts: the user's ~/.tmux.conf, then remain-on-exit and 50,000 lines of history.
 const CONF = join(HOME, ".claude", "skills", "interactive-terminal", "assets", "tmux.conf");
 const tmuxArgs = () => ["-L", SOCKET, ...(existsSync(CONF) ? ["-f", CONF] : [])];

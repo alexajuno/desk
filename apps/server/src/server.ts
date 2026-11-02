@@ -1,11 +1,11 @@
 // desk's server, started by main.ts once the packages match the commit checked out. PORT picks the port (default 8790),
-// DESK_DATA the data folder (default ~/.local/share/desk), and DESK_CLOCK=0 leaves the line, the automations'
-// clock off, as a second desk for testing should.
+// DESK_DATA the data folder (default ~/.local/share/desk), and DESK_ENV=test leaves the line and the automations' clock
+// off, as a slot's desk should (config.ts, ENV).
 import { create } from "./app.ts";
 import * as auto from "./auto.ts";
 import * as automations from "./automations.ts";
 import * as chats from "./chats.ts";
-import { PORT } from "./config.ts";
+import { PORT, TEST } from "./config.ts";
 import * as db from "./db.ts";
 import * as hosted from "./hosted.ts";
 import * as inbox from "./inbox.ts";
@@ -54,7 +54,7 @@ const keepCurrent = () => void hosted.keepCurrent().catch(() => {});
 keepCurrent();
 setInterval(keepCurrent, 10_000);
 setInterval(() => void db.prune().catch((error) => console.error("pruning the log", error)), 3600_000);
-if (process.env.DESK_CLOCK !== "0") {
+if (!TEST) {
   land.start(); // the line for desk's own checkout moves on its own
   automations.startClock(); // each automation whose time came fires
 }

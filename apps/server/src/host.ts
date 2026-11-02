@@ -125,6 +125,10 @@ export interface StartOptions {
   agent?: string; // one of the user's agents (~/.claude/agents), as `claude --agent` runs it: its prompt, tools and model
   settings?: Record<string, unknown>;
   message?: Content;
+  // On a test desk, the id the session runs as in Claude Code (transcript.ts, forkOf), resumed, or with fork, forked
+  // from the session's own transcript, which stays as it was.
+  as?: string;
+  fork?: boolean;
 }
 
 type Content = string | Record<string, unknown>[];
@@ -202,8 +206,9 @@ function start(o: StartOptions): Session {
     prompt: inbox(s),
     options: {
       cwd: o.cwd,
-      ...(o.resume ? { resume: id } : { sessionId: id }),
-      ...(o.title && !o.resume ? { title: o.title } : {}),
+      ...(o.as ? (o.fork ? { resume: id, forkSession: true, sessionId: o.as } : o.resume ? { resume: o.as } : { sessionId: o.as })
+        : o.resume ? { resume: id } : { sessionId: id }),
+      ...(o.title && !o.resume && !o.fork ? { title: o.title } : {}),
       systemPrompt: { type: "preset", preset: "claude_code", ...(o.append ? { append: o.append } : {}) },
       tools: { type: "preset", preset: "claude_code" },
       ...(o.model ? { model: o.model } : {}),

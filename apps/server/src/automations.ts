@@ -21,7 +21,7 @@
 // when desk first saw each one, when it last fired, its last run's chat and how its last check went.
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { AUTOMATIONS_DIR, HOME } from "./config.ts";
+import { AUTOMATIONS_DIR, HOME, TEST } from "./config.ts";
 import * as chats from "./chats.ts";
 import { sql } from "./db.ts";
 import { asText, dump, split } from "./frontmatter.ts";
@@ -237,6 +237,8 @@ const lastLine = (text: string) => text.trim().split("\n").pop()?.slice(0, 200) 
 // Run it now: its check, then, when the check printed something or a call sent a message, a chat with its agent.
 // Answers how it went, in a few words.
 export async function fire(a: Automation, why: string, message = ""): Promise<string> {
+  // A check reads the user's real mail and files, and may mark what it saw: a test desk runs none.
+  if (TEST) return "Automations do not run on a test desk.";
   if (firing.has(a.slug)) return "It is already running its check.";
   firing.add(a.slug);
   try {
@@ -287,8 +289,8 @@ function runMessage(a: Automation, why: string, output: string, failed: string, 
     "report: your reply is the first thing the user reads, in desk's Inbox, and they may answer you there. Keep it brief: what matters, and what they need to do, if anything.";
 }
 
-// desk's clock for automations: once a minute, each active one whose time came fires. Off in a second desk for testing
-// (DESK_CLOCK=0), which would otherwise run the user's automations twice.
+// desk's clock for automations: once a minute, each active one whose time came fires. Off on a test desk (config.ts,
+// TEST), which would otherwise run the user's automations twice.
 const TICK = 60; // s
 
 export function startClock() {

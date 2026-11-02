@@ -9,7 +9,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, 
 import { dirname, join } from "node:path";
 import * as agents from "./agents.ts";
 import * as chats from "./chats.ts";
-import { DATA_DIR, expand, HOME } from "./config.ts";
+import { DATA_DIR, expand, HOME, PORT, TEST } from "./config.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as sessiontext from "./sessiontext.ts";
@@ -18,7 +18,8 @@ import * as uploads from "./uploads.ts";
 import { ago } from "./when.ts";
 
 export const PROJECTS = join(HOME, ".claude", "projects");
-const CACHE = join(HOME, ".cache", "desk", "sessions.json");
+// A test desk keeps its own, as it lists its forks.
+const CACHE = join(HOME, ".cache", "desk", TEST ? `sessions-${PORT}.json` : "sessions.json");
 
 interface TableRow {
   id: string;
