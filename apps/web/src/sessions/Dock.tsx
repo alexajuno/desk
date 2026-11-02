@@ -1544,8 +1544,8 @@ const Mode = observer(function Mode({ s }: { s: LiveSession }) {
 // The chip by Send: the model and effort the session runs on; its menu picks others and shows the usage.
 // The chat's context, outright beside Manual after its grey word, as Claude desktop's ring by its model picker (the
 // user, 31 Oct: "display the current context and weekly usage outright"). The 5 hours and the week hold for the whole
-// account, so they sit in the window's bar (frame/StatusBar.tsx; 1 Nov: "so only 5hourly usage and weekly usage move to
-// global status bar"). The chip's menu shows all three again.
+// account, so they sit in the window's bar, as the live profile's (frame/StatusBar.tsx; 1 Nov: "so only 5hourly usage
+// and weekly usage move to global status bar"). The chip's menu shows all three again.
 const Used = observer(function Used({ s }: { s: LiveSession }) {
   const context = s.meta?.usage?.context;
   if (!context) return null;
@@ -1557,10 +1557,11 @@ const Used = observer(function Used({ s }: { s: LiveSession }) {
 });
 
 // A number shown outright: a ring and its percent, after its grey word, named on hover (the composer's context, the
-// window bar's 5 hours and week). No colour at any number: "i kinda hate the warning stuff. just gimme the number"
-// (17 Oct), and "coloring is bad. usually we should use black and white" (1 Nov).
-export function Gauge({ word, percent, title }: { word: string; percent: number; title: string }) {
-  return <span title={title}><span className="word">{word}</span><Ring percent={percent} />{percent}%</span>;
+// window bar's profile numbers). The text replaces the percent where it says more, as api's dollars left, or a dash
+// for a meter not read. No colour at any number: "i kinda hate the warning stuff. just gimme the number" (17 Oct), and
+// "coloring is bad. usually we should use black and white" (1 Nov).
+export function Gauge({ word, percent, text, title }: { word: string; percent: number; text?: string; title: string }) {
+  return <span title={title}><span className="word">{word}</span><Ring percent={percent} />{text ?? `${percent}%`}</span>;
 }
 
 function Ring({ percent }: { percent: number }) {

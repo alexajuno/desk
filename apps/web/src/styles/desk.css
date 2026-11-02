@@ -369,6 +369,11 @@ a.not-main:hover { background: var(--btn-side-hover); box-shadow: 0 0 0 0.5px va
 .status-bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: flex-end;
               height: var(--status-bar-h); padding: 0 9px; box-sizing: border-box; }
 .status-bar .used > span { height: 24px; }
+/* seat's live profile by name, before its own numbers ("A", the user, 2 Nov): a quiet chip, filled only under the mouse,
+   in the numbers' height, its name a step brighter than them. Linear has no such bar, so nothing here is measured. */
+.status-bar button.profile { gap: 4px; height: 24px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); }
+.status-bar button.profile:hover { background: var(--bg-icon-hover); color: var(--text-1); }
+.status-bar button.profile svg { color: var(--text-4); }
 .bar { display: flex; align-items: center; gap: 8px; height: 44px; flex: none; padding: 0 16px; border-bottom: 1px solid var(--border-1);
        font-weight: 500; color: var(--text-2); }
 .bar a { text-decoration: none; color: var(--text-3); } .bar a:hover { color: var(--text-1); }
