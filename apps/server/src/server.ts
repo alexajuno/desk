@@ -11,6 +11,7 @@ import * as hosted from "./hosted.ts";
 import * as inbox from "./inbox.ts";
 import * as store from "./issues.ts";
 import * as models from "./models.ts";
+import * as notices from "./notices.ts";
 import * as pins from "./pins.ts";
 import * as pool from "./pool.ts";
 import * as projects from "./projects.ts";
@@ -53,6 +54,7 @@ const keepCurrent = () => void hosted.keepCurrent().catch(() => {});
 keepCurrent();
 setInterval(keepCurrent, 10_000);
 setInterval(() => void db.prune().catch((error) => console.error("pruning the log", error)), 3600_000);
+setInterval(() => void notices.prune().catch((error) => console.error("pruning the notices", error)), 3600_000);
 if (!TEST) {
   automations.startClock(); // each automation whose time came fires
   pool.start(); // the test desks' line moves on its own

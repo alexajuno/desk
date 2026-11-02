@@ -202,6 +202,19 @@ create table if not exists session_text ( -- what a search finds a session by: w
 create index if not exists session_text_words on session_text using gin (words);
 create table if not exists session_words (word text primary key); -- each word of session_text once, for a typo's near words
 create index if not exists session_words_near on session_words using gin (word gin_trgm_ops);
+create table if not exists notices ( -- each Slack message and mail that came in, and the firewall's verdict (notices.ts)
+  id text primary key, -- slack:<channel>:<ts>, or mail:<Gmail's id>
+  source text not null, -- slack or mail
+  thread text not null, -- its DM, Slack thread or mail thread: one Inbox row each
+  place text not null, -- #imagenhub, a DM, a group DM, mail
+  who text not null, -- who sent it
+  text text not null, -- the message; a mail's subject and start
+  link text not null default '', -- opens it in Slack or Gmail
+  at double precision not null, -- when it was sent, in seconds
+  verdict text, -- now, later or dropped; null until the firewall judged it
+  why text not null default '' -- the firewall's line, or a mail's topic
+);
+create index if not exists notices_thread on notices (thread, at);
 create table if not exists inbox ( -- the Inbox's rows (inbox.ts): what each session last did for you, and each issue to settle
   id text primary key, -- the session's id, or the slug of an issue in Triage with no session
   slug text not null, -- what the row opens: the issue's slug, or the id of a chat with no issue
