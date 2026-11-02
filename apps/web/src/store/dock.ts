@@ -15,6 +15,7 @@
 // in the sidebar", the user, 31 Oct): its terminal or its browser, each a view of the half (sessions/Half.tsx). Which
 // chats have it open, on which view, and how wide it is, are remembered in this browser.
 import { action, computed, makeObservable, observable } from "mobx";
+import { APP } from "../lib/desktop";
 
 export type Layout = "page" | "chat";
 // What the chat in the middle shows under its head: the chat, or its issue's changes.
@@ -40,7 +41,8 @@ class Dock {
   view: View = "chat"; // what the chat in the middle shows; each chat comes on Chat
   details = false; // its issue's details dropped open under its head; each chat comes with them folded
   pill = saved.pill ?? false; // the chat you left, at the bottom right
-  halves: Record<string, Half> = saved.halves ?? {}; // the chats whose right half is open, and on which view
+  // the chats whose right half is open, and on which view; desk in a web page has no Browser (lib/desktop.ts)
+  halves: Record<string, Half> = Object.fromEntries(Object.entries(saved.halves ?? {}).filter(([, half]) => APP || half !== "browser"));
   chatWidth = saved.chatWidth ?? CHAT.start; // the chat's width in px while its right half is open, which gets the rest
   tab: Record<string, string> = {}; // the tab each chat's Browser shows, by Chrome's id, once you picked one
 
@@ -121,8 +123,9 @@ class Dock {
 
   // A tab the chat's session just opened, or works in, which its Browser shows, open beside it: Claude's tabs have no
   // window ("when browser is in use, will the browsre tab show?", "on using browser, the desk should open the browser
-  // tab", the user, 1 Nov). desk says so once a turn for each tab (the server's tabs.ts).
+  // tab", the user, 1 Nov). desk says so once a turn for each tab (the server's tabs.ts). desk in a web page shows none.
   openTab(session: string, target: string) {
+    if (!APP) return;
     this.setHalf(session, "browser");
     this.showTab(session, target);
   }

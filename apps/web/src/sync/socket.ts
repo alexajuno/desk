@@ -10,7 +10,7 @@ import { shown } from "./shown";
 // what was missed, or every row afresh when its log no longer reaches back that far. The pages fetch themselves again,
 // since what they show besides the rows may have moved meanwhile, and desk is told again which issue the app shows
 // (sync/shown.ts), whose page it pushes. A chat's terminal that Claude started opens beside it, and so does its
-// Browser, on a tab its session just opened or works in, until it closes its last tab.
+// Browser in desk's app, on a tab its session just opened or works in, until it closes its last tab.
 export function connect(store: IssueStore, again = false) {
   const since = store.log ? `log=${encodeURIComponent(store.log)}&since=${store.seq}` : "log=&since=";
   const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/sync?${since}`);

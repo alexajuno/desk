@@ -884,16 +884,14 @@ export async function create(): Promise<FastifyInstance> {
     if (!found) throw new HttpError(404, "No icon for that tab");
     return reply.type(found.type).header("cache-control", "max-age=86400").send(found.body);
   });
-  // The tab's picture, live, for the chat's Browser (cast.ts), or with ?frames=0 all of it but the picture, for desk's
-  // app, which shows the tab itself.
+  // What Chrome draws outside the tab's page, for the chat's Browser in desk's app, which shows the tab itself (cast.ts).
   app.get("/api/tabs/:target/screen", {
     websocket: true,
     preValidation: async (req, reply) => {
       if (!fromDesk(req) || !cast.TARGET.test((req.params as { target: string }).target)) await reply.code(403).send();
     },
   }, (socket, req) => {
-    const q = req.query as Record<string, string | undefined>;
-    void cast.watch(socket, (req.params as { target: string }).target, Number(q.w), Number(q.h), q.frames !== "0");
+    void cast.watch(socket, (req.params as { target: string }).target);
   });
   app.get("/api/live/:id/terminal/screen", {
     websocket: true,

@@ -5,9 +5,10 @@
 // Ctrl ` and Ctrl ⇧ B open it on their view, switch it to theirs, and hide it ("we have two duplicated sections: the
 // terminal and browser icons and then, on right sidebar, we have terminal and browser chips", the user, 1 Nov, then
 // "yeah A" on two mockups, over the half's tabs with one button in the head). Hiding leaves the terminal's session
-// running. On a phone it takes the chat's place, under the chat's head.
+// running. On a phone it takes the chat's place, under the chat's head. Only desk's app has the browser (lib/desktop.ts).
 import { observer } from "mobx-react-lite";
 import { useCallback, type PointerEvent, type ReactNode } from "react";
+import { APP } from "../lib/desktop";
 import { dock, type Half as View } from "../store/dock";
 import { toast } from "../ui/toast";
 import { live } from "./live";
@@ -47,9 +48,10 @@ function drag(e: PointerEvent<HTMLDivElement>) {
 }
 
 // Ctrl `, as VS Code's, and Ctrl ⇧ B: the half of the chat in the middle open on its terminal or its browser, or
-// hidden when it shows that one, the reply box taking the cursor back. False when no chat is there.
+// hidden when it shows that one, the reply box taking the cursor back. False when no chat is there, and for the browser
+// in a web page, which has none (lib/desktop.ts), so that the key goes on to your browser.
 export function toggleHalf(view: View): boolean {
-  if (!dock.center || !dock.session) return false;
+  if (!dock.center || !dock.session || (view === "browser" && !APP)) return false;
   if (!live(dock.session).meta?.chat) return (toast(`Only a desk chat has a ${view}.`), true);
   const open = dock.halves[dock.session] === view;
   const inside = document.activeElement?.closest(".half");

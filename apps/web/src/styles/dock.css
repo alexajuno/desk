@@ -515,7 +515,6 @@ button.foot-step:hover { background: var(--bg-hover); }
 .browser-url.editing { border: 0; outline: none; color: var(--text-1); box-shadow: 0 0 0 1px var(--accent); } /* as a text field's focus */
 .browser-page { position: relative; flex: 1; min-height: 0; overflow: hidden; }
 .browser-shot { display: block; width: 100%; height: 100%; object-fit: contain; object-position: top center; user-select: none; }
-.browser-keys { position: absolute; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; resize: none; pointer-events: none; }
 .browser-empty { margin: 48px 12px; text-align: center; font-size: 13px; color: var(--text-3); }
 /* what the page asks of you, which Chrome draws outside it (Browser.tsx): the picture dimmed as under a modal, and the
    chat's question card (.ask) at its top, where Chrome puts its own dialogs */

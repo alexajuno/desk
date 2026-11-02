@@ -1,9 +1,10 @@
-// A chat's Browser, a view of its right half (Half.tsx): the tabs its session has open in the agents' Chrome, which the
-// session host's relay notes and desk keeps (the server's tabs.ts), as a strip, then back, forward, reload and the open
-// tab's address, then the page ("okay A", the user's pick from three mockups, 31 Oct). The strip has no new tab or ×:
-// the tabs are the session's, opened and closed by Claude.
+// A chat's Browser, a view of its right half (Half.tsx), in desk's app alone (lib/desktop.ts): the tabs its session has
+// open in desk's app, which the session host's relay notes and desk keeps (the server's tabs.ts), as a strip, then back,
+// forward, reload and the open tab's address, then the page ("okay A", the user's pick from three mockups, 31 Oct). The
+// strip has no new tab or ×: the tabs are the session's, opened and closed by Claude.
 import { observer } from "mobx-react-lite";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { APP } from "../lib/desktop";
 import { dock } from "../store/dock";
 import { issues, type Tab } from "../store/issues";
 import { ui } from "../store/ui";
@@ -37,9 +38,6 @@ type Dialog = { type: "alert" | "confirm" | "prompt" | "beforeunload"; message: 
 type Chooser = { multiple: boolean };
 type Told = { dialog?: Dialog | null; held?: boolean; chooser?: Chooser | null; back?: boolean; forward?: boolean };
 const BIGGEST = 100 * 1024 * 1024; // bytes in one file given a page: one message on desk's socket, as ws takes at most
-// desk's app (apps/desktop), which lays the tab itself over its box in the Browser, or aside, and gives a picture of it
-// (its preload.cjs), or nothing in a browser
-const APP = (window as { deskApp?: { show(target: string | null, at?: object, aside?: boolean): void; still(target: string): Promise<Uint8Array | null> } }).deskApp;
 // desk's own layers, which the tab would cover where they meet its box: its menus and popovers, search and the command
 // menu, the @ menu, the boxes that create, the image viewer, the toast, a tooltip, a list's display options and its
 // selection bar, the Browser's own cards, and the shortcuts panel (#keys). Each is a list the page keeps up to date,
@@ -49,15 +47,12 @@ const layered = (r: DOMRect) => [...LAYERS.flatMap((list) => [...list]), documen
   const l = el?.getBoundingClientRect();
   return l && l.width && l.height && l.left < r.right && r.left < l.right && l.top < r.bottom && r.top < l.bottom;
 });
-const sizeOf = (box: HTMLElement) => ({ w: Math.round(box.clientWidth * devicePixelRatio), h: Math.round(box.clientHeight * devicePixelRatio) });
 
-// The tab's back, forward, reload and address, then its picture, live (the server's cast.ts), fit into the half: the tab
-// is in a window of the agents' Chrome, the size Claude works in, which stays as it is. A tab in front of its window
-// comes at the size the half shows it, in the screen's pixels, and a tab behind whole, at the screen's scale (cast.ts
-// says why). desk restarting drops the socket, so it watches again, once a second for a minute, the last picture kept
-// meanwhile. In desk's app the tab itself shows in the picture's place, and the socket brings the rest, with no pictures.
+// The tab's back, forward, reload and address, then the tab itself, which desk's app lays over the page's box (its
+// tabs.ts), and a socket to desk for what Chrome draws outside the page (the server's cast.ts). desk restarting drops
+// the socket, so it watches again, once a second for a minute.
 function Page({ tab }: { tab: Tab }) {
-  const shot = useRef<HTMLImageElement>(null), typed = useRef<HTMLTextAreaElement>(null), picker = useRef<HTMLInputElement>(null);
+  const shot = useRef<HTMLImageElement>(null), picker = useRef<HTMLInputElement>(null);
   const area = useRef<HTMLDivElement>(null);
   const [stand, setStand] = useState<"waiting" | "on" | "away" | "failed">("waiting");
   const [moves, setMoves] = useState({ back: false, forward: false }); // where the tab can go in its history, as desk says
@@ -68,40 +63,23 @@ function Page({ tab }: { tab: Tab }) {
   const [giving, setGiving] = useState(""); // what is being given the page, while it goes
   const say = useRef<(said: object) => void>(() => {});
   const give = useRef<(files: File[]) => void>(() => {});
-  // the tab's toolbar, as Chrome's: its buttons leave your keys with the page, and an address typed takes them back there
-  const go = (said: object) => {
-    say.current(said);
-    typed.current?.focus({ preventScroll: true });
-  };
+  // the tab's toolbar, as Chrome's: its buttons leave your keys where they were
+  const go = (said: object) => say.current(said);
   const button = (name: string, glyph: ReactNode, keys: string, can: boolean, nav: string) => (
     <button className="dock-btn" type="button" title={`${name}  ${keys}`} aria-label={name} disabled={!can || stand !== "on"}
       onMouseDown={(e) => e.preventDefault()} onClick={() => go({ nav })}>{glyph}</button>
   );
   useEffect(() => {
-    const img = APP ? null : shot.current, keys = typed.current, pick = picker.current!, box = area.current!;
-    const refocus = () => keys?.focus({ preventScroll: true }); // your keys back to the page's picture
-    let socket: WebSocket | null = null, gone = false, tries = 0, retry = 0, shown = "", next = "";
-    // Each picture shows once it has loaded, and the one before it is let go then; one that came before it loaded is
-    // dropped for the next.
-    if (img) img.onload = () => {
-      if (shown) URL.revokeObjectURL(shown);
-      shown = next;
-      next = "";
-    };
+    const pick = picker.current!;
+    let socket: WebSocket | null = null, gone = false, tries = 0, retry = 0;
     const watch = () => {
-      const { w, h } = sizeOf(box);
-      const ws = socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/tabs/${tab.target}/screen?${APP ? "frames=0" : `w=${w}&h=${h}`}`);
-      ws.binaryType = "blob";
+      const ws = socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/tabs/${tab.target}/screen`);
       ws.onopen = () => {
         tries = 0;
-        if (APP) setStand("on");
+        setStand("on");
       };
       ws.onmessage = (e) => {
-        if (typeof e.data === "string") return told(JSON.parse(e.data) as Told);
-        if (!img) return;
-        if (next) URL.revokeObjectURL(next);
-        img.src = next = URL.createObjectURL(e.data as Blob);
-        setStand("on");
+        if (typeof e.data === "string") told(JSON.parse(e.data) as Told);
       };
       ws.onclose = (e) => {
         if (gone || ws !== socket || e.code === 4404) return; // a tab that closed leaves the strip
@@ -110,15 +88,14 @@ function Page({ tab }: { tab: Tab }) {
         else setStand("failed");
       };
     };
-    // What desk tells besides pictures: where the tab can go, and what the page asks of you, which takes your keys while
-    // it waits and gives them back to the page once it is answered. A chooser opens your own file chooser at once, as
-    // your click in the picture still lets the page do (a browser lets a page open one only just after a click).
+    // What desk tells: where the tab can go, and what the page asks of you, which takes your keys while it waits. A
+    // chooser opens your own file chooser at once, as your click in the tab still lets the page do (a browser lets a
+    // page open one only just after a click).
     let asking = false; // a box or a chooser waits on you, which keeps the socket while desk is out of sight (cast.ts)
     const told = (m: Told) => {
       if ("dialog" in m) {
         setDialog(m.dialog ?? null);
         asking = Boolean(m.dialog);
-        if (!m.dialog) refocus();
       } else if ("held" in m) setHeld(Boolean(m.held));
       else if ("chooser" in m) {
         setChooser(m.chooser ?? null);
@@ -126,7 +103,7 @@ function Page({ tab }: { tab: Tab }) {
         if (m.chooser) {
           pick.multiple = m.chooser.multiple;
           pick.click();
-        } else refocus();
+        }
       } else setMoves({ back: Boolean(m.back), forward: Boolean(m.forward) });
     };
     watch();
@@ -160,7 +137,6 @@ function Page({ tab }: { tab: Tab }) {
     const cancelled = () => {
       send({ files: [] });
       setChooser(null);
-      refocus();
     };
     pick.addEventListener("cancel", cancelled);
     return () => {
@@ -170,154 +146,17 @@ function Page({ tab }: { tab: Tab }) {
       removeEventListener("pagehide", away);
       pick.removeEventListener("cancel", cancelled);
       socket?.close();
-      for (const url of [shown, next]) if (url) URL.revokeObjectURL(url);
     };
   }, [tab.target]);
 
-  // In a browser, the picture's size, and your mouse and keys on it.
-  useEffect(() => {
-    if (APP) return;
-    const img = shot.current!, keys = typed.current!, box = area.current!;
-    const send = (said: object) => say.current(said);
-    // a half dragged wider, or the window, gets its pictures at the new size
-    let wait = 0;
-    const sized = new ResizeObserver(() => {
-      clearTimeout(wait);
-      wait = window.setTimeout(() => send(sizeOf(box)), 300);
-    });
-    sized.observe(box);
-
-    // Your mouse and wheel on the picture go to the tab (the server's cast.ts), a place or a distance as a fraction of the
-    // picture as drawn, which is fit into the box at its top. Only the left button: the right one would open Chrome's own
-    // menu, which a headless Chrome draws nowhere. Moves and wheels go once a frame, added up.
-    const spot = (e: MouseEvent) => {
-      const r = img.getBoundingClientRect(), k = Math.min(r.width / (img.naturalWidth || 1), r.height / (img.naturalHeight || 1));
-      const w = img.naturalWidth * k, h = img.naturalHeight * k, x = (e.clientX - r.left - (r.width - w) / 2) / w, y = (e.clientY - r.top) / h;
-      return { x, y, w, h, on: w > 0 && x >= 0 && x <= 1 && y >= 0 && y <= 1 };
-    };
-    const mods = (e: MouseEvent | KeyboardEvent) => (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
-    let held = false, frame = 0, move: object | null = null, rolled: { dx: number; dy: number; x: number; y: number; mods: number } | null = null;
-    const flush = () => {
-      cancelAnimationFrame(frame);
-      frame = 0;
-      if (move) send(move);
-      if (rolled) send({ wheel: [rolled.dx, rolled.dy], x: rolled.x, y: rolled.y, mods: rolled.mods });
-      move = rolled = null;
-    };
-    const later = () => { frame ||= requestAnimationFrame(flush); };
-    const clamp = (n: number) => Math.min(Math.max(n, 0), 1);
-    const hover = (e: MouseEvent) => {
-      const at = spot(e);
-      if (held || !at.on) return;
-      move = { mouse: "move", x: at.x, y: at.y, mods: mods(e) };
-      later();
-    };
-    const drag = (e: MouseEvent) => {
-      const at = spot(e);
-      move = { mouse: "move", x: clamp(at.x), y: clamp(at.y), held: true, mods: mods(e) };
-      later();
-    };
-    const up = (e: MouseEvent) => {
-      if (e.button !== 0) return;
-      const at = spot(e);
-      held = false;
-      removeEventListener("mousemove", drag);
-      removeEventListener("mouseup", up);
-      flush();
-      send({ mouse: "up", x: clamp(at.x), y: clamp(at.y), n: e.detail, mods: mods(e) });
-    };
-    const down = (e: MouseEvent) => {
-      const at = spot(e);
-      if (e.button !== 0 || !at.on) return;
-      e.preventDefault();
-      // the keys' box goes where you clicked, for an input method's list of words
-      keys.style.left = `${e.clientX - box.getBoundingClientRect().left}px`;
-      keys.style.top = `${e.clientY - box.getBoundingClientRect().top}px`;
-      keys.focus({ preventScroll: true });
-      held = true;
-      addEventListener("mousemove", drag);
-      addEventListener("mouseup", up);
-      flush();
-      send({ mouse: "down", x: at.x, y: at.y, n: e.detail, mods: mods(e) });
-    };
-    const wheel = (e: WheelEvent) => {
-      const at = spot(e);
-      if (e.ctrlKey || !at.on) return; // Ctrl and the wheel zooms desk, as it does elsewhere
-      e.preventDefault();
-      const px = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? at.h : 1;
-      rolled = { dx: (rolled?.dx ?? 0) + (e.deltaX * px) / at.w, dy: (rolled?.dy ?? 0) + (e.deltaY * px) / at.h, x: at.x, y: at.y, mods: mods(e) };
-      later();
-    };
-    // Your keys go to the tab from a box you cannot see, which a click on the picture puts them in, as xterm.js takes the
-    // terminal's: a browser extension leaves keys typed into a text box alone, where it takes them from a picture as its
-    // own (1 Nov: Vimium, in the agents' Chrome as in yours, took h, l, o, d and s, and its o opened its own search
-    // bar). Each key goes but Ctrl ` and Ctrl ⇧ B, which go on to desk, as from the terminal (Terminal.tsx), and Ctrl V,
-    // which pastes into the box: what an input method wrote there (fcitx5's Vietnamese) and what you pasted go to the
-    // tab as text. Chrome's own keys for its toolbar do what they do there, since Chrome takes no key sent to a tab as
-    // its own: Alt ← and Alt → go back and forward, Ctrl R and F5 reload, and Ctrl L goes to the address.
-    const toolbar = (e: KeyboardEvent) => {
-      const alone = !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey, ctrl = e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
-      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) return e.key === "ArrowLeft" ? "back" : "forward";
-      if ((ctrl && e.code === "KeyR") || (alone && e.key === "F5")) return "reload";
-      return ctrl && e.code === "KeyL" ? "address" : "";
-    };
-    const key = (e: KeyboardEvent) => {
-      if (e.ctrlKey && !e.altKey && !e.metaKey && (e.code === "Backquote" || (e.shiftKey && e.code === "KeyB") || e.code === "KeyV")) return;
-      if (e.isComposing || e.keyCode === 229) return; // the input method's
-      e.preventDefault();
-      e.stopPropagation();
-      const pressed = e.type === "keydown", plain = !e.ctrlKey && !e.altKey && !e.metaKey, own = toolbar(e);
-      if (own) {
-        if (pressed && !e.repeat) {
-          if (own === "address") setEditing(true);
-          else send({ nav: own });
-        }
-        return;
-      }
-      const text = !pressed || !plain ? "" : e.key === "Enter" ? "\r" : [...e.key].length === 1 ? e.key : "";
-      flush();
-      send({ key: pressed ? "down" : "up", k: e.key, code: e.code, kc: e.keyCode, text, mods: mods(e) });
-    };
-    const write = (e: Event) => {
-      if ((e as InputEvent).isComposing || !keys.value) return;
-      flush();
-      send({ insert: keys.value });
-      keys.value = "";
-    };
-    const paste = (e: ClipboardEvent) => {
-      e.preventDefault();
-      const text = e.clipboardData?.getData("text/plain");
-      if (text) send({ insert: text });
-    };
-    const menu = (e: MouseEvent) => e.preventDefault();
-    img.addEventListener("mousedown", down);
-    img.addEventListener("mousemove", hover);
-    img.addEventListener("wheel", wheel, { passive: false });
-    img.addEventListener("contextmenu", menu);
-    keys.addEventListener("keydown", key);
-    keys.addEventListener("keyup", key);
-    keys.addEventListener("input", write);
-    keys.addEventListener("compositionend", write);
-    keys.addEventListener("paste", paste);
-    return () => {
-      clearTimeout(wait);
-      cancelAnimationFrame(frame);
-      sized.disconnect();
-      removeEventListener("mousemove", drag);
-      removeEventListener("mouseup", up);
-      for (const [name, on] of [["mousedown", down], ["mousemove", hover], ["wheel", wheel], ["contextmenu", menu]] as const) img.removeEventListener(name, on as EventListener);
-      for (const [name, on] of [["keydown", key], ["keyup", key], ["input", write], ["compositionend", write], ["paste", paste]] as const) keys.removeEventListener(name, on as EventListener);
-    };
-  }, [tab.target]);
-
-  // In desk's app, the tab itself over the box, where the box is each frame: the app lays it there (its tabs.ts), and
+  // The tab itself over the box, where the box is each frame: the app lays it there (its tabs.ts), and
   // puts it back as the Browser goes. While one of desk's own layers meets the box, a menu or a card here, which the tab
   // would cover, a picture of the tab shows in the box, and the tab stands aside, out of sight at its size, until the
   // layer goes: a still page under the layer, as Chrome's own menus leave it. A click on the picture puts away what
   // covers it, as a click beside a menu does, and the tab comes back. Ctrl L in the tab comes here, the tab hands it on,
   // and edits the address.
   useEffect(() => {
-    if (!APP) return;
+    if (!APP) return; // desk in a web page draws no Browser (Half.tsx)
     const box = area.current!, img = shot.current!;
     let frame = 0, was = "", over = false, still = false, asked = 0, hide = 0;
     // The picture shows once drawn, and the tab stands aside two frames later, once the window shows it in its place; one
@@ -399,9 +238,8 @@ function Page({ tab }: { tab: Tab }) {
         {button("Reload", GLYPH.reload, "Ctrl R", true, "reload")}
         <Address tab={tab} editing={editing} edit={setEditing} open={(url) => go({ open: url })} />
       </div>
-      <div ref={area} className="browser-page" data-tab={APP ? tab.target : undefined}>
-        <img ref={shot} className="browser-shot" alt={tab.title || tab.url} draggable={false} hidden={APP ? true : stand === "waiting"} />
-        {!APP && <textarea ref={typed} className="browser-keys" aria-label="Keys to the page" autoComplete="off" autoCorrect="off" spellCheck={false} />}
+      <div ref={area} className="browser-page" data-tab={tab.target}>
+        <img ref={shot} className="browser-shot" alt={tab.title || tab.url} draggable={false} hidden />
         {(stand === "away" || stand === "failed") && <p className="term-note">{stand === "away" ? "Reconnecting…" : "desk does not answer."}</p>}
         {dialog && <DialogCard key={`${dialog.type} ${dialog.message}`} dialog={dialog} host={host} answer={answer} />}
         {held && !dialog && <HeldCard host={host} reload={() => { setHeld(false); go({ nav: "reload" }); }} />}

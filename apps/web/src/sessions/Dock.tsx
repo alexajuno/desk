@@ -11,6 +11,7 @@ import { flushSync } from "react-dom";
 import { postJson, reason } from "../api/http";
 import { go } from "../app/nav";
 import { splashUp, useSplash } from "../app/splash";
+import { APP } from "../lib/desktop";
 import { markdown } from "../lib/markdown";
 import { seenPage, usePage } from "../api/page";
 import { HeadStatus, IssueDetails, landSkip, Lands, StepButtons, Title, useStep, type IssuePageData } from "../issues/IssueView";
@@ -152,10 +153,12 @@ const Dot = observer(function Dot({ s }: { s: LiveSession }) {
 const quiet = (s: LiveSession) => !s.items.length && !s.pending.length && !s.working;
 
 // A chat as the middle shows it; the Inbox draws one in its right pane too.
-// A link to another site, clicked in the chat in the middle, opens in its Browser: a tab for its session in the agents'
-// Chrome, beside the chat ("i want everything on chrome that desk opens sit inside desk. e.g. open a link from agent's
-// result", the user, 1 Nov). Ctrl, Shift, Alt or the middle button opens it in your own browser, as before.
+// A link to another site, clicked in the chat in the middle, opens in its Browser: a tab for its session in desk's app,
+// beside the chat ("i want everything on chrome that desk opens sit inside desk. e.g. open a link from agent's result",
+// the user, 1 Nov). Ctrl, Shift, Alt or the middle button opens it in your own browser, as before, and so does any
+// click in desk in a web page, which has no Browser (lib/desktop.ts).
 function browse(e: React.MouseEvent, session: string) {
+  if (!APP) return;
   const a = (e.target as Element).closest?.("a[href]") as HTMLAnchorElement | null;
   if (!a || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
   if (!/^https?:$/.test(a.protocol) || a.origin === location.origin) return;
@@ -291,8 +294,8 @@ const ChatSteps = observer(function ChatSteps({ s, here }: { s: LiveSession; her
 
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, then its issue's status and
 // title, with a ⌄ that drops the issue's details open under the head (IssueDetails), its views (Chat, Changes), and
-// at its right the terminal and the globe, which open the half beside it (1 Nov: "since terminal and browser are
-// opened in right sidebar, so having these icons in composer doesn't sound valid"), then the issue's next step, Try
+// at its right the terminal and, in desk's app, the globe, which open the half beside it (1 Nov: "since terminal and
+// browser are opened in right sidebar, so having these icons in composer doesn't sound valid"), then the issue's next step, Try
 // and Go or Approve (1 Nov: "the approve button is not there, but i have to tab to issue"); the Inbox, which shows a
 // chat without its head, has its own. Where its work stands is in the steps
 // above the composer. A chat with no issue is renamed in its title, and shows its folder, which only an issue's Properties would
@@ -315,7 +318,7 @@ const ChatHead = observer(function ChatHead({ s, views, view, setView, docked }:
         )}
       </div>
       {views.length > 1 && m?.issue && <ViewTabs slug={m.issue.slug} views={views} view={view} setView={setView} />}
-      {m?.chat && docked && <span className="head-halves"><HalfButton id={s.id} view="terminal" /><HalfButton id={s.id} view="browser" /></span>}
+      {m?.chat && docked && <span className="head-halves"><HalfButton id={s.id} view="terminal" />{APP && <HalfButton id={s.id} view="browser" />}</span>}
       {here && docked && <HeadStep data={here} />}
     </header>
   );
@@ -1457,7 +1460,7 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
 
 // The terminal and the globe in the chat's head: the chat's right half, on its terminal or its browser, open, switched
 // to the other or hidden (Half.tsx), each lit while the half shows its view. They are the only place it is, as the half
-// has no head of its own ("yeah A", 1 Nov).
+// has no head of its own ("yeah A", 1 Nov). The globe is only in desk's app, which alone has the Browser (lib/desktop.ts).
 const HALF_BUTTONS = {
   terminal: { icon: GLYPH.terminal, label: "Terminal", key: "Ctrl `" },
   browser: { icon: GLYPH.globe, label: "Browser", key: "Ctrl ⇧ B" },

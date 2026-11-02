@@ -62,10 +62,6 @@
   .composer-foot:has(.start-in) .mode { display: none; }
   /* The context and the week stay in the model menu: with them the foot ran 465px in its 359 at 412 wide (31 Oct). */
   .composer-foot .used { display: none; }
-  /* The head keeps the terminal and leaves out the globe, as the foot did when they were there (1 Nov): the Browser
-     opens there only as Claude opens a tab, and the globe shows while it does, to hide it. */
-  .dock-head .half-browser:not(.on) { display: none; }
-
   /* A phone's Chrome shows a notification only from a service worker, which desk has not; the line offering them
      would turn on nothing. */
   .notify-ask { display: none; }
