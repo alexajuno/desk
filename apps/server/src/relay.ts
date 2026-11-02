@@ -36,6 +36,10 @@ const APP = `http://127.0.0.1:${process.env.DESK_CHROME_PORT || 9337}`; // its D
 const SOCKET = process.env.DESK_APP_SOCKET || join(process.env.XDG_RUNTIME_DIR || tmpdir(), "desk-app.sock"); // where it opens a tab
 const OURS = 1e9; // the ids of the relay's own calls on a session's connection, above any Playwright reaches
 const ATTACH = 5000; // ms an answer to Target.createTarget waits for the tab's attach
+// ms a tab has to answer once the session is attached to it, before the session hears of it: Playwright's connect waits
+// for every page it is attached to, so one whose renderer never answers timed out every chat's (2 Nov, a tab whose
+// reload needed a process the app could no longer start)
+const ANSWER = 3000;
 const BIGGEST = 512 * 1024 * 1024; // bytes in one message: a full-page screenshot comes back as one
 const EVERY = 2000; // ms between the watcher's asks for every tab
 const AGAIN = 1000; // ms a session works on in the same tab before the relay says so again: less than a turn takes to start
@@ -88,7 +92,10 @@ function pipe(mcp: WebSocket, session: string) {
   const tabOf = new Map<string, string>(); // the tab each of its CDP sessions is attached to, by session id
   const waiting = new Map<string, () => void>(); // its answers to Target.createTarget, waiting for the tab's attach
   const listing = new Set<string>(); // its Target.getTargets calls, by CDP session and id
+  const stuck = new Set<string>(); // its tabs that did not answer when attached, hidden as desk's pages are, by target id
   let attaching = false; // it auto-attaches to new tabs, so each one's attach comes
+  let autoAttach: number | undefined; // its Target.setAutoAttach call's id, whose answer comes after the tabs' attaches
+  const checking = new Set<Promise<void>>(); // the attaches waiting on their tab's answer
   const mine = new Map<number, (m: Cdp) => void>(); // the relay's own calls on it, waiting for their answers
   let ours = OURS, context = "";
   let app: WebSocket | null = null;
@@ -113,6 +120,30 @@ function pipe(mcp: WebSocket, session: string) {
     mine.set(id, done);
     up(JSON.stringify({ id, ...(sessionId ? { sessionId } : {}), method, params }));
   });
+  // Whether the page the session was just attached to answers, within ANSWER ms, a call its renderer answers with no
+  // script run, as one waiting for the debugger still does
+  const answers = (sessionId: string) => {
+    let late: NodeJS.Timeout;
+    const asked = ask(sessionId, "Page.getFrameTree").then(() => true);
+    const id = ours - 1;
+    return Promise.race([asked, new Promise<boolean>((done) => (late = setTimeout(() => (mine.delete(id), done(false)), ANSWER)))]).finally(() => clearTimeout(late));
+  };
+  // The session's attach to its tab, passed on once the tab answers; one that does not is let go, as desk's pages are
+  const attached = async (data: Buffer, m: Cdp) => {
+    const info = m.params!.targetInfo as TargetInfo, sessionId = m.params!.sessionId as string;
+    if (info.type === "page" && !m.sessionId && !(await answers(sessionId))) {
+      console.log(`relay: ${session}'s tab ${info.targetId} (${info.url}) did not answer in ${ANSWER / 1000} s; hidden from it`);
+      stuck.add(info.targetId);
+      tabOf.delete(sessionId);
+      hidden.add(sessionId);
+      if (m.params!.waitingForDebugger) up(JSON.stringify({ id: ours++, sessionId, method: "Runtime.runIfWaitingForDebugger" }));
+      up(JSON.stringify({ id: ours++, method: "Target.detachFromTarget", params: { sessionId } }));
+      return;
+    }
+    if (mcp.readyState === WebSocket.OPEN) mcp.send(data, { binary: false });
+    waiting.get(info.targetId)?.();
+    waiting.delete(info.targetId);
+  };
   // Its screenshot of the tab, from the app (tabs.ts, shot), answered as Chrome would. Playwright gives the place in the
   // page's own pixels, from its corner (its coreBundle.js, takeScreenshot): the app takes it from where the tab is scrolled
   // to, which it asks the tab as Playwright did, or from the page's corner for a place beyond the tab, as a full page is.
@@ -158,19 +189,19 @@ function pipe(mcp: WebSocket, session: string) {
       return hidden.delete(m.params!.sessionId as string);
     }
     if (info) { // Target.targetCreated and targetInfoChanged
-      if (info.browserContextId === context) return false;
+      if (info.browserContextId === context && !stuck.has(info.targetId)) return false;
       others.add(info.targetId);
       return true;
     }
-    if (m.method === "Target.targetDestroyed" || m.method === "Target.targetCrashed") return others.has(m.params!.targetId as string);
-    if (m.result?.targetInfos && listing.delete(`${m.sessionId ?? ""} ${m.id}`)) m.result.targetInfos = m.result.targetInfos.filter((t) => t.browserContextId === context);
+    if (m.method === "Target.targetDestroyed" || m.method === "Target.targetCrashed") return others.has(m.params!.targetId as string) || stuck.has(m.params!.targetId as string);
+    if (m.result?.targetInfos && listing.delete(`${m.sessionId ?? ""} ${m.id}`)) m.result.targetInfos = m.result.targetInfos.filter((t) => t.browserContextId === context && !stuck.has(t.targetId));
     return false;
   };
   mcp.on("message", (data: Buffer) => {
     if (data.includes("Target.")) {
       const m = parse(data);
       if (m?.method === "Target.createTarget") return make(m);
-      if (m?.method === "Target.setAutoAttach" && !m.sessionId) attaching = !!m.params?.autoAttach;
+      if (m?.method === "Target.setAutoAttach" && !m.sessionId) (attaching = !!m.params?.autoAttach), (autoAttach = m.id);
       if (m?.method === "Target.getTargets") listing.add(`${m.sessionId ?? ""} ${m.id}`);
     } else if (data.length < 10_000 && ACTS.test(data.toString())) {
       const m = parse(data), target = tabOf.get(m?.sessionId ?? "");
@@ -197,11 +228,13 @@ function pipe(mcp: WebSocket, session: string) {
         if (m && theirs(m)) return;
         if (m?.result?.targetInfos) data = Buffer.from(JSON.stringify(m));
         if (m?.method === "Target.attachedToTarget") {
-          if (mcp.readyState === WebSocket.OPEN) mcp.send(data, { binary: false });
-          const target = (m.params!.targetInfo as TargetInfo).targetId;
-          waiting.get(target)?.();
-          waiting.delete(target);
-          return;
+          const done = attached(data, m).finally(() => checking.delete(done));
+          return void checking.add(done);
+        }
+        // Chrome answers it after the attach to every open tab, which Playwright's connect counts on: so does the relay
+        if (m && m.id === autoAttach && !m.sessionId && checking.size) {
+          autoAttach = undefined;
+          return void Promise.all(checking).then(() => mcp.readyState === WebSocket.OPEN && mcp.send(data, { binary: false }));
         }
       }
       if (mcp.readyState === WebSocket.OPEN) mcp.send(data, { binary: false });
