@@ -435,6 +435,11 @@ button.plan-step:hover, button.plan-step.open { background: var(--bg-hover); }
 .plan-step-open { margin: 4px 0 8px 31px; border: 1px solid var(--border-3); border-radius: 8px; background: var(--bg-raised); overflow: hidden; }
 .plan-step-open .d2 { margin: 0; }
 .plan-step-open .d2-row { row-gap: 12px; }
+/* A step written as parts (Steps.tsx, StepParts), open on the issue's page: its parts read down the box, at the list's size. */
+.plan-step-parts { padding: 12px 14px; }
+.plan-step-parts .step-part-title { font-size: 13px; margin-bottom: 6px; }
+.plan-step-parts .body { font-size: 13px; line-height: 20px; }
+.plan-step-parts .step-part-said .body { color: var(--text-3); }
 .body.plan-step-said { padding: 8px 12px; border-top: 1px solid var(--border-2); font-size: 12px; line-height: 18px; color: var(--text-3); }
 .plan-step-open .plan-step-said:first-child { border-top: 0; }
 .body.plan-step-said ul, .body.plan-step-said p { margin: 0; }

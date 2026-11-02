@@ -273,6 +273,21 @@ button.msg-copy:hover { background: var(--btn-ghost-hover); color: var(--text-1)
 .step-sent .step-sent-where { margin-left: auto; color: var(--text-4); font-weight: 450; }
 .step-sent .sent-body + .step-sent-said { margin-top: 12px; }
 .sent .reply.body { font-size: 14px; line-height: 22px; }
+/* A design step written as parts (issues/Steps.tsx, StepParts), read from the basics down, as mockup A drew it ("A", 3
+   Nov): each part its number in a small circle and its title, its text, and its diagram under it. While the chat's right
+   half shows the diagrams (StepHalf.tsx), the part being read has an accent edge and the others dim, the edge set
+   in the card's padding so the text stays where it was. */
+.step-parts { display: flex; flex-direction: column; gap: 18px; }
+.step-part-title { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 8px; font: 500 15px/1.4 var(--font); color: var(--text-1); }
+.step-part-n { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 18px; height: 18px; border-radius: 9999px;
+               background: var(--bg-hover); color: var(--text-2); font: 500 11px var(--font); }
+.step-part-title .step-part-n { margin-top: 1.5px; } /* on the title's first line, 21px tall */
+.step-part-pic { margin-top: 10px; }
+.step-part-pic .d2 { margin-bottom: 0; }
+.step-part-pic .d2-row { row-gap: 12px; }
+.step-sent .step-part { margin: 0 -14px 0 -12px; padding: 2px 14px 4px 10px; border-left: 2px solid transparent; transition: opacity 0.1s, border-color 0.1s; }
+.step-sent .step-part.now { border-left-color: var(--accent); }
+.step-parts.beside:has(.now) .step-part[data-part]:not(.now) { opacity: 0.55; }
 .sent-details { margin: 10px 0 0; }
 /* the steps Approve runs, under a card in review, apart from the card's last line as the Details are */
 .sent .review-lands { margin: 14px 0 0; }
@@ -494,6 +509,30 @@ button.foot-step:hover { background: var(--bg-hover); }
    while the half shows its view, as a current control is: the only place the half is opened, switched or hidden. */
 .head-halves { flex: none; display: flex; gap: 2px; }
 .half-btn.on { background: var(--bg-active); color: var(--text-1); }
+
+/* The half on a step's diagram (StepHalf.tsx), mockup A ("A", 3 Nov): the step's name and where in it you read, level
+   with the chat's head; its parts as pills, as the head's view tabs, the one being read filled with its number on the
+   accent; then that part's title and its pictures, fitted whole into the room left under it (StepHalf.tsx, Pictures). */
+.step-half { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 0 20px 20px; overflow: hidden; }
+.step-half-head { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; font: 500 13px var(--font); color: var(--text-2); }
+.step-half-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-half-at { flex: none; margin-left: auto; color: var(--text-4); font-weight: 450; }
+.step-half-pills { flex: none; display: flex; flex-wrap: wrap; gap: 4px; margin: -6px 0 0 -6px; }
+.step-half-pill { display: flex; align-items: center; gap: 6px; height: 28px; max-width: 240px; padding: 0 10px 0 5px; border-radius: 9999px;
+                  background: transparent; font: 500 12px var(--font); color: var(--text-3); }
+.step-half-pill:hover { background: var(--btn-ghost-hover); color: var(--text-2); }
+.step-half-pill.on { background: var(--bg-tab-on); color: var(--text-1); box-shadow: 0 0 0 0.5px var(--ring-btn); }
+.step-half-pill.on .step-part-n { background: var(--accent); color: var(--on-accent); }
+.step-half-pill-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-half-title { flex: none; margin: 4px 0 0; font: 500 15px/1.4 var(--font); color: var(--text-1); }
+.step-half-pic { flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; justify-content: center; align-items: flex-start; }
+.step-half-pic .d2 { flex: none; margin: 0; }
+.step-half-pic .d2 svg { max-height: none; }
+.step-half-pic .d2-row { flex-wrap: nowrap; gap: 16px; }
+.step-half-pic[data-dir="column"] .d2-row { flex-direction: column; align-items: center; }
+.step-half-pic .d2-row > .d2-pic { flex: none; max-width: none; min-width: 0; }
+.step-half-none { margin: 0; font-size: 13px; color: var(--text-4); }
+.half > .step-half-none { margin: 14px 20px; }
 
 /* The chat's Browser (Browser.tsx), mockup A ("okay A", 31 Oct): a strip of its session's tabs, as tall as the chat's
    head beside it, pills as the head's tabs, the open one filled as a current tab is; then a 40px row of back, forward,

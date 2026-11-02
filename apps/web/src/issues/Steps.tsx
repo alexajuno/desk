@@ -3,14 +3,17 @@
 // and a step's note in the quiet grey at its end, and the one being worked on filled ("similar statuses for issues i
 // suppose?", the user, 27 Oct). The issue's page shows it, and its chat a card of it above the composer
 // (sessions/StepsCard.tsx). A step its session drew opens under its row, a click away, with its diagram and its
-// decisions: the chat shows them where they were sent ("we had all diagrams on sidebar and it can easily be viewed
+// decisions, or its parts: the chat shows them where they were sent ("we had all diagrams on sidebar and it can easily be viewed
 // through artifact view already", 27 Oct). The step being worked on starts open.
 import { useState } from "react";
 import { GLYPH, StateIcon } from "../ui/icons";
 
 // diagram_html and said_html: the step's diagram and decisions, drawn (pages.ts, drawnSteps).
+// parts: a step written as parts instead (render.ts, takeParts), each its title, its text and its diagram, drawn.
 // commit: the one that ends a build step, from which its diff in Changes is drawn (changes.ts).
-export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[]; diagram_html?: string; said_html?: string; commit?: string };
+export type StepPart = { title: string; text_html?: string; diagram_html?: string };
+export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[]; diagram_html?: string; said_html?: string; parts?: StepPart[];
+  commit?: string };
 
 export function Steps({ steps }: { steps: PlanStep[] }) {
   return <ul className="plan-steps">{steps.map((s, n) => <StepRow key={n} s={s} />)}</ul>;
@@ -18,7 +21,35 @@ export function Steps({ steps }: { steps: PlanStep[] }) {
 
 // The step being worked on, not its parent: running, with no running step of its own.
 export const isHere = (s: PlanStep) => s.state === "running" && !(s.kids ?? []).some((k) => k.state === "running");
-export const isDrawn = (s: PlanStep) => Boolean(s.diagram_html || s.said_html);
+export const isDrawn = (s: PlanStep) => Boolean(s.diagram_html || s.said_html || s.parts?.length);
+
+// A part's title as shown, after its number: any number its session wrote before it goes, as "1. The basics" would read
+// "1 1. The basics".
+export const partTitle = (p: StepPart) => p.title.replace(/^\d+[.):]\s+/, "");
+
+// A step written as parts, read from its basics down, as the user reads an explainer: each part its number and title,
+// its text, and its diagram under it, unless the chat's right half shows the diagram of the part being read beside the
+// text (sessions/StepHalf.tsx: "text equals to voice on the left and diagrams equals to video on the right", the user,
+// 3 Nov), the part being read marked (now). Its decisions come last. body: the class its text takes where it is drawn.
+export function StepParts({ parts, said, beside = false, now, body = "body" }: { parts: StepPart[]; said?: string; beside?: boolean; now?: number; body?: string }) {
+  return (
+    <div className={`step-parts${beside ? " beside" : ""}`}>
+      {parts.map((p, n) => (
+        <section key={n} className={`step-part${beside && n === now ? " now" : ""}`} data-part={n}>
+          <h3 className="step-part-title"><span className="step-part-n">{n + 1}</span>{partTitle(p)}</h3>
+          {p.text_html && <div className={body} dangerouslySetInnerHTML={{ __html: p.text_html }} />}
+          {!beside && p.diagram_html && <div className={`${body} step-part-pic`} dangerouslySetInnerHTML={{ __html: p.diagram_html }} />}
+        </section>
+      ))}
+      {said && (
+        <section className="step-part step-part-said">
+          <h3 className="step-part-title">Decisions</h3>
+          <div className={body} dangerouslySetInnerHTML={{ __html: said }} />
+        </section>
+      )}
+    </div>
+  );
+}
 
 // Where the work stands, for the steps above the composer: the step being worked on, else the next one to do, with its
 // place in its part, as Build's second of six. None when every step is done.
@@ -52,7 +83,9 @@ function StepRow({ s }: { s: PlanStep }) {
         <button type="button" className={`plan-step drawn${here ? " here" : ""}${open ? " open" : ""}`} data-state={s.state}
           title={open ? "Hide its diagram" : "Show its diagram"} aria-expanded={open} onClick={() => setOpen(!open)}>{row}</button>
       ) : <div className={`plan-step${here ? " here" : ""}`} data-state={s.state}>{row}</div>}
-      {drawn && open && (
+      {drawn && open && s.parts?.length ? (
+        <div className="plan-step-open plan-step-parts"><StepParts parts={s.parts} said={s.said_html} /></div>
+      ) : drawn && open && (
         <div className="plan-step-open">
           {s.diagram_html && <div className="body" dangerouslySetInnerHTML={{ __html: s.diagram_html }} />}
           {s.said_html && <div className="body plan-step-said" dangerouslySetInnerHTML={{ __html: s.said_html }} />}

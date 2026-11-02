@@ -6,7 +6,7 @@
 // half, beside it, holds what Claude drives: its terminal (Half.tsx).
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { postJson, reason } from "../api/http";
 import { go } from "../app/nav";
@@ -22,12 +22,13 @@ import { dock, type Layout, type View } from "../store/dock";
 import { issues } from "../store/issues";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { CHEVRON, GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
-import { isDrawn, type PlanStep } from "../issues/Steps";
+import { isDrawn, StepParts, type PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { anyCommit, Changes, Counts, useChanges } from "./Changes";
 import { rising } from "./glide";
 import { Half } from "./Half";
+import { followParts } from "./StepHalf";
 import { StepsCard } from "./StepsCard";
 import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
 import { EFFORTS, effortName, loadModels, runsMenu, tokens, warm, type Runs as RunsShown } from "./models";
@@ -166,6 +167,12 @@ function browse(e: React.MouseEvent, session: string) {
   void postJson(`/api/live/${session}/browse`, { url: a.href }).then(async (res) => res.ok || toast(await reason(res)));
 }
 
+// Whether a step written as parts can show its diagrams in the chat's right half, as only the chat in the middle can, and
+// not on a phone, where the half would take the chat's place; and whether the half shows them now (StepHalf.tsx), or
+// each part draws its own under its text.
+const phone = matchMedia("(max-width: 640px)");
+const StepSide = createContext({ can: false, beside: false });
+
 // above: what the conversation follows, the thread a chat from a thread's Inbox row is on (inbox/Thread.tsx); foot:
 // what sits over its composer, that thread's reply waiting for your Send.
 export const SessionView = observer(function SessionView({ id, above, foot }: { id: string; above?: ReactNode; foot?: ReactNode }) {
@@ -185,6 +192,12 @@ export const SessionView = observer(function SessionView({ id, above, foot }: { 
   const want = docked ? dock.view : own;
   const shown = views.includes(want) ? want : "chat";
   const setView = (v: View) => (docked ? dock.setView(v) : setOwn(v));
+  // The chat in the middle may have its right half open beside it, which a step's diagram needs its issue's steps for.
+  const opened = docked && m?.chat ? dock.halves[id] : undefined;
+  const half = opened === "step" && (phone.matches || !here) ? undefined : opened;
+  const side = { can: Boolean(docked && m?.chat && !phone.matches), beside: half === "step" };
+  const beside = useRef(false); // the half follows the part being read as the chat scrolls or grows
+  beside.current = side.beside;
   // A view opens at its top, and the chat again at its end, where its words keep coming.
   useLayoutEffect(() => {
     const el = scroller.current!;
@@ -204,6 +217,7 @@ export const SessionView = observer(function SessionView({ id, above, foot }: { 
     else if (el.scrollTop < lastTop.current) stuck.current = false;
     lastTop.current = el.scrollTop;
     setAway((a) => (stuck.current ? false : a || "quiet"));
+    if (beside.current) followParts(el, id);
   };
   // The pill takes the chat back to its end, which it follows again. It jumps there, as a step's jump to its message
   // does (StepsCard.tsx), and leaves the keys on the conversation as the pill goes.
@@ -226,7 +240,10 @@ export const SessionView = observer(function SessionView({ id, above, foot }: { 
   // with the window.
   useEffect(() => {
     const el = scroller.current!;
-    const keep = new ResizeObserver(() => { if (stuck.current && !rising(el)) el.scrollTo({ top: el.scrollHeight }); });
+    const keep = new ResizeObserver(() => {
+      if (stuck.current && !rising(el)) el.scrollTo({ top: el.scrollHeight });
+      if (beside.current) followParts(el, id);
+    });
     keep.observe(el);
     keep.observe(el.firstElementChild!); // the conversation itself, as words stream and steps unfold
     keep.observe(el.lastElementChild!); // the foot: the composer and any question card
@@ -248,7 +265,6 @@ export const SessionView = observer(function SessionView({ id, above, foot }: { 
   // The composer lies over the conversation's end, as claude.ai's does: the foot sticks to the bottom of the view, and
   // the conversation runs on behind it (dock.css). The chat in the middle may have its right half open beside it, the
   // chat then as wide as you dragged it (--chat-w), the half all the rest.
-  const half = docked && m?.chat ? dock.halves[id] : undefined;
   return (
     <div className="session-split" style={half ? ({ "--chat-w": `${dock.chatWidth}px` } as CSSProperties) : undefined}>
       <div className="session-view">
@@ -265,7 +281,9 @@ export const SessionView = observer(function SessionView({ id, above, foot }: { 
                 : m?.chat ? "Ask desk's agent anything: it files the work and does it here. Start with @ and a name to talk to one of your agents."
                 : "Nothing said yet."}</p>
               : null}
-            {m?.issue ? <IssueConversation s={s} slug={m.issue.slug} /> : <Conversation s={s} page={null} slug={null} />}
+            <StepSide.Provider value={side}>
+              {m?.issue ? <IssueConversation s={s} slug={m.issue.slug} /> : <Conversation s={s} page={null} slug={null} />}
+            </StepSide.Provider>
           </div>
           <div className="dock-foot">
             {shown === "chat" && away && (
@@ -283,7 +301,7 @@ export const SessionView = observer(function SessionView({ id, above, foot }: { 
           </div>
         </div>
       </div>
-      {half && <Half session={id} view={half} />}
+      {half && <Half session={id} view={half} steps={here?.plan_steps ?? []} />}
     </div>
   );
 });
@@ -321,7 +339,12 @@ const ChatHead = observer(function ChatHead({ s, views, view, setView, docked }:
         )}
       </div>
       {views.length > 1 && m?.issue && <ViewTabs slug={m.issue.slug} views={views} view={view} setView={setView} />}
-      {m?.chat && docked && <span className="head-halves"><HalfButton id={s.id} view="terminal" />{APP && <HalfButton id={s.id} view="browser" />}</span>}
+      {m?.chat && docked && (
+        <span className="head-halves">
+          {here && !phone.matches && hasParts(here.plan_steps ?? []) && <HalfButton id={s.id} view="step" />}
+          <HalfButton id={s.id} view="terminal" />{APP && <HalfButton id={s.id} view="browser" />}
+        </span>
+      )}
       {here && docked && <HeadStep data={here} />}
     </header>
   );
@@ -481,6 +504,11 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
   const steps = page?.plan_steps ?? [];
   const latestStep = new Map<string, number>();
   rows.forEach((r, n) => { if (r.kind === "step") latestStep.set(stepNamed(steps, r)?.title ?? r.place, n); });
+  // The newest step sent, written as parts, opens the half on its diagrams (store/dock.ts, showStep).
+  const side = useContext(StepSide);
+  const newest = rows.filter((r) => r.kind === "step").at(-1);
+  const newestParts = newest?.kind === "step" && stepNamed(steps, newest)?.parts?.length ? newest.key : null;
+  useEffect(() => { if (newestParts && side.can) dock.showStep(s.id, newestParts); }, [s.id, newestParts, side.can]);
   // A reply streaming now: its words show as they come, its tool calls join the last fold.
   const liveSteps = s.partial.filter((b) => b.kind === "tool_use" || b.kind === "thinking");
   const liveText = s.partial.filter((b) => b.kind === "text");
@@ -506,7 +534,7 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
         if (r.kind === "sent") return <Sent key={r.key} at={r.key} page={page} section={r.section} latest={n === latest[r.section]} />;
         if (r.kind === "step") {
           const step = stepNamed(steps, r);
-          return <StepSent key={r.key} at={r.key} step={step} top={steps[Number(r.place.split(".")[0]) - 1]?.title ?? null} latest={latestStep.get(step?.title ?? r.place) === n} />;
+          return <StepSent key={r.key} at={r.key} session={s.id} step={step} top={steps[Number(r.place.split(".")[0]) - 1]?.title ?? null} latest={latestStep.get(step?.title ?? r.place) === n} />;
         }
         if (r.kind === "note") {
           const agent = r.item.id ? s.items.find((i) => i.t === "tool" && i.id === r.item.id && (i.name === "Agent" || i.name === "Task")) : undefined;
@@ -583,20 +611,28 @@ function stepNamed(steps: PlanStep[], r: { place: string; title: string | null }
 
 // A step's diagram and its decisions under it, where its session sent them, as the step stands now: the latest send of
 // each step drawn, an earlier one a line, since desk keeps only the step's latest. The steps above the composer bring
-// it here, the one place a step is read in its chat.
-const StepSent = function StepSent({ at, step, top, latest }: { at: string; step: PlanStep | null; top: string | null; latest: boolean }) {
+// it here, the one place a step is read in its chat. A step written as parts shows them, read from the basics down, each
+// part's diagram in the right half while it shows them, which follows the part being read (StepHalf.tsx).
+const StepSent = observer(function StepSent({ at, session, step, top, latest }: { at: string; session: string; step: PlanStep | null; top: string | null; latest: boolean }) {
+  const side = useContext(StepSide), reading = dock.reading[session];
   const name = step?.title ?? "A step";
   if (!latest || !step || !isDrawn(step)) {
     return <p className="sent-line" data-at={at}>{GLYPH.file}<span>{name}</span><span className="sent-when">{latest ? "sent" : "an earlier diagram, sent"}</span></p>;
   }
   return (
-    <div className="sent step-sent" data-at={at}>
+    <div className="sent step-sent" data-at={at} data-step={step.parts?.length ? step.title : undefined}>
       <div className="sent-head"><StateIcon state={step.state} /><span>{name}</span>{top && top !== name && <span className="step-sent-where">{top}</span>}</div>
-      {step.diagram_html && <div className="reply body sent-body" dangerouslySetInnerHTML={{ __html: step.diagram_html }} />}
-      {step.said_html && <div className="reply body sent-body step-sent-said" dangerouslySetInnerHTML={{ __html: step.said_html }} />}
+      {step.parts?.length ? (
+        <StepParts parts={step.parts} said={step.said_html} beside={side.beside} now={reading?.title === step.title ? reading.part : undefined} body="reply body" />
+      ) : (
+        <>
+          {step.diagram_html && <div className="reply body sent-body" dangerouslySetInnerHTML={{ __html: step.diagram_html }} />}
+          {step.said_html && <div className="reply body sent-body step-sent-said" dangerouslySetInnerHTML={{ __html: step.said_html }} />}
+        </>
+      )}
     </div>
   );
-};
+});
 
 const LONG = 600; // characters past which a message shows its first lines only, as claude.ai shows a long paste
 
@@ -1464,15 +1500,19 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
 // The terminal and the globe in the chat's head: the chat's right half, on its terminal or its browser, open, switched
 // to the other or hidden (Half.tsx), each lit while the half shows its view. They are the only place it is, as the half
 // has no head of its own ("yeah A", 1 Nov). The globe is only in desk's app, which alone has the Browser (lib/desktop.ts).
+// Before them, in an issue's chat with a step written as parts, the diagram, for the part being read (StepHalf.tsx).
 const HALF_BUTTONS = {
+  step: { icon: GLYPH.diagram, label: "Diagram", key: "" },
   terminal: { icon: GLYPH.terminal, label: "Terminal", key: "Ctrl `" },
   browser: { icon: GLYPH.globe, label: "Browser", key: "Ctrl ⇧ B" },
 } as const;
 
+const hasParts = (steps: PlanStep[]): boolean => steps.some((s) => Boolean(s.parts?.length) || hasParts(s.kids ?? []));
+
 const HalfButton = observer(function HalfButton({ id, view }: { id: string; view: keyof typeof HALF_BUTTONS }) {
   const open = dock.halves[id] === view, { icon, label, key } = HALF_BUTTONS[view];
   return (
-    <button className={`dock-btn half-btn half-${view}${open ? " on" : ""}`} type="button" title={`${open ? `Hide the ${label.toLowerCase()}` : label}  ${key}`}
+    <button className={`dock-btn half-btn half-${view}${open ? " on" : ""}`} type="button" title={`${open ? `Hide the ${label.toLowerCase()}` : label}${key && `  ${key}`}`}
       aria-pressed={open} onClick={() => dock.setHalf(id, open ? null : view, true)}>{icon}</button>
   );
 });

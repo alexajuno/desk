@@ -13,15 +13,20 @@
 // Beside it, the chat in the middle may open its right half, which holds what Claude drives ("i want terminal on the
 // right half side similar to claude code. i'm imagining later on claude will drive both my chrome instance and terminal
 // in the sidebar", the user, 31 Oct): its terminal or its browser, each a view of the half (sessions/Half.tsx). Which
-// chats have it open, on which view, and how wide it is, are remembered in this browser.
+// chats have it open, on which view, and how wide it is, are remembered in this browser. A design step written as parts
+// shows there too, the diagram of the part being read beside its text ("text equals to voice on the left and diagrams
+// equals to video on the right", the user, 3 Nov; sessions/StepHalf.tsx).
 import { action, computed, makeObservable, observable } from "mobx";
 import { APP } from "../lib/desktop";
 
 export type Layout = "page" | "chat";
 // What the chat in the middle shows under its head: the chat, or its issue's changes.
 export type View = "chat" | "changes";
-// What the right half beside it shows: the chat's terminal, or its browser, the tabs its session has open.
-export type Half = "terminal" | "browser";
+// What the right half beside it shows: the chat's terminal, or its browser, the tabs its session has open, or the
+// diagram of the step part being read in it.
+export type Half = "terminal" | "browser" | "step";
+// The step part being read in a chat: the step, by its title, and the part's place in it, from 0.
+export type Reading = { title: string; part: number };
 
 // The chat's width while its right half is open beside it, a column, the half taking all the rest ("ok. A", 2 Nov, on
 // three mockups, over a Widen button and the page over the whole window), and the least a drag on the half's edge leaves it.
@@ -29,7 +34,7 @@ export const CHAT = { start: 480, min: 360 };
 
 const saved = (() => {
   try {
-    return JSON.parse(localStorage.dock ?? "{}") as { session?: string; pill?: boolean; halves?: Record<string, Half>; chatWidth?: number };
+    return JSON.parse(localStorage.dock ?? "{}") as { session?: string; pill?: boolean; halves?: Record<string, Half>; chatWidth?: number; stepsShown?: string[] };
   } catch {
     return {};
   }
@@ -45,17 +50,20 @@ class Dock {
   halves: Record<string, Half> = Object.fromEntries(Object.entries(saved.halves ?? {}).filter(([, half]) => APP || half !== "browser"));
   chatWidth = saved.chatWidth ?? CHAT.start; // the chat's width in px while its right half is open, which gets the rest
   tab: Record<string, string> = {}; // the tab each chat's Browser shows, by Chrome's id, once you picked one
+  reading: Record<string, Reading> = {}; // the step part being read in each chat, whose diagram its half shows
+  private stepsShown: string[] = saved.stepsShown ?? []; // the step sends that opened their chat's half, by their place in the chat
+  private held = 0; // until when a part picked in the half holds against the scroll it starts (StepHalf.tsx)
 
   constructor() {
     makeObservable(this, {
       session: observable, center: observable, view: observable, details: observable, pill: observable, halves: observable, chatWidth: observable,
-      tab: observable, layout: computed, arrange: action, setView: action, setDetails: action, dismiss: action, setHalf: action, setChatWidth: action,
-      showTab: action, openTab: action, closeBrowser: action,
+      tab: observable, reading: observable, layout: computed, arrange: action, setView: action, setDetails: action, dismiss: action, setHalf: action,
+      setChatWidth: action, showTab: action, openTab: action, closeBrowser: action, read: action, showStep: action,
     });
   }
 
   private save() {
-    localStorage.dock = JSON.stringify({ session: this.session, pill: this.pill, halves: this.halves, chatWidth: this.chatWidth });
+    localStorage.dock = JSON.stringify({ session: this.session, pill: this.pill, halves: this.halves, chatWidth: this.chatWidth, stepsShown: this.stepsShown });
   }
 
   get layout(): Layout {
@@ -135,6 +143,26 @@ class Dock {
   // A half on the terminal stays.
   closeBrowser(session: string) {
     if (this.halves[session] === "browser") this.setHalf(session, null);
+  }
+
+  // The step part being read in the chat, as its scroll says, or as picked in its half, which then holds for a moment
+  // against the scroll that brings it into view.
+  read(session: string, reading: Reading, picked = false) {
+    if (!picked && performance.now() < this.held) return;
+    if (picked) this.held = performance.now() + 250;
+    const was = this.reading[session];
+    if (was?.title !== reading.title || was.part !== reading.part) this.reading = { ...this.reading, [session]: reading };
+  }
+
+  // A step written as parts, sent in the chat (at, its place there): the half opens on its diagram, once for each send,
+  // as Claude's browser opens it on a tab, unless it shows the terminal or the browser now. Hidden again, it stays hidden
+  // until the next.
+  showStep(session: string, at: string) {
+    const key = `${session} ${at}`;
+    if (this.stepsShown.includes(key)) return;
+    this.stepsShown = [...this.stepsShown, key].slice(-50);
+    if (this.halves[session]) this.save();
+    else this.setHalf(session, "step");
   }
 
   // × on the pill: the chat you left stops waiting there.

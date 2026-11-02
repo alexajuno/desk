@@ -1,5 +1,6 @@
 // The right half beside the chat in the middle, which holds what Claude drives (store/dock.ts): the chat's terminal
-// (Terminal.tsx) or its browser (Browser.tsx), each a view of it. It runs the window's full height beside the chat, and
+// (Terminal.tsx) or its browser (Browser.tsx), each a view of it, and the diagram of the design step part being read in
+// the chat (StepHalf.tsx). It runs the window's full height beside the chat, and
 // takes all the room the chat leaves, the chat a 480px column until its left edge is dragged ("ok. A", 2 Nov), so a
 // wider window widens only the half. It has no head of its own: the terminal and globe buttons in the chat's head,
 // Ctrl ` and Ctrl ⇧ B open it on their view, switch it to theirs, and hide it ("we have two duplicated sections: the
@@ -13,20 +14,23 @@ import { dock, type Half as View } from "../store/dock";
 import { toast } from "../ui/toast";
 import { live } from "./live";
 import { BrowserView } from "./Browser";
+import { StepHalf } from "./StepHalf";
 import { TerminalView } from "./Terminal";
+import type { PlanStep } from "../issues/Steps";
 
-// Each view the half can show: its name and what draws it.
-const VIEWS: Record<View, { label: string; draw: (session: string, hide: () => void) => ReactNode }> = {
+// Each view the half can show: its name and what draws it, from the chat's issue's steps for a step's diagram.
+const VIEWS: Record<View, { label: string; draw: (session: string, hide: () => void, steps: PlanStep[]) => ReactNode }> = {
   terminal: { label: "Terminal", draw: (session, hide) => <TerminalView session={session} ended={hide} /> },
   browser: { label: "Browser", draw: (session) => <BrowserView session={session} /> },
+  step: { label: "Diagram", draw: (session, _, steps) => <StepHalf session={session} steps={steps} /> },
 };
 
-export const Half = observer(function Half({ session, view }: { session: string; view: View }) {
+export const Half = observer(function Half({ session, view, steps = [] }: { session: string; view: View; steps?: PlanStep[] }) {
   const hide = useCallback(() => dock.setHalf(session, null), [session]);
   return (
     <section className="half" aria-label={VIEWS[view].label}>
       <div className="half-grip" onPointerDown={drag} title="Drag to resize" />
-      {VIEWS[view].draw(session, hide)}
+      {VIEWS[view].draw(session, hide, steps)}
     </section>
   );
 });
