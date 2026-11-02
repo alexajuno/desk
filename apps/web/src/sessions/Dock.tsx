@@ -20,7 +20,6 @@ import { folderMenu } from "../issues/menus";
 import { toClipboard } from "../issues/actions";
 import { dock, type Layout, type View } from "../store/dock";
 import { issues } from "../store/issues";
-import { lineKey } from "../store/frame";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { CHEVRON, GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
 import { isDrawn, type PlanStep } from "../issues/Steps";
@@ -87,7 +86,7 @@ export function arrange(session: string | null) {
 }
 
 // The views a chat has, in its head's order: Chat, and for an issue's, its Changes once a step has sent its commit. Its
-// page is no view of it since 1 Nov: its step and Try are in the head, its details drop open under it, and its Plan and
+// page is no view of it since 1 Nov: its step is in the head, its details drop open under it, and its Plan and
 // card are drawn in the chat ("for content, it's all in the chat huh", the user).
 function viewsOf(here: IssuePageData | null): View[] {
   const views: View[] = ["chat"];
@@ -295,8 +294,8 @@ const ChatSteps = observer(function ChatSteps({ s, here }: { s: LiveSession; her
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, then its issue's status and
 // title, with a ⌄ that drops the issue's details open under the head (IssueDetails), its views (Chat, Changes), and
 // at its right the terminal and, in desk's app, the globe, which open the half beside it (1 Nov: "since terminal and
-// browser are opened in right sidebar, so having these icons in composer doesn't sound valid"), then the issue's next step, Try
-// and Go or Approve (1 Nov: "the approve button is not there, but i have to tab to issue"); the Inbox, which shows a
+// browser are opened in right sidebar, so having these icons in composer doesn't sound valid"), then the issue's next step, Go
+// or Approve (1 Nov: "the approve button is not there, but i have to tab to issue"); the Inbox, which shows a
 // chat without its head, has its own. Where its work stands is in the steps
 // above the composer. A chat with no issue is renamed in its title, and shows its folder, which only an issue's Properties would
 // show otherwise. Whether the chat works shows in the chat itself, its Working… line and its stop button (28 Oct: "the
@@ -324,13 +323,13 @@ const ChatHead = observer(function ChatHead({ s, views, view, setView, docked }:
   );
 });
 
-// The issue's next step at the head's right, only while it is a click: Go on a plan, Approve on a card, Try beside
-// it. Open chat, the step while the issue's turn is said in its chat, has no button here, in that chat.
+// The issue's next step at the head's right, only while it is a click: Go on a plan, Approve on a card. Open chat,
+// the step while the issue's turn is said in its chat, has no button here, in that chat.
 const HeadStep = observer(function HeadStep({ data }: { data: IssuePageData }) {
-  const { p, step, landing, trust, act } = useStep(data);
+  const { p, step, trust, act } = useStep(data);
   return (
     <div className="chat-acts">
-      <StepButtons p={p} step={step} trial={landing ? null : data.trial} trust={trust} act={act} chat={null} />
+      <StepButtons p={p} step={step} trust={trust} act={act} chat={null} />
     </div>
   );
 });
@@ -426,7 +425,7 @@ function rowsOf(items: Item[], results: Map<string, Item>, slug: string | null):
 // An issue's chat: its conversation, with the plan and the card its session sent drawn from the issue's page, kept
 // current as the issue's page is.
 const IssueConversation = observer(function IssueConversation({ s, slug }: { s: LiveSession; slug: string }) {
-  const { data, reload } = usePage<IssuePageData>(`/api/page/issue/${slug}`, `${issues.files.get(slug) ?? 0} ${lineKey()}`);
+  const { data, reload } = usePage<IssuePageData>(`/api/page/issue/${slug}`, `${issues.files.get(slug) ?? 0}`);
   useIssueLive(data, reload);
   const page = data?.issue.slug === slug ? data : null;
   useEffect(() => {

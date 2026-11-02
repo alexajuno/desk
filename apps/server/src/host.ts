@@ -1,6 +1,6 @@
 // desk's session host: it holds the Claude Code sessions desk's panel talks to, each one Claude Code run through the
 // Agent SDK (one `claude` process per session, fed messages as they come and read as data), so that desk can draw a
-// session as a chat. It runs on its own, apart from desk's server: desk restarts on every Try, and a turn running inside
+// session as a chat. It runs on its own, apart from desk's server: desk restarts on every landing, and a turn running inside
 // it would be cut off. desk starts it (hosted.ts) in a systemd scope of its own, which desk.service's restart leaves alone,
 // and talks to it over a unix socket. Run: node apps/server/src/host.ts --socket <path>.
 //
@@ -369,7 +369,7 @@ function take(s: Session, m: SDKMessage) {
 
 // --- telling desk ------------------------------------------------------------------------------------------------------
 // Each session's state goes to desk the moment it changes, several changes at once as one. While desk is away, as it
-// restarts on every Try, the host tries again each second, and says every session anew once it is back: one that
+// restarts on every landing, the host tries again each second, and says every session anew once it is back: one that
 // ended meanwhile is left out, which tells desk so.
 
 let desk: WebSocket | null = null; // open

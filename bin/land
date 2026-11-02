@@ -8,8 +8,8 @@
 # repo that lands straight on main rarely breaks there ("usually they don't crash. and if they do, costing more token is
 # valid", the user, 28 Oct). Only a rebase that conflicts fails, and desk then wakes the session to land it by hand.
 #
-# The checkout on main: merge --ff-only there. On no branch, while Try runs another branch: fetch . <branch>:main moves
-# main where it is checked out nowhere, and only as a fast-forward. Then the branch's worktree and the branch go.
+# The checkout on main: merge --ff-only there. On another branch or none, as one switched by hand: fetch . <branch>:main
+# moves main where it is checked out nowhere, and only as a fast-forward. Then the branch's worktree and the branch go.
 # Its last line says where it landed, which desk keeps as the issue's landed. desk puts a step's stderr after its
 # stdout, and git's rebase and fetch talk on stderr, so all of it goes to stdout, in order.
 exec 2>&1

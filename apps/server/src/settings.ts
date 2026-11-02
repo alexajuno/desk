@@ -10,9 +10,6 @@
 //
 // Linear keeps the first two in Settings > Team > Workflow (linear.app/docs/parent-and-sub-issues#status-automation);
 // desk has no teams, so they are Settings > Workflow. The sessions' three and the steps card are Settings > Preferences.
-import { join } from "node:path";
-import { DATA_DIR } from "./config.ts";
-import * as copies from "./copies.ts";
 import * as db from "./db.ts";
 import { sql } from "./db.ts";
 
@@ -39,7 +36,6 @@ export const DEFAULTS: Settings = {
 };
 export const MAX_SLOTS = 4;
 
-const FILE = join(DATA_DIR, "settings.json"); // where they were until 19 Oct, written out still (copies.ts)
 const MODEL = /^[a-z0-9][a-z0-9.\-[\]]{0,79}$/; // an alias or a model id, such as sonnet or claude-opus-5-5[1m]
 
 // Why the value is no good for the setting, or "" when it is.
@@ -56,23 +52,8 @@ const known = (name: string): name is keyof Settings => name in DEFAULTS;
 // What the table holds, kept here as well, since every save of an issue asks (issues.ts, autoClose), inside its write.
 let held: Partial<Settings> = {};
 
-// Read the settings, once, as desk starts: those of settings.json first when a desk of an older branch changed it.
+// Read the settings, once, as desk starts.
 export async function open() {
-  const text = await copies.changed(FILE);
-  if (text !== undefined) {
-    let saved: Record<string, unknown> = {};
-    try {
-      saved = text ? JSON.parse(text) : {};
-    } catch {
-      // a file broken by hand counts as none
-    }
-    await db.write(async (tx) => {
-      await tx.query("delete from settings");
-      for (const [name, value] of Object.entries(saved))
-        if (known(name) && !wrong(name, value)) await tx.query("insert into settings values ($1, $2)", [name, JSON.stringify(value)]);
-    });
-    await copies.taken(FILE, text);
-  }
   const rows = (await sql().query<{ name: string; value: unknown }>("select name, value from settings")).rows;
   held = Object.fromEntries(rows.filter((r) => known(r.name) && !wrong(r.name as keyof Settings, r.value)).map((r) => [r.name, r.value]));
 }
@@ -91,8 +72,5 @@ export async function set(changes: Record<string, unknown>): Promise<Settings> {
       await tx.query("insert into settings values ($1, $2) on conflict (name) do update set value = excluded.value", [name, JSON.stringify(value)]);
   });
   held = { ...held, ...changes };
-  const next = load();
-  // As the file held them: every setting, with what a branch of its own added.
-  await copies.out(FILE, `${JSON.stringify({ ...next, ...copies.others(FILE, Object.keys(DEFAULTS)) }, null, 2)}\n`);
-  return next;
+  return load();
 }

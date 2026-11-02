@@ -1,7 +1,7 @@
 // desk's app (apps/web: React, MobX, StyleX), the page behind every one of desk's addresses (ported from desk/web.py).
 //
-// desk.service runs whatever commit Try, back-to-main or a landing checked out, so desk builds the app itself when it
-// starts, whenever the app's committed sources differ from the ones its last build came from. With nothing changed
+// desk.service runs whatever commit a landing checked out, and a test desk its session's worktree, so desk builds the
+// app itself when it starts, whenever the app's committed sources differ from the ones its last build came from. With nothing changed
 // that costs one `git rev-parse`; a build, pnpm's install check included, took 1.2 s with its store warm (16 Oct).
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";

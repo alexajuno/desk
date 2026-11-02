@@ -1,17 +1,15 @@
-// What the sidebar shows that no row the app holds says yet: the sessions, desk's checkout, and where each open issue's
+// What the sidebar shows that no row the app holds says yet: the sessions, and where each open issue's
 // session stands (pages.ts, framePage). desk sends it over the sync socket (sync/socket.ts) when it connects and
 // whenever it changed, the moment a session starts or stops working; an action asks for it once more, as it asks for its
 // page. The rest the app works out from its rows (store/issues.ts), as the Inbox's count and its dots.
 import { makeAutoObservable, observableRef } from "mobx";
-import type { IssueRow, State } from "../lib/desk";
+import type { State } from "../lib/desk";
 import { onReload } from "./ui";
 
 // A session as the sidebar lists it. auto: Auto carries it on without you; a desk from before 1 Nov leaves it out.
 export interface ChatRow { session: string; title: string; issue: { slug: string; state: State } | null; working: boolean; auto?: boolean }
 
 export interface FrameData {
-  trying: { slug: string; branch: string; issue: IssueRow | null } | null;
-  line: { slug: string; branch: string; for: string; issue: IssueRow }[];
   pinned: ChatRow[]; // the sessions the user pinned, in the order pinned
   chats: ChatRow[]; // the other sessions still in hand, the newest first
   automations?: string; // moves whenever an automation does: its page fetches itself again
@@ -21,7 +19,7 @@ export interface FrameData {
 // A frame with nothing in it. A frame from a desk of another version can lack a list this app reads, such as a tab
 // reopened on the app it last had while desk runs a newer or older commit (18 Oct: the sidebar's Agents crashed the
 // page); the list then draws empty until the tab reloads.
-const EMPTY: FrameData = { trying: null, line: [], pinned: [], chats: [], live: {} };
+const EMPTY: FrameData = { pinned: [], chats: [], live: {} };
 
 class Frame {
   data: FrameData | null = null;
@@ -52,9 +50,6 @@ export const frame = new Frame();
 
 // Where an open issue's chat stands, as the frame says: working, idle (your move), or none, with no chat.
 export const talkOf = (i: { slug: string; session: string | null }) => (i.session ? frame.data?.live[i.slug] ?? "idle" : "none");
-
-// Which branch runs on 8790 and which wait for it, which an issue's Try button says.
-export const lineKey = () => (frame.data ? [frame.data.trying?.slug, ...frame.data.line.map((w) => w.slug)].join(" ") : "");
 
 // The first frame comes over the sync socket, worked out afresh for this app (the server's sync.ts): fetching it as well
 // had desk work it out twice as the page opened, and drew whichever came first.

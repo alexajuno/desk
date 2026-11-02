@@ -170,7 +170,7 @@ export async function save(chat: Chat, more?: (tx: Db) => Promise<unknown>) {
 }
 
 // At start: the chats' files written since desk last looked are read in, then every row is kept. Every file, the first
-// time; then any a desk from before the table wrote, as an older branch on Try does, which wins over the row, being
+// time; then any a desk from before the table wrote, as an older branch on Try did, which wins over the row, being
 // newer.
 export async function readIn() {
   await db.write(async (tx) => {

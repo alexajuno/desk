@@ -321,21 +321,11 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
 /* Linear's Help button, measured 2026-10-15: a 24px circle 10px in from the window's bottom left corner,
    level with the Agent button, its 16px question mark text-3 until hovered. desk's sits in the window's bar, at its
    left end (2 Nov, below); the sidebar's foot keeps it only on a phone, which has no bar (phone.css), so on a wider
-   screen the foot shows only while it holds the Not on main card. The foot stays at the sidebar's bottom while the
-   chats scroll under it, fading out over its first 14px (28 Oct); the sidebar still scrolls as one. */
-.side-foot { position: sticky; bottom: -12px; display: flex; flex-direction: column; gap: 6px; margin: auto 0 -12px;
+   screen the foot does not show. The foot stays at the sidebar's bottom while the chats scroll under it, fading out
+   over its first 14px (28 Oct); the sidebar still scrolls as one. */
+.side-foot { position: sticky; bottom: -12px; display: none; margin: auto 0 -12px;
              padding: 14px 0 10px; background: linear-gradient(to bottom, transparent, var(--bg-app) 14px); }
-.side-foot:not(:has(.not-main)), .side-foot > .help-open { display: none; }
 .side-icon.help-open { width: 24px; height: 24px; margin-left: -2px; background: none; }
-/* desk's checkout runs a branch, not main: a card in the New issue button's fill and ring, no chat row (28 Oct) */
-.not-main { display: flex; align-items: flex-start; gap: 8px; padding: 7px 9px 8px 6px; border-radius: 8px; color: var(--text-3);
-            text-decoration: none; background: var(--btn-side); box-shadow: 0 0 0 0.5px var(--ring-btn), var(--shadow-panel); }
-a.not-main:hover { background: var(--btn-side-hover); box-shadow: 0 0 0 0.5px var(--ring-btn-hover), var(--shadow-panel); }
-.not-main .glyph { margin-top: 2px; width: 16px; height: 16px; }
-.not-main-text { display: flex; flex-direction: column; min-width: 0; }
-.not-main-lead { font-size: 12px; font-weight: 500; line-height: 20px; color: var(--text-2); }
-.not-main-lead span { font-weight: 450; color: var(--text-3); }
-.not-main .nav-title { font-weight: 500; line-height: 18px; white-space: nowrap; }
 /* Hiding the sidebar ([ or its toggle). On a wide window it slides out and the panel takes its space; at
    900px and under it is hidden until it opens over the page as a drawer (the media query below). The
    toggle sits where Linear's workspace switcher does, and in the top bar while the sidebar is hidden. */

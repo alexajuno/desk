@@ -652,31 +652,6 @@ export async function create(): Promise<FastifyInstance> {
     return fromInbox ? onward(reply, before, slug, message) : back(reply, slug);
   });
 
-  // Try: run the branch of an issue in review in the desk you use, or line it up next.
-  app.post("/issue/:slug/try", async (req: Req, reply) => {
-    const i = await store.load(req.params.slug);
-    let message: string;
-    try {
-      message = await land.tryBranch(i, await land.branchOf(i), "review");
-    } catch (error) {
-      if (!(error instanceof land.Blocked)) throw error;
-      message = error.message;
-    }
-    return back(reply, i.slug, message, false, field(req, "src") === "inbox");
-  });
-
-  // Back to main, after Try: desk runs main again, or the next in line.
-  app.post("/issue/:slug/back-to-main", async (req: Req, reply) => {
-    let message: string;
-    try {
-      message = (await land.backToMain(await store.load(req.params.slug))) || "Nothing was switched.";
-    } catch (error) {
-      if (!(error instanceof land.Blocked)) throw error;
-      message = error.message;
-    }
-    return back(reply, req.params.slug, message, false, field(req, "src") === "inbox");
-  });
-
   // --- sessions: the corner's history, and New session
   // New session: an agent chat, opened in the panel.
   app.post("/sessions/new", async (req) => {

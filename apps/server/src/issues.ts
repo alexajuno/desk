@@ -431,7 +431,7 @@ export const onRename = (told: (tx: Db, from: string, to: string) => Promise<voi
 // A new title gives the issue the slug a new issue of that title would get, as Linear's address follows its title:
 // "can't we have a better way to generate slug?" (the user, 28 Oct). No alias keeps the old one: "i'm the only user
 // here. no one is using it. we don't over engineer here right?". So in the write that saves it, all that names the
-// issue follows it: its row, its folder, its sub-issues, its chat, the line, the trash, and the links to it in every
+// issue follows it: its row, its folder, its sub-issues, its chat, its test desk, the trash, and the links to it in every
 // issue's and project's document, its own screenshots' among them. The Inbox's rows follow on its next take. Whether
 // it moved; the caller saves the issue, then writes out the files of the others it changed (rewriteAll).
 async function follow(tx: Db, i: Issue): Promise<boolean> {
@@ -454,7 +454,7 @@ async function follow(tx: Db, i: Issue): Promise<boolean> {
   }
   for (const r of (await linking("projects")).rows) await tx.query("update projects set body = $2 where slug = $1", [r.slug, relink(r.body)]);
   for (const told of renamed) await told(tx, from, to);
-  for (const table of ["line", "tries", "trying", "tests"]) await tx.query(`update ${table} set slug = $2 where slug = $1`, [from, to]);
+  await tx.query("update tests set slug = $2 where slug = $1", [from, to]);
   await tx.query("update trashed set row = jsonb_set(row, '{parent}', to_jsonb($2::text)) where row ->> 'parent' = $1", [from, to]);
   return true;
 }

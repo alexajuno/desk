@@ -10,8 +10,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { query, type ModelInfo, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { DATA_DIR, HOME } from "./config.ts";
-import * as copies from "./copies.ts";
+import { HOME } from "./config.ts";
 import * as db from "./db.ts";
 import { sql } from "./db.ts";
 import * as hosted from "./hosted.ts";
@@ -40,32 +39,13 @@ export interface Model {
 
 // --- the picks -----------------------------------------------------------------------------------------------------
 
-const FILE = join(DATA_DIR, "session-models.json"); // where they were until 19 Oct, written out still (copies.ts)
-
 // What the table holds, kept here as well, since the chip and the sidebar ask for every session they show.
 let picks: Record<string, Pick> = {};
 
 const fit = (pick: Pick): Pick => ({ ...(typeof pick.model === "string" && { model: pick.model }), ...(EFFORTS.includes(pick.effort!) && { effort: pick.effort }) });
 
-// Read the picks, once, as desk starts: those of session-models.json first when a desk of an older branch changed it.
+// Read the picks, once, as desk starts.
 export async function open() {
-  const text = await copies.changed(FILE);
-  if (text !== undefined) {
-    let saved: Record<string, Pick> = {};
-    try {
-      saved = text ? JSON.parse(text) : {};
-    } catch {
-      // a file broken by hand counts as none
-    }
-    await db.write(async (tx) => {
-      await tx.query("delete from session_models");
-      for (const [session, pick] of Object.entries(saved)) {
-        const { model = null, effort = null } = fit(pick ?? {});
-        await tx.query("insert into session_models values ($1, $2, $3)", [session, model, effort]);
-      }
-    });
-    await copies.taken(FILE, text);
-  }
   const rows = (await sql().query<{ session: string; model: string | null; effort: Effort | null }>("select * from session_models")).rows;
   picks = Object.fromEntries(rows.map((r) => [r.session, fit({ model: r.model ?? undefined, effort: r.effort ?? undefined })]));
   await listen();
@@ -82,7 +62,6 @@ async function save(session: string, pick: Pick) {
   picks = { ...picks, [session]: fit(pick) };
   await db.write((tx) => tx.query(`insert into session_models values ($1, $2, $3)
     on conflict (session) do update set model = excluded.model, effort = excluded.effort`, [session, model, effort]));
-  await copies.out(FILE, `${JSON.stringify(picks, null, 2)}\n`);
 }
 
 // A /model or /effort typed in the session itself, as Claude Code ran it (transcript.ts, commandRun): kept as the

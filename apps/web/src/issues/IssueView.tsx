@@ -55,8 +55,6 @@ export interface IssuePageData {
   session_kind: string | null;
   live: string;
   step: { text: string; button: StepButton | null };
-  trial: StepButton | null;
-  branch: string | null; // the branch its session tested in desk's checkout, which Try runs
   landed: string | null; // in done, where its session said the work landed
   lands: { steps: string[]; landed?: string } | null; // in review, the steps Approve runs, as its session gave them
   plan_steps: PlanStep[] | null; // a design issue's steps, which its session sets and ticks
@@ -97,7 +95,7 @@ export function useStep(data: IssuePageData, inInbox = false) {
   const steps = data.lands?.steps ?? null;
   const [skip, setSkip] = landSkip(p.slug, steps);
 
-  // A form route of the old pages: Plan, Start, Approve, Try, Trust folder. What its redirect says shows as a toast.
+  // A form route of the old pages: Plan, Start, Approve, Trust folder. What its redirect says shows as a toast.
   // From the Inbox, Approve moves on as Linear does: the next notification opens, and a toast says what happened
   // (app.ts, onward).
   async function act(action: string) {
@@ -131,7 +129,7 @@ export function useStep(data: IssuePageData, inInbox = false) {
 
 // parents: the line of its parents over its title, where no top bar names them, as the issue's page does (IssuePage).
 export const IssueView = observer(function IssueView({ data, inInbox = false, parents = true }: { data: IssuePageData; inInbox?: boolean; parents?: boolean }) {
-  const { p, step, landing, steps, skip, setSkip, trust, act } = useStep(data, inInbox);
+  const { p, step, steps, skip, setSkip, trust, act } = useStep(data, inInbox);
 
   useLayoutEffect(() => showFolded());
 
@@ -187,7 +185,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false, pa
           )}
         </div>
         <div className="issue-side">
-          <Actions p={p} step={step} trial={landing ? null : data.trial} trust={trust} act={act} />
+          <Actions p={p} step={step} trust={trust} act={act} />
           <Properties data={data} p={p} />
         </div>
       </div>
@@ -196,30 +194,28 @@ export const IssueView = observer(function IssueView({ data, inInbox = false, pa
 });
 
 // The issue's actions, in a row over its Properties, as Linear's issue has Copy issue URL and its kin: Copy link, a quiet
-// Open chat whenever the chat is not the step, Try in review, and last the step, the one primary button.
-function Actions({ p, step, trial: t, trust, act }: {
-  p: IssueRow; step: IssuePageData["step"]; trial: StepButton | null; trust: boolean; act: (action: string) => void;
+// Open chat whenever the chat is not the step, and last the step, the one primary button.
+function Actions({ p, step, trust, act }: {
+  p: IssueRow; step: IssuePageData["step"]; trust: boolean; act: (action: string) => void;
 }) {
   const session = p.session, chat = session ? () => openSession(session, p.slug) : null;
   return (
     <div className="issue-acts">
       <button className="act" type="button" title="Copy link" onClick={() => copy(`${location.origin}/issue/${p.slug}`, "Link copied")}>{GLYPH.link}</button>
       {chat && !step.button?.chat && <button className="act open-chat" type="button" title="Open the issue's chat  I" onClick={chat}>{GLYPH.chat}</button>}
-      <StepButtons p={p} step={step} trial={t} trust={trust} act={act} chat={chat} />
+      <StepButtons p={p} step={step} trust={trust} act={act} chat={chat} />
     </div>
   );
 }
 
-// Try in review, then the step, the one primary button, which Ctrl Enter presses (Frame.tsx): over the issue's
-// Properties, and at the right of its chat's head, which passes no chat, so that a step said in the chat shows none.
-export function StepButtons({ p, step, trial: t, trust, act, chat }: {
-  p: IssueRow; step: IssuePageData["step"]; trial: StepButton | null; trust: boolean; act: (action: string) => void; chat: (() => void) | null;
+// The step, the one primary button, which Ctrl Enter presses (Frame.tsx): over the issue's Properties, and at the
+// right of its chat's head, which passes no chat, so that a step said in the chat shows none.
+export function StepButtons({ p, step, trust, act, chat }: {
+  p: IssueRow; step: IssuePageData["step"]; trust: boolean; act: (action: string) => void; chat: (() => void) | null;
 }) {
   const b = step.button;
   return (
     <>
-      {/* Try, in review: runs the issue's branch in the desk you use (pages.ts, tryButton). Not the step: Approve is. */}
-      {t && <button type="button" title={t.title} disabled={t.disabled} onClick={() => act(t.action!)}>{t.label}</button>}
       {trust ? (
         <button className="primary step" type="button" title="Tells Claude Code to trust this folder, as accepting its prompt does"
           onClick={() => act("trust")}>Trust folder</button>
@@ -317,7 +313,6 @@ export const IssueDetails = observer(function IssueDetails({ data }: { data: Iss
       )}
       <div className="details-meta">
         {p.session && <span>Session <code>{p.session.slice(0, 8)}</code> <span className={`live ${data.live}`}>{liveWord(data, p)}</span></span>}
-        {data.branch && <span>Branch <code>{data.branch}</code></span>}
         <span>Opened {p.created_short}</span>
         {p.link && <span>Link <a href={p.link}>{p.link.split("/").pop()}</a></span>}
         {/* Where its session said the work landed, unless that is the pull request the Link already is. */}

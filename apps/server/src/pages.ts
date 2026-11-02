@@ -374,19 +374,6 @@ export function step(i: Issue, asks: Set<string>, hasPlan: boolean, hasResult: b
   return { text: i.state === "done" ? "Done" : "Dropped", button: null };
 }
 
-// Beside Approve, on an issue in review whose session tested its branch in desk's own checkout: Try runs that branch in
-// the desk you use, next in line when a session tests there, and Back to main ends it.
-export async function tryButton(i: Issue): Promise<Button> {
-  if (i.state !== "review") return null;
-  const branch = await land.branchOf(i);
-  if (!branch) return null;
-  const top = land.DESK_REPO;
-  const now = await land.trying(top);
-  if (now && now.slug === i.slug) return { label: "Back to main", action: "back-to-main", title: `desk runs ${branch}: put it back on main` };
-  if ((await land.line(top)).some((e) => e.slug === i.slug)) return { label: "Next on 8790", disabled: true, title: `${branch} runs once the test there ends` };
-  return { label: "Try", action: "try", title: `Run ${branch} in the desk you use, to try it` };
-}
-
 // The issue as its page shows it, or as the Inbox's right pane does.
 export async function issuePageJson(all: Map<string, Issue>, slug: string) {
   const i = all.get(slug)!;
@@ -429,8 +416,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     agent_files: agentFiles, plan, plan_card: plan ? split(plan) : null, result, card, reviewing,
     context_html: toHtml(store.section(i, "Context"), `/issue/${slug}/f/`), // the chat's first message, folded
     session_kind: session.kind ?? null, live: talkOf(i),
-    step: step(i, await asking(), store.hasPlan(i), Boolean(result)), landed: i.landed, trial: await tryButton(i),
-    branch: await land.branchOf(i), // the branch its session tested in desk's checkout, which Try runs
+    step: step(i, await asking(), store.hasPlan(i), Boolean(result)), landed: i.landed,
     lands: reviewing ? land.landsOf(i) : null, // the steps Approve runs, which the review lists to untick
     plan_steps: i.plan_steps ? drawnSteps(JSON.parse(i.plan_steps), `/issue/${slug}/f/`) : null, // a design issue's steps (api.ts, PlanStep)
   };
@@ -458,11 +444,7 @@ function drawnSteps(steps: Step[], base: string): unknown[] {
 export async function framePage(old = false, all?: Map<string, Issue>) {
   all ??= await store.loadAll();
   await notifications(all); // moves the issues on first, and writes what the Inbox's rows say now
-  const now = await land.running(land.DESK_REPO);
-  const line = await land.line(land.DESK_REPO);
   return {
-    trying: now && { slug: now.slug, branch: now.branch, issue: (now.slug && all.has(now.slug)) ? issueJson(all.get(now.slug)!) : null },
-    line: line.filter((w) => all.has(w.slug)).map((w) => ({ slug: w.slug, branch: w.branch ?? null, for: w.for ?? null, issue: issueJson(all.get(w.slug)!) })),
     ...chatsNow(all),
     automations: automations.stamp(), // a page of automations fetches itself again when it moves
     live: Object.fromEntries([...all.values()].filter((i) => sessionOf(i) && !CLOSED.has(i.state)).map((i) => [i.slug, talkOf(i)])),

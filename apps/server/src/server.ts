@@ -1,6 +1,6 @@
 // desk's server, started by main.ts once the packages match the commit checked out. PORT picks the port (default 8790),
-// DESK_DATA the data folder (default ~/.local/share/desk), and DESK_ENV=test leaves the line and the automations' clock
-// off, as a slot's desk should (config.ts, ENV).
+// DESK_DATA the data folder (default ~/.local/share/desk), and DESK_ENV=test leaves the test desks' line and the automations'
+// clock off, as a slot's desk should (config.ts, ENV).
 import { create } from "./app.ts";
 import * as auto from "./auto.ts";
 import * as automations from "./automations.ts";
@@ -10,7 +10,6 @@ import * as db from "./db.ts";
 import * as hosted from "./hosted.ts";
 import * as inbox from "./inbox.ts";
 import * as store from "./issues.ts";
-import * as land from "./land.ts";
 import * as models from "./models.ts";
 import * as pins from "./pins.ts";
 import * as pool from "./pool.ts";
@@ -38,7 +37,6 @@ const left = await chats.adoptLeft(); // once: an open issue whose chat went on 
 if (left) console.log(`desk gave ${left} open issues whose chat had moved on a chat of their own`);
 const renamed = await store.renameAll(); // once: after the chats, which follow their issues
 if (renamed) console.log(`desk gave ${renamed} issues the slug their title makes now`);
-// What a desk of an older branch changed in the files desk kept its state in before Postgres, while it ran (copies.ts).
 await settings.open();
 await pins.open();
 await models.open();
@@ -56,7 +54,6 @@ keepCurrent();
 setInterval(keepCurrent, 10_000);
 setInterval(() => void db.prune().catch((error) => console.error("pruning the log", error)), 3600_000);
 if (!TEST) {
-  land.start(); // the line for desk's own checkout moves on its own
   automations.startClock(); // each automation whose time came fires
   pool.start(); // the test desks' line moves on its own
 }

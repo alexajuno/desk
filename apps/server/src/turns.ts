@@ -12,7 +12,7 @@
 // Its hello also says whether its browser relay runs and the tabs it noted, which desk answers (tabs.ts).
 //
 // A <state> is {id, open, working, asks, prompted, replied, ended}, its times in ms, null while the host has seen none. The
-// socket closing says the host is gone, and every process it held with it. A desk that restarts, as on every Try,
+// socket closing says the host is gone, and every process it held with it. A desk that restarts, as on every landing,
 // misses nothing: the host connects again within a second and says everything anew.
 //
 // A host of older code says nothing. While one runs, as for the hours after this landed until it gave way to one of
@@ -67,7 +67,7 @@ const COLUMNS = `id, open, working, asks, extract(epoch from prompted)::float8 a
 // whose turn ended, so that what they wrote beside their issue is read again.
 type Listener = (sessions: string[] | null, ended: string[]) => void;
 
-// Each change, as the host says it: sync.ts sends the frame and the open chats again, and the line looks (land.ts).
+// Each change, as the host says it: sync.ts sends the frame and the open chats again, and the test desks' line looks (pool.ts).
 export const onChange = (fn: Listener) => { listeners.add(fn); };
 
 function changed(sessions: string[] | null, ended: string[] = []) {

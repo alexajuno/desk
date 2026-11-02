@@ -5,7 +5,6 @@ import { useParams } from "react-router";
 import { usePage } from "../api/page";
 import { Go } from "../app/nav";
 import { Bar } from "../frame/Bar";
-import { lineKey } from "../store/frame";
 import { issues } from "../store/issues";
 import { toggled } from "../ui/menu";
 import { MORE_ICON } from "../ui/icons";
@@ -16,8 +15,8 @@ import { useLive } from "./useLive";
 
 export const IssuePage = observer(function IssuePage() {
   const { slug = "" } = useParams();
-  // Its plan and result, which a session writes, and the line on 8790, which its Try button says.
-  const { data, error, reload } = usePage<IssuePageData>(`/api/page/issue/${slug}`, `${issues.files.get(slug) ?? 0} ${lineKey()}`);
+  // Its plan and result, which a session writes.
+  const { data, error, reload } = usePage<IssuePageData>(`/api/page/issue/${slug}`, `${issues.files.get(slug) ?? 0}`);
   const scroll = useRef<HTMLDivElement>(null);
   // The issue on screen stays until the next one's data is in, as the old pages' soft refresh did: moving between
   // issues never shows an empty page.

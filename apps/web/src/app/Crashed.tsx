@@ -1,5 +1,5 @@
 // A page that crashed, in place of React Router's bare "Unexpected Application Error!". Most often the app a tab has
-// meets a desk of another version, since desk runs whichever commit Try, a test or a landing checked out, and a reload
+// meets a desk of another version, as after a landing restarts desk on new code, and a reload
 // brings the app that matches: so it reloads once on its own, under the splash when desk was just opening. Crashing
 // again within a minute shows the error, with a Reload button, rather than reloading in a loop.
 import { useEffect } from "react";

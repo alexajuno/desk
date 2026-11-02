@@ -1,6 +1,6 @@
 // desk: one place to park, plan, run and review issues with Claude. Run: node apps/server/src/main.ts (desk.service
-// does). Try, back-to-main and a landing switch the commit under desk.service, which then restarts desk; a commit may
-// need packages the last one did not. So before anything else, desk installs them whenever pnpm-lock.yaml differs from
+// does, and a test desk from a session's worktree, pool.ts). A landing moves the commit under desk.service, which then
+// restarts desk; a commit may need packages the last one did not. So before anything else, desk installs them whenever pnpm-lock.yaml differs from
 // the one its last install came from, as web.ts builds the app whenever apps/web changed. With nothing changed that
 // costs one `git rev-parse`. Only Node's own modules load before the install; the server's come after it (server.ts).
 import { execFileSync } from "node:child_process";

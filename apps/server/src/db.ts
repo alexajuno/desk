@@ -10,7 +10,7 @@
 // (since). Reads go through sql().
 //
 // The tables are the record of desk's state ("you should find whatever represent state, should be in db", the user, 19
-// Oct): issues, teams and projects, the Inbox, the trash, pins, each session's model, settings and the line.
+// Oct): issues, teams and projects, the Inbox, the trash, pins, each session's model, settings and the test desks.
 // issue.md, team.md and project.md are only written out, for agents, git and an editor to read; desk reads them in only
 // into a database with no issues yet, as a new one (issues.importAll).
 import { PGlite, type Transaction } from "@electric-sql/pglite";
@@ -59,7 +59,7 @@ create table if not exists issues (
   landed text,
   lands text, -- JSON: the steps Approve runs to land the work, which its session gave with its Result (land.ts, Lands)
   plan_steps text, -- JSON: a design issue's steps, which its session sets and ticks as it goes (api.ts, PlanStep)
-  session text, -- unread since 29 Oct: an issue's chat holds its session (chats.issue); kept for older branches on Try
+  session text, -- unread since 29 Oct: an issue's chat holds its session (chats.issue)
   waiting_on text,
   waiting_since text,
   review_of text,
@@ -162,27 +162,6 @@ create table if not exists session_models ( -- the model and effort picked for a
 -- session's context, as "context:<session>".
 create table if not exists heard (name text primary key, value jsonb not null, at double precision not null);
 create table if not exists settings (name text primary key, value jsonb not null); -- each one set (settings.ts)
--- The line for a checkout (land.ts): who waits for it, the branch each issue last tried there, and the branch desk
--- switched it to. repo is the checkout's folder.
-create table if not exists line (
-  repo text not null,
-  place integer not null,
-  slug text not null,
-  branch text not null,
-  holder text not null, -- test, the issue's session, or review, the user's Try
-  primary key (repo, slug)
-);
-create table if not exists tries (repo text not null, slug text not null, branch text not null, primary key (repo, slug));
-create table if not exists trying (
-  repo text primary key,
-  branch text not null,
-  slug text not null,
-  back text not null, -- the branch to put the checkout back on
-  holder text,
-  told boolean not null default false, -- whether its session knows the branch runs
-  since double precision not null, -- seconds
-  pid integer -- the desk that switched it
-);
 -- The pool of test desks (pool.ts): each issue whose session asked for one, in the order it asked, with the port of
 -- its slot once it has one (null while it waits in line), and when it was told so (null until then).
 create table if not exists tests (
@@ -192,7 +171,6 @@ create table if not exists tests (
   port integer,
   told double precision -- seconds
 );
-create table if not exists copies (path text primary key, text text); -- each file copies.ts last wrote out, null once removed
 create table if not exists sessions ( -- what each session does, as the session host tells desk (turns.ts)
   id text primary key,
   open boolean not null default false, -- the host holds its process
@@ -294,8 +272,10 @@ export async function open(): Promise<PGlite> {
   await opened.exec("alter table chats add column if not exists deleted text;"); // a chat's Delete (chats.ts, remove), from 25 Oct
   await opened.exec("alter table chats add column if not exists auto boolean not null default false;"); // its composer's Auto (chats.ts, setAuto), from 29 Oct
   await opened.exec("alter table teams add column if not exists aliases text not null default '';"); // a team's rename (teams.ts), from 25 Oct
-  await opened.exec("alter table trying add column if not exists head text;"); // the commit desk detached the checkout on (land.ts), from 31 Oct
   await opened.exec("drop table if exists slack_filed; drop table if exists slack_threads;"); // Slack's tags, out since 22 Oct
+  // Try's line for desk's own checkout and the copies of the files from before 19 Oct, out since 2 Nov: a branch is
+  // tested on a test desk of its own (pool.ts, tests).
+  await opened.exec("drop table if exists line; drop table if exists tries; drop table if exists trying; drop table if exists copies;");
   // desk's database is a few MB: Postgres's default 128 MB of shared buffers only holds memory, about 50 MB of it. Set
   // once in postgresql.auto.conf, it applies from the next start.
   if ((await opened.query<{ shared_buffers: string }>("show shared_buffers")).rows[0]?.shared_buffers !== "16MB")
@@ -367,7 +347,7 @@ export function write<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 // sync.ts hears here of each write's changes, with the change told before them.
 export const onWrite = (fn: typeof tell) => { tell = fn; };
 
-// And here of each write that changed a row, of a table the app holds or not, such as the line's or a session's: what
+// And here of each write that changed a row, of a table the app holds or not, such as the test desks' or a session's: what
 // the frame and the open chats show may have moved.
 export const onCommit = (fn: () => void) => { wrote = fn; };
 

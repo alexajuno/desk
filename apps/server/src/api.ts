@@ -14,8 +14,9 @@
 //     POST   /api/issues/<slug>/start   write its plan, then start its own session in the background
 //     POST   /api/issues/<slug>/work    the agent chat works it itself: the chat becomes the issue's session, taking
 //                                       over one that sits idle
-//     POST   /api/issues/<slug>/try     run the issue's branch in its folder's checkout, to test it (land.ts)
-//     POST   /api/issues/<slug>/back-to-main   and back, handing desk's checkout to the next in line
+//     POST   /api/issues/<slug>/test    a test desk for its branch, {"branch": ...}: its address, or its place in line
+//                                       (pool.ts); 8790 keeps running main
+//     DELETE /api/issues/<slug>/test    give it back, or leave the line, handing the desk to the next in line
 //     GET    /api/teams                 list teams (state=active|archived|all); /api/issues takes team=<slug>
 //     GET    /api/teams/<slug>          one team, with its description and issues
 //     POST   /api/teams                 create one: title, body
@@ -52,7 +53,6 @@ import * as compact from "./compact.ts";
 import { HOME, TEST } from "./config.ts";
 import * as store from "./issues.ts";
 import { byRank, type Issue } from "./issues.ts";
-import * as land from "./land.ts";
 import * as periods from "./periods.ts";
 import * as pool from "./pool.ts";
 import { HttpError } from "./pages.ts";
@@ -811,18 +811,6 @@ export function routes(app: FastifyInstance) {
     return { chat: handed.chat.id, session: handed.chat.session, started: handed.started, url: `/issue/${slug}` };
   });
 
-  // Switch the issue's folder checkout to its branch, to test it in the one running app; in desk's own repo, while
-  // another branch runs there, the issue joins the line.
-  app.post("/api/issues/:slug/try", async (req: Req) => {
-    const branch = ((req.body ?? {}) as Record<string, unknown>).branch;
-    try {
-      return { message: await land.tryBranch(await loadIssue(req.params.slug), typeof branch === "string" ? branch : null) };
-    } catch (error) {
-      if (error instanceof land.Blocked) throw new HttpError(409, error.message);
-      throw error;
-    }
-  });
-
   // A test desk for the issue's branch: desk runs it from its worktree on a port of its own, on a fresh copy of the
   // data, or puts the issue in line for one (pool.ts). 8790 keeps running main.
   app.post("/api/issues/:slug/test", async (req: Req) => {
@@ -841,16 +829,5 @@ export function routes(app: FastifyInstance) {
   app.delete("/api/issues/:slug/test", async (req: Req) => {
     if (TEST) throw new HttpError(403, "A test desk hands out no test desks: ask 8790.");
     return { message: await pool.release(req.params.slug) };
-  });
-
-  // The issue is done with its folder's checkout: put it back on the branch it was on before try, and take the issue
-  // out of the line.
-  app.post("/api/issues/:slug/back-to-main", async (req: Req) => {
-    try {
-      return { message: (await land.backToMain(await loadIssue(req.params.slug))) || "Nothing was switched." };
-    } catch (error) {
-      if (error instanceof land.Blocked) throw new HttpError(409, error.message);
-      throw error;
-    }
   });
 }

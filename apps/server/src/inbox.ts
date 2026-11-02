@@ -55,19 +55,6 @@ let filled = false; // whether the table has filled once, from the Inbox's marks
 export async function load() {
   for (const r of (await sql().query<Row>(`select ${COLUMNS.join(", ")} from inbox`)).rows) rows.set(r.id, r);
   filled = (await sql().query("select 1 from meta where name = 'inbox'")).rows.length > 0;
-  if (filled) await readBack();
-}
-
-// What a desk of a branch from before the table read while Try ran it, as it kept it in seen.json: each unread row
-// whose session it read since the row's news is read, as desk starts again on its own branch.
-async function readBack() {
-  const marks = before().sessions;
-  const now = [...rows.values()].filter((r) => r.read === null && (marks[r.id] ?? 0) >= r.at);
-  if (!now.length) return;
-  await db.write(async (tx) => {
-    for (const r of now) await tx.query("update inbox set read = $1 where id = $2", [marks[r.id], r.id]);
-  });
-  for (const r of now) rows.set(r.id, { ...r, read: marks[r.id] });
 }
 
 // --- reading -------------------------------------------------------------------------------------------------------

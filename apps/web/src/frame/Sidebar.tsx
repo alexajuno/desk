@@ -1,7 +1,6 @@
 // The sidebar on every page (templates/base.html's aside.side), Linear's (measured on linear.app on 20 Oct): Inbox, My
 // issues; Your teams, each team folding open to its own Issues and Projects, as Linear's team does;
-// then the sessions you pinned and those still in hand, as claude.ai's Starred and Recents, then what desk's checkout
-// runs. Linear's Workspace section is left out ("projects are under teams already. and automations... honestly i
+// then the sessions you pinned and those still in hand, as claude.ai's Starred and Recents. Linear's Workspace section is left out ("projects are under teams already. and automations... honestly i
 // seldomly get into there", the user, 23 Oct): Projects stays on G then P, and Automations on its address.
 // An issue in progress or landing shows in Chats, by its session ("now that the chats section display all issues, feel like we don't need the in progress
 // section anymore", the user, 19 Oct); the rest stay in Issues.
@@ -10,7 +9,7 @@ import { useState, type ReactNode } from "react";
 import { useLocation } from "react-router";
 import { deskPath, go, Go } from "../app/nav";
 import type { State } from "../lib/desk";
-import { frame, type ChatRow, type FrameData } from "../store/frame";
+import { frame, type ChatRow } from "../store/frame";
 import { issues } from "../store/issues";
 import { ui } from "../store/ui";
 import { deleteChat, pinChat, renameChat } from "../sessions/live";
@@ -116,25 +115,6 @@ function Fold({ name, folded, toggle, children }: { name: string; folded: Set<st
   );
 }
 
-// An issue's title as the rows say it, which a change brings before the frame that follows it.
-const held = (i: { slug: string; title: string }) => issues.bySlug.get(i.slug) ?? i;
-const NotMain = observer(function NotMain({ trying, line }: { trying: NonNullable<FrameData["trying"]>; line: FrameData["line"] }) {
-  const waits = line.map((w, i) => `${i === 0 ? "Next" : i + 1}: ${held(w.issue).title}, to ${w.for === "review" ? "try" : "test"} ${w.branch}`);
-  const title = [`desk runs ${trying.branch}, not main: a session's test, or your Try`, ...waits].join("\n");
-  const body = (
-    <>
-      {GLYPH.branch}
-      <span className="not-main-text">
-        <span className="not-main-lead">Not on main{line.length > 0 && <span> · {line.length} waiting</span>}</span>
-        <span className="nav-title">{trying.issue ? held(trying.issue).title : trying.branch}</span>
-      </span>
-    </>
-  );
-  return trying.issue
-    ? <Go className="not-main" to={`/issue/${trying.slug}`} title={title}>{body}</Go>
-    : <div className="not-main" title={title}>{body}</div>;
-});
-
 export const Sidebar = observer(function Sidebar() {
   const here = deskPath(useLocation().pathname);
   const d = frame.data;
@@ -211,12 +191,8 @@ export const Sidebar = observer(function Sidebar() {
       {d && d.pinned.length > 0 && <Fold name="Pinned" folded={folded} toggle={toggle}>{d.pinned.map((c) => chatRow(c, true))}</Fold>}
       {d && d.chats.length > 0 && <Fold name="Chats" folded={folded} toggle={toggle}>{d.chats.map((c) => chatRow(c, false))}</Fold>}
       {/* The foot stays at the sidebar's bottom while the chats scroll under it ("sticky to the bottom", the user, 28
-          Oct). A card says while desk's checkout runs a branch, not main: a session's test or your Try. It informs, it
-          is no chat ("it's just a way of informing that we are running a version that's not on desk's main yet", "so
-          don't build it like a chat", the user, 28 Oct), and says who waits in line for 8790 only as a count; its
-          tooltip names them. The ? under it shows only on a phone, which has no window bar to hold it (phone.css). */}
+          Oct), holding the Help menu's ?. It shows only on a phone, which has no window bar to hold the ? (phone.css). */}
       <div className="side-foot">
-        {d?.trying && <NotMain trying={d.trying} line={d.line} />}
         <HelpButton />
       </div>
     </aside>

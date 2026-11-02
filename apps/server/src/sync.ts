@@ -23,7 +23,7 @@
 // them. A row is the table's, less what the app is not sent (db.ts, HELD): an <issue> is every field of issue.md but
 // its description, a <team> its slug, title, state, created and aliases, a <chat> its id, session, issue, title and who it is
 // with, an Inbox <row> every column (inbox.ts); a deleted row comes as null. A description is part of its issue's row, so a new one comes as a change: the page
-// showing it asks again. A <frame> is the sidebar's sessions and desk's checkout, with each open issue's session state
+// showing it asks again. A <frame> is the sidebar's sessions, with each open issue's session state
 // (pages.ts, framePage), which no table holds yet. "files" names the issues whose files beside issue.md may have changed
 // (a screenshot, or an older issue's plan.md and result.md), which no row holds either: a page showing one of them asks
 // again.
