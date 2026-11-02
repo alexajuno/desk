@@ -3,7 +3,7 @@
 // separate module from desk. which handles auto routing between profiles ... and we'll write a seat connection in desk.
 // which will display seat's related numbers"). `seat ls --json` is the contract: desk never reads seat's files.
 import { run } from "./proc.ts";
-import { HttpError } from "./pages.ts";
+import { HttpError } from "./httperror.ts";
 
 export interface Window {
   percent: number;

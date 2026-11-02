@@ -30,15 +30,8 @@ import * as updates from "./updates.ts";
 import * as views from "./views.ts";
 import { nearDay, parseLocal, shortDate, waited } from "./when.ts";
 
-export class HttpError extends Error {
-  status: number;
-  detail: unknown; // what the answer's "detail" says: the message, or FastAPI's list for a field left out
-  constructor(status: number, detail: string, shaped?: unknown) {
-    super(detail);
-    this.status = status;
-    this.detail = shaped ?? detail;
-  }
-}
+import { HttpError } from "./httperror.ts";
+export { HttpError };
 
 // Changes whenever an issue's or a team's file is added, removed or edited: "<files>:<newest mtime in ns>".
 export function version(): string {
