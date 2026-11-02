@@ -503,8 +503,12 @@ app.post<{ Params: { id: string }; Body: { ask: string; result: PermissionResult
   return row(s);
 });
 
+// Answered once its process has exited, so that it can start again at once on another host, as when desk moves it to
+// the newest (hosted.ts).
 app.post<{ Params: { id: string } }>("/sessions/:id/close", async (req) => {
-  close(find(req.params.id));
+  const s = find(req.params.id);
+  close(s);
+  await Promise.race([s.ended, new Promise((r) => setTimeout(r, 15_000))]);
   return {};
 });
 

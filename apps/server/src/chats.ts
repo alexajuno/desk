@@ -449,7 +449,6 @@ export const startIn = (chat: Chat, folder: string, bare: boolean) =>
 async function restartAs(chat: Chat, became: Partial<Chat>, runs: models.Pick, title: string, message?: hosted.Content) {
   if (await hosted.holds(chat.session)) {
     await hosted.close(chat.session).catch(() => {});
-    await hosted.released(chat.session);
   }
   const was = { ...chat };
   Object.assign(chat, became);
@@ -638,7 +637,6 @@ async function carryOver(id: string, base: string) {
   }
   if (row.kind === "host") {
     await hosted.close(chat.session).catch(() => {});
-    await hosted.released(chat.session);
   } else {
     // From before the panel: drop the daemon's record of it, which would otherwise wake it in its old folder.
     await run(["claude", "rm", row.id!], { timeout: 30 });

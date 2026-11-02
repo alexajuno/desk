@@ -4,8 +4,9 @@
 //
 // Each host listens on a socket named by its version, desk-host-<port>-<version>.sock, so that one of new code starts
 // beside one still running a turn. A new session starts on the host of the code checked out now; anything for a session
-// goes to the host that holds it. A host of older code takes no new session, closes each of its own once idle for 5
-// minutes (host.ts), and desk asks it to quit once it lists none (keepCurrent). Until 2 Nov one host ran on
+// goes to the host that holds it, and one idle on a host of older code moves to the newest on its next message (send).
+// A host of older code takes no new session, closes each of its own once idle for 5 minutes (host.ts), and desk asks it
+// to quit once it lists none (keepCurrent). Until 2 Nov one host ran on
 // desk-host-<port>.sock, swapped only once every session had been quiet for 10 minutes, and on 2 Nov that took 46 ("i
 // can't create new session for 10min. which is kinda suck", the user).
 import { createHash } from "node:crypto";
@@ -249,16 +250,23 @@ export async function start(o: StartOptions): Promise<HostRow> {
   return row;
 }
 
-// Now: Claude reads it at once, as Claude Code's send now (host.ts, /send). A host of older code sends it as any other.
+// Now: Claude reads it at once, as Claude Code's send now (host.ts, /send). A session idle on a host of older code, not
+// working, asking or running a task, moves to the newest instead: closed there, and the 404 tells the caller to start
+// it again with the message (agents.ts, tell), as one the host closed. One a host from before 2 Nov holds stays: its
+// list says no tasks, so it might be running one.
 export async function send(id: string, content: Content, uuid?: string, now = false): Promise<HostRow> {
-  return call<HostRow>(at(id), "POST", `/sessions/${id}/send`, { content, ...(uuid ? { uuid } : {}), ...(now ? { priority: "now" } : {}) });
+  const socket = at(id), row = listed.get(socket)?.find((r) => r.id === id);
+  if (socket !== socketOf(current()) && row && !row.working && !row.asks && row.tasks === 0) {
+    await close(id);
+    throw new HostError("It moves to the newest session host", 404);
+  }
+  return call<HostRow>(socket, "POST", `/sessions/${id}/send`, { content, ...(uuid ? { uuid } : {}), ...(now ? { priority: "now" } : {}) });
 }
 
 export const withdraw = async (id: string, uuid: string) => (await call<{ withdrawn: boolean }>(at(id), "POST", `/sessions/${id}/withdraw`, { uuid })).withdrawn;
 
 export const interrupt = (id: string) => call(at(id), "POST", `/sessions/${id}/interrupt`, {});
 export const answer = (id: string, ask: string, result: Record<string, unknown>) => call(at(id), "POST", `/sessions/${id}/answer`, { ask, result });
-export const close = (id: string) => call(at(id), "POST", `/sessions/${id}/close`, {});
 export const commands = (id: string) => call<{ name: string; description: string; argumentHint?: string }[]>(at(id), "GET", `/sessions/${id}/commands`);
 export const settings = (id: string, set: { model?: string; effort?: StartOptions["effort"] }) => call<HostRow>(at(id), "POST", `/sessions/${id}/settings`, set);
 export const context = (id: string) => call<{ tokens: number; max: number; percent: number }>(at(id), "GET", `/sessions/${id}/context`);
@@ -266,8 +274,13 @@ export const context = (id: string) => call<{ tokens: number; max: number; perce
 // The session's event stream from the host holding it (host.ts says what comes over it).
 export const events = (id: string) => new WebSocket(`ws+unix://${at(id)}:/sessions/${id}/events`);
 
-// Wait until no host holds the session: its process has ended.
-export async function released(id: string, seconds = 15) {
-  const deadline = performance.now() + seconds * 1000;
-  while (performance.now() < deadline && (await holds(id))) await sleep(100);
+// Close the session's process; its transcript stays, and its next message starts it again. The host answers once the
+// process has ended (15 s at most), so that it can start again at once on any host. A host from before 2 Nov answers
+// at once, and its own wait for the end, in POST /sessions, does not cover a start on another host: desk gives the
+// process a second.
+export async function close(id: string): Promise<void> {
+  const socket = at(id);
+  await call(socket, "POST", `/sessions/${id}/close`, {});
+  cached = [0, []];
+  if (basename(socket) === OLD) await sleep(1000);
 }

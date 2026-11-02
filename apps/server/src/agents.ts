@@ -191,7 +191,8 @@ export async function tell(session: string, content: hosted.Content, uuid?: stri
       await hosted.send(session, content, uuid, now);
       return;
     } catch (error) {
-      if (!(error instanceof hosted.HostError && error.status === 404)) throw error; // closed as we asked: start it again
+      // Closed, as we asked, or moving to the newest host (hosted.ts, send): start it again.
+      if (!(error instanceof hosted.HostError && error.status === 404)) throw error;
     }
   }
   const row = await liveRow(session, true);
