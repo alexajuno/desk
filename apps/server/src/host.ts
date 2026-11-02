@@ -39,8 +39,9 @@ const option = (name: string) => (process.argv.includes(name) ? process.argv[pro
 const SOCKET = option("--socket");
 if (!SOCKET) throw new Error("usage: node host.ts --socket <path> [--desk <desk's address>]");
 const DESK = option("--desk"); // desk, which the host tells what each session does: http://127.0.0.1:<port>
-const RELAY = Number(option("--relay")) || 0; // the browser relay's port (relay.ts), or none
-// desk compares this with its own copy of the files, and restarts the host while nothing works when they differ.
+const RELAY = Number(option("--relay")) || 0; // the first port the browser relay tries (relay.ts), or 0 for none
+// desk compares this with its own copy of the files, and starts a host of the new code beside this one when they differ;
+// this one then drains, taking no new session, and desk asks it to quit once it holds none (hosted.ts).
 const VERSION = ["./host.ts", "./relay.ts"].reduce((h, f) => h.update(readFileSync(fileURLToPath(new URL(f, import.meta.url)))), createHash("sha1"))
   .digest("hex").slice(0, 12);
 // The user's own Claude Code, the one their terminal runs, rather than the copy the SDK's package carries.
@@ -222,7 +223,7 @@ function start(o: StartOptions): Session {
       pathToClaudeCodeExecutable: CLAUDE,
       // DESK_CDP_ENDPOINT: the session's own way into the agents' Chrome, which chrome-mcp.sh connects its chrome MCP to.
       env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "desk", BASH_MAX_TIMEOUT_MS: LONGEST_COMMAND,
-        ...(relaying ? { DESK_CDP_ENDPOINT: `ws://127.0.0.1:${RELAY}/cdp/${id}` } : {}) },
+        ...(relayPort ? { DESK_CDP_ENDPOINT: `ws://127.0.0.1:${relayPort}/cdp/${id}` } : {}) },
       // A tool call Claude Code wants a yes for, and every AskUserQuestion, waits here for the user's answer in the panel.
       canUseTool: (tool, input, { signal, toolUseID }) => new Promise<PermissionResult>((resolve) => {
         const askId = toolUseID ?? randomUUID();
@@ -396,9 +397,10 @@ function reach() {
   const ws = new WebSocket(`${DESK.replace(/^http/, "ws")}/api/host`, { origin: DESK });
   ws.on("open", () => {
     desk = ws;
-    // relay: whether the browser relay runs, and tabs, what it noted: desk keeps the tabs (tabs.ts).
-    ws.send(JSON.stringify({ type: "hello", sessions: [...sessions.values()].filter((s) => !s.closed).map(stateOf),
-      relay: relaying, tabs: relaying ? relay.tabs() : [] }));
+    // version: this host's, which tells desk which of its hosts this is; relay: whether the browser relay runs, and tabs,
+    // what it noted: desk keeps the tabs (tabs.ts).
+    ws.send(JSON.stringify({ type: "hello", version: VERSION, sessions: [...sessions.values()].filter((s) => !s.closed).map(stateOf),
+      relay: Boolean(relayPort), tabs: relayPort ? relay.tabs() : [] }));
   });
   // desk answers with the tabs a host before this one noted, as {"type": "owners", "tabs": [{target, session}, ...]}, and
   // asks for a tab for a session, a link clicked in its chat, as {"type": "open", "session", "url"}.
@@ -409,8 +411,8 @@ function reach() {
     } catch {
       return;
     }
-    if (m.type === "owners" && relaying && Array.isArray(m.tabs)) relay.adopt(m.tabs);
-    else if (m.type === "open" && relaying && typeof m.session === "string" && typeof m.url === "string" && /^https?:\/\//.test(m.url))
+    if (m.type === "owners" && relayPort && Array.isArray(m.tabs)) relay.adopt(m.tabs);
+    else if (m.type === "open" && relayPort && typeof m.session === "string" && typeof m.url === "string" && /^https?:\/\//.test(m.url))
       relay.open(m.session, m.url).catch((e: Error) => console.log(`no tab for ${m.url}: ${e.message}`));
   });
   ws.on("close", () => {
@@ -436,7 +438,8 @@ setInterval(() => {
   for (const s of sessions.values()) if (!s.working && !s.asks.size && !s.tasks.size && Date.now() - s.since > IDLE_CLOSE) close(s);
 }, 60_000);
 
-const row = (s: Session) => ({ id: s.id, cwd: s.cwd, title: s.title, working: s.working, since: s.since, asks: s.asks.size, watchers: s.watchers.size });
+const row = (s: Session) => ({ id: s.id, cwd: s.cwd, title: s.title, working: s.working, since: s.since, asks: s.asks.size, tasks: s.tasks.size,
+  watchers: s.watchers.size });
 
 function find(id: string): Session {
   const s = sessions.get(id);
@@ -536,11 +539,10 @@ app.get<{ Params: { id: string } }>("/sessions/:id/events", { websocket: true },
   ws.on("close", () => s.watchers.delete(ws));
 });
 
-// desk asks the host to step down for a newer one, which it does only while nothing works or runs in the background,
-// nor has for a while: a session that just finished may yet start a turn of its own, such as a wakeup it scheduled.
-const QUIET = 10 * 60_000; // ms
+// desk asks a host of older code to quit once it lists no session (hosted.ts). It refuses while one still works, waits on
+// the user or runs something in the background, whose process would end with it.
 app.post("/quit", async (_req, reply) => {
-  if ([...sessions.values()].some((s) => s.working || s.asks.size || s.tasks.size || Date.now() - s.since < QUIET))
+  if ([...sessions.values()].some((s) => s.working || s.asks.size || s.tasks.size))
     return reply.code(409).send({ detail: "A session is working" });
   setTimeout(stop, 50);
   return {};
@@ -553,11 +555,12 @@ function stop() {
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
 
-// The browser relay goes up before any session starts, each of which reaches the Chrome through it. When its port is
-// taken, the sessions go straight to the Chrome, as before it.
-const relaying = RELAY > 0 && await relay.start(RELAY, (news) => {
+// The browser relay goes up before any session starts, each of which reaches the Chrome through it, on the first port
+// free from RELAY: a host of older code may still drain on RELAY, and a third on the next. When none is free, the
+// sessions go straight to the Chrome, as before the relay.
+const relayPort = RELAY > 0 ? await relay.start(RELAY, (news) => {
   if (desk?.readyState === WebSocket.OPEN) desk.send(JSON.stringify(news));
-}).then(() => true, (e: Error) => (console.log(`no browser relay: ${e.message}`), false));
+}).then((port) => (console.log(`browser relay on ${port}`), port), (e: Error) => (console.log(`no browser relay: ${e.message}`), 0)) : 0;
 
 if (existsSync(SOCKET)) unlinkSync(SOCKET); // a host that died left it behind; hosted.ts checks no host answers first
 await app.listen({ path: SOCKET });

@@ -50,8 +50,11 @@ const pages = new Map<string, { url: string; title: string; opener?: string; sai
 const owners = new Map<string, string>(); // the session that opened each tab, by its target id
 let tell: (news: TabNews) => void = () => {};
 
-// Listen on 127.0.0.1:<port>, telling what each session's tabs do as they change.
-export function start(port: number, told: (news: TabNews) => void): Promise<void> {
+const PORTS = 4; // ports a relay tries, one after another: one host per landing still draining, the newest on the next
+
+// Listen on 127.0.0.1, on the first port free from first, telling what each session's tabs do as they change; it answers
+// with the port.
+export async function start(first: number, told: (news: TabNews) => void): Promise<number> {
   tell = told;
   const wss = new WebSocketServer({ noServer: true, maxPayload: BIGGEST });
   const server = createServer((_req, res) => res.writeHead(404).end());
@@ -60,11 +63,19 @@ export function start(port: number, told: (news: TabNews) => void): Promise<void
     if (!session) return void socket.destroy();
     wss.handleUpgrade(req, socket, head, (mcp) => pipe(mcp, session));
   });
-  void watch(); // the app may be up already, with tabs a host before this one noted
-  return new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(port, "127.0.0.1", () => resolve());
-  });
+  for (let port = first; ; port++) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(port, "127.0.0.1", () => (server.off("error", reject), resolve()));
+      });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "EADDRINUSE" && port < first + PORTS - 1) continue;
+      throw e;
+    }
+    void watch(); // the app may be up already, with tabs a host before this one noted
+    return port;
+  }
 }
 
 // One session's connection: through to the app's, both ways, its new tabs asked of the app, and desk's own pages kept
