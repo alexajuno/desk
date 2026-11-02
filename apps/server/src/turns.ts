@@ -5,21 +5,23 @@
 // sessions table, which the Inbox, the sidebar and the issues' moves read (pages.ts), rather than Claude Code's
 // transcripts and `claude agents`, asked again every 5 s.
 //
-//     {"type": "hello", "sessions": [<state>, ...]}    first, on every connect: each session the host holds
+//     {"type": "hello", "version": "<v>", "sessions": [<state>, ...]}    first, on every connect: each session the host holds
 //     {"type": "session", ...<state>}                  one changed; "open": false once its process ended
 //     {"type": "tab", ...}, "tab-closed" or "tab-used"   a session's tab in desk's app (tabs.ts)
 //
-// Its hello also says whether its browser relay runs and the tabs it noted, which desk answers (tabs.ts).
+// Its hello also says the version of its code (none from a host before 2 Nov), whether its browser relay runs and the
+// tabs it noted, which desk answers (tabs.ts).
 //
-// A <state> is {id, open, working, asks, prompted, replied, ended}, its times in ms, null while the host has seen none. The
-// socket closing says the host is gone, and every process it held with it. A desk that restarts, as on every landing,
-// misses nothing: the host connects again within a second and says everything anew.
+// A <state> is {id, open, working, asks, prompted, replied, ended}, its times in ms, null while the host has seen none.
+// More than one host runs while one of older code drains beside the newest (hosted.ts), each on its own socket, and desk
+// keeps the sessions each holds, from its hello and its words since. A socket closing says that host is gone, and every
+// process it held with it. A session moving to the newest says closed on one socket and open on the other, in either
+// order: the closed is skipped while another host holds it. A desk that restarts, as on every landing, misses nothing:
+// each host connects again within a second and says everything anew.
 //
-// A host of older code says nothing. While one runs, as for the hours after this landed until it gave way to one of
-// this code (hosted.ts swaps it once its sessions are quiet), desk reads as it did before, from the transcripts
-// (sessions.ts) and the host's list, and looks again every few seconds, since nothing tells it (lookWhileOlder); so
-// does the moment after desk starts, before the host's hello. On 19 Oct 8790's host had run since the night before,
-// its sessions never all quiet.
+// A host of code from before 19 Oct said nothing. While one ran, and in the moment after desk starts, before the hosts'
+// hellos, desk reads as it did before, from the transcripts (sessions.ts) and the hosts' lists, and looks again every
+// few seconds, since nothing tells it (lookWhileOlder). On 19 Oct 8790's host had run since the night before.
 import { statSync } from "node:fs";
 import type { WebSocket } from "ws";
 import type { Tab } from "./relay.ts";
@@ -55,7 +57,16 @@ interface State {
 const rows = new Map<string, Row>();
 // A host of this code tells desk: the table is current. False while an older host runs, until a host says hello.
 let reporting = false;
-let host: WebSocket | null = null; // the host's socket now
+// Each host's socket, with what it said: the version of its code (null from a host before 2 Nov), whether its browser
+// relay runs, and the sessions it holds now.
+interface Link {
+  version: string | null;
+  relay: boolean;
+  holds: Set<string>;
+}
+const links = new Map<WebSocket, Link>(); // in the order they said hello
+// Every host's words, in one queue: a session moving says closed on one socket and open on another.
+let heard = Promise.resolve();
 let stopping = false;
 const listeners = new Set<Listener>();
 const waiters = new Set<() => void>(); // settled's, each looking again at every change
@@ -79,10 +90,20 @@ function changed(sessions: string[] | null, ended: string[] = []) {
 
 export const reports = () => reporting;
 
-// A tab for the session at the address, which the host's relay opens (relay.ts): false with no host to ask.
+// The socket of the host holding the session, else the newest's, where it starts on its next message.
+function linkOf(session: string): WebSocket | null {
+  const open = [...links].filter(([ws]) => ws.readyState === ws.OPEN), version = hosted.version();
+  return (open.find(([, l]) => l.holds.has(session)) ?? open.find(([, l]) => l.version === version) ?? open.at(-1))?.[0] ?? null;
+}
+
+// Whether a host other than the one on this socket holds the session.
+const elsewhere = (ws: WebSocket, session: string) => [...links].some(([w, l]) => w !== ws && l.holds.has(session));
+
+// A tab for the session at the address, which the relay of the host holding it opens (relay.ts): false with no host to ask.
 export function openTab(session: string, url: string): boolean {
-  if (!host || host.readyState !== host.OPEN) return false;
-  host.send(JSON.stringify({ type: "open", session, url }));
+  const ws = linkOf(session);
+  if (!ws) return false;
+  ws.send(JSON.stringify({ type: "open", session, url }));
   return true;
 }
 
@@ -152,10 +173,10 @@ async function upsertAll(tx: db.Db, states: State[]): Promise<Row[]> {
   return written;
 }
 
-// Those whose process is gone: a turn that ran ended with it.
-const closeAll = (tx: db.Db, except: string[] = []) =>
-  tx.query<Row>(`update sessions set open = false, working = false, asks = 0, ended = case when working then now() else ended end, updated = now()
-    where open and not (id = any($1)) returning ${COLUMNS}`, [except]);
+// Those whose process is gone: a turn that ran ended with it. Every open one but those excepted, or only those named.
+const CLOSE = "update sessions set open = false, working = false, asks = 0, ended = case when working then now() else ended end, updated = now() where open and";
+const closeAll = (tx: db.Db, except: string[] = []) => tx.query<Row>(`${CLOSE} not (id = any($1)) returning ${COLUMNS}`, [except]);
+const closeOnly = (tx: db.Db, ids: string[]) => tx.query<Row>(`${CLOSE} id = any($1) returning ${COLUMNS}`, [ids]);
 
 // Keep what a write returned; a chat whose turn started or ended moved now (chats.ts), and the listeners are told.
 function kept(written: Row[]) {
@@ -195,16 +216,18 @@ async function catchUp() {
   if (behind.length) kept(await db.write((tx) => upsertAll(tx, behind)));
 }
 
-// While a host of older code runs, which tells desk nothing, desk looks again at every session every few seconds, as
-// it did before the host told it: the listeners read the transcripts then (sessions.ts). The host's hello ends it.
+// Until a host says hello, desk looks again at every session every few seconds, as it did before the host told it: the
+// listeners read the transcripts then (sessions.ts). The first hello ends it.
 const OLDER_LOOK = 5000; // ms
 let older: NodeJS.Timeout | null = null;
 const lookWhileOlder = () => { older ??= setInterval(() => changed(null), OLDER_LOOK); };
 
-async function hello(ws: WebSocket, states: State[]) {
-  host = ws;
-  // Those the host no longer holds ended while desk was away.
-  kept(await db.write(async (tx) => [...(await closeAll(tx, states.map((s) => s.id))).rows, ...(await upsertAll(tx, states))]));
+async function hello(ws: WebSocket, version: string | undefined, relay: boolean, states: State[]) {
+  links.set(ws, { version: version ?? null, relay, holds: new Set(states.map((s) => s.id)) });
+  // Those no host holds now ended while desk was away. Every host's, not this one's alone: when desk starts, each host
+  // says hello on its own, and the others' sessions would show closed for a moment, as a turn's end.
+  const held = new Set([...[...links.values()].flatMap((l) => [...l.holds]), ...(await hosted.sessions(true)).map((r) => r.id)]);
+  kept(await db.write(async (tx) => [...(await closeAll(tx, [...held])).rows, ...(await upsertAll(tx, states))]));
   if (!reporting) {
     await catchUp();
     reporting = true;
@@ -214,11 +237,19 @@ async function hello(ws: WebSocket, states: State[]) {
   }
 }
 
-// The host's socket: what it says, in order.
+// A host's word for one session. Its closed, once the session moved to another host that holds it now, says nothing.
+async function word(ws: WebSocket, s: State) {
+  const link = links.get(ws);
+  if (s.open) link?.holds.add(s.id);
+  else link?.holds.delete(s.id);
+  if (!s.open && elsewhere(ws, s.id)) return;
+  kept([await db.write((tx) => upsert(tx, s))]);
+}
+
+// A host's socket: what it says, in order.
 export function connect(ws: WebSocket) {
-  let heard = Promise.resolve();
   ws.on("message", (data) => {
-    let e: { type?: string; sessions?: State[]; relay?: boolean; tabs?: Tab[]; target?: string } & Partial<State> & Partial<Tab>;
+    let e: { type?: string; version?: string; sessions?: State[]; relay?: boolean; tabs?: Tab[]; target?: string } & Partial<State> & Partial<Tab>;
     try {
       e = JSON.parse(data.toString());
     } catch {
@@ -226,26 +257,29 @@ export function connect(ws: WebSocket) {
     }
     heard = heard.then(async () => {
       if (e.type === "hello") {
-        await hello(ws, e.sessions ?? []);
-        await tabs.hello(ws, e.relay, e.tabs ?? []);
-      } else if (e.type === "session" && e.id) kept([await db.write((tx) => upsert(tx, e as State))]);
+        await hello(ws, e.version, Boolean(e.relay), e.sessions ?? []);
+        await tabs.hello(ws, e.relay, e.tabs ?? [], [...links].some(([w, l]) => w !== ws && l.relay));
+      } else if (e.type === "session" && e.id) await word(ws, e as State);
       else if (e.type === "tab" && e.target && e.session) await tabs.opened(e as Tab, prompted(e.session));
       else if (e.type === "tab-closed" && e.target) await tabs.closed(e.target);
       else if (e.type === "tab-used" && e.target && e.session) tabs.used(e.target, e.session, prompted(e.session));
     }).catch((error) => console.error("desk: the host's word", error));
   });
-  // The host is gone, and every process it held, unless desk is the one stopping.
+  // That host is gone, and every process it held, unless desk is the one stopping: its sessions show closed, but for
+  // one another host holds now.
   ws.on("close", () => {
     heard = heard.then(async () => {
-      if (host !== ws || stopping) return;
-      host = null;
-      kept((await db.write((tx) => closeAll(tx))).rows);
+      const link = links.get(ws);
+      links.delete(ws);
+      if (!link || stopping) return;
+      const gone = [...link.holds].filter((id) => !elsewhere(ws, id));
+      if (gone.length) kept((await db.write((tx) => closeOnly(tx, gone))).rows);
     }).catch((error) => console.error("desk: the host left", error));
   });
 }
 
 // At start: the table as it was, and whether a host runs. With none, no process runs, and the table says so at once;
-// one of this code says hello in a moment; an older one says nothing until it gives way.
+// each that runs says hello in a moment.
 export async function load() {
   for (const r of (await db.sql().query<Row>(`select ${COLUMNS} from sessions`)).rows) rows.set(r.id, r);
   if ((await hosted.standing()) !== "none") return lookWhileOlder();

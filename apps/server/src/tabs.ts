@@ -8,7 +8,8 @@
 //
 // The relay lives as long as its host, and a new host's knows none of the tabs. So its hello says what it noted, and desk
 // answers with the rest it keeps, {"type": "owners", "tabs": [{target, session}, ...]}: the relay takes back each one
-// still open, and says the others closed. A host with no relay leaves no tab known, and the table empties.
+// still open, and says the others closed, a draining host's sessions' too, which keep them once they move to it. A host
+// with no relay leaves no tab known, and the table empties, unless another host's relay runs.
 import type { Transaction } from "@electric-sql/pglite";
 import type { WebSocket } from "ws";
 import * as db from "./db.ts";
@@ -56,10 +57,14 @@ export async function closed(target: string) {
   for (const fn of closers) fn(last);
 }
 
-// The host's hello: relay, whether its relay runs, and tabs, the ones it noted.
-export async function hello(ws: WebSocket, relay: boolean | undefined, tabs: Tab[]) {
+// A host's hello: relay, whether its relay runs, and tabs, the ones it noted; another, whether the relay of another host,
+// one draining beside it (hosted.ts), runs and keeps the tabs.
+export async function hello(ws: WebSocket, relay: boolean | undefined, tabs: Tab[], another = false) {
   const rest = await db.write(async (tx) => {
-    if (!relay) return void (await tx.query("delete from tabs"));
+    if (!relay) {
+      if (!another) await tx.query("delete from tabs");
+      return;
+    }
     for (const t of tabs) await keep(tx, t);
     return (await tx.query<{ target: string; session: string }>("select target, session from tabs where not (target = any($1))",
       [tabs.map((t) => t.target)])).rows;

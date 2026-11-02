@@ -69,6 +69,7 @@ export interface StartOptions {
 
 // The version a host of the code checked out now would report (host.ts computes it the same way).
 const current = () => CODE.reduce((h, f) => h.update(readFileSync(f)), createHash("sha1")).digest("hex").slice(0, 12);
+export const version = current;
 
 export class HostError extends Error {
   status: number;
