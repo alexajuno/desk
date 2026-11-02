@@ -9,6 +9,7 @@ import { CONNECT, PORT, TEST } from "./config.ts";
 import * as db from "./db.ts";
 import * as hosted from "./hosted.ts";
 import * as inbox from "./inbox.ts";
+import * as mail from "./mail.ts";
 import * as store from "./issues.ts";
 import * as models from "./models.ts";
 import * as notices from "./notices.ts";
@@ -60,7 +61,10 @@ if (!TEST) {
   automations.startClock(); // each automation whose time came fires
   pool.start(); // the test desks' line moves on its own
 }
-if (CONNECT) slack.start(); // Slack's messages come in as notices (notices.ts)
+if (CONNECT) {
+  slack.start(); // Slack's messages come in as notices (notices.ts)
+  mail.start(); // and Gmail's mail, read each minute
+}
 
 let stopping = false;
 async function stop() {
@@ -70,6 +74,7 @@ async function stop() {
   sync.closeAll();
   turns.stop();
   slack.stop();
+  mail.stop();
   const late = setTimeout(() => process.exit(0), 5000);
   try {
     await app.close();

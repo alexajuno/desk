@@ -42,6 +42,19 @@ export async function judge(id: string, verdict: Verdict, why: string) {
   await sql().query("update notices set verdict = $2, why = $3 where id = $1", [id, verdict, why]);
 }
 
+// Which of these ids are written already, as a poll asks before it fetches what it has not seen.
+export async function known(ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const r = await sql().query<{ id: string }>("select id from notices where id = any($1)", [ids]);
+  return new Set(r.rows.map((x) => x.id));
+}
+
+// When the newest notice of one source was sent, or null when none is written.
+export async function newest(source: Notice["source"]): Promise<number | null> {
+  const r = await sql().query<{ at: unknown }>("select max(at) as at from notices where source = $1", [source]);
+  return r.rows[0]?.at == null ? null : Number(r.rows[0].at);
+}
+
 // The notices the firewall has yet to judge, oldest first.
 export async function unjudged(): Promise<Notice[]> {
   return (await sql().query<Record<string, unknown>>("select * from notices where verdict is null order by at")).rows.map(asNotice);
