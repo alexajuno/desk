@@ -7,7 +7,7 @@
 // Mail is judged as muse's bin/mail-daily judges it, with the same ordinary topics, the secretary's
 // (~/projects/muse/claude/agents/secretary.md, "## Ordinary topics"), read again on each call so that a topic the
 // secretary adds holds at once: an ordinary mail is dropped, with its topic as why, and bin/mail-daily reads these
-// verdicts at 08:00 rather than judging again. A Slack message is never dropped: it pops up or waits.
+// verdicts at 08:00 (GET /api/mail/verdicts) rather than judging again. A Slack message is never dropped: it pops up or waits.
 //
 // One `claude -p` call judges all that came in the last minute, BATCH at most, on Sonnet with no tools, no settings and
 // no session file, as bin/mail-daily's call. Its usage goes to muse's runs file as bin/usage_record.py writes it, since a

@@ -377,6 +377,20 @@ export async function create(): Promise<FastifyInstance> {
     await replies.discard(req.params.id);
     return { discarded: true };
   });
+  // The firewall's verdict on each mail that came since a time, for muse's bin/mail-daily, which reads them at 08:00
+  // rather than judging the day's mail again (firewall.ts): by Gmail's own id, now (it popped up, and its row is in the
+  // Inbox), later (worth the report), dropped (an ordinary topic, the why naming it), or null while the firewall has yet
+  // to judge it. A mail desk does not list, as one from before KEEP_DAYS or while desk was down long, has no verdict here.
+  // No mail's text: bin/mail-daily reads that from Gmail.
+  app.get("/api/mail/verdicts", async (req: Req) => {
+    const since = Number(req.query.since ?? Date.now() / 1000 - 86400);
+    if (!Number.isFinite(since)) throw new HttpError(400, "since is a time in seconds, as Unix counts it.");
+    return {
+      mails: (await notices.since("mail", since)).map((n) => ({
+        id: n.id.slice("mail:".length), thread: n.thread.slice("mail:".length), at: n.at, verdict: n.verdict, why: n.why,
+      })),
+    };
+  });
   // A made-up login that ended, or held again, on a test desk, which connects to neither Slack nor Gmail (logins.ts).
   app.post("/api/logins", async (req: Req) => {
     if (!TEST) throw new HttpError(403, "Only a test desk takes a made-up login.");
