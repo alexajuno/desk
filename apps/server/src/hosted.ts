@@ -1,16 +1,27 @@
-// desk's side of the session host (host.ts): starting it when none answers, replacing it with a newer one while nothing
-// works, and asking it things over its unix socket. One host per desk port, so a second desk for testing keeps its own.
+// desk's side of the session hosts (host.ts): starting one of the code checked out now when a session needs it, and at
+// once beside one of older code, which drains; and asking each its things over its unix socket. Each desk port keeps
+// its own, so a test desk's never meet the user's.
+//
+// Each host listens on a socket named by its version, desk-host-<port>-<version>.sock, so that one of new code starts
+// beside one still running a turn. A new session starts on the host of the code checked out now; anything for a session
+// goes to the host that holds it. A host of older code takes no new session, closes each of its own once idle for 5
+// minutes (host.ts), and desk asks it to quit once it lists none (keepCurrent). Until 2 Nov one host ran on
+// desk-host-<port>.sock, swapped only once every session had been quiet for 10 minutes, and on 2 Nov that took 46 ("i
+// can't create new session for 10min. which is kinda suck", the user).
 import { createHash } from "node:crypto";
-import { mkdirSync, openSync, readFileSync } from "node:fs";
+import { mkdirSync, openSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { request as httpRequest } from "node:http";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { spawn } from "node:child_process";
 import { WebSocket } from "ws";
 import { HOME, PORT, RELAY_PORT, REPO, TEST } from "./config.ts";
 import { sleep, which } from "./proc.ts";
 import { find, forkOf, pathOf } from "./transcript.ts";
 
-export const SOCKET = join(process.env.XDG_RUNTIME_DIR || "/tmp", `desk-host-${PORT}.sock`);
+const RUN = process.env.XDG_RUNTIME_DIR || "/tmp";
+const NAMED = new RegExp(`^desk-host-${PORT}-([0-9a-f]{12})\\.sock$`);
+const OLD = `desk-host-${PORT}.sock`; // the one socket of a host from before 2 Nov
+const socketOf = (version: string) => join(RUN, `desk-host-${PORT}-${version}.sock`);
 const HOST = join(REPO, "apps", "server", "src", "host.ts");
 const CODE = [HOST, join(dirname(HOST), "relay.ts")]; // the files a host runs, whose content is its version
 const LOG = join(HOME, ".cache", "desk", `host-${PORT}.log`);
@@ -23,7 +34,14 @@ export interface HostRow {
   working: boolean;
   since: number;
   asks: number;
+  tasks?: number; // running in the background; a host from before 2 Nov does not say
   watchers: number;
+}
+
+// A host that answers: its socket, and the version of the code it runs.
+interface Host {
+  socket: string;
+  version: string;
 }
 
 export type Content = string | Record<string, unknown>[];
@@ -59,10 +77,10 @@ export class HostError extends Error {
   }
 }
 
-function call<T>(method: string, path: string, body?: unknown, timeout = 30_000): Promise<T> {
+function call<T>(socket: string, method: string, path: string, body?: unknown, timeout = 30_000): Promise<T> {
   return new Promise((resolve, reject) => {
     const data = body === undefined ? undefined : JSON.stringify(body);
-    const req = httpRequest({ socketPath: SOCKET, path, method, timeout, headers: data ? { "content-type": "application/json" } : {} }, (res) => {
+    const req = httpRequest({ socketPath: socket, path, method, timeout, headers: data ? { "content-type": "application/json" } : {} }, (res) => {
       let text = "";
       res.setEncoding("utf8");
       res.on("data", (c) => (text += c));
@@ -85,22 +103,47 @@ function call<T>(method: string, path: string, body?: unknown, timeout = 30_000)
   });
 }
 
-async function version(): Promise<string | null> {
+const versionAt = async (socket: string) => (await call<{ version: string }>(socket, "GET", "/version", undefined, 2000)).version;
+
+// The sockets a host of this desk may listen on: one per version that ran, and the one from before 2 Nov.
+function sockets(): string[] {
+  let names: string[] = [];
   try {
-    return (await call<{ version: string }>("GET", "/version", undefined, 2000)).version;
+    names = readdirSync(RUN);
   } catch {
-    return null;
+    // no runtime folder, so no host
   }
+  return names.filter((n) => n === OLD || NAMED.test(n)).map((n) => join(RUN, n));
 }
 
-// Start a host in a systemd scope of its own, so that desk.service's restart, which stops everything in its cgroup,
-// leaves it and its sessions running (on 15 Oct one restart of desk killed every session it had started); its output
-// goes to LOG.
-async function launch() {
+let known: Host[] = []; // the hosts at the last look
+
+// The hosts that answer now.
+async function look(): Promise<Host[]> {
+  const found = await Promise.all(sockets().map(async (socket): Promise<Host | null> => {
+    try {
+      return { socket, version: await versionAt(socket) };
+    } catch (e) {
+      // One too busy to answer still runs, of the version it said before, or its socket's name says.
+      if (e instanceof HostError && e.status === 504)
+        return { socket, version: known.find((h) => h.socket === socket)?.version ?? NAMED.exec(basename(socket))?.[1] ?? "" };
+      // Nothing listens there: a host that ended left it, unless one is starting, which may be about to listen on it.
+      if ((e as NodeJS.ErrnoException).code === "ECONNREFUSED" && !launching) rmSync(socket, { force: true });
+      return null;
+    }
+  }));
+  return (known = found.filter((h): h is Host => h !== null));
+}
+
+// Start a host of the code checked out now, on the socket of its version, in a systemd scope of its own, so that
+// desk.service's restart, which stops everything in its cgroup, leaves it and its sessions running (on 15 Oct one
+// restart of desk killed every session it had started); its output goes to LOG.
+async function launch(version: string): Promise<Host> {
+  const socket = socketOf(version);
   mkdirSync(dirname(LOG), { recursive: true });
   const out = openSync(LOG, "a");
   const node = process.execPath;
-  const args = ["--socket", SOCKET, "--desk", `http://127.0.0.1:${PORT}`, // the host tells desk what each session does (turns.ts)
+  const args = ["--socket", socket, "--desk", `http://127.0.0.1:${PORT}`, // the host tells desk what each session does (turns.ts)
     "--relay", String(RELAY_PORT)];
   const argv = which("systemd-run")
     ? ["systemd-run", "--user", "--scope", "--slice=agents.slice", `--unit=${UNIT}-${Date.now()}`, "--collect", "--quiet", "--", node, HOST, ...args]
@@ -108,77 +151,89 @@ async function launch() {
   const { sessionEnv } = await import("./agents.ts");
   spawn(argv[0], argv.slice(1), { cwd: REPO, env: await sessionEnv(), detached: true, stdio: ["ignore", out, out] }).unref();
   for (let i = 0; i < 100; i++) {
-    if (await version()) return;
-    await sleep(100);
+    try {
+      return { socket, version: await versionAt(socket) };
+    } catch {
+      await sleep(100);
+    }
   }
   throw new Error(`The session host did not start; see ${LOG}`);
 }
 
-// Which host answers now: none, one of the code checked out now, or one of older code.
-export async function standing(): Promise<"none" | "current" | "older"> {
-  const v = await version();
-  return !v ? "none" : v === current() ? "current" : "older";
-}
+// A start under way, one at a time: a session's and desk's tick could otherwise start two hosts on the same socket, and
+// the second would leave the first running with no way in.
+let launching: Promise<Host> | null = null;
 
-// The check under way, one at a time: a session's start and desk's tick could otherwise swap the host together, and
-// the second host would take the first one's socket and leave it running with no way in.
-let starting: Promise<void> | null = null;
-
-function check(launchIfNone: boolean): Promise<void> {
-  starting ??= (async () => {
+// The host of the code checked out now, started if none answers.
+function newest(): Promise<Host> {
+  return (launching ??= (async () => {
     try {
-      const v = await version();
-      if (v && v !== current()) await replace();
-      else if (!v && launchIfNone) await launch();
+      const version = current();
+      return (await look()).find((h) => h.version === version) ?? (await launch(version));
     } finally {
-      starting = null;
+      launching = null;
     }
-  })();
-  return starting;
+  })());
 }
 
-// A host of the code checked out now, started if none answers. It waits out the tick's check, which starts none.
-export async function ensure(): Promise<void> {
-  while (starting) await starting;
-  return check(true);
+// Which hosts answer now: none, or one of the code checked out now among them, or only older ones; and which holds
+// each session (sessions).
+export async function standing(): Promise<"none" | "current" | "older"> {
+  const hosts = await look(), version = current();
+  await sessions(true);
+  return !hosts.length ? "none" : hosts.some((h) => h.version === version) ? "current" : "older";
 }
 
-// Swap a host running older code for one of the code checked out now, but only while none of its sessions works or
-// waits on the user: their processes end with it, and each resumes on its next message.
-async function replace(): Promise<boolean> {
-  try {
-    await call("POST", "/quit", {}, 5000);
-  } catch {
-    return false; // busy: the old one serves until it is idle
+// desk's tick: each host of older code is asked to quit once it lists no session, and refuses while one works, so a
+// later tick asks again. Once code lands, a host of it starts at once, beside the older ones, which take no new session.
+export async function keepCurrent(): Promise<void> {
+  const version = current();
+  const older = (await look()).filter((h) => h.version !== version);
+  if (!older.length) return;
+  for (const h of older) {
+    try {
+      if (!(await call<HostRow[]>(h.socket, "GET", "/sessions", undefined, 3000)).length) await call(h.socket, "POST", "/quit", {}, 5000);
+    } catch {
+      // busy, or gone already
+    }
   }
-  for (let i = 0; i < 50 && (await version()); i++) await sleep(100);
-  await launch();
-  return true;
+  await newest();
 }
 
-// desk's tick: a host left over from older code is replaced once it is idle.
-export const keepCurrent = (): Promise<void> => starting ?? check(false);
-
+const listed = new Map<string, HostRow[]>(); // what each host last listed, by its socket
+const where = new Map<string, string>(); // each session, by the socket of the host that holds it
 let cached: [number, HostRow[]] = [0, []];
 
-// The sessions the host holds now; none when no host runs (desk starts one only when a session needs it). A host too
+// The sessions every host holds now; none when no host runs (desk starts one only when a session needs it). A host too
 // busy to answer in time still holds what it last listed: read as none, every working session would be your turn.
 export async function sessions(fresh = false): Promise<HostRow[]> {
   if (!fresh && performance.now() - cached[0] < 300) return cached[1];
-  let rows: HostRow[] = [];
-  try {
-    rows = await call<HostRow[]>("GET", "/sessions", undefined, 3000);
-  } catch (e) {
-    if (e instanceof HostError && e.status === 504) rows = cached[1]; // otherwise no host
+  const all = sockets();
+  await Promise.all(all.map(async (socket) => {
+    try {
+      listed.set(socket, await call<HostRow[]>(socket, "GET", "/sessions", undefined, 3000));
+    } catch (e) {
+      if (!(e instanceof HostError && e.status === 504)) listed.delete(socket); // otherwise no host there
+    }
+  }));
+  where.clear();
+  for (const [socket, rows] of listed) {
+    if (!all.includes(socket)) listed.delete(socket);
+    else for (const r of rows) where.set(r.id, socket);
   }
-  cached = [performance.now(), rows];
-  return rows;
+  cached = [performance.now(), [...listed.values()].flat()];
+  return cached[1];
 }
 
 export async function holds(id: string | null | undefined): Promise<HostRow | null> {
   return id ? (await sessions(true)).find((r) => r.id === id) ?? null : null;
 }
 
+// The socket of the host holding the session, as last listed; with none, the newest's, where each session starts.
+const at = (id: string) => where.get(id) ?? socketOf(current());
+
+// Each session starts on the host of the code checked out now. One an older host still holds stays there, as one host
+// would refuse a second process of a session it holds.
 export async function start(o: StartOptions): Promise<HostRow> {
   if (TEST && o.id) {
     // On a test desk a session runs as its fork: resumed once the fork has run, forked from the session's transcript
@@ -186,34 +241,32 @@ export async function start(o: StartOptions): Promise<HostRow> {
     const as = forkOf(o.id), ran = Boolean(find(as));
     o = { ...o, as, resume: ran, fork: !ran && Boolean(find(o.id)) };
   } else if (o.resume && o.id && !pathOf(o.id)) o = { ...o, resume: false }; // never got a message: starts afresh, under the same id
-  await ensure();
-  // A host of older code drops what it does not know: it would run an agent's chat as a plain session, and resume the
-  // user's own session where a test desk forks it.
-  if ((o.agent || o.as) && (await version()) !== current())
-    throw new HostError(`desk's session host runs older code, which cannot ${o.as ? "fork a session" : "start an agent"} yet. It updates itself once no session has worked for 10 minutes; try again then.`, 503);
-  const row = await call<HostRow>("POST", "/sessions", o);
+  const host = await newest();
+  if (o.id && (await holds(o.id)) && where.get(o.id) !== host.socket) throw new HostError("An older session host still holds this session", 409);
+  const row = await call<HostRow>(host.socket, "POST", "/sessions", o);
+  where.set(row.id, host.socket);
   cached = [0, []];
   return row;
 }
 
 // Now: Claude reads it at once, as Claude Code's send now (host.ts, /send). A host of older code sends it as any other.
 export async function send(id: string, content: Content, uuid?: string, now = false): Promise<HostRow> {
-  return call<HostRow>("POST", `/sessions/${id}/send`, { content, ...(uuid ? { uuid } : {}), ...(now ? { priority: "now" } : {}) });
+  return call<HostRow>(at(id), "POST", `/sessions/${id}/send`, { content, ...(uuid ? { uuid } : {}), ...(now ? { priority: "now" } : {}) });
 }
 
-export const withdraw = async (id: string, uuid: string) => (await call<{ withdrawn: boolean }>("POST", `/sessions/${id}/withdraw`, { uuid })).withdrawn;
+export const withdraw = async (id: string, uuid: string) => (await call<{ withdrawn: boolean }>(at(id), "POST", `/sessions/${id}/withdraw`, { uuid })).withdrawn;
 
-export const interrupt = (id: string) => call("POST", `/sessions/${id}/interrupt`, {});
-export const answer = (id: string, ask: string, result: Record<string, unknown>) => call("POST", `/sessions/${id}/answer`, { ask, result });
-export const close = (id: string) => call("POST", `/sessions/${id}/close`, {});
-export const commands = (id: string) => call<{ name: string; description: string; argumentHint?: string }[]>("GET", `/sessions/${id}/commands`);
-export const settings = (id: string, set: { model?: string; effort?: StartOptions["effort"] }) => call<HostRow>("POST", `/sessions/${id}/settings`, set);
-export const context = (id: string) => call<{ tokens: number; max: number; percent: number }>("GET", `/sessions/${id}/context`);
+export const interrupt = (id: string) => call(at(id), "POST", `/sessions/${id}/interrupt`, {});
+export const answer = (id: string, ask: string, result: Record<string, unknown>) => call(at(id), "POST", `/sessions/${id}/answer`, { ask, result });
+export const close = (id: string) => call(at(id), "POST", `/sessions/${id}/close`, {});
+export const commands = (id: string) => call<{ name: string; description: string; argumentHint?: string }[]>(at(id), "GET", `/sessions/${id}/commands`);
+export const settings = (id: string, set: { model?: string; effort?: StartOptions["effort"] }) => call<HostRow>(at(id), "POST", `/sessions/${id}/settings`, set);
+export const context = (id: string) => call<{ tokens: number; max: number; percent: number }>(at(id), "GET", `/sessions/${id}/context`);
 
-// The session's event stream from the host (host.ts says what comes over it).
-export const events = (id: string) => new WebSocket(`ws+unix://${SOCKET}:/sessions/${id}/events`);
+// The session's event stream from the host holding it (host.ts says what comes over it).
+export const events = (id: string) => new WebSocket(`ws+unix://${at(id)}:/sessions/${id}/events`);
 
-// Wait until the host no longer holds the session: its process has ended.
+// Wait until no host holds the session: its process has ended.
 export async function released(id: string, seconds = 15) {
   const deadline = performance.now() + seconds * 1000;
   while (performance.now() < deadline && (await holds(id))) await sleep(100);

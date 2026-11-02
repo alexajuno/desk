@@ -46,9 +46,9 @@ await web.build();
 const app = await create();
 await sync.start();
 auto.start(); // Auto says next for the user as a turn ends
-// A session host left from older code gives way to one of this code once none of its sessions works: at once, and
-// soon after it goes quiet, so that the swap's few seconds fall on no new chat, whose start would wait for it (1 Nov:
-// "i start a new chat from ctrl shift o and there was a few seconds delay").
+// Once a host's code lands, a host of it starts beside the older one, at once, so that no new chat waits for its start
+// (1 Nov: "i start a new chat from ctrl shift o and there was a few seconds delay"); the older one quits once it holds
+// no session (hosted.ts).
 const keepCurrent = () => void hosted.keepCurrent().catch(() => {});
 keepCurrent();
 setInterval(keepCurrent, 10_000);
