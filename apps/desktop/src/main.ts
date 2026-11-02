@@ -31,7 +31,7 @@ let win: BrowserWindow | null = null;
 let quitting = false;
 
 app.commandLine.appendSwitch("remote-debugging-port", String(tabs.PORT)); // on 127.0.0.1 only
-// The cookies' key in the user's keyring, as their Chrome's (logins.ts); on a desktop it does not know, as Hyprland,
+// The key of the cookies the app keeps on disk in the user's keyring, as their Chrome's (fuses.ts); on a desktop it does not know, as Hyprland,
 // Electron's Chrome would use the key every Chrome has, "peanuts"
 app.commandLine.appendSwitch("password-store", "gnome-libsecret");
 

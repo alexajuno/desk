@@ -12,8 +12,8 @@
 //   (Playwright looks the new tab up by the answer's id: its coreBundle.js, doCreateNewPage).
 // - Its Page.captureScreenshot of one of its tabs, which the relay asks the app for instead (snap, below): Chrome's own
 //   waits for the screen to show the page, which a locked screen never does, and hung there for minutes (2 Nov).
-// - desk's own pages, its window and its developer tools, which the same Chrome holds: the session hears only of tabs
-//   in the context Claude's tabs keep their logins in, and the relay lets go of any other it was attached to, freeing
+// - desk's own pages, its window and its developer tools, which the same Chrome holds, and other sessions' tabs: the
+//   session hears only of tabs in its own browser context, the partition the app keeps its tabs' cookies in, and the relay lets go of any other it was attached to, freeing
 //   one Playwright's auto-attach holds before it runs (waitForDebuggerOnStart).
 // A tab opened from a session's tab, a popup or a link to a new tab, is that session's too, which the relay's own watcher
 // sees: one connection straight to the app, which ends as the app stops, its tabs with it.
@@ -106,7 +106,7 @@ function pipe(mcp: WebSocket, session: string) {
   };
   const make = (m: Cdp) => {
     const to = m.sessionId ? { sessionId: m.sessionId } : {};
-    tab(String(m.params?.url || "about:blank")).then((target) => {
+    tab(String(m.params?.url || "about:blank"), session).then((target) => {
       own(target, session);
       const answer = () => down({ id: m.id, ...to, result: { targetId: target } });
       if (!attaching || heardOf.has(target)) return answer();
@@ -212,7 +212,7 @@ function pipe(mcp: WebSocket, session: string) {
   });
   mcp.on("close", () => app?.close());
   mcp.on("error", () => {}); // it closes next
-  Promise.all([call<{ context: string }>("GET", "/"), browserUrl(APP)]).then(([about, url]) => {
+  Promise.all([call<{ context: string }>("GET", `/?session=${session}`), browserUrl(APP)]).then(([about, url]) => {
     if (mcp.readyState !== WebSocket.OPEN) return;
     context = about.context;
     const ws = (app = new WebSocket(url, { perMessageDeflate: false, maxPayload: BIGGEST }));
@@ -246,12 +246,12 @@ function pipe(mcp: WebSocket, session: string) {
 
 // A tab desk opens for the session at the address, which the app makes.
 export async function open(session: string, url: string) {
-  own(await tab(url), session);
+  own(await tab(url, session), session);
   void watch();
 }
 
-// A new tab of Claude's at the address, made by desk's app, and its target id.
-const tab = (url: string) => call<{ target: string }>("PUT", "/tabs", { url }).then((r) => r.target);
+// A new tab of the session's at the address, made by desk's app in the session's own partition, and its target id.
+const tab = (url: string, session: string) => call<{ target: string }>("PUT", "/tabs", { url, session }).then((r) => r.target);
 
 // A call to desk's app on its socket (apps/desktop/src/tabs.ts), answered with its JSON.
 export function call<T>(method: "GET" | "PUT" | "POST", path: string, body?: object): Promise<T> {

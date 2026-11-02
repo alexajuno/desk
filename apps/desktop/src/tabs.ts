@@ -3,8 +3,8 @@
 // protocol on PORT, through the relay in desk's session host (apps/server/src/relay.ts), which asks the app here for
 // each new tab, since Electron answers the protocol's Target.createTarget with "Not supported":
 //
-//     relay ── PUT /tabs {"url"} ──► SOCKET ──► a tab in a window of its own ──► {"target": "<its DevTools id>"}
-//     relay ── GET / ──► SOCKET ──► {"context": "<the tabs' DevTools browser context>"}, the only one the relay shows Claude
+//     relay ── PUT /tabs {"url", "session"} ──► SOCKET ──► a tab of the session's, in a window of its own ──► {"target": "<its DevTools id>"}
+//     relay ── GET /?session=<id> ──► SOCKET ──► {"context": "<the session's tabs' DevTools browser context>"}, the only one the relay shows it
 //     desk ── GET /tabs/<id> ──► SOCKET ──► {"focused": true}, whether your keys are in the tab, which a chat's Browser shows
 //     relay ── POST /tabs/<id>/shot {place, scale, format} ──► SOCKET ──► {"data": "<base64>"}, Claude's screenshot (shot)
 //     bin/desk-app ── POST /window ──► SOCKET ──► desk's window, made or shown again (main.ts)
@@ -15,8 +15,11 @@
 // Hyprland draws as any other. A page draws only on a screen Hyprland shows, uncovered: on a hidden workspace Claude's
 // screenshots took 1.4 s or never came, on a screen 0.3 s, and under another tab in the same window 1.2 s or never
 // (1 Nov). Hyprland's config (~/.config/hypr/hyprland.lua, "desk's app") puts the screen out of the mouse's reach and
-// the tabs' windows on it, and the user's screen scripts leave it out. The tabs keep their logins apart from desk's
-// page, in PARTITION, which takes the user's own Chrome's as the app starts (logins.ts).
+// the tabs' windows on it, and the user's screen scripts leave it out. Each session's tabs keep their cookies and storage
+// in a partition of their own, in memory: they start logged out, apart from desk's page and from every other chat's, and
+// the app's restart empties them. They are for work that must start logged out, such as a test you watch beside the
+// chat; logged-in work goes to the agents' own Chrome ("probably it's mostly used for non login stuff. like, testing",
+// the user, 2 Nov).
 import { BaseWindow, nativeImage, session, WebContentsView, type BrowserWindow, type Input, type NativeImage, type Rectangle, type WebContents } from "electron";
 import { execFile } from "node:child_process";
 import { rmSync } from "node:fs";
@@ -26,12 +29,12 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import { shortcut } from "./keys.ts";
-import * as logins from "./logins.ts";
 
 export const PORT = Number(process.env.DESK_CHROME_PORT) || 9337; // a second desk app for testing takes another
 const RUN = process.env.XDG_RUNTIME_DIR || tmpdir();
 const SOCKET = process.env.DESK_APP_SOCKET || join(RUN, "desk-app.sock"); // in the user's own folder, which only they reach
-const PARTITION = "persist:agents";
+const partition = (session: string) => `tabs-${session}`; // no "persist:", so held in memory alone
+const SESSION = /^[\w-]{1,64}$/; // a session's id, as the relay's address holds it
 const SCREEN = "desk-tabs"; // the virtual screen's name, which Hyprland's config and the user's screen scripts know
 const TITLE = "desk tabs"; // the tabs' windows', which Hyprland's rule knows them by
 const SIZE = { width: 1440, height: 900 }; // a tab's, about the agents' Chrome's window, as the rule sizes it
@@ -42,34 +45,38 @@ type Tab = { id: string; view: WebContentsView; shelf: BaseWindow; host?: Browse
 const all = new Map<string, Tab>(); // Claude's tabs, by their DevTools id
 const showing = new Map<BrowserWindow, Tab>(); // the tab each of desk's windows shows
 const watched = new WeakSet<BrowserWindow>();
-let context = "";
+const contexts = new Map<string, Promise<string>>(); // each session's partition's DevTools browser context, by session
 let quitting = false;
 
-// The tabs' screen, logins and socket, on which a call for desk's window brings it (main.ts).
+// The tabs' screen and socket, on which a call for desk's window brings it (main.ts).
 export async function start(showWindow: () => void) {
   await screen();
-  const agents = session.fromPartition(PARTITION);
-  // As Chrome's, without Electron's and the app's names, which some sites refuse
-  agents.setUserAgent(agents.getUserAgent().replace(/ (Electron|desk)\/\S+/g, ""));
-  // A page Claude opens gets no camera, microphone, place or notifications, as headless Chrome gave it none
-  agents.setPermissionRequestHandler((_page, permission, done) => done(permission === "clipboard-sanitized-write"));
-  agents.setPermissionCheckHandler((_page, permission) => permission === "clipboard-sanitized-write");
-
-  const probe = new WebContentsView({ webPreferences: { partition: PARTITION } });
-  context = (await info(probe.webContents)).browserContextId;
-  await logins.bring(probe.webContents).then(
-    (n) => console.log(`your logins: ${n} cookies from your Chrome`),
-    (e: Error) => console.log(`no logins from your Chrome: ${e.message}`),
-  );
-  probe.webContents.close();
   listen(showWindow);
+}
+
+// The session's partition, set up the first time it is asked for, and its DevTools browser context.
+function contextOf(id: string) {
+  let known = contexts.get(id);
+  if (known) return known;
+  const tabs = session.fromPartition(partition(id));
+  // As Chrome's, without Electron's and the app's names, which some sites refuse
+  tabs.setUserAgent(tabs.getUserAgent().replace(/ (Electron|desk)\/\S+/g, ""));
+  // A page Claude opens gets no camera, microphone, place or notifications, as headless Chrome gave it none
+  tabs.setPermissionRequestHandler((_page, permission, done) => done(permission === "clipboard-sanitized-write"));
+  tabs.setPermissionCheckHandler((_page, permission) => permission === "clipboard-sanitized-write");
+  const probe = new WebContentsView({ webPreferences: { partition: partition(id) } });
+  known = info(probe.webContents).then((i) => i.browserContextId).finally(() => probe.webContents.close());
+  known.catch(() => contexts.delete(id));
+  contexts.set(id, known);
+  return known;
 }
 
 export const quit = () => { quitting = true; };
 
-// A new tab at the address, and its DevTools id.
-async function open(url: string) {
-  const { view, target } = shelve(new WebContentsView({ webPreferences: { partition: PARTITION, backgroundThrottling: false } }));
+// A new tab of the session's at the address, and its DevTools id.
+async function open(url: string, session: string) {
+  await contextOf(session);
+  const { view, target } = shelve(new WebContentsView({ webPreferences: { partition: partition(session), backgroundThrottling: false } }));
   const id = await target;
   view.webContents.loadURL(url).catch(() => {}); // a page that fails shows its error, as in Chrome
   return id;
@@ -243,7 +250,8 @@ function listen(showWindow: () => void) {
   rmSync(SOCKET, { force: true }); // left by an app that crashed: only the one app holding the lock gets here
   createServer((req, res) => {
     const reply = (status: number, body: object) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
-    if (req.method === "GET" && req.url === "/") return reply(200, { context, port: PORT });
+    const asking = req.method === "GET" && /^\/\?session=([\w-]{1,64})$/.exec(req.url ?? "")?.[1];
+    if (asking) return void contextOf(asking).then((context) => reply(200, { context, port: PORT }), (e: Error) => reply(500, { detail: e.message }));
     if (req.method === "POST" && req.url === "/window") return (showWindow(), reply(200, {})); // bin/desk-app's
     const id = req.method === "GET" && /^\/tabs\/([0-9A-F]{32})$/.exec(req.url ?? "")?.[1];
     if (id) {
@@ -255,11 +263,12 @@ function listen(showWindow: () => void) {
       return read(req).then((body) => shot(shooting, JSON.parse(body) as Shot)).then((data) => reply(200, { data }))
         .catch((e: Error) => reply(e.message === "No such tab" ? 404 : 500, { detail: e.message }));
     }
-    if (req.method !== "PUT" || req.url !== "/tabs") return reply(404, { detail: "GET /, GET /tabs/<id>, PUT /tabs, POST /tabs/<id>/shot or POST /window" });
+    if (req.method !== "PUT" || req.url !== "/tabs") return reply(404, { detail: "GET /?session=<id>, GET /tabs/<id>, PUT /tabs, POST /tabs/<id>/shot or POST /window" });
     read(req).then((body) => {
-      const url = (JSON.parse(body) as { url?: unknown }).url ?? "about:blank";
+      const { url = "about:blank", session: id } = JSON.parse(body) as { url?: unknown; session?: unknown };
       if (typeof url !== "string" || !ADDRESS.test(url)) return reply(400, { detail: "An http or https address, or about:blank" });
-      return open(url).then((target) => reply(200, { target }));
+      if (typeof id !== "string" || !SESSION.test(id)) return reply(400, { detail: "The session the tab is for" });
+      return open(url, id).then((target) => reply(200, { target }));
     }).catch((e: Error) => reply(500, { detail: e.message }));
   }).listen(SOCKET);
 }

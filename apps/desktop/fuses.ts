@@ -6,8 +6,9 @@
 // connect through the relay (2 Nov, desk issue "Browser relay times out"). A version's copy is never written again once
 // made, and a new version only moves the link, which the running app does not read: it runs the new one once restarted.
 //
-// The copy's binary has Electron's EnableCookieEncryption fuse set, so that the logins in Claude's tabs (src/logins.ts)
-// sit on disk locked with a key in the user's keyring, as Chrome's do, and not as plain text, Electron's default.
+// The copy's binary has Electron's EnableCookieEncryption fuse set, so that the cookies the app keeps on disk, desk's
+// page's, sit locked with a key in the user's keyring, as Chrome's do, and not as plain text, Electron's default.
+// Claude's tabs keep theirs in memory alone (src/tabs.ts).
 import { flipFuses, FuseState, FuseV1Options, FuseVersion, getCurrentFuseWire } from "@electron/fuses";
 import electron from "electron";
 import { cp, mkdir, rename, rm, stat, symlink } from "node:fs/promises";
