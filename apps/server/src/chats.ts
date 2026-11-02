@@ -357,6 +357,16 @@ export async function newChat(base: string, start?: { issue: Issue; message: str
   return chat;
 }
 
+// An empty chat reused for a new one (sessions.ts, newSession) starts again on Settings > Preferences, as a new chat
+// would: it kept what it started on, so one made before Preferences changed still showed the old pick (2 Nov: Opus at
+// extra high, with Preferences on medium).
+export async function renew(chat: Chat): Promise<Chat> {
+  const s = settings.load(), pick = models.pickOf(chat.session);
+  if (pick.model !== s.chat_model || pick.effort !== s.chat_effort)
+    await models.change(chat.session, { model: s.chat_model, effort: s.chat_effort }).catch((error) => console.error("desk: renewing a chat's model", error));
+  return chat;
+}
+
 const newId = () => `chat-${randomBytes(4).toString("hex")}`;
 
 // A new chat on the issue, in its folder and bound to it from the start, which works on the message at once: Plan's,

@@ -300,11 +300,13 @@ export async function rows(query = "") {
 
 // --- opening one -----------------------------------------------------------------------------------------------------
 
-// Ctrl Shift O and New session: an agent chat in desk's panel. One nobody has written in yet is reused, so empty chats
-// never pile up and none is ever removed: desk's reaper used to remove them, and on 17 Oct a restart, which forgot the
-// open panels, took one while the user wrote its first message ("Its folder is gone").
+// Ctrl Shift O and New session: an agent chat in desk's panel. One nobody has written in yet is reused, on Preferences'
+// model and effort (chats.renew), so empty chats never pile up and none is ever removed: desk's reaper used to remove
+// them, and on 17 Oct a restart, which forgot the open panels, took one while the user wrote its first message ("Its
+// folder is gone").
 export async function newSession(base: string): Promise<chats.Chat> {
-  return chats.agentChats().find((c) => !c.deleted && chats.empty(c)) ?? (await chats.newChat(base));
+  const empty = chats.agentChats().find((c) => !c.deleted && chats.empty(c));
+  return empty ? chats.renew(empty) : chats.newChat(base);
 }
 
 // A chat as rows() finds it.
