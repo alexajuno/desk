@@ -79,9 +79,9 @@ The user's screen is 2x, and Linear sets its hairlines when the page loads: on a
 - A new colour becomes a token, in `:root` and in `:root[data-theme=light]`, with a few words on what it colours.
 - Above the CSS block, a comment says what was measured, on which Linear page and date, in which themes, as the other blocks in desk.css do.
 
-## Checking desk on 8790
+## Checking desk on a test desk
 
-Try the branch as CLAUDE.md says, then read the same properties off desk's element with the agents' Chrome (the `chrome` server) and compare them with Linear's numbers, in both themes.
+Run the branch on a test desk as CLAUDE.md says, then read the same properties off desk's element, at the address it answered, with the agents' Chrome (the `chrome` server) and compare them with Linear's numbers, in both themes.
 
 - desk's theme is pinned per browser in `localStorage.theme`, which beats an emulated scheme (a browser had `light` pinned on 18 Oct). Set it to `dark`, reload, and put back what was there.
 - Wait for the page's data before reading: Filter and Display only appear once the list has loaded.
