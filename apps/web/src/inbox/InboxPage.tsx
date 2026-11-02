@@ -7,7 +7,8 @@
 // issue's status sits where Linear draws who acted, since every row's session would look the same (19 Oct: "there is
 // nobody"), then a dot while unread, the issue's title, then what the session did and how long ago. Opening a row
 // reads it, for every tab, and so does anything new on it while it is open. With Show unreads only, a row you read
-// stays until you leave the Inbox, so that reading never moves the list. A row may instead be a chat with no issue,
+// stays until you leave the Inbox, so that reading never moves the list. A row may be a Slack or mail thread the
+// firewall let through (?i=slack:… or mail:…), whose messages open on the right (Thread.tsx). A row may instead be a chat with no issue,
 // one of the user's agents or a bare one (?i=<chat id>), whose chat opens on the right. The top
 // bar splits at the list's edge: over the list, "Inbox" with its ⋯ menu, and at the list's right edge Show unreads
 // only, Filter and Display options, as Linear's (measured on linear.app on 19 Oct), their keys in actions.ts; the open
@@ -34,6 +35,7 @@ import { GLYPH, StateIcon } from "../ui/icons";
 import { toggled } from "../ui/menu";
 import { DISPLAY_ICON, FILTER_ICON, inboxMenu, MORE_ICON, rowHref, UNREADS_ICON } from "./actions";
 import { listing } from "./listing";
+import { badgeOf, initial, ThreadView } from "./Thread";
 
 // A due date's notifications (the server's pages.ts), which no session sent.
 const DEADLINE = new Set(["due soon", "overdue"]);
@@ -101,6 +103,7 @@ export const InboxPage = observer(function InboxPage() {
   const open = isIssue ? shown.page : null, waiting = isIssue && shown.of !== i;
   useSplash(waiting);
   const chat = isIssue || !i ? undefined : [...issues.inbox.values()].find((r) => r.slug === i && !r.issue && r.session);
+  const thread = isIssue || !i ? undefined : [...issues.inbox.values()].find((r) => r.slug === i && r.source);
   // Opening a row reads it, and anything new on it while it is open: as the server's inbox.ts reads a slug's rows.
   const unreadHere = [...issues.inbox.values()].filter((r) => r.slug === i && r.read === null).map((r) => r.id).join(" ");
   useEffect(() => { if (unreadHere) void postJson("/api/inbox/read", { keys: unreadHere.split(" ") }); }, [unreadHere]);
@@ -129,7 +132,7 @@ export const InboxPage = observer(function InboxPage() {
               {listView.displayOpen && <DisplayPanel view={view} />}
             </span>
           </span>
-          {(p || chat) && <><span className="sep">›</span><span className="inbox-crumb">{p ? p.title : chat!.agent ? `${chat!.agent}: ${chat!.title}` : chat!.title}</span></>}
+          {(p || chat || thread) && <><span className="sep">›</span><span className="inbox-crumb">{p ? p.title : thread ? thread.title : chat!.agent ? `${chat!.agent}: ${chat!.title}` : chat!.title}</span></>}
         </>}
         tools={p && (
           <button className="more" title="Actions" onClick={(e) => { if (!toggled(e.currentTarget)) actionsMenu(p, { anchor: e.currentTarget }, p.slug); }}>
@@ -144,13 +147,14 @@ export const InboxPage = observer(function InboxPage() {
               <NotifyAsk />
               {chips.length > 0 && <div className="inbox-filters"><FilterBar list={{ chips }} /></div>}
               {rows.map((n) => {
+                if (n.source) return <ThreadRow key={n.id} n={n} open={i === n.slug} query={query} />;
                 if (!n.issue) return <ChatRow key={n.id} n={n} open={i === n.slug} query={query} />;
                 const issue = issues.bySlug.get(n.slug);
                 return issue && <IssueNotice key={n.id} n={n} issue={issue} open={i} query={query} />;
               })}
             </div>
             <div className={`inbox-open${chat ? " chat-open" : ""}`} data-keep-scroll="same" ref={pane}>
-              {chat ? <SessionView key={chat.session} id={chat.session!} /> : open ? <IssueView data={open} inInbox /> : !waiting && (
+              {thread ? <ThreadView key={thread.slug} row={thread} /> : chat ? <SessionView key={chat.session} id={chat.session!} /> : open ? <IssueView data={open} inInbox /> : !waiting && (
                 <div className="inbox-empty">
                   {/* Linear's empty Inbox drawing, its strokes in desk's own text colours */}
                   <svg width="98" height="100" viewBox="0 0 78 80" fill="none" aria-hidden="true">
@@ -207,6 +211,24 @@ const ChatRow = observer(function ChatRow({ n, open, query }: { n: InboxRow; ope
       <span className="lines">
         <span className="line"><span className="dot" aria-label="Unread" /><span className="title">{n.title}</span></span>
         <span className="line sub"><span className="says">{`${agent ?? "Chat"} ${n.says}`}</span><span className="age" title={dayAndTime(n.at)}>{ago(n.at)}</span></span>
+      </span>
+    </Go>
+  );
+});
+
+// A Slack thread's, DM's or mail thread's row (the server's pages.ts, threadRow), Linear's: the avatar of who wrote,
+// here their initial, with a badge for where; the place as its title (a channel, a DM's sender, a mail's subject); who
+// wrote and what it needs from you under it. Picked from two mockups, "who first" over the source's icon (2 Nov,
+// mock-1-who.png in the desk issue "desk as my notification center").
+const ThreadRow = observer(function ThreadRow({ n, open, query }: { n: InboxRow; open: boolean; query: string }) {
+  return (
+    <Go className={`item inbox-row thread-row${open ? " selected" : ""}${n.read !== null || open ? " read" : ""}${ui.focused === n.slug ? " focus" : ""}`}
+      to={rowHref(query, n.slug)} title={n.title} data-key={n.slug} data-row-key={n.id} data-waits={n.waits} data-why={n.why}
+      onMouseMove={() => { if (ui.focused !== n.slug) ui.focus(n.slug, true); }}>
+      <span className="avatar agent" aria-label={n.who ?? ""}>{initial(n.who)}<span className="badge">{badgeOf(n)}</span></span>
+      <span className="lines">
+        <span className="line"><span className="dot" aria-label="Unread" /><span className="title">{n.title}</span></span>
+        <span className="line sub"><span className="says">{n.says}</span><span className="age" title={dayAndTime(n.at)}>{ago(n.at)}</span></span>
       </span>
     </Go>
   );

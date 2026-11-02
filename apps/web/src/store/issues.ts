@@ -92,6 +92,8 @@ export interface InboxRow {
   read: number | null; // when you read it, in seconds; null while unread
   gone?: number | null; // when you deleted it: out of the Inbox until something newer comes
   marked?: number | null; // when you marked it unread
+  source?: "slack" | "mail" | null; // a Slack thread's, DM's or mail thread's row (the server's notices.ts); its why is now or later
+  who?: string | null; // who wrote the thread's newest message
 }
 
 // A tab a desk session has open in the agents' Chrome (the server's tabs.ts), which its chat's Browser shows.

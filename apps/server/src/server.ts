@@ -57,6 +57,7 @@ const keepCurrent = () => void hosted.keepCurrent().catch(() => {});
 keepCurrent();
 setInterval(keepCurrent, 10_000);
 setInterval(() => void db.prune().catch((error) => console.error("pruning the log", error)), 3600_000);
+notices.onJudged(sync.frameChanged); // a notice let through makes or moves its thread's Inbox row (pages.ts)
 setInterval(() => void notices.prune().catch((error) => console.error("pruning the notices", error)), 3600_000);
 if (!TEST) {
   automations.startClock(); // each automation whose time came fires

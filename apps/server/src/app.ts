@@ -24,6 +24,7 @@ import * as seat from "./seat.ts";
 import * as projects from "./projects.ts";
 import { HttpError } from "./pages.ts";
 import * as sessions from "./sessions.ts";
+import * as notices from "./notices.ts";
 import * as sync from "./sync.ts";
 import { tailnetName } from "./tailnet.ts";
 import * as teams from "./teams.ts";
@@ -333,6 +334,21 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/api/page/file/:slug/:name", async (req: Req) => pages.filePage(req.params.slug, req.params.name));
   // The Inbox's rows, newest first, for an agent or a script: the app holds them itself (inbox.ts).
   app.get("/api/inbox", async () => pages.inboxRows());
+  // A Slack thread's or a mail thread's messages, as its Inbox row opens them: the app holds no notices.
+  app.get("/api/page/thread", async (req: Req) => pages.threadPage(req.query.id ?? ""));
+  // A made-up notice, on a test desk alone, which connects to neither Slack nor Gmail (config.ts, CONNECT): a test of
+  // the Inbox's rows and pop-ups writes its own. 8790's come only from its connectors.
+  app.post("/api/notices", async (req: Req) => {
+    if (!TEST) throw new HttpError(403, "Only a test desk takes made-up notices.");
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const text = (k: string) => (typeof b[k] === "string" ? (b[k] as string) : "");
+    const source = b.source === "mail" ? "mail" : "slack";
+    const id = text("id") || `${source}:test:${Date.now()}`;
+    const verdict = ["now", "later", "dropped"].includes(text("verdict")) ? (text("verdict") as notices.Verdict) : null;
+    const n = { id, source, thread: text("thread") || id, place: text("place") || (source === "mail" ? "mail" : "DM"), who: text("who") || "someone",
+      text: text("text"), link: text("link"), at: typeof b.at === "number" ? b.at : Date.now() / 1000, verdict, why: text("why") } as const;
+    return { added: await notices.add(n) };
+  });
   // The Inbox's ⋯ menu, U and Backspace (Linear's): rows read, or unread again, or deleted, by their ids; with none,
   // every row, and with read, only the rows already read, as Linear's Delete all read. The app hears it as any write.
   app.post("/api/inbox/read", async (req: Req) => {

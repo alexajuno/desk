@@ -1,5 +1,6 @@
 // The Inbox's rows, in the inbox table, which the app holds as it holds the issues (db.ts, HELD): one for each session
-// that replied or asks you something, and one for each issue in Triage with no chat. "if we do it properly, this
+// that replied or asks you something, one for each issue in Triage with no chat, and one for each Slack thread, DM or
+// mail thread holding a notice the firewall let through (notices.ts). "if we do it properly, this
 // problem won't happen" (the user, 19 Oct, of the Inbox's count saying 2 over a list of one, then flipping back): the
 // sidebar's count, the Inbox's list and each row's dot are all worked out in the app from these same rows, and no
 // browser keeps its own idea of what was read.
@@ -32,6 +33,8 @@ export interface Row {
   read: number | null; // when you read it, in seconds
   gone: number | null; // when you deleted it: out of the Inbox until something newer comes
   marked: number | null; // when you marked it unread: it stays so, though you saw the session, until you read it
+  source: "slack" | "mail" | null; // a Slack thread's or a mail thread's row (notices.ts), or null for a session's or an issue's
+  who: string | null; // who wrote the thread's newest message
 }
 
 // What a row should say now, as pages.ts works it out. at is when it happened, or null for a question or a landing
@@ -46,7 +49,7 @@ export interface Want extends Omit<Row, "at" | "read" | "gone" | "marked"> {
 
 const DAY = 86400; // seconds a deleted row is kept, and how old a row new to the table may be
 const KEEP = 2000; // read rows kept, the newest: Linear's Inbox keeps 2,000 notifications (linear.app/docs/inbox)
-const COLUMNS = ["id", "slug", "issue", "session", "title", "agent", "why", "says", "kind", "waits", "at", "read", "gone", "marked"] as const;
+const COLUMNS = ["id", "slug", "issue", "session", "title", "agent", "why", "says", "kind", "waits", "at", "read", "gone", "marked", "source", "who"] as const;
 
 // The table, as desk last wrote it: desk is its one writer.
 const rows = new Map<string, Row>();

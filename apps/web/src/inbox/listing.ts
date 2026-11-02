@@ -53,8 +53,11 @@ function query(v: View): string {
 
 // The Notification type, by what a row asks of you, as Linear's are Assignments, Comments and replies, and Reminders
 // and deadlines.
-const TYPES: Record<string, string> = { deadline: "Reminders and deadlines", plan: "Plans", result: "Results", question: "Questions", reply: "Replies", triage: "Triage", stuck: "Landing stuck" };
-function typeOf(why: string): string {
+const TYPES: Record<string, string> = { deadline: "Reminders and deadlines", plan: "Plans", result: "Results", question: "Questions", reply: "Replies", triage: "Triage", stuck: "Landing stuck",
+  now: "Messages that need you", later: "Messages that wait" };
+function typeOf(r: InboxRow): string {
+  const why = r.why;
+  if (r.source) return why === "now" ? "now" : "later";
   if (why === "plan ready") return "plan";
   if (why === "result ready" || why === "check it") return "result";
   if (why === "asks you" || why === "waiting for you") return "question";
@@ -69,8 +72,8 @@ const folderName = (path: string | null) => (path ? path.replace(/\/+$/, "").rep
 // A row's value of one of the filters, as the address writes it. A chat with no issue has no folder, team, priority or
 // status, and comes From its agent, or from "chat".
 function valueOf(store: IssueStore, r: InboxRow, name: string): string {
-  if (name === "type") return typeOf(r.why);
-  if (name === "from") return r.issue ? "issue" : r.agent || "chat";
+  if (name === "type") return typeOf(r);
+  if (name === "from") return r.issue ? "issue" : r.source || r.agent || "chat";
   const i = r.issue ? store.bySlug.get(r.slug) : undefined;
   if (!i) return "none";
   if (name === "status") return i.state;
@@ -81,7 +84,7 @@ function valueOf(store: IssueStore, r: InboxRow, name: string): string {
 
 function labelOf(store: IssueStore, name: string, v: string): string {
   if (name === "type") return TYPES[v] ?? v;
-  if (name === "from") return v === "issue" ? "Issue sessions" : v === "chat" ? "Chats" : v;
+  if (name === "from") return v === "issue" ? "Issue sessions" : v === "chat" ? "Chats" : v === "slack" ? "Slack" : v === "mail" ? "Mail" : v;
   if (name === "status") return v === "none" ? "No status" : STATE_NAMES[v as keyof typeof STATE_NAMES] ?? v;
   if (name === "priority") return PRIORITY_NAMES[v as keyof typeof PRIORITY_NAMES] ?? v;
   if (v === "none") return `No ${name}`;

@@ -1,6 +1,12 @@
 // The Inbox's desktop notifications, from its rows (store/issues.ts). An unread row no desk tab had becomes one, unless a
 // desk tab has the focus, where the count shows it. The tabs share the rows they last had in localStorage.inboxNotified
 // as "<id>:<at>" keys, so one event notifies once; the rows a tab finds when it opens are not news.
+//
+// A Slack or mail thread's row (its source set) goes by the firewall's verdict instead, its why: now pops up even while
+// desk has the focus, where you spend the day and a count is easy to miss, and later never does, as it waits unread
+// ("only when sth worth notified about that it pops up", the user, 2 Nov; the desk issue "desk as my notification
+// center"). Only a message sent in the last FRESH seconds pops up, so a desk that was down, or the first day of mail
+// read back, leaves unread rows rather than a burst.
 import { reaction } from "mobx";
 import { post } from "../api/http";
 import { issues, type InboxRow } from "./issues";
@@ -12,6 +18,14 @@ addEventListener("pagehide", () => { if (document.hasFocus()) localStorage.deskF
 
 const keyOf = (row: InboxRow) => `${row.id}:${row.at}`;
 
+const FRESH = 15 * 60;
+
+// Whether a new unread row pops up, by what it is and whether a desk tab has the focus.
+function popsUp(row: InboxRow, watched: boolean) {
+  if (!row.source) return !watched;
+  return row.why === "now" && row.at > Date.now() / 1000 - FRESH;
+}
+
 let mine: Set<string> | null = null; // the unread rows this tab last had
 
 function notifyNew(rows: InboxRow[]) {
@@ -22,16 +36,18 @@ function notifyNew(rows: InboxRow[]) {
   mine = new Set(keys);
   localStorage.inboxNotified = JSON.stringify({ at: Date.now(), keys });
   const watched = document.hasFocus() || localStorage.deskFocus === "1";
-  if (!watched && window.Notification?.permission === "granted")
-    for (const row of rows) if (!had.has(keyOf(row)) && !told.has(keyOf(row))) notify(row);
+  if (window.Notification?.permission === "granted")
+    for (const row of rows) if (!had.has(keyOf(row)) && !told.has(keyOf(row)) && popsUp(row, watched)) notify(row);
 }
 
-// The notification reads as the Inbox's row: the issue's title, then what its session did, or the agent. A newer one for
-// the same issue takes the older's place. A click opens it in the Inbox and asks desk to bring this window forward,
-// since Hyprland leaves the page's own window.focus() unanswered.
+// The notification reads as the Inbox's row: the issue's title, then what its session did, or the agent; a thread's
+// place, then who wrote and what it needs. A newer one for the same issue or thread takes the older's place. A click
+// opens it in the Inbox and asks desk to bring this window forward, since Hyprland leaves the page's own window.focus()
+// unanswered.
 function notify(row: InboxRow) {
   const title = (row.issue && issues.bySlug.get(row.slug)?.title) || row.title;
-  const note = new Notification(title, { body: `${row.issue ? "Session" : row.agent ?? "Chat"} ${row.says}`, tag: row.slug });
+  const body = row.source ? row.says : `${row.issue ? "Session" : row.agent ?? "Chat"} ${row.says}`;
+  const note = new Notification(title, { body, tag: row.slug });
   note.onclick = () => {
     note.close();
     window.focus();

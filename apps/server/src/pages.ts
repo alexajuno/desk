@@ -15,6 +15,7 @@ import { byRank, CLOSED, runs, type Issue } from "./issues.ts";
 import * as inbox from "./inbox.ts";
 import * as land from "./land.ts";
 import * as live_ from "./live.ts";
+import * as notices from "./notices.ts";
 import * as periods from "./periods.ts";
 import * as pins from "./pins.ts";
 import * as projects from "./projects.ts";
@@ -232,7 +233,7 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
       id: h.session, slug: i?.slug ?? h.chat!.id, issue: Boolean(i), session: h.session, title: i ? i.title : chatTitle(h.chat!),
       agent: i ? null : h.chat!.agent ?? null, why, says: saysOf(why, i), kind: i?.state === "review" && REVIEWED.has(why) ? "review" : "needs",
       waits, at: waits ? null : replied, looked: live_.watching(h.session) ? now : turns.prompted(h.session) ?? 0,
-      seed: marks && !waits ? readBefore(h, replied!, marks) : null,
+      seed: marks && !waits ? readBefore(h, replied!, marks) : null, source: null, who: null,
     });
   }
   // Linear's due date notifications: one the day before an open issue is due, and one the day after it passed, each
@@ -246,21 +247,48 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
     const today = new Date().toDateString() === due.start.toDateString();
     wanted.push({ id: `due:${i.slug}`, slug: i.slug, issue: true, session: null, title: i.title, agent: null, why: late ? "overdue" : "due soon",
       says: late ? `Overdue since ${periods.label(i.due)}` : today ? "Due today" : "Due tomorrow", kind: "needs", waits: false,
-      at: late ? at(1) : at(-1), looked: 0, seed: null });
+      at: late ? at(1) : at(-1), looked: 0, seed: null, source: null, who: null });
   }
   for (const i of all.values())
     if (i.state === "triage" && !sessionOf(i))
       wanted.push({ id: i.slug, slug: i.slug, issue: true, session: null, title: i.title, agent: null, why: "no chat", says: saysOf("no chat", i),
-        kind: "needs", waits: true, at: parseLocal(i.created).getTime() / 1000, looked: 0, seed: null });
+        kind: "needs", waits: true, at: parseLocal(i.created).getTime() / 1000, looked: 0, seed: null, source: null, who: null });
+  for (const n of await notices.threads()) wanted.push(threadRow(n));
   await inbox.take(wanted);
   return inbox.listed(keep);
+}
+
+// A Slack thread's, DM's or mail thread's row, from its newest notice the Inbox shows (notices.ts): its place as the
+// title, as Linear's row names the issue, a DM by its sender and a mail by its subject; then who wrote, and what it needs
+// from you as the firewall's Claude put it, or the message itself where a rule let it through ("a DM" says nothing).
+// Its why is the notice's verdict, now or later, which the app's pop-up reads (store/inbox.ts). Opening it reads it,
+// as any row; it leaves the Inbox once its notices are pruned (notices.ts, KEEP_DAYS).
+function threadRow(n: notices.Notice): inbox.Want {
+  const [first, ...rest] = n.text.split("\n");
+  const said = (n.source === "mail" ? rest.join(" ") : first).trim() || first;
+  const what = n.why && !notices.RULED.has(n.why) ? n.why : said;
+  const title = n.source === "mail" ? first || "(no subject)" : n.place === "DM" ? n.who : n.place.replace(/^group DM with /, "");
+  return {
+    id: n.thread, slug: n.thread, issue: false, session: null, title, agent: null, why: n.verdict!,
+    says: n.place === "DM" ? what : `${n.who}: ${what}`, kind: "needs", waits: false, at: n.at, looked: 0, seed: null,
+    source: n.source, who: n.who,
+  };
 }
 
 // The Inbox's rows, newest first, as /api/inbox lists them, each named by who: a row from a chat with no issue names
 // its agent, or "Chat".
 export const inboxRows = async () => (await notifications(await store.loadAll())).map((r) => ({
-  slug: r.slug, title: r.title, why: r.why, says: r.says, url: `/inbox?i=${r.slug}`, unread: r.read === null, ...(r.issue ? {} : { who: r.agent ?? "Chat" }),
+  slug: r.slug, title: r.title, why: r.why, says: r.says, url: `/inbox?i=${encodeURIComponent(r.slug)}`, unread: r.read === null,
+  ...(r.issue ? {} : { who: r.source ? `${r.who} on ${r.source === "mail" ? "mail" : "Slack"}` : r.agent ?? "Chat" }),
 }));
+
+// A Slack thread's, DM's or mail thread's messages, oldest first, as its Inbox row opens them; the dropped ones left out.
+export async function threadPage(thread: string) {
+  if (!/^(slack|mail):/.test(thread)) throw new HttpError(404, "No such thread.");
+  const found = await notices.ofThread(thread);
+  if (!found.length) throw new HttpError(404, "No such thread.");
+  return { thread, notices: found.map(({ id, source, place, who, text, link, at, verdict, why }) => ({ id, source, place, who, text, link, at, verdict, why })) };
+}
 
 // The sidebar's Pinned and Chats, each session with its issue's state, whether it works now, and whether Auto carries it
 // on without you (auto.ts, quiet), as it keeps it out of the Inbox; the app adds whether it said something you have not

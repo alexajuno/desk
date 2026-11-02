@@ -905,6 +905,31 @@ button.inbox-tool.on { background: var(--btn-ghost-on); color: var(--text-1); }
 .inbox-row .sub { height: 15px; font: 450 12px var(--font); color: var(--text-3); }
 .inbox-row .says { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inbox-row .age { flex: none; margin-left: 4px; }
+/* A Slack or mail thread's row and the thread it opens (inbox/Thread.tsx), picked from two mockups on 2 Nov ("who
+   first"): who wrote as an agent's initial is drawn, a badge for where. The thread is a chat-wide column of its
+   messages, as a chat's (dock.css, .composer's width), under the firewall's line on why it reached you; Linear has none. */
+.inbox-row .avatar.agent .badge { color: var(--text-2); }
+.thread-view { display: flex; flex-direction: column; width: min(760px, calc(100% - 48px)); margin: 0 auto; padding: 28px 0 40px; }
+.thread-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.thread-name { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+.thread-place { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 18px var(--font); color: var(--text-1); }
+.thread-kind { flex: none; font: 450 13px var(--font); color: var(--text-3); }
+button.thread-out { flex: none; gap: 6px; }
+.thread-why { display: flex; align-items: center; gap: 8px; margin-top: 16px; padding: 10px 12px; border: 0.5px solid var(--border-2);
+              border-radius: 10px; background: var(--bg-raised); font: 450 13px var(--font); color: var(--text-2); }
+.thread-why .why-tag { flex: none; padding: 1px 8px; border: 0.5px solid var(--border-2); border-radius: 9999px; font: 500 12px var(--font); color: var(--text-1); }
+.thread-why .why-text { flex: 1; min-width: 0; }
+.thread-why .why-by { flex: none; font-size: 12px; color: var(--text-4); }
+.thread-msgs { display: flex; flex-direction: column; gap: 18px; margin-top: 24px; }
+.thread-msg { display: flex; gap: 10px; min-width: 0; }
+.thread-avatar { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+                 background: var(--avatar-session); color: var(--on-accent); font: 500 12px var(--font); }
+.thread-body { flex: 1; min-width: 0; }
+.thread-meta { display: flex; align-items: baseline; gap: 8px; }
+.thread-who { font: 500 13px var(--font); color: var(--text-1); }
+.thread-at { font: 450 12px var(--font); color: var(--text-4); }
+.thread-text { margin-top: 2px; font: 450 14px/22px var(--font); color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.thread-text strong { font-weight: 500; color: var(--text-1); }
 /* The line offering desktop notifications (desk.js), above the rows, until Chrome has your answer. */
 .notify-ask { display: flex; align-items: center; gap: 8px; margin: 0 10px 8px; padding: 6px 6px 6px 10px;
               border: 1px solid var(--border-2); border-radius: 8px; font: 500 13px var(--font); color: var(--text-2); }
@@ -916,9 +941,10 @@ button.inbox-tool.on { background: var(--btn-ghost-on); color: var(--text-1); }
 @media (max-width: 900px) { .bar .inbox-head { width: calc(var(--inbox-list) - 36px); } }
 @media (max-width: 769px) {
   .inbox { grid-template-columns: minmax(0, 1fr); }
-  /* the open row takes the screen when it is an issue's page or a chat (a chat row, or Triage's), else the list does */
-  .inbox:has(.inbox-open :is(.issue, .session-view)) .inbox-list,
-  .inbox:not(:has(.inbox-open :is(.issue, .session-view))) .inbox-open { display: none; }
+  /* the open row takes the screen when it is an issue's page, a chat (a chat row, or Triage's) or a Slack or mail
+     thread, else the list does */
+  .inbox:has(.inbox-open :is(.issue, .session-view, .thread-view)) .inbox-list,
+  .inbox:not(:has(.inbox-open :is(.issue, .session-view, .thread-view))) .inbox-open { display: none; }
   .inbox-list { border-right: 0; }
   .bar:has(.inbox-head)::after { content: none; }
   .bar .inbox-head, .side-collapsed .bar .inbox-head { width: auto; }
