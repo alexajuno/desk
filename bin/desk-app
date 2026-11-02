@@ -7,7 +7,7 @@
 top=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 if systemctl --user cat desk-app.service >/dev/null 2>&1; then
 	systemctl --user start desk-app.service
-	for _ in $(seq 50); do # the app answers once it has brought your logins, a second or two after it starts
+	for _ in $(seq 50); do # the app answers a second or two after it starts
 		curl -sf --unix-socket "${XDG_RUNTIME_DIR:-/tmp}/desk-app.sock" -X POST http://desk/window >/dev/null && exit 0
 		sleep 0.2
 	done
