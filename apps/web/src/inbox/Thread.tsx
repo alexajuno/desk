@@ -10,6 +10,9 @@
 //
 // A reply the chat's Claude drafted waits on a card above the composer (ReplyCard; the server's replies.ts), yours to
 // edit, and only your Send there posts it to Slack or sends it from Gmail as you: Claude has no call that sends.
+//
+// A Slack or Gmail login that ended has a row of its own (the server's logins.ts and pages.ts, loginRow), which opens on
+// what to do (LoginView), picked from two mockups over a strip above the Inbox's list, which the phone hides.
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { useState } from "react";
@@ -38,7 +41,10 @@ const ENVELOPE = <svg width="10" height="10" viewBox="0 0 16 16" fill="none" str
 const OUT = <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" /></svg>;
 
 // A thread's row's badge: a channel's #, a DM's bubble, a mail's envelope.
-export const badgeOf = (r: InboxRow) => (r.source === "mail" ? ENVELOPE : r.title.startsWith("#") ? HASH : BUBBLE);
+const KEY = <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="5.5" cy="10.5" r="3" /><path d="M7.7 8.3 13.5 2.5M11 5l2 2" /></svg>;
+
+const isLogin = (r: InboxRow) => r.slug.startsWith("login:");
+export const badgeOf = (r: InboxRow) => (isLogin(r) ? KEY : r.source === "mail" ? ENVELOPE : r.title.startsWith("#") ? HASH : BUBBLE);
 export const initial = (who: string | null | undefined) => (who ?? "?").trim().slice(0, 1).toUpperCase() || "?";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -69,6 +75,7 @@ export const chatOf = (row: InboxRow) => row.session ?? started.get(row.slug) ??
 
 // The thread open on the right: the thread with a composer under it, or once you wrote, the chat on it.
 export const ThreadView = observer(function ThreadView({ row }: { row: InboxRow }) {
+  if (isLogin(row)) return <LoginView row={row} />;
   const session = chatOf(row);
   if (session) return <SessionView id={session} above={<><ThreadBody row={row} /><p className="convo-note thread-private">With Claude: only you see this</p></>} foot={<ReplyCard thread={row.slug} />} />;
   return (
@@ -78,6 +85,33 @@ export const ThreadView = observer(function ThreadView({ row }: { row: InboxRow 
     </div>
   );
 });
+
+// A login that ended: since when, what refused it, and what mends it. The row leaves once desk is signed in again.
+function LoginView({ row }: { row: InboxRow }) {
+  const { data } = usePage<{ login?: { source: "slack" | "mail"; at: number; why: string } }>(`/api/page/thread?id=${encodeURIComponent(row.slug)}`, String(row.at));
+  const login = data?.login, slack = row.source === "slack";
+  return (
+    <div className="thread-pane">
+      <div className="thread-view">
+        <div className="thread-head">
+          <div className="thread-name"><span className="thread-place">{row.title}</span><span className="thread-kind">{slack ? "Slack" : "Mail"}</span></div>
+          {slack && <button type="button" className="thread-out" onClick={() => window.open("https://ownego.slack.com", "_blank", "noopener")}>{OUT}Open Slack</button>}
+        </div>
+        {login && (
+          <div className="thread-why">
+            <span className="why-tag">Login</span>
+            <span className="why-text">{login.why}</span>
+            <span className="why-by">since {when(login.at)}</span>
+          </div>
+        )}
+        <p className="login-text">{slack
+          ? "desk reads your Slack login from your Chrome, Profile 2. Log in to Slack there once: desk tries again each minute, and once it holds, reads back what came in meanwhile. Until then nothing from Slack reaches you here."
+          : "desk reads Gmail with muse's Gmail login, mail/gmail-muse in pass, and Google no longer takes its refresh token: it was revoked or expired. Put a new one there, from the same client: desk tries again each minute, and once it holds, reads from where it stopped. Until then no mail reaches you here."}</p>
+        <p className="login-text login-note">This row leaves on its own once desk is signed in again.</p>
+      </div>
+    </div>
+  );
+}
 
 // The thread's reply not sent yet, the newest: Claude's draft, or one Slack or Gmail refused.
 const unsent = (thread: string): Reply | null =>

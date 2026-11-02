@@ -24,6 +24,7 @@ import * as seat from "./seat.ts";
 import * as projects from "./projects.ts";
 import { HttpError } from "./pages.ts";
 import * as sessions from "./sessions.ts";
+import * as logins from "./logins.ts";
 import * as notices from "./notices.ts";
 import * as sync from "./sync.ts";
 import * as replies from "./replies.ts";
@@ -375,6 +376,15 @@ export async function create(): Promise<FastifyInstance> {
     if (!fromPage(req)) throw new HttpError(403, "Only its card in desk discards a reply.");
     await replies.discard(req.params.id);
     return { discarded: true };
+  });
+  // A made-up login that ended, or held again, on a test desk, which connects to neither Slack nor Gmail (logins.ts).
+  app.post("/api/logins", async (req: Req) => {
+    if (!TEST) throw new HttpError(403, "Only a test desk takes a made-up login.");
+    const b = (req.body ?? {}) as { source?: string; ended?: boolean; why?: string };
+    const source = b.source === "mail" ? "mail" : "slack";
+    if (b.ended === false) await logins.holds(source);
+    else await logins.end(source, typeof b.why === "string" && b.why ? b.why : "made up, on a test desk");
+    return { ended: logins.of(source) };
   });
   // A made-up notice, on a test desk alone, which connects to neither Slack nor Gmail (config.ts, CONNECT): a test of
   // the Inbox's rows and pop-ups writes its own. 8790's come only from its connectors.

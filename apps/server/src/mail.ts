@@ -16,6 +16,7 @@
 // nor a mail's text outside the notices table.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import * as logins from "./logins.ts";
 import * as notices from "./notices.ts";
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me/";
@@ -31,7 +32,8 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let stopped = false;
 let said = ""; // the last error logged, so that one that repeats each minute is logged once
 
-// Gmail refused the login: the refresh token was revoked or expired, so a poll can do nothing until it is renewed.
+// Gmail refused the login: the refresh token was revoked or expired, so a poll can do nothing until it is renewed. The
+// Inbox says so once (logins.ts); each minute's poll tries it again, and once it holds reads from where it stopped.
 export class SignedOut extends Error {}
 
 async function token(): Promise<string> {
@@ -44,9 +46,13 @@ async function token(): Promise<string> {
     signal: AbortSignal.timeout(60_000),
   });
   const body = (await r.json().catch(() => ({}))) as Record<string, any>;
-  if (body.error === "invalid_grant") throw new SignedOut("Gmail refused the login (invalid_grant)");
+  if (body.error === "invalid_grant") {
+    await logins.end("mail", "Google refused its refresh token (invalid_grant)");
+    throw new SignedOut("Gmail refused the login (invalid_grant)");
+  }
   if (!r.ok || !body.access_token) throw new Error(`Gmail's token endpoint answered ${r.status}`);
   access = { token: body.access_token, until: Date.now() + (Number(body.expires_in ?? 3600) - 300) * 1000 };
+  await logins.holds("mail");
   return access.token;
 }
 

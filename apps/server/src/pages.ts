@@ -13,6 +13,7 @@ import * as fields from "./fields.ts";
 import * as store from "./issues.ts";
 import { byRank, CLOSED, runs, type Issue } from "./issues.ts";
 import * as inbox from "./inbox.ts";
+import * as logins from "./logins.ts";
 import * as land from "./land.ts";
 import * as live_ from "./live.ts";
 import * as notices from "./notices.ts";
@@ -259,6 +260,7 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
       wanted.push({ id: i.slug, slug: i.slug, issue: true, session: null, title: i.title, agent: null, why: "no chat", says: saysOf("no chat", i),
         kind: "needs", waits: true, at: parseLocal(i.created).getTime() / 1000, looked: 0, seed: null, source: null, who: null });
   for (const n of await notices.threads()) wanted.push(threadRow(n, onThreads.get(n.thread), now));
+  for (const l of logins.all()) wanted.push(loginRow(l));
   await inbox.take(wanted);
   return inbox.listed(keep);
 }
@@ -285,15 +287,31 @@ function threadRow(n: notices.Notice, chat: inbox.Want | undefined, now: number)
   return { ...row, why: chat.why, says: `Claude ${chat.says}`, waits: chat.waits, at: chat.at, looked: chat.looked, seed: chat.seed };
 }
 
+// A Slack or Gmail login that ended (logins.ts): one row, which pops up once as a thread's now does, from when desk
+// first found it, and waits until desk is signed in again, then leaves. Opening it says what to do (inbox/Thread.tsx).
+function loginRow(l: logins.Ended): inbox.Want {
+  const slack = l.source === "slack";
+  return {
+    id: `login:${l.source}`, slug: `login:${l.source}`, issue: false, session: null, title: `${slack ? "Slack" : "Gmail"} login ended`, agent: null,
+    why: "now", says: slack ? "desk: log in to Slack in your Chrome" : "desk: renew desk's Gmail login", kind: "needs", waits: true, at: l.at,
+    looked: 0, seed: null, source: l.source, who: slack ? "Slack" : "Gmail",
+  };
+}
+
 // The Inbox's rows, newest first, as /api/inbox lists them, each named by who: a row from a chat with no issue names
 // its agent, or "Chat".
 export const inboxRows = async () => (await notifications(await store.loadAll())).map((r) => ({
   slug: r.slug, title: r.title, why: r.why, says: r.says, url: `/inbox?i=${encodeURIComponent(r.slug)}`, unread: r.read === null,
-  ...(r.issue ? {} : { who: r.source ? `${r.who} on ${r.source === "mail" ? "mail" : "Slack"}` : r.agent ?? "Chat" }),
+  ...(r.issue ? {} : { who: r.id.startsWith("login:") ? "desk" : r.source ? `${r.who} on ${r.source === "mail" ? "mail" : "Slack"}` : r.agent ?? "Chat" }),
 }));
 
 // A Slack thread's, DM's or mail thread's messages, oldest first, as its Inbox row opens them; the dropped ones left out.
 export async function threadPage(thread: string) {
+  if (thread.startsWith("login:")) { // a login that ended, as its row opens it
+    const ended = logins.of(thread.slice("login:".length) as logins.Source);
+    if (!ended) throw new HttpError(404, "That login holds.");
+    return { thread, notices: [], login: ended };
+  }
   if (!/^(slack|mail):/.test(thread)) throw new HttpError(404, "No such thread.");
   const found = await notices.ofThread(thread);
   if (!found.length) throw new HttpError(404, "No such thread.");

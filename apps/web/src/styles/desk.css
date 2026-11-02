@@ -920,6 +920,9 @@ button.thread-out { flex: none; gap: 6px; }
 .thread-why .why-tag { flex: none; padding: 1px 8px; border: 0.5px solid var(--border-2); border-radius: 9999px; font: 500 12px var(--font); color: var(--text-1); }
 .thread-why .why-text { flex: 1; min-width: 0; }
 .thread-why .why-by { flex: none; font-size: 12px; color: var(--text-4); }
+/* A login that ended (inbox/Thread.tsx, LoginView): what mends it, in the thread's column */
+.login-text { margin: 20px 0 0; font: 450 14px/1.6 var(--font); color: var(--text-2); }
+.login-text.login-note { margin-top: 12px; font-size: 13px; color: var(--text-3); }
 .thread-msgs { display: flex; flex-direction: column; gap: 18px; margin-top: 24px; }
 .thread-msg { display: flex; gap: 10px; min-width: 0; }
 .thread-avatar { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;

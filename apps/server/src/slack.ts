@@ -14,6 +14,10 @@
 // reply in a thread they wrote in are written as now, by rule; the rest of a work channel is written unjudged, for the
 // firewall's Claude to judge. A DM from an app (Jira, Calendar, Slackbot) goes to Claude too, not straight to now.
 //
+// What came while no socket was open, a desk that was down, a socket that closed or one Slack refused, desk reads back
+// (readBack): once a socket opens, and each minute while none does. A login that ended (SignedOut) the Inbox says once
+// (logins.ts), and desk tries it again each minute, so that one made again in Chrome is picked up within the minute.
+//
 // Nothing here logs or keeps the cookie or the token outside this process's memory, nor a message's text outside the
 // notices table: the slack skill's rule.
 import { execFile } from "node:child_process";
@@ -25,10 +29,12 @@ import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import { WebSocket } from "ws";
 import { HOME } from "./config.ts";
+import { sql } from "./db.ts";
+import * as logins from "./logins.ts";
 import * as notices from "./notices.ts";
 
 const WORKSPACE = "https://ownego.slack.com";
-const PROFILE = process.env.DESK_CHROME_PROFILE || join(HOME, ".config/google-chrome/Profile 2"); // as the app's
+const profile = () => process.env.DESK_CHROME_PROFILE || join(HOME, ".config/google-chrome/Profile 2"); // as the app's
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
 const NON_WORK = "non-work"; // the sidebar section whose channels desk never shows
 const REFRESH = 10 * 60_000; // how often the channels and the sidebar are read again
@@ -81,7 +87,7 @@ async function readCookie(): Promise<string | null> {
   // A copy, since Chrome holds its own open; in the user's own runtime folder, which only they reach
   const dir = mkdtempSync(join(process.env.XDG_RUNTIME_DIR || tmpdir(), "desk-slack-"));
   try {
-    copyFileSync(join(PROFILE, "Cookies"), join(dir, "Cookies"));
+    copyFileSync(join(profile(), "Cookies"), join(dir, "Cookies"));
     const db = new DatabaseSync(join(dir, "Cookies"), { readOnly: true });
     const version = Number((db.prepare("SELECT value FROM meta WHERE key = 'version'").get() as { value: string }).value);
     const rows = db.prepare("SELECT name, value, encrypted_value FROM cookies WHERE host_key = '.slack.com' AND name IN ('d', 'd-s')")
@@ -106,22 +112,32 @@ async function readCookie(): Promise<string | null> {
   }
 }
 
+// Signed in, or SignedOut when the login ended, which the Inbox then says once (logins.ts). Slack down, or no network, is
+// a plain Error: the login may still hold.
 async function signIn() {
   const cookie = await readCookie();
-  if (!cookie) throw new SignedOut("no Slack cookie in Chrome");
+  if (!cookie) throw ended(new SignedOut("no Slack cookie in Chrome"));
   // The page as a tab loads it, the redirects followed by hand so that the cookie goes along each
   let url = `${WORKSPACE}/customize/emoji`, html = "";
   for (let i = 0; i < 6 && !html; i++) {
-    const r = await fetch(url, { headers: { cookie, "user-agent": UA }, redirect: "manual" });
+    const r = await fetch(url, { headers: { cookie, "user-agent": UA }, redirect: "manual", signal: AbortSignal.timeout(30_000) });
     if (r.status >= 300 && r.status < 400 && r.headers.get("location")) url = new URL(r.headers.get("location")!, url).href;
+    else if (!r.ok) throw new Error(`Slack's page answered ${r.status}`);
     else html = await r.text();
   }
   const token = html.match(/"api_token":"(xoxc-[^"]+)"/)?.[1];
-  if (!token) throw new SignedOut("Slack's page gave no session token");
+  if (!token) throw ended(new SignedOut("Slack's page gave no session token"));
   login = { cookie, token, me: "", handle: "" };
   const auth = await call("auth.test");
   login.me = auth.user_id as string;
   login.handle = auth.user as string;
+  await logins.holds("slack");
+}
+
+// A refusal only a new login mends, told once; the error, to throw.
+function ended(e: SignedOut) {
+  void logins.end("slack", e.message).catch((x) => console.error("slack: keeping the login's end,", x.message));
+  return e;
 }
 
 // A Slack API method, as the user; its answer, or an Error naming the method and Slack's error code, never the token.
@@ -137,7 +153,7 @@ async function call(method: string, params: Record<string, string> = {}): Promis
   if (answer.ok) return answer;
   if (["invalid_auth", "not_authed", "token_revoked", "account_inactive"].includes(answer.error)) {
     login = null;
-    throw new SignedOut(`${method}: ${answer.error}`);
+    throw ended(new SignedOut(`${method}: ${answer.error}`));
   }
   throw new Error(`${method}: ${answer.error}`);
 }
@@ -322,9 +338,74 @@ export async function post(id: string, text: string): Promise<string> {
   return `${WORKSPACE}/archives/${channel}/p${String(r.ts).replace(".", "")}` + (ts ? `?thread_ts=${ts}&cid=${channel}` : "");
 }
 
+// ---- What came while desk was not listening
+
+// A desk that was down, a socket that closed, or one Slack refused: desk reads back what came meanwhile, from how far it
+// last heard Slack (heard), kept in meta so that a restart reads back from where it stopped, BACK at most. Each
+// conversation whose newest message is past the mark (client.counts, as Slack's own client asks) is read from there, and
+// each thread the user follows with a reply past it (subscriptions.thread.getView: the threads they started, wrote in or
+// were mentioned in, as Slack's Threads view lists them); each message goes through the door as one from the socket
+// would, and one written already is left as it was (notices.add).
+const BACK = 3 * 86400; // seconds: a weekend away
+const OVERLAP = 60; // seconds read again before the mark, since Slack lists a message a little after its time
+const EVERY = 60_000; // how often desk reads back while no socket is open
+const HEARD = "slack heard";
+
+async function heard(): Promise<number | null> {
+  const r = await sql().query<{ value: string }>("select value from meta where name = $1", [HEARD]);
+  return r.rows[0] ? Number(r.rows[0].value) : null;
+}
+
+// Slack heard up to this time, in seconds; a mark never goes back.
+async function hear(at: number) {
+  await sql().query(`insert into meta values ($1, $2) on conflict (name) do update
+    set value = greatest(meta.value::double precision, excluded.value::double precision)::text`, [HEARD, String(at)]);
+}
+
+let reading: Promise<number> | null = null;
+
+// Reads back from the mark to now, once at a time; how many messages it wrote.
+function readBack(): Promise<number> {
+  reading ??= (async () => {
+    try {
+      const began = Date.now() / 1000;
+      const from = String(Math.max((await heard()) ?? began, began - BACK) - OVERLAP);
+      const take_ = (m: Message, channel: string) => take({ ...m, type: "message", channel });
+      let written = 0;
+      const counts = await call("client.counts", {});
+      for (const c of [...(counts.channels ?? []), ...(counts.mpims ?? []), ...(counts.ims ?? [])] as { id: string; latest?: string }[]) {
+        if (!(Number(c.latest) > Number(from)) || places.get(c.id)?.nonWork) continue;
+        const got: Message[] = [];
+        let cursor = "";
+        do {
+          const r = await call("conversations.history", { channel: c.id, oldest: from, limit: "200", cursor });
+          got.push(...r.messages);
+          cursor = r.response_metadata?.next_cursor || "";
+        } while (cursor);
+        for (const m of got.reverse()) if (await take_(m, c.id)) written++; // oldest first, as they came
+      }
+      const followed = (await call("subscriptions.thread.getView", { limit: "50" })).threads as { root_msg?: Message & { latest_reply?: string } }[];
+      for (const { root_msg: root } of followed ?? []) {
+        if (!root?.channel || !(Number(root.latest_reply) > Number(from)) || places.get(root.channel)?.nonWork) continue;
+        const r = await call("conversations.replies", { channel: root.channel, ts: root.thread_ts ?? root.ts, oldest: from, limit: "200" });
+        for (const m of r.messages as Message[]) if (m.ts !== root.ts && (await take_(m, root.channel))) written++;
+      }
+      await hear(began);
+      return written;
+    } finally {
+      reading = null;
+    }
+  })();
+  return reading;
+}
+
 // ---- The socket
 
+let live = false; // a socket is open and Slack said hello on it
+let polled = false; // whether the log said desk reads back each minute, since a socket last opened
+
 // One socket's life: signed in, the places read, rtm.connect's socket open until it closes. Resolves when it does.
+// Once Slack says hello, desk reads back what came since it last heard Slack, and marks it heard as the socket lives.
 async function session() {
   if (!login) await signIn();
   await loadPlaces();
@@ -332,14 +413,15 @@ async function session() {
   await new Promise<void>((resolve) => {
     const ws = new WebSocket(url, { headers: { cookie: login!.cookie, "user-agent": UA } });
     socket = ws;
-    let heard = Date.now(), id = 0, queue = Promise.resolve();
+    let heardAt = Date.now(), id = 0, queue = Promise.resolve();
     const ping = setInterval(() => {
-      if (Date.now() - heard > QUIET) return ws.terminate();
+      if (Date.now() - heardAt > QUIET) return ws.terminate();
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ id: ++id, type: "ping" }));
+      if (live) void hear(heardAt / 1000).catch((e) => console.error("slack: keeping how far it heard,", e.message));
     }, 30_000);
     const refresh = setInterval(() => void loadPlaces().catch((e) => console.error("slack: reading the channels,", e.message)), REFRESH);
     ws.on("message", (data) => {
-      heard = Date.now();
+      heardAt = Date.now();
       let m: Message;
       try {
         m = JSON.parse(String(data));
@@ -347,8 +429,12 @@ async function session() {
         return;
       }
       if (m.type === "hello") {
+        live = true;
+        polled = false;
         const work = [...places.values()].filter((p) => p.kind === "channel" && !p.nonWork).length;
         console.log(`slack: connected as ${login?.handle}, ${work} work channels`);
+        void readBack().then((n) => { if (n) console.log(`slack: read back ${n} that came while desk was not listening`); },
+          (e) => console.error(`slack: reading back, ${e.message}`));
       }
       if (m.type === "goodbye") ws.close();
       if (m.type === "message") queue = queue.then(() => take(m)).then(() => {}, (e) => console.error("slack: a message,", e.message));
@@ -359,26 +445,39 @@ async function session() {
       clearInterval(ping);
       clearInterval(refresh);
       socket = null;
+      live = false;
       if (!stopped) console.log(`slack: the socket closed (${code})`);
       resolve();
     });
   });
 }
 
+let polling: ReturnType<typeof setInterval> | null = null;
+
 // Keeps a socket open while desk runs: after one closes, the next opens 5 s later, the wait doubling up to 5 minutes
-// while they keep failing, and back to 5 s after one that lasted.
+// while they keep failing, and back to 5 s after one that lasted; a login that ended is tried again each minute, so that
+// one made again in Chrome is picked up within the minute. While no socket is open but the login holds, as when Slack
+// refuses the socket, desk reads back what came each minute instead.
 export function start() {
+  polling = setInterval(() => {
+    if (stopped || live || !login || reading) return;
+    if (!polled) console.log("slack: no socket, reading back each minute until one opens");
+    polled = true;
+    readBack().then((n) => { if (n) console.log(`slack: read back ${n}`); }, (e) => console.error(`slack: reading back, ${e.message}`));
+  }, EVERY);
   void (async () => {
     let wait = 5_000;
     while (!stopped) {
       const began = Date.now();
+      let signedOut = false;
       try {
         await session();
       } catch (e) {
+        signedOut = e instanceof SignedOut;
         console.error(`slack: ${(e as Error).message}`);
       }
       if (Date.now() - began > 5 * 60_000) wait = 5_000;
-      await new Promise((r) => setTimeout(r, wait));
+      await new Promise((r) => setTimeout(r, signedOut ? EVERY : wait));
       wait = Math.min(wait * 2, 5 * 60_000);
     }
   })();
@@ -386,6 +485,7 @@ export function start() {
 
 export function stop() {
   stopped = true;
+  if (polling) clearInterval(polling);
   socket?.close();
 }
 
