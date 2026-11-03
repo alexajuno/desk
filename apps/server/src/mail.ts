@@ -133,6 +133,9 @@ function bodyOf(part: Record<string, any> | undefined): string {
 
 // A mail thread as Gmail holds it now, for a chat on its Inbox row (threads.ts): each mail, the user's own too, as
 // "you", oldest first, its subject over its text, cut at LONG characters.
+// The thread a mail is in, by the mail's id, which desk's links to a mail hold, for a chat attaching it (threads.ts, idOf).
+export const threadOf = async (message: string) => `mail:${(await call(`messages/${message}`, { format: "minimal" })).threadId}`;
+
 export async function thread(id: string): Promise<{ who: string; at: number; text: string }[]> {
   const t = await call(`threads/${id.slice("mail:".length)}`, { format: "full" });
   return (t.messages ?? []).map((m: Record<string, any>) => {

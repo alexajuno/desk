@@ -48,7 +48,7 @@ export interface Chat {
   named?: string; // the title the user gave it, or its automation's, over Claude Code's
   from?: string; // the script whose message started it (push)
   automation?: string; // the automation whose run it is, by slug (automations.ts)
-  thread?: string; // the Slack thread, DM or mail thread whose Inbox row it was started from (threads.ts)
+  threads?: string[]; // the Slack threads, DMs and mail threads it follows (follow): the one it started on, and any attached since
   seen?: number; // when the user last looked at it, in seconds, until 19 Oct: the inbox table keeps it since (inbox.ts)
   deleted?: string; // when the user deleted it (remove)
   [key: string]: unknown; // what else its file held, such as the messages of a chat from before the panel
@@ -128,7 +128,7 @@ const now = () => store.now();
 
 // --- the table -------------------------------------------------------------------------------------------------------
 
-const COLUMNS = ["id", "kind", "title", "created", "updated", "session", "issue", "folder", "cwd", "agent", "bare", "auto", "named", "from", "automation", "seen", "deleted"];
+const COLUMNS = ["id", "kind", "title", "created", "updated", "session", "issue", "folder", "cwd", "agent", "bare", "auto", "named", "from", "automation", "threads", "seen", "deleted"];
 
 const UPSERT = `insert into chats (${[...COLUMNS, "extra"].map((c) => `"${c}"`).join(", ")})
   values (${[...COLUMNS, "extra"].map((_, n) => `$${n + 1}`).join(", ")})
@@ -136,7 +136,8 @@ const UPSERT = `insert into chats (${[...COLUMNS, "extra"].map((c) => `"${c}"`).
 
 async function put(tx: Db, chat: Chat) {
   const extra = Object.fromEntries(Object.entries(chat).filter(([k]) => !COLUMNS.includes(k)));
-  await tx.query(UPSERT, [...COLUMNS.map((c) => (c === "bare" || c === "auto" ? Boolean(chat[c]) : (chat[c] ?? null))), extra]);
+  const value = (c: string) => (c === "bare" || c === "auto" ? Boolean(chat[c]) : c === "threads" ? (chat.threads?.length ? chat.threads : null) : (chat[c] ?? null));
+  await tx.query(UPSERT, [...COLUMNS.map(value), extra]);
 }
 
 // The chat a row holds, with the fields it leaves empty left out, as its file did.
@@ -194,6 +195,8 @@ export async function readIn() {
     }
     if (newest > since)
       await tx.query("insert into meta values ('chats read', $1) on conflict (name) do update set value = excluded.value", [String(newest)]);
+    // A thread's chat from before 3 Nov kept its one thread in extra: it follows it, from its threads.
+    await tx.query("update chats set threads = coalesce(threads, '{}') || array[extra->>'thread'], extra = extra - 'thread' where extra ? 'thread'");
   });
   const read = new Map<string, Chat>();
   for (const row of (await db.sql().query<Record<string, unknown>>("select * from chats")).rows) {
@@ -270,7 +273,8 @@ export function transcript(id: string): string {
 // The chat becomes the issue's session: the issue, as the caller set it, and the chat are saved as one write. desk
 // moves the chat into the issue's folder once its turn ends. An issue in Triage has no folder yet, so the chat stays
 // where it runs.
-// The issue's earlier session, which the chat takes over, lets the issue go too when it is a chat of its own.
+// The issue's earlier session, which the chat takes over, lets the issue go too when it is a chat of its own. The chat
+// working the issue holds its threads, so it takes those of the issue's chats before it.
 export async function bind(chat: Chat, i: Issue, base: string, previous: string | null = null) {
   chat.issue = i.slug;
   delete chat.deleted; // a chat at work is in sight
@@ -280,12 +284,15 @@ export async function bind(chat: Chat, i: Issue, base: string, previous: string 
     delete old.issue;
     old.updated = now();
   }
+  const before = [...all().values()].filter((c) => c.id !== chat.id && c.issue === i.slug).flatMap((c) => c.threads ?? []);
+  if (before.length) chat.threads = [...new Set([...(chat.threads ?? []), ...before])];
   await save(chat, async (tx) => {
     await store.saveIn(tx, i);
     if (old) {
       await put(tx, old);
       keep(all(), old);
     }
+    await takeFrom(tx, chat);
   });
   if (!same(chat.folder, runsIn(chat)) && !MOVING.has(chat.id)) {
     MOVING.add(chat.id);
@@ -491,18 +498,80 @@ async function cameIn(message: string, more: Partial<Chat>): Promise<Chat> {
   const s = settings.load();
   await models.keep(chat.session, { model: s.chat_model, effort: s.chat_effort });
   await hosted.start({ ...(await hostOptions(chat)), title: `desk chat ${stamp()}`, message });
-  await save(chat);
+  await save(chat, (tx) => takeFrom(tx, chat));
   return chat;
 }
 
 // A chat on a Slack thread's, DM's or mail thread's Inbox row (threads.ts), named after the thread until it files its
-// issue. One started before 3 Nov stays bare: a chat never changes kind.
-export const onThread = (thread: string, title: string, message: string) => cameIn(message, { thread, named: title });
+// issue, which follows the thread from its start, so that it never hangs on the model remembering a call. One started
+// before 3 Nov stays bare: a chat never changes kind.
+export const onThread = (thread: string, title: string, message: string) => cameIn(message, { threads: [thread], named: title });
 
-// The thread's chat, the newest the user kept, or null.
-export function ofThread(thread: string): Chat | null {
-  const found = [...all().values()].filter((c) => c.thread === thread && !c.deleted).sort((a, b) => b.created.localeCompare(a.created))[0];
+// --- the threads a chat follows --------------------------------------------------------------------------------------
+// A chat follows the threads attached to it, with no end: "attach slack threads to a chat, and it'll follow that thread
+// forever" (the user, 3 Nov), the attachment living on the chat, not on desk's copy of the messages, which goes after 14
+// days (notices.ts). desk attaches the one a chat starts on (onThread); the chat's model attaches any other and lets one
+// go, on the user's word (follow, letGo). A thread is one chat's, since its messages go somewhere: attaching it moves it.
+// A deleted chat follows none, and a DM is followed only while the chat's issue is open, since a DM has no end and would
+// bring every later message from that person here.
+
+const DM = /^slack:[^:]+$/; // a DM's or a group DM's, the whole DM
+
+// The threads the chat follows now, of those attached to it.
+export function follows(chat: Chat, issues: Map<string, Issue>): string[] {
+  if (chat.deleted) return [];
+  const closed = Boolean(chat.issue) && CLOSED.has(issues.get(chat.issue!)?.state ?? "");
+  return (chat.threads ?? []).filter((t) => !closed || !DM.test(t));
+}
+
+// The chat following the thread, or null: the newest the thread is attached to, as one from before 3 Nov may share it.
+export function followerOf(thread: string, issues: Map<string, Issue>): Chat | null {
+  const found = [...all().values()].filter((c) => c.threads?.includes(thread)).sort((a, b) => b.created.localeCompare(a.created))
+    .find((c) => follows(c, issues).includes(thread));
   return found ? structuredClone(found) : null;
+}
+
+// The same, reading the issue of the chat it is attached to.
+export async function follower(thread: string): Promise<Chat | null> {
+  const slugs = [...all().values()].filter((c) => c.issue && c.threads?.includes(thread)).map((c) => c.issue!);
+  const issues = new Map<string, Issue>();
+  for (const slug of new Set(slugs)) if (await store.exists(slug)) issues.set(slug, await store.load(slug));
+  return followerOf(thread, issues);
+}
+
+// One thread, one chat: the chat's threads leave every other chat they were attached to, in the chat's write. Gives
+// those chats.
+async function takeFrom(tx: Db, chat: Chat): Promise<Chat[]> {
+  const mine = new Set(chat.threads ?? []);
+  const others = [...all().values()].filter((c) => c.id !== chat.id && c.threads?.some((t) => mine.has(t))).map((c) => structuredClone(c));
+  for (const other of others) {
+    other.threads = other.threads!.filter((t) => !mine.has(t));
+    other.updated = now();
+    await put(tx, other);
+    keep(all(), other);
+  }
+  return others;
+}
+
+export class NotFollowed extends Error {}
+
+// The thread attached to the chat, by its model's call (POST /api/chats/<id>/threads), from any chat it was attached to:
+// gives the one that followed it, if any, for the model to tell the user.
+export async function follow(id: string, thread: string): Promise<{ chat: Chat; from: Chat | null }> {
+  const chat = load(id), had = await follower(thread);
+  if (!chat.threads?.includes(thread)) chat.threads = [...(chat.threads ?? []), thread];
+  await save(chat, (tx) => takeFrom(tx, chat));
+  return { chat, from: had && had.id !== chat.id ? had : null };
+}
+
+// The thread let go of, by its model's call (DELETE /api/chats/<id>/threads), on the user's word: its next message goes
+// through the firewall to a row of its own again.
+export async function letGo(id: string, thread: string): Promise<Chat> {
+  const chat = load(id);
+  if (!chat.threads?.includes(thread)) throw new NotFollowed(`This chat does not follow ${thread}. It follows ${chat.threads?.join(", ") || "none"}.`);
+  chat.threads = chat.threads.filter((t) => t !== thread);
+  await save(chat);
+  return chat;
 }
 
 // An automation's run (automations.ts), named after it, which starts on the message and waits in the Inbox with its
@@ -580,7 +649,7 @@ export function* said(chat: Chat): Generator<[string, string]> {
 
 // A chat nobody has written in yet: no issue, and no transcript, which its session writes only from its first message.
 // One desk started on a thread or a run has its message, though its transcript may not be written yet.
-export const empty = (chat: Chat) => !chat.issue && !chat.agent && !chat.bare && !chat.thread && !chat.automation && !transcripts.pathOf(chat.session);
+export const empty = (chat: Chat) => !chat.issue && !chat.agent && !chat.bare && !chat.threads?.length && !chat.automation && !transcripts.pathOf(chat.session);
 
 // Every chat as kept, to read, not to change: load() gives one to change.
 const chats = (): Chat[] => [...all().values()];

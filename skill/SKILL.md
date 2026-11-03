@@ -178,6 +178,15 @@ Any other Claude Code session (not the agent chat) can start a chat on an issue,
 curl -s "http://127.0.0.1:8790/api/issues/<slug>/start" --json '{"plan": "Direction:\n\n- Send the user back to the page they came from after login.\n\nDone when: logging in from /pricing lands on /pricing.\n\nWhat you may decide alone: where the return address is kept."}'
 ```
 
+## A chat's threads
+
+A desk chat started from a Slack thread's, a DM's or a mail thread's Inbox row follows that thread: desk attached it as the chat started, and the chat's first message holds it, in a `<desk-thread>` block. A chat follows the threads attached to it with no end, past the 14 days desk keeps their messages. When the user names another thread about the same work ("minhnt opened another thread about it, follow that too"), or you find one, attach it to your chat, by its Slack link, desk's Gmail link to one of its mails, or desk's id for it: `slack:<channel>:<ts>` for a channel's thread, `slack:<channel>` for a DM or a group DM, `mail:<Gmail's thread id>`. The reply gives the thread whole, under `text`, and the threads the chat follows. A thread is one chat's: attaching it moves it from the chat that followed it, which the reply's `says` names. The chat working an issue holds its threads, so a chat that takes an issue over takes them too. A DM is followed only while the chat's issue is open, since a DM has no end. desk refuses a Slack channel the user is not in, since it hears only theirs: tell the user. Let a thread go only when the user says so; its next message reaches a row of its own again. Read one again as it stands with `GET /api/threads/<id>`.
+
+```bash
+curl -s "http://127.0.0.1:8790/api/chats/<chat id>/threads" --json '{"thread": "https://ownego.slack.com/archives/C0123ABCD/p1730612345678900"}'
+curl -s "http://127.0.0.1:8790/api/chats/<chat id>/threads" -X DELETE --json '{"thread": "slack:C0123ABCD:1730612345.678900"}'
+```
+
 ## A chat's terminal
 
 Each desk chat has a terminal of its own, in the right half of its screen, which the user opens with the terminal button beside Attach or Ctrl \` and types in: a tmux session named after the chat's id, on the interactive-terminal skill's server, `tmux -L agent`. It starts only when the user or you open it, in the chat's folder with the user's shell, and ends when that shell exits. When the user should watch something run or take it over, such as a dev server, a REPL, a login or a prompt for a code, run it there rather than in your Bash tool ("agent can either drive it or i type it", the user, 31 Oct): start it, which opens it beside the chat on the user's screen, then type into it with that skill's `tt`, by the chat's id. The reply's `started` is false when it ran already: read its screen first, since the user may be typing in it. Never `tt start` or `tt stop` it.

@@ -194,6 +194,17 @@ async function place(channel: string): Promise<Place> {
   return found;
 }
 
+// What a channel is, for a thread a chat attaches by its link (threads.ts, idOf), and whether the user is in it: desk
+// hears only their channels, the ones users.conversations lists.
+export async function channelOf(channel: string): Promise<{ kind: Place["kind"]; member: boolean }> {
+  if (channel.startsWith("D")) return { kind: "dm", member: true };
+  if (!login) await signIn();
+  const known = places.get(channel);
+  if (known) return { kind: known.kind, member: true };
+  const c = (await call("conversations.info", { channel })).channel;
+  return { kind: placeOf(c, false).kind, member: Boolean(c.is_member) };
+}
+
 async function nameOf(user: string) {
   let name = names.get(user);
   if (!name) {

@@ -3,7 +3,8 @@
 // filtering, that only when sth worth notified about that it pops up and carry it on with me", the user, 2 Nov; the
 // desk issue "desk as my notification center"). It is desk's agent chat, named after the thread, which files its issue
 // in Triage from its first reply, its Context quoting the message, then the user (3 Nov; chats.ts, cameIn); the row
-// opens on it from then on, the thread above it. One started before then is a bare Chat, and stays one.
+// opens on it from then on. The chat follows the thread, with no end, and any other thread it attaches (idOf, below).
+// One started before 3 Nov is a bare Chat, and stays one.
 //
 // desk reads the thread again from Slack or Gmail as the chat starts, the user's own messages too, since the notices
 // hold only what the door let in; the chat reads it again on GET /api/threads/<id> as the talk goes on. A desk that
@@ -62,13 +63,14 @@ const when = (at: number) => {
 export const asText = (said: Said[]) => said.map((s) => `${s.who}, ${when(s.at)}:\n${s.text.trim()}`).join("\n\n");
 
 // The chat on the thread, started with the user's first words, which the thread's notice and the thread itself follow
-// in a block the chat's panel leaves out (transcript.ts, THREAD), so that it shows only what the user wrote.
+// in a block the chat's panel draws as its card (transcript.ts, Came). The chat follows the thread from its start
+// (chats.ts, onThread).
 export async function startChat(thread: string, text: string): Promise<chats.Chat> {
   if (!IS.test(thread)) throw new HttpError(404, "No such thread.");
   if (!text.trim()) throw new HttpError(400, "Write something to start the chat.");
   const shown = await notices.ofThread(thread);
   if (!shown.length) throw new HttpError(404, "No such thread.");
-  if (chats.ofThread(thread)) throw new HttpError(409, "This thread has a chat already.");
+  if (await chats.follower(thread)) throw new HttpError(409, "This thread has a chat already.");
   const newest = shown[shown.length - 1];
   const judged = [...shown].reverse().find((n) => n.verdict === "now") ?? [...shown].reverse().find((n) => n.verdict === "later");
   const message = fill(ON_THREAD, {
@@ -80,4 +82,56 @@ export async function startChat(thread: string, text: string): Promise<chats.Cha
     thread: asText(await whole(thread)),
   });
   return chats.onThread(thread, titleOf(newest), message);
+}
+
+// ---- A thread a chat attaches or lets go of (chats.ts, follow), by the chat's own call to desk's API on the user's
+// word, such as "minhnt opened another thread about it, follow that too": one way, with no button ("maybe just need a
+// single way through the chat is enough. the model will handle call to api endpoint", the user, 3 Nov).
+
+const SLACK_LINK = /^https:\/\/[\w-]+\.slack\.com\/archives\/([A-Z0-9]+)\/p(\d{10})(\d{6})(?:\?(\S*))?$/;
+const GMAIL_LINK = /^https:\/\/mail\.google\.com\/mail\/u\/\d+\/#[\w-]+\/([0-9a-f]{16})$/; // as desk writes one (mail.ts, notice)
+
+export class Refused extends Error {}
+
+// A Slack channel's kind, and whether the user is in it: from Slack, else guessed from what desk wrote down, a DM's id
+// starting with D and a group DM's thread having no ts.
+async function channelKind(channel: string): Promise<{ kind: string; member: boolean }> {
+  if (CONNECT) {
+    try {
+      return await slack.channelOf(channel);
+    } catch (e) {
+      console.error(`threads: reading a Slack channel, ${(e as Error).message}`);
+    }
+  }
+  if (channel.startsWith("D") || (await notices.ofThread(`slack:${channel}`)).length) return { kind: "dm", member: true };
+  return { kind: "channel", member: true };
+}
+
+// desk's id for the thread given: its id as given, or read from its link, a Slack message's, which names its thread, or
+// one of desk's own to a mail. A channel's thread is slack:<channel>:<its first message's ts>, a DM's or group DM's the
+// whole DM, slack:<channel>, and a mail thread mail:<Gmail's thread id>. Attaching refuses a Slack channel the user is
+// not in, whose messages desk never hears.
+export async function idOf(given: string, attaching: boolean): Promise<string> {
+  const text = given.trim(), slackLink = text.match(SLACK_LINK), mailLink = text.match(GMAIL_LINK);
+  if (mailLink) {
+    const id = `mail:${mailLink[1]}`;
+    if (CONNECT) {
+      try {
+        return await mail.threadOf(mailLink[1]);
+      } catch (e) {
+        console.error(`threads: reading a mail's thread, ${(e as Error).message}`);
+      }
+    }
+    return (await notices.threadOf(id)) ?? id; // a thread's first mail has the thread's id
+  }
+  if (text.startsWith("mail:") && IS.test(text)) return text;
+  let channel = "", ts = "";
+  if (slackLink) [channel, ts] = [slackLink[1], new URLSearchParams(slackLink[4] ?? "").get("thread_ts") ?? `${slackLink[2]}.${slackLink[3]}`];
+  else if (text.startsWith("slack:") && IS.test(text)) [, channel, ts = ""] = text.split(":");
+  else throw new Refused("Give the thread’s Slack link, desk’s Gmail link to one of its mails, or desk’s id for it: slack:<channel>:<ts> for a channel’s thread, slack:<channel> for a DM, mail:<thread id>.");
+  const { kind, member } = await channelKind(channel);
+  if (attaching && !member) throw new Refused("The user is not in that Slack channel, and desk hears only theirs: ask them to join it in Slack, then attach the thread again.");
+  if (kind !== "channel") return `slack:${channel}`;
+  if (!ts) throw new Refused("A channel is followed a thread at a time: give the thread’s link, or slack:<channel>:<its first message’s ts>.");
+  return `slack:${channel}:${ts}`;
 }

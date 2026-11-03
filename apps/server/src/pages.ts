@@ -221,7 +221,7 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
   const asks = await asking();
   const marks = inbox.filling() ? inbox.before() : null, now = Date.now() / 1000;
   const wanted: inbox.Want[] = [];
-  const onThreads = new Map<string, inbox.Want>(); // a thread's chat's row, by thread: its thread's row says it (threadRow)
+  const onThreads = new Map<string, inbox.Want>(); // a chat's row, by each thread it follows: the thread's row says it (threadRow)
   for (const h of held(all)) {
     const i = h.issue, replied = turns.replied(h.session);
     let why = "", waits = true;
@@ -239,8 +239,9 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
       waits, at: waits ? null : replied, looked: live_.watching(h.session) ? now : turns.prompted(h.session) ?? 0,
       seed: marks && !waits ? readBefore(h, replied!, marks) : null, source: null, who: null,
     };
-    if (h.chat?.thread) onThreads.set(h.chat.thread, want);
-    else wanted.push(want);
+    const follows = h.chat ? chats.follows(h.chat, all) : [];
+    for (const thread of follows) onThreads.set(thread, want);
+    if (!follows.length) wanted.push(want);
   }
   // Linear's due date notifications: one the day before an open issue is due, and one the day after it passed, each
   // from 09:00 (linear.app/docs/issue-property#due-date-notifications; the hour is desk's).
@@ -259,7 +260,7 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
     if (i.state === "triage" && !sessionOf(i))
       wanted.push({ id: i.slug, slug: i.slug, issue: true, session: null, title: i.title, agent: null, why: "no chat", says: saysOf("no chat", i),
         kind: "needs", waits: true, at: parseLocal(i.created).getTime() / 1000, looked: 0, seed: null, source: null, who: null });
-  for (const n of await notices.threads()) wanted.push(threadRow(n, onThreads.get(n.thread), now));
+  for (const n of await notices.threads()) wanted.push(threadRow(n, onThreads.get(n.thread), chats.followerOf(n.thread, all)?.session ?? null, now));
   for (const l of logins.all()) wanted.push(loginRow(l));
   await inbox.take(wanted);
   return inbox.listed(keep);
@@ -271,13 +272,13 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
 // Its why is the notice's verdict, now or later, which the app's pop-up reads (store/inbox.ts). Opening it reads it,
 // as any row; it leaves the Inbox once its notices are pruned (notices.ts, KEEP_DAYS).
 //
-// Once you wrote in it, the row opens on its chat (threads.ts), and is that chat's row too: Claude's reply or question
-// newer than the thread's newest notice says it, as a chat's own row would, the row keeping its place, avatar and title.
-function threadRow(n: notices.Notice, chat: inbox.Want | undefined, now: number): inbox.Want {
+// Once you wrote in it, the row opens on the chat following it (threads.ts), and is that chat's row too: Claude's reply
+// or question newer than the thread's newest notice says it, as a chat's own row would, the row keeping its place,
+// avatar and title.
+function threadRow(n: notices.Notice, chat: inbox.Want | undefined, session: string | null, now: number): inbox.Want {
   const [first, ...rest] = n.text.split("\n");
   const said = (n.source === "mail" ? rest.join(" ") : first).trim() || first;
   const what = n.why && !notices.RULED.has(n.why) ? n.why : said;
-  const session = chats.ofThread(n.thread)?.session ?? null;
   const row: inbox.Want = {
     id: n.thread, slug: n.thread, issue: false, session, title: threads.titleOf(n), agent: null, why: n.verdict!,
     says: n.place === "DM" ? what : `${n.who}: ${what}`, kind: "needs", waits: false, at: n.at,

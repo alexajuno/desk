@@ -348,10 +348,41 @@ export async function create(): Promise<FastifyInstance> {
     return { chat: chat.id, session: chat.session };
   });
   // The thread as it stands now, for its chat's Claude to read again: from Slack or Gmail, the user's own messages too.
+  // A thread a chat follows reads on after desk pruned its notices.
   app.get("/api/threads/:id", async (req: Req, reply: FastifyReply) => {
     const id = req.params.id;
-    if (!threads.IS.test(id) || !(await notices.ofThread(id)).length) throw new HttpError(404, "No such thread.");
+    if (!threads.IS.test(id) || (!(await notices.ofThread(id)).length && !(await chats.follower(id)))) throw new HttpError(404, "No such thread.");
     return reply.type("text/plain; charset=utf-8").send(threads.asText(await threads.whole(id)));
+  });
+  // A thread the chat follows, attached by its model on the user's word, by the thread's link or desk's id for it, and
+  // let go of (chats.ts, follow): one way, the chat's own call ("the model will handle call to api endpoint", the user,
+  // 3 Nov). The attach answers with the thread whole, for the model to read.
+  const threadOf = async (req: Req, attaching: boolean) => {
+    if (!chats.exists(req.params.id)) throw new HttpError(404, "No such chat");
+    const { thread } = (req.body ?? {}) as { thread?: unknown };
+    try {
+      return await threads.idOf(String(thread ?? ""), attaching);
+    } catch (error) {
+      if (error instanceof threads.Refused) throw new HttpError(422, error.message);
+      throw error;
+    }
+  };
+  app.post("/api/chats/:id/threads", async (req: Req) => {
+    const thread = await threadOf(req, true);
+    const { chat, from } = await chats.follow(req.params.id, thread);
+    const moved = from ? ` It left the chat “${from.named || from.title}”, which followed it until now: a thread is one chat’s.` : "";
+    return { thread, follows: chat.threads, says: `This chat follows ${thread} now.${moved} The thread as it stands, oldest first, is under text.`,
+      text: threads.asText(await threads.whole(thread)) };
+  });
+  app.delete("/api/chats/:id/threads", async (req: Req) => {
+    const thread = await threadOf(req, false);
+    try {
+      const chat = await chats.letGo(req.params.id, thread);
+      return { thread, follows: chat.threads ?? [], says: `This chat no longer follows ${thread}: its next message goes through desk’s firewall to a row of its own.` };
+    } catch (error) {
+      if (error instanceof chats.NotFollowed) throw new HttpError(404, error.message);
+      throw error;
+    }
   });
   // A reply to the thread, as the user, only on their word (replies.ts): its chat's Claude puts its reply on the card above
   // the user's composer, the text as the request's body, as a section's; the user's Send on it, from desk's page alone,

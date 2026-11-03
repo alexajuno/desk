@@ -88,6 +88,11 @@ export async function ofThread(thread: string): Promise<Notice[]> {
     order by at`, [thread])).rows.map(asNotice);
 }
 
+// The thread a notice is in, by the notice's id, or null when desk never wrote it down or pruned it.
+export async function threadOf(id: string): Promise<string | null> {
+  return (await sql().query<{ thread: string }>("select thread from notices where id = $1", [id])).rows[0]?.thread ?? null;
+}
+
 // The notices of one source that came in since a time, oldest first, as bin/mail-daily reads the day's mail.
 export async function since(source: Notice["source"], at: number): Promise<Notice[]> {
   return (await sql().query<Record<string, unknown>>("select * from notices where source = $1 and at >= $2 order by at", [source, at])).rows.map(asNotice);

@@ -33,7 +33,7 @@ const HELD: Record<string, { key: string; hidden: string[] }> = {
   projects: { key: "slug", hidden: ["body", "written"] },
   milestones: { key: "id", hidden: [] },
   activity: { key: "id", hidden: [] },
-  chats: { key: "id", hidden: ["folder", "cwd", "seen", "extra"] },
+  chats: { key: "id", hidden: ["folder", "cwd", "threads", "seen", "extra"] },
   inbox: { key: "id", hidden: [] },
   tabs: { key: "target", hidden: [] },
   replies: { key: "id", hidden: [] },
@@ -126,6 +126,7 @@ create table if not exists chats ( -- desk's chats (chats.ts): each a session, a
   named text,
   "from" text,
   automation text,
+  threads text[], -- the Slack threads, DMs and mail threads it follows (chats.ts, follow)
   seen double precision,
   deleted text, -- when the user deleted it: out of sight, its row and transcript kept
   extra jsonb not null default '{}' -- what else its file held, such as the messages of a chat from before the panel
@@ -299,6 +300,7 @@ export async function open(): Promise<PGlite> {
   await opened.exec(["source", "who"].map((c) => `alter table inbox add column if not exists ${c} text;`).join(" "));
   await opened.exec("alter table chats add column if not exists deleted text;"); // a chat's Delete (chats.ts, remove), from 25 Oct
   await opened.exec("alter table chats add column if not exists auto boolean not null default false;"); // its composer's Auto (chats.ts, setAuto), from 29 Oct
+  await opened.exec("alter table chats add column if not exists threads text[];"); // the threads it follows (chats.ts, follow), from 3 Nov
   await opened.exec("alter table teams add column if not exists aliases text not null default '';"); // a team's rename (teams.ts), from 25 Oct
   await opened.exec("drop table if exists slack_filed; drop table if exists slack_threads;"); // Slack's tags, out since 22 Oct
   // Try's line for desk's own checkout and the copies of the files from before 19 Oct, out since 2 Nov: a branch is
