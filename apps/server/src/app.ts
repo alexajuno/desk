@@ -385,18 +385,22 @@ export async function create(): Promise<FastifyInstance> {
       throw error;
     }
   });
-  // A reply to the thread, as the user, only on their word (replies.ts): its chat's Claude puts its reply on the card above
-  // the user's composer, the text as the request's body, as a section's; the user's Send on it, from desk's page alone,
-  // posts it, the text as they left it. Claude has no call that sends.
+  // A reply to the thread, as the user, only on their word (replies.ts): the Claude of the chat following it, asked by the
+  // user, puts its draft in their box above the composer, the text as the request's body, as a section's; the user's
+  // Enter or Send there, from desk's page alone, posts it, the text as they left it. Claude has no call that sends. A
+  // draft in a turn the thread's new message started is refused, since nobody asked for it (wakes.ts, inWake).
   app.register(async (raw) => {
     raw.removeContentTypeParser("application/x-www-form-urlencoded");
     raw.addContentTypeParser("*", { parseAs: "string" }, (_req, body, done) => done(null, body));
     raw.put("/api/threads/:id/draft", async (req: Req) => {
       const id = req.params.id;
       if (!threads.IS.test(id)) throw new HttpError(404, "No such thread.");
+      const chat = await chats.follower(id);
+      if (!chat) throw new HttpError(404, "No chat follows this thread, so no box would show your draft: follow it from this chat first, as “A chat's threads” says.");
+      if (wakes.inWake(chat.session)) throw new HttpError(409, "This turn is the thread's: its new message started it, not the user, who asked for no reply. desk takes a draft only in a turn the user started. Say in your line what you would answer, if anything: they ask for a draft when they want one.");
       const text = typeof req.body === "string" ? req.body : String(((req.body ?? {}) as { text?: unknown }).text ?? "");
       const r = await replies.draft(id, text);
-      return { reply: r.id, whom: r.whom, says: `It is on the card above the user's composer, ${r.whom}, with Send: only their press sends it, and they may edit it first. A newer one you put replaces it.` };
+      return { reply: r.id, whom: r.whom, says: `It is in the user's box above their composer${r.whom ? `, ${r.whom}` : ""}, tagged Claude's draft: they may edit it, and only their Enter posts it. A newer one you put replaces it.` };
     });
   });
   app.post("/api/replies/:id/send", async (req: Req) => {

@@ -21,8 +21,9 @@
 // thread, so the thread's row leaves the Inbox for the chat's, which carries its news (the server's pages.ts,
 // withNews), and the pane goes with it.
 //
-// A reply the chat's Claude drafted waits on a card above the composer (ReplyCard; the server's replies.ts), yours to
-// edit, and only your Send there posts it to Slack or sends it from Gmail as you: Claude has no call that sends.
+// A reply the chat's Claude drafted, when you asked, opens in your box above that chat's composer (sessions/YourReply.tsx;
+// the server's replies.ts), yours to edit, and only your Enter or Send there posts it to Slack or sends it from Gmail as
+// you: Claude has no call that sends.
 //
 // A Slack or Gmail login that ended has a row of its own (the server's logins.ts and pages.ts, loginRow), which opens on
 // what to do (LoginView), picked from two mockups over a strip above the Inbox's list, which the phone hides.
@@ -32,7 +33,7 @@ import { useEffect, useRef, useState } from "react";
 import { postJson, reason } from "../api/http";
 import { usePage } from "../api/page";
 import { SessionView } from "../sessions/Dock";
-import { issues, type InboxRow, type Reply } from "../store/issues";
+import { issues, type InboxRow } from "../store/issues";
 import { closeMenu, openMenu } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { slackMark } from "../ui/icons";
@@ -40,8 +41,6 @@ import { charOf, emojiGroups } from "./emoji";
 import { whereTo, type Message, type Reaction, type Where } from "./where";
 
 
-const HASH = <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6.5 2.5l-1 11M10.5 2.5l-1 11M3 6h10.5M2.5 10H13" /></svg>;
-const BUBBLE = <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2c3.6 0 6.5 2.4 6.5 5.4S11.6 12.8 8 12.8c-.6 0-1.2-.1-1.8-.2L3 14.1c-.4.2-.8-.2-.7-.6l.6-2.4C2 10.1 1.5 8.8 1.5 7.4 1.5 4.4 4.4 2 8 2z" /></svg>;
 const ENVELOPE = <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><rect x="1.75" y="3.25" width="12.5" height="9.5" rx="1.5" /><path d="M2.25 4l5.75 4.5L13.75 4" /></svg>;
 const OUT = <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" /></svg>;
 
@@ -104,7 +103,7 @@ export const startedOn = (thread: string) => started.get(thread);
 export const ThreadView = observer(function ThreadView({ row }: { row: InboxRow }) {
   if (isLogin(row)) return <LoginView row={row} />;
   const session = chatOf(row);
-  if (session) return <SessionView id={session} foot={<ReplyCard thread={row.slug} />} />;
+  if (session) return <SessionView id={session} />;
   return <ThreadPane row={row} />;
 });
 
@@ -121,7 +120,6 @@ const ThreadPane = observer(function ThreadPane({ row }: { row: InboxRow }) {
     <div className="thread-pane">
       <ThreadBody row={row} page={page} asking={asking} ask={() => setAsking((a) => !a)} />
       <div className="dock-foot">
-        <ReplyCard thread={row.slug} />
         {asking ? <AskBox row={row} back={() => setAsking(false)} />
           : all.length > 0 && <YourBox row={row} to={whereTo(row.slug, all)} />}
       </div>
@@ -151,67 +149,6 @@ function LoginView({ row }: { row: InboxRow }) {
           ? "desk reads your Slack login from your Chrome, Profile 2. Log in to Slack there once: desk tries again each minute, and once it holds, reads back what came in meanwhile. Until then nothing from Slack reaches you here."
           : "desk reads Gmail with muse's Gmail login, mail/gmail-muse in pass, and Google no longer takes its refresh token: it was revoked or expired. Put a new one there, from the same client: desk tries again each minute, and once it holds, reads from where it stopped. Until then no mail reaches you here."}</p>
         <p className="login-text login-note">This row leaves on its own once desk is signed in again.</p>
-      </div>
-    </div>
-  );
-}
-
-// The thread's reply not sent yet, the newest: Claude's draft, or one Slack or Gmail refused.
-const unsent = (thread: string): Reply | null =>
-  [...issues.replies.values()].filter((r) => r.thread === thread && r.state !== "sent" && r.state !== "kept").sort((a, b) => b.at - a.at)[0] ?? null;
-
-// The card above the composer, mockup A of two (2 Nov) over one in the conversation, which scrolls away. A newer draft
-// starts it afresh, what you typed in it gone with the one it replaced.
-const ReplyCard = observer(function ReplyCard({ thread }: { thread: string }) {
-  const r = unsent(thread);
-  return r ? <ReplyBox key={`${r.id}:${r.at}`} reply={r} /> : null;
-});
-
-function ReplyBox({ reply }: { reply: Reply }) {
-  const [text, setText] = useState(reply.text);
-  const [busy, setBusy] = useState(false);
-  const where = reply.source === "mail" ? "Gmail" : "Slack";
-  const sending = busy || reply.state === "sending";
-  const send = async () => {
-    if (!text.trim() || sending) return;
-    setBusy(true);
-    const res = await postJson(`/api/replies/${reply.id}/send`, { text });
-    setBusy(false);
-    if (!res.ok) return toast(await reason(res));
-    const { state } = (await res.json()) as { state: Reply["state"] };
-    if (state === "sent") toast(reply.source === "mail" ? "Sent from Gmail" : "Sent to Slack");
-    else if (state === "kept") toast("Kept: a test desk sends nothing");
-  };
-  const discard = async () => {
-    const res = await fetch(`/api/replies/${reply.id}`, { method: "DELETE" });
-    if (!res.ok) toast(await reason(res));
-  };
-  return (
-    <div className="reply-card">
-      <div className="reply-head">
-        <span className="reply-icon">{reply.source === "mail" ? ENVELOPE : reply.whom.startsWith("in #") ? HASH : BUBBLE}</span>
-        <span className="reply-as">Reply as you</span>
-        <span className="reply-whom">{reply.whom}</span>
-      </div>
-      <textarea className="reply-text" value={text} spellCheck={false} disabled={sending} onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.nativeEvent.isComposing) return;
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            void send();
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation(); // the frame's Esc would also leave the page
-            e.currentTarget.blur();
-          }
-        }} />
-      <div className="reply-foot">
-        {reply.state === "failed"
-          ? <span className="reply-note failed">{where} refused it: {reply.error}</span>
-          : <span className="reply-note">Claude’s draft, yours to edit. Only Send posts it.</span>}
-        <button className="ghost" type="button" disabled={sending} onClick={() => void discard()}>Discard</button>
-        <button className="primary" type="button" title={`Send  Ctrl Enter`} disabled={!text.trim() || sending} onClick={() => void send()}>
-          {sending ? "Sending…" : reply.source === "mail" ? "Send from Gmail" : "Send to Slack"}</button>
       </div>
     </div>
   );

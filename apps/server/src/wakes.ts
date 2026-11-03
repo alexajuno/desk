@@ -93,6 +93,15 @@ export async function answeredAt(ids: string[]): Promise<Map<string, number>> {
   return new Map(r.rows.map((w) => [w.id, Number(w.answered)]));
 }
 
+// Whether the session's turn is a thread's: its last message a wake, with no word from the user since. Claude drafts a
+// reply to a thread only when the user asks for one ("a lot of messages i have to react and reply within the chat. AI
+// response is not a good choice", the user, 3 Nov), so desk refuses a draft in such a turn, holding the rule without
+// trusting the prompt (app.ts, PUT /api/threads/<id>/draft).
+export function inWake(session: string): boolean {
+  const w = latest.get(session);
+  return Boolean(w && !w.error && w.at > (turns.prompted(session) ?? 0));
+}
+
 export class NoWake extends Error {}
 
 // The chat's verdict on a wake, by its call; again when it changes its mind. The row hears it as the notices'.

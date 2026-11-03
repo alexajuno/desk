@@ -187,6 +187,12 @@ curl -s "http://127.0.0.1:8790/api/chats/<chat id>/threads" --json '{"thread": "
 curl -s "http://127.0.0.1:8790/api/chats/<chat id>/threads" -X DELETE --json '{"thread": "slack:C0123ABCD:1730612345.678900"}'
 ```
 
+The user answers a thread themselves, in their box above the composer, which Reply on the thread's card in the chat opens. Draft a reply only when they ask you for one: write it whole, as it would go out (Slack's markup, or a mail's plain text with its greeting and sign-off), to a file, and put it in their box, the text as the request's body. It opens there tagged Claude's draft, aimed at that thread: they may edit it, and only their Enter posts it, as them. A newer one you put replaces it. Say in a line that it is in their box, not the reply again. desk refuses a draft on a thread no chat follows, and one in a turn a thread's new message started (below), since the user asked for none. You have no call that sends, and never post, send or react in Slack or Gmail by any other way.
+
+```bash
+curl -s "http://127.0.0.1:8790/api/threads/<id>/draft" -X PUT --data-binary @/tmp/reply.txt
+```
+
 Each new message in a thread your chat follows comes to you rather than to desk's firewall: desk gathers a minute of them, the user's own left out, and gives them to you in a `<desk-thread wake="…">` block, once your turn ends if you are at work. The user has not seen it. Read it against your work, and end that turn on the call the block names, in place of the call that sets the issue's state, which you leave as it is: a thread's message is not the user's, so a plan waiting on Go still waits on Go. `now` makes the issue's row unread and pops it up, for someone who needs the user today; `later` makes it unread, with no pop-up; `noted` leaves the row as it was, for a message with nothing for the user. When torn, pick later; a turn with no call counts as later. `why` is the row's line after who wrote where; leave it out to show the message itself.
 
 ```bash

@@ -1025,6 +1025,11 @@ button.thread-out.on { background: var(--bg-active); color: var(--text-1); }
 .reply-close { flex: none; display: grid; place-items: center; width: 24px; height: 24px; margin: -4px -4px -4px 0; padding: 0; border: 0;
                border-radius: 9999px; background: none; color: var(--text-3); }
 .reply-close:hover { background: var(--bg-hover); color: var(--text-1); }
+/* Claude's draft in it, tagged as the mockup draws it, and "1 more" when another thread's waits, a quiet pill that
+   switches to it. */
+.reply-tag { flex: none; height: 20px; padding: 0 7px; border-radius: 9999px; background: var(--bg-hover); font: 500 11px/20px var(--font); color: var(--text-3); }
+.reply-more { flex: none; height: 20px; padding: 0 7px; border: 0; border-radius: 9999px; background: none; font: 500 11px/20px var(--font); color: var(--text-3); cursor: pointer; }
+.reply-more:hover { background: var(--bg-hover); color: var(--text-1); }
 /* The line offering desktop notifications (desk.js), above the rows, until Chrome has your answer. */
 .notify-ask { display: flex; align-items: center; gap: 8px; margin: 0 10px 8px; padding: 6px 6px 6px 10px;
               border: 1px solid var(--border-2); border-radius: 8px; font: 500 13px var(--font); color: var(--text-2); }

@@ -33,7 +33,7 @@ const HELD: Record<string, { key: string; hidden: string[] }> = {
   projects: { key: "slug", hidden: ["body", "written"] },
   milestones: { key: "id", hidden: [] },
   activity: { key: "id", hidden: [] },
-  chats: { key: "id", hidden: ["folder", "cwd", "threads", "seen", "extra"] },
+  chats: { key: "id", hidden: ["folder", "cwd", "seen", "extra"] }, // threads: shown since 3 Nov, for Claude's draft on one (YourReply.tsx)
   inbox: { key: "id", hidden: [] },
   tabs: { key: "target", hidden: [] },
   replies: { key: "id", hidden: [] },

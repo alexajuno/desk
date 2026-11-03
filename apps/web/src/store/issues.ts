@@ -73,6 +73,7 @@ export interface Chat {
   from: string | null; // the script whose message started it
   automation: string | null; // the automation whose run it is
   deleted: string | null; // when the user deleted it: out of sight
+  threads?: string[] | null; // the Slack and mail threads it follows (the server's chats.ts), whose Claude's drafts open in its box (sessions/YourReply.tsx)
 }
 
 // A row of the Inbox (the server's inbox.ts): what a session last did for you, or an issue in Triage with no chat to

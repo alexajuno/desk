@@ -7,7 +7,7 @@
 // your box to it above the composer, which Reply on the thread's card opens (YourReply.tsx).
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
 import { postJson, reason } from "../api/http";
 import { go } from "../app/nav";
@@ -177,9 +177,9 @@ function browse(e: React.MouseEvent, session: string) {
 const phone = matchMedia("(max-width: 640px)");
 const StepSide = createContext({ can: false, beside: false });
 
-// foot: what sits over its composer, the reply waiting for your Send in a chat from a thread's Inbox row (inbox/Thread.tsx).
-// Your box to a thread the chat follows sits between them, once Reply on its card opened it (YourReply.tsx).
-export const SessionView = observer(function SessionView({ id, foot }: { id: string; foot?: ReactNode }) {
+// Your box to a thread the chat follows sits over its composer, once Reply on its card, or Claude's draft, opened it
+// (YourReply.tsx).
+export const SessionView = observer(function SessionView({ id }: { id: string }) {
   const s = useLive(id)!;
   useSplash(!s.loaded); // desk opening on a chat shows it with its conversation, never "Connecting…"
   const scroller = useRef<HTMLDivElement>(null);
@@ -299,7 +299,6 @@ export const SessionView = observer(function SessionView({ id, foot }: { id: str
             {here && shown === "chat" && <ChatSteps s={s} here={here} />}
             <Running s={s} />
             {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
-            {foot}
             <YourReply session={id} />
             <Composer s={s} />
           </div>
