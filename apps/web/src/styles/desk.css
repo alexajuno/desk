@@ -154,6 +154,11 @@
   --diff-del-text: lch(80% 80 29);
   --diff-line-no: lch(39.452% 1.425 272);
   --diff-pick-bg: rgb(94 105 209 / 0.22);  /* lines picked to comment on: the accent over the line's own tint, desk's own */
+  /* Slack's mark (inbox/Thread.tsx, slackMark), in Slack's own brand colours, the same in both themes as Slack's is */
+  --slack-red: #e01e5a;
+  --slack-blue: #36c5f0;
+  --slack-green: #2eb67d;
+  --slack-yellow: #ecb22e;
 }
 
 :root[data-theme=light] {
@@ -263,6 +268,10 @@
   --diff-del-text: lch(50% 80 29);
   --diff-line-no: lch(66% 1 282);
   --diff-pick-bg: lch(53% 52.26 286.91 / 0.14);
+  --slack-red: #e01e5a;
+  --slack-blue: #36c5f0;
+  --slack-green: #2eb67d;
+  --slack-yellow: #ecb22e;
 }
 
 html { background: var(--bg-app); scroll-behavior: smooth; }
@@ -938,6 +947,46 @@ button.thread-out { flex: none; gap: 6px; }
 .thread-at { font: 450 12px var(--font); color: var(--text-4); }
 .thread-text { margin-top: 2px; font: 450 14px/22px var(--font); color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .thread-text strong { font-weight: 500; color: var(--text-1); }
+/* A Slack thread's pane (inbox/Thread.tsx), mockup 5 of step 1.8, "yeah, looks fine. proceed" (the user, 3 Nov): Slack's
+   mark before its name, and on each Slack row's badge; under the mouse a message is lit, with a bar of four quick
+   reactions and the picker at its top right; under its words its files as cards and its reactions as pills, the emoji
+   and how many, yours with an accent edge, then a pill that opens the picker. Slack's own pane does the same; Linear's
+   comments have a reaction pill much like it. */
+.thread-mark { flex: none; display: flex; align-self: center; }
+.inbox-row .badge svg { display: block; }
+.thread-view .thread-msg { position: relative; margin: -6px -8px; padding: 6px 8px; border-radius: 8px; }
+.thread-view .thread-msg:hover { background: var(--bg-hover); }
+.thread-avatar.me { background: var(--bg-active); color: var(--text-1); }
+.react-bar { position: absolute; top: -14px; right: 8px; z-index: 1; display: none; gap: 2px; padding: 2px; border: 0.5px solid var(--border-pop);
+             border-radius: 8px; background: var(--bg-pop); box-shadow: var(--shadow-pop); }
+.thread-msg:hover > .react-bar { display: flex; }
+.react-bar button { justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: none; font-size: 15px; color: var(--text-3); }
+.react-bar button:hover { background: var(--bg-pop-on); color: var(--text-1); }
+.reacts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+button.react { gap: 5px; height: 24px; padding: 0 8px; border: 0.5px solid var(--border-2); background: var(--bg-raised); font: 500 12px var(--font); color: var(--text-2); }
+button.react:hover { background: var(--bg-active); }
+button.react.mine { border-color: var(--accent); color: var(--text-1); }
+button.react.add { padding: 0 6px; color: var(--text-4); }
+button.react.add:hover { color: var(--text-2); }
+.react-emoji { font-size: 14px; line-height: 1; }
+button.react img { width: 16px; height: 16px; object-fit: contain; }
+.file-card { display: flex; align-items: center; gap: 8px; max-width: 460px; margin-top: 6px; padding: 8px 10px; border: 0.5px solid var(--border-2);
+             border-radius: 10px; background: var(--bg-raised); color: var(--text-3); }
+.file-card > svg { flex: none; }
+.file-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px var(--font); color: var(--text-1); }
+.file-meta { flex: 1; white-space: nowrap; font: 450 12px var(--font); color: var(--text-4); }
+/* The emoji picker, in the menu's place under what opened it (ui/menu.tsx): a search box, then every emoji by category,
+   nine to a row, the workspace's own first, as Slack's picker. */
+.menu.emoji-pick { width: 340px; padding: 0; }
+.emoji-pick-in input { display: block; width: 100%; box-sizing: border-box; height: 38px; padding: 0 12px; border: 0; border-bottom: 0.5px solid var(--border-pop);
+                       border-radius: 0; outline: 0; background: transparent; font: 450 13px var(--font); color: var(--text-1); }
+.emoji-list { max-height: 300px; overflow: auto; padding: 0 8px 8px; }
+.emoji-group { padding: 10px 4px 4px; font: 500 12px var(--font); color: var(--text-3); }
+.emoji-grid { display: grid; grid-template-columns: repeat(9, 1fr); }
+.emoji-grid button { justify-content: center; height: 32px; padding: 0; border: 0; border-radius: 6px; background: none; font-size: 20px; }
+.emoji-grid button:hover { background: var(--bg-pop-on); }
+.emoji-grid img { width: 20px; height: 20px; object-fit: contain; }
+.emoji-none { padding: 12px 4px; font: 450 13px var(--font); color: var(--text-3); }
 /* Under a thread no chat is on yet, the chat's composer (dock.css), stuck to the pane's foot; once you wrote, the chat
    opens on a card of the thread instead (dock.css, .came). */
 .thread-pane { display: flex; flex-direction: column; min-height: 100%; }

@@ -139,10 +139,29 @@ export async function pane(thread: string): Promise<Message[]> {
   return all.sort((a, b) => a.at - b.at);
 }
 
+// Your name in Slack, for your avatar's initial in the pane; none for a mail thread or on a test desk.
+export const myName = async (thread: string) => (CONNECT && thread.startsWith("slack:") ? slack.myName().catch(() => "") : "");
+
+// The workspace's own emoji, for the pane's picker; none on a test desk.
+export const workspaceEmoji = async () => (CONNECT ? slack.workspaceEmoji().catch(() => ({})) : {});
+
 // A test desk's made-up reactions and files, by notice, as POST /api/notices gives them (app.ts): it reads no Slack.
 const madeUp = new Map<string, Pick<slack.Shown, "reactions" | "files">>();
 export function makeUp(id: string, extras: Pick<slack.Shown, "reactions" | "files">) {
   madeUp.set(id, extras);
+}
+
+// Your reaction on a message in the pane, added (on) or taken back, as you in Slack (slack.ts, react). Only your click
+// in desk's page sends it (app.ts): Claude has no call that acts in Slack. A test desk, which reaches no Slack, changes
+// its made-up reactions instead, and logs what it would have done.
+export async function react(message: string, name: string, on: boolean) {
+  if (CONNECT) return slack.react(message, name, on);
+  const extras = madeUp.get(message) ?? { reactions: [], files: [] };
+  const r = extras.reactions.find((x) => x.name === name);
+  if (!r && on) extras.reactions.push({ name, count: 1, mine: true });
+  else if (r && r.mine !== on) Object.assign(r, { count: r.count + (on ? 1 : -1), mine: on });
+  madeUp.set(message, { ...extras, reactions: extras.reactions.filter((x) => x.count > 0) });
+  console.log(`threads: would ${on ? "add" : "take back"} :${name}: on ${message} in Slack`);
 }
 
 // ---- A thread a chat attaches or lets go of (chats.ts, follow), by the chat's own call to desk's API on the user's

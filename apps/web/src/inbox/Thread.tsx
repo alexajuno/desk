@@ -5,6 +5,12 @@
 // is read whole from Slack, your own messages too, with their reactions and files (the server's threads.ts, pane); a
 // mail thread is what desk got of it.
 //
+// A Slack message shows its reactions as pills, the emoji and how many, yours with an accent edge, and its files as
+// cards, by name, kind and size, with Open in Slack and no preview ("a lot of messages i have to react and reply within
+// the chat", the user, 3 Nov; mockup 5 of step 1.8). A click on a pill adds yours or takes it back, and under the mouse
+// a bar of four quick reactions and the picker does the same, as you in Slack (the server's threads.ts, react): only
+// your click sends it. The pane shows the change at once and reads the thread again behind it.
+//
 // A composer under it starts a chat with Claude on the thread, which only you see (the server's threads.ts: "pops up
 // and carry it on with me", the user, 2 Nov), picked from two mockups on 2 Nov over one with Draft a reply, File an
 // issue and Mark done above the box. From then on the row opens on that chat, which opens on a card of the thread as
@@ -19,12 +25,14 @@
 // what to do (LoginView), picked from two mockups over a strip above the Inbox's list, which the phone hides.
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { postJson, reason } from "../api/http";
 import { usePage } from "../api/page";
 import { SessionView } from "../sessions/Dock";
 import { issues, type InboxRow, type Reply } from "../store/issues";
+import { closeMenu, openMenu } from "../ui/menu";
 import { toast } from "../ui/toast";
+import { charOf, emojiGroups } from "./emoji";
 
 interface Message {
   id: string;
@@ -38,8 +46,14 @@ interface Message {
   why: string;
   mine: boolean; // yours
   desk: boolean; // sent from desk
-  reactions: { name: string; count: number; mine: boolean; image?: string }[];
+  reactions: Reaction[];
   files: { name: string; kind: string; size: number | null; link: string }[];
+}
+interface Reaction {
+  name: string; // Slack's, such as +1 or eyes, ::skin-tone-2 after it for a tone
+  count: number;
+  mine: boolean;
+  image?: string; // the workspace's own emoji, its picture's address
 }
 
 const HASH = <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6.5 2.5l-1 11M10.5 2.5l-1 11M3 6h10.5M2.5 10H13" /></svg>;
@@ -47,11 +61,26 @@ const BUBBLE = <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColo
 const ENVELOPE = <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><rect x="1.75" y="3.25" width="12.5" height="9.5" rx="1.5" /><path d="M2.25 4l5.75 4.5L13.75 4" /></svg>;
 const OUT = <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" /></svg>;
 
-// A thread's row's badge: a channel's #, a DM's bubble, a mail's envelope.
+// Slack's mark in its four colours, as Slack's brand draws it (the paths are Simple Icons'), on a Slack row's badge and its
+// thread's head: "inside inbox, with slack icon" (the user, 3 Nov).
+const SLACK_PATHS = [
+  "M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z",
+  "M8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z",
+  "M18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312z",
+  "M15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z",
+];
+const SLACK_FILLS = ["var(--slack-red)", "var(--slack-blue)", "var(--slack-green)", "var(--slack-yellow)"];
+export const slackMark = (px: number) => (
+  <svg width={px} height={px} viewBox="0 0 24 24">{SLACK_PATHS.map((d, i) => <path key={i} d={d} style={{ fill: SLACK_FILLS[i] }} />)}</svg>
+);
+const SMILE_PLUS = <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M13.6 7.2A5.75 5.75 0 1 1 8.8 2.3" /><path d="M5.75 9.5c.5.8 1.3 1.25 2.25 1.25s1.75-.45 2.25-1.25" /><path d="M6 6.5h.01M10 6.5h.01" strokeWidth="1.8" /><path d="M12.5 1.5v4M10.5 3.5h4" /></svg>;
+const FILE = <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 1.75H4.75a1.25 1.25 0 0 0-1.25 1.25v10c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V5.25z" /><path d="M9 1.75v3.5h3.5" /></svg>;
+
+// A thread's row's badge: Slack's mark, a mail's envelope, and a login's key.
 const KEY = <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="5.5" cy="10.5" r="3" /><path d="M7.7 8.3 13.5 2.5M11 5l2 2" /></svg>;
 
 const isLogin = (r: InboxRow) => r.slug.startsWith("login:");
-export const badgeOf = (r: InboxRow) => (isLogin(r) ? KEY : r.source === "mail" ? ENVELOPE : r.title.startsWith("#") ? HASH : BUBBLE);
+export const badgeOf = (r: InboxRow) => (isLogin(r) ? KEY : r.source === "mail" ? ENVELOPE : slackMark(10));
 export const initial = (who: string | null | undefined) => (who ?? "?").trim().slice(0, 1).toUpperCase() || "?";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -63,10 +92,23 @@ function when(at: number) {
   return d.toDateString() === new Date().toDateString() ? time : `${MONTHS[d.getMonth()]} ${d.getDate()}, ${time}`;
 }
 
-// What the thread is, beside its name.
-function kindOf(n: Message) {
+// What the thread is, beside its name: a channel's thread by whose it is, as Slack's own head says.
+function kindOf(n: Message, root: Message | undefined, thread: string) {
   if (n.source === "mail") return n.place === "mail" ? "Mail" : `Mail${n.place.slice(4)}`;
-  return n.place === "DM" ? "DM · Slack" : n.place.startsWith("group DM") ? "Group DM · Slack" : "Slack";
+  if (n.place === "DM") return "DM · Slack";
+  if (n.place.startsWith("group DM")) return "Group DM · Slack";
+  const whose = thread.split(":").length === 3 && root ? (root.who === "you" ? "your thread" : `${root.who}’s thread`) : "";
+  return whose ? `${whose} · Slack` : "Slack";
+}
+
+// A file's size, as Slack's card says it: 312 B, 4 KB, 1.2 MB.
+function sizeOf(bytes: number | null) {
+  if (bytes === null) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  const mb = kb / 1024;
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
 }
 
 // The door's whys (the server's notices.ts, RULED), as the line on why it reached you says them.
@@ -231,17 +273,36 @@ function ThreadComposer({ row }: { row: InboxRow }) {
 // The thread itself, asked of desk each time its row moves, or a reply you sent goes into it (the app holds no notices).
 const ThreadBody = observer(function ThreadBody({ row }: { row: InboxRow }) {
   const sent = [...issues.replies.values()].filter((r) => r.thread === row.slug && (r.state === "sent" || r.state === "kept")).length;
-  const { data } = usePage<{ messages: Message[] }>(`/api/page/thread?id=${encodeURIComponent(row.slug)}`, `${row.at}:${sent}`);
+  const { data, reload } = usePage<{ messages: Message[]; me?: string }>(`/api/page/thread?id=${encodeURIComponent(row.slug)}`, `${row.at}:${sent}`);
+  // Your reactions as you clicked them, shown until the thread is read again with them
+  const [clicked, setClicked] = useState<Map<string, Reaction[]>>(() => new Map());
+  useEffect(() => setClicked(new Map()), [data]);
   const all = data?.messages ?? [];
   const last = all[all.length - 1];
   // Why it reached you: its newest ask that needs you, though a later reply came after it, else its newest message's
   const judged = [...all].reverse().find((n) => n.verdict === "now") ?? [...all].reverse().find((n) => n.verdict === "later");
   if (!last) return <div className="thread-view" />;
   const why = judged ? RULED[judged.why] ?? judged.why : "";
+  const slackThread = row.slug.startsWith("slack:");
+  const reactionsOf = (n: Message) => clicked.get(n.id) ?? n.reactions;
+  // Yours on the message, added or taken back: on Slack's pill, its quick bar and its picker alike
+  const react = async (n: Message, name: string, image?: string) => {
+    const list = reactionsOf(n), had = list.find((r) => r.name === name), on = !had?.mine;
+    const next = had
+      ? list.map((r) => (r === had ? { ...r, mine: on, count: r.count + (on ? 1 : -1) } : r)).filter((r) => r.count > 0)
+      : [...list, { name, count: 1, mine: true, ...(image ? { image } : {}) }];
+    setClicked((was) => new Map(was).set(n.id, next));
+    const res = await postJson("/api/reactions", { message: n.id, name, on });
+    if (!res.ok) toast(await reason(res));
+    void reload();
+  };
   return (
     <div className="thread-view">
       <div className="thread-head">
-        <div className="thread-name"><span className="thread-place">{row.title}</span><span className="thread-kind">{kindOf(last)}</span></div>
+        <div className="thread-name">
+          {slackThread && <span className="thread-mark">{slackMark(16)}</span>}
+          <span className="thread-place">{row.title}</span><span className="thread-kind">{kindOf(last, all[0], row.slug)}</span>
+        </div>
         {last.link && <button type="button" className="thread-out" onClick={() => window.open(last.link, "_blank", "noopener")}>
           {OUT}Open in {last.source === "mail" ? "Gmail" : "Slack"}</button>}
       </div>
@@ -255,14 +316,40 @@ const ThreadBody = observer(function ThreadBody({ row }: { row: InboxRow }) {
       <div className="thread-msgs">
         {all.map((n) => {
           const [first, ...rest] = n.text.split("\n");
+          const reacts = n.source === "slack" && n.id.startsWith("slack:"); // a reply only desk has yet takes none
+          const reactions = reactionsOf(n);
           return (
             <div className="thread-msg" key={n.id}>
-              <span className="thread-avatar">{initial(n.who)}</span>
+              {reacts && (
+                <div className="react-bar">
+                  {QUICK.map((q) => <button key={q} type="button" title={`:${q}:`} onClick={() => void react(n, q)}>{charOf(q)}</button>)}
+                  <button type="button" className="more" title="Add reaction" onClick={(e) => pickEmoji(e.currentTarget, (name, image) => void react(n, name, image))}>{SMILE_PLUS}</button>
+                </div>
+              )}
+              <span className={`thread-avatar${n.mine ? " me" : ""}`}>{initial(n.mine && data?.me ? data.me : n.who)}</span>
               <div className="thread-body">
                 <div className="thread-meta"><span className="thread-who">{n.who}</span><span className="thread-at">{when(n.at)}{n.desk && (n.link ? " · from desk" : " · kept, a test desk sends nothing")}</span></div>
                 {n.source === "mail"
                   ? <div className="thread-text"><strong>{first}</strong>{rest.length > 0 && <>{"\n"}{rest.join("\n")}</>}</div>
-                  : <div className="thread-text">{n.text}</div>}
+                  : n.text && <div className="thread-text">{n.text}</div>}
+                {n.files.map((f, i) => (
+                  <div className="file-card" key={i}>
+                    {FILE}<span className="file-name">{f.name}</span>
+                    <span className="file-meta">{[f.kind, sizeOf(f.size)].filter(Boolean).join(" · ")}</span>
+                    {f.link && <button type="button" className="thread-out" onClick={() => window.open(f.link, "_blank", "noopener")}>{OUT}Open in Slack</button>}
+                  </div>
+                ))}
+                {reacts && reactions.length > 0 && (
+                  <div className="reacts">
+                    {reactions.map((r) => (
+                      <button key={r.name} type="button" className={`react${r.mine ? " mine" : ""}`} title={`:${r.name}:`} onClick={() => void react(n, r.name)}>
+                        {r.image ? <img src={r.image} alt={`:${r.name}:`} /> : <span className="react-emoji">{charOf(r.name) ?? `:${r.name}:`}</span>}
+                        <span>{r.count}</span>
+                      </button>
+                    ))}
+                    <button type="button" className="react add" title="Add reaction" onClick={(e) => pickEmoji(e.currentTarget, (name, image) => void react(n, name, image))}>{SMILE_PLUS}</button>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -271,3 +358,58 @@ const ThreadBody = observer(function ThreadBody({ row }: { row: InboxRow }) {
     </div>
   );
 });
+
+// The bar under the mouse: Slack's own four quick reactions, then the picker.
+const QUICK = ["+1", "white_check_mark", "eyes", "pray"];
+
+// The workspace's own emoji, asked of desk once, for the picker.
+let workspace: Promise<Record<string, string>> | null = null;
+const workspaceEmoji = () => (workspace ??= fetch("/api/slack/emoji")
+  .then(async (r) => (r.ok ? ((await r.json()) as { emoji?: Record<string, string> }).emoji ?? {} : {}))
+  .catch(() => ({})));
+
+// The picker, in the menu's place under what opened it: a search box over every emoji by category, the workspace's own
+// first, as Slack's. Enter takes the first found; Esc and a click outside close it.
+function pickEmoji(anchor: Element, pick: (name: string, image?: string) => void) {
+  openMenu({ anchor, className: "emoji-pick", items: () => [], render: () => <EmojiPick pick={(name, image) => { closeMenu(); pick(name, image); }} /> });
+}
+
+interface Pickable { name: string; names: string[]; char?: string; image?: string }
+
+function EmojiPick({ pick }: { pick: (name: string, image?: string) => void }) {
+  const [typed, setTyped] = useState("");
+  const [custom, setCustom] = useState<Record<string, string>>({});
+  useEffect(() => void workspaceEmoji().then(setCustom), []);
+  const query = typed.trim().toLowerCase().replace(/^:|:$/g, "");
+  const groups: { title: string; emoji: Pickable[] }[] = [
+    { title: "Custom", emoji: Object.entries(custom).sort(([a], [b]) => a.localeCompare(b)).map(([name, image]) => ({ name, names: [name], image })) },
+    ...emojiGroups(),
+  ].map((g) => ({ title: g.title, emoji: query ? g.emoji.filter((e) => e.names.some((n) => n.includes(query))) : g.emoji }))
+    .filter((g) => g.emoji.length);
+  const firstFound = groups[0]?.emoji[0];
+  return (
+    <div className="emoji-pick-in">
+      <input autoFocus type="text" placeholder="Search emoji" value={typed} spellCheck={false} onChange={(e) => setTyped(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || e.nativeEvent.isComposing || !firstFound) return;
+          e.preventDefault();
+          pick(firstFound.name, firstFound.image);
+        }} />
+      <div className="emoji-list">
+        {groups.map((g) => (
+          <div key={g.title}>
+            <div className="emoji-group">{g.title}</div>
+            <div className="emoji-grid">
+              {g.emoji.map((e) => (
+                <button key={e.name} type="button" title={`:${e.name}:`} onClick={() => pick(e.name, e.image)}>
+                  {e.image ? <img src={e.image} alt="" loading="lazy" /> : e.char}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        {!groups.length && <div className="emoji-none">No emoji is named “{query}”</div>}
+      </div>
+    </div>
+  );
+}

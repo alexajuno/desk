@@ -409,6 +409,18 @@ export async function create(): Promise<FastifyInstance> {
     await replies.discard(req.params.id);
     return { discarded: true };
   });
+  // Your click on a reaction in a thread's pane, or on an emoji under the mouse: added or taken back in Slack as you
+  // (threads.ts, react). Only desk's page sends it, as only your Send posts a reply: Claude has no call that acts in Slack.
+  app.post("/api/reactions", async (req: Req) => {
+    if (!fromPage(req)) throw new HttpError(403, "Only your click in desk reacts in Slack.");
+    const { message, name, on } = (req.body ?? {}) as { message?: unknown; name?: unknown; on?: unknown };
+    if (typeof message !== "string" || !/^slack:[A-Z0-9]+:\d+\.\d+$/.test(message)) throw new HttpError(400, "message is a Slack message's id, slack:<channel>:<ts>.");
+    if (typeof name !== "string" || !/^[\w+'.-]+(::skin-tone-[2-6])?$/.test(name)) throw new HttpError(400, "name is the emoji's name in Slack, such as eyes or +1.");
+    await threads.react(message, name, on !== false);
+    return { reacted: on !== false };
+  });
+  // The workspace's own emoji, for the pane's picker, by name, each its picture's address; none on a test desk.
+  app.get("/api/slack/emoji", async () => ({ emoji: await threads.workspaceEmoji() }));
   // The firewall's verdict on each mail that came since a time, for muse's bin/mail-daily, which reads them at 08:00
   // rather than judging the day's mail again (firewall.ts): by Gmail's own id, now (it popped up, and its row is in the
   // Inbox), later (its row in the Inbox, with no pop-up, and worth the report), dropped (an ordinary topic, the why naming it), or null while the firewall has yet

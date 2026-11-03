@@ -428,6 +428,33 @@ export async function post(id: string, text: string): Promise<string> {
   return `${WORKSPACE}/archives/${channel}/p${String(r.ts).replace(".", "")}` + (ts ? `?thread_ts=${ts}&cid=${channel}` : "");
 }
 
+// ---- A reaction, as the user
+
+// Your click on a reaction's pill, or on an emoji under the mouse, in a thread's pane (inbox/Thread.tsx): added or
+// taken back as you, as Slack's own client does with reactions.add and reactions.remove. One already there, or already
+// gone, as when Slack's tab did it first, is no error.
+export async function react(message: string, name: string, on: boolean) {
+  const [, channel, ts] = message.split(":");
+  if (!login) await signIn();
+  try {
+    await call(on ? "reactions.add" : "reactions.remove", { channel, timestamp: ts, name });
+  } catch (e) {
+    if (!/: (already_reacted|no_reaction)$/.test((e as Error).message)) throw e;
+  }
+}
+
+// The workspace's own emoji for the pane's picker, by name, each its picture's address.
+export async function workspaceEmoji(): Promise<Record<string, string>> {
+  if (!login) await signIn();
+  return Object.fromEntries(await customEmoji());
+}
+
+// Your name in Slack, for your avatar's initial in the pane.
+export async function myName(): Promise<string> {
+  if (!login) await signIn();
+  return nameOf(login!.me);
+}
+
 // ---- Read in desk, read in Slack
 
 // What you read in desk is read in Slack too, so that Slack's own badge, on your phone or a tab, says only what you have

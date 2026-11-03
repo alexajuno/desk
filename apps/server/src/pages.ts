@@ -337,7 +337,7 @@ export async function threadPage(thread: string) {
   if (!/^(slack|mail):/.test(thread)) throw new HttpError(404, "No such thread.");
   const messages = await threads.pane(thread); // read whole from Slack, with what the user sent from desk (threads.ts)
   if (!messages.length) throw new HttpError(404, "No such thread.");
-  return { thread, messages };
+  return { thread, messages, me: await threads.myName(thread) };
 }
 
 // The sidebar's Pinned and Chats, each session with its issue's state, whether it works now, and whether Auto carries it
