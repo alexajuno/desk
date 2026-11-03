@@ -12,7 +12,9 @@
 // in their sidebar's "non-work" section is dropped there and never written ("i think currently there are a few channels
 // in work category and DMs, that's all matter", 2 Nov). A DM or group DM from a person, an @mention of the user and a
 // reply in a thread they wrote in are written as now, by rule; the rest of a work channel is written unjudged, for the
-// firewall's Claude to judge. A DM from an app (Jira, Calendar, Slackbot) goes to Claude too, not straight to now.
+// firewall's Claude to judge. A DM from an app (Jira, Calendar, Slackbot) goes to Claude too, not straight to now. A
+// thread attached to a chat comes in from a non-work channel too, and goes to that chat rather than to a rule or the
+// firewall (notices.ts, add).
 //
 // What came while no socket was open, a desk that was down, a socket that closed or one Slack refused, desk reads back
 // (readBack): once a socket opens, and each minute while none does. A login that ended (SignedOut) the Inbox says once
@@ -28,6 +30,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import { WebSocket } from "ws";
+import * as chats from "./chats.ts";
 import { HOME } from "./config.ts";
 import { sql } from "./db.ts";
 import * as logins from "./logins.ts";
@@ -282,7 +285,8 @@ export async function take(m: Message): Promise<notices.Notice | null> {
     return null;
   }
   const at = await place(m.channel);
-  if (at.nonWork) return null;
+  const thread = at.kind === "channel" ? `slack:${m.channel}:${m.thread_ts ?? m.ts}` : `slack:${m.channel}`;
+  if (at.nonWork && !chats.attached().has(thread)) return null;
   const app = fromApp(m), raw = rawOf(m);
   const verdict =
     !app && at.kind === "dm" ? "a DM"
@@ -293,7 +297,7 @@ export async function take(m: Message): Promise<notices.Notice | null> {
   const n: notices.Notice = {
     id: `slack:${m.channel}:${m.ts}`,
     source: "slack",
-    thread: at.kind === "channel" ? `slack:${m.channel}:${m.thread_ts ?? m.ts}` : `slack:${m.channel}`,
+    thread,
     place: at.name,
     who: app ? await appOf(m) : await nameOf(m.user ?? ""),
     text: await textOf(m),
@@ -355,8 +359,9 @@ export async function post(id: string, text: string): Promise<string> {
 // last heard Slack (heard), kept in meta so that a restart reads back from where it stopped, BACK at most. Each
 // conversation whose newest message is past the mark (client.counts, as Slack's own client asks) is read from there, and
 // each thread the user follows with a reply past it (subscriptions.thread.getView: the threads they started, wrote in or
-// were mentioned in, as Slack's Threads view lists them); each message goes through the door as one from the socket
-// would, and one written already is left as it was (notices.add).
+// were mentioned in, as Slack's Threads view lists them), and each channel thread attached to a chat, which the user
+// may not follow in Slack (chats.ts, attached); each message goes through the door as one from the socket would, and
+// one written already is left as it was (notices.add).
 const BACK = 3 * 86400; // seconds: a weekend away
 const OVERLAP = 60; // seconds read again before the mark, since Slack lists a message a little after its time
 const EVERY = 60_000; // how often desk reads back while no socket is open
@@ -396,10 +401,21 @@ function readBack(): Promise<number> {
         for (const m of got.reverse()) if (await take_(m, c.id)) written++; // oldest first, as they came
       }
       const followed = (await call("subscriptions.thread.getView", { limit: "50" })).threads as { root_msg?: Message & { latest_reply?: string } }[];
+      const read = new Set<string>();
       for (const { root_msg: root } of followed ?? []) {
         if (!root?.channel || !(Number(root.latest_reply) > Number(from)) || places.get(root.channel)?.nonWork) continue;
         const r = await call("conversations.replies", { channel: root.channel, ts: root.thread_ts ?? root.ts, oldest: from, limit: "200" });
+        read.add(`slack:${root.channel}:${root.thread_ts ?? root.ts}`);
         for (const m of r.messages as Message[]) if (m.ts !== root.ts && (await take_(m, root.channel))) written++;
+      }
+      for (const id of chats.attached()) {
+        const [, channel, ts] = id.split(":");
+        if (!id.startsWith("slack:") || !ts || read.has(id)) continue; // a DM's came with client.counts
+        const r = await call("conversations.replies", { channel, ts, oldest: from, limit: "200" }).catch((e) => {
+          console.error(`slack: reading back an attached thread, ${e.message}`); // its channel left, or the thread deleted
+          return { messages: [] };
+        });
+        for (const m of r.messages as Message[]) if (m.ts !== ts && (await take_(m, channel))) written++;
       }
       await hear(began);
       return written;

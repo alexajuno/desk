@@ -4,7 +4,8 @@
 // thread. It draws what Claude read, from the chat's first message: where it came from, the newest message with the
 // earlier ones folded above it, and Open in Slack, Gmail or the automation ("A", the user, 3 Nov, on three mockups, over
 // the whole thread and a quote on your first words; the desk issue "A chat from a Slack message, mail or event starts
-// with its context, then we file the issue").
+// with its context, then we file the issue"). A followed thread's new messages, which woke the chat (the server's
+// wakes.ts), are the same card where they came in its talk, "1 new message".
 import { useLayoutEffect, useRef, useState } from "react";
 import { go } from "../app/nav";
 import type { Came } from "./live";
@@ -27,7 +28,7 @@ export function CameCard({ came, at }: { came: Came; at?: number }) {
   const earlier = run ? 0 : came.said.length - 1;
   const shown = run || open ? came.said : came.said.slice(-1);
   const icon = run ? CLOCK : came.source === "mail" ? ENVELOPE : came.name.startsWith("#") ? HASH : BUBBLE;
-  const kind = run ? `Automation${at ? ` · ${sent(at)}` : ""}` : `${came.kind} · ${many(came.said.length, "message")}`;
+  const kind = run ? `Automation${at ? ` · ${sent(at)}` : ""}` : `${came.kind} · ${many(came.said.length, came.fresh ? "new message" : "message")}`;
   const where = run ? "automation" : came.source === "mail" ? "in Gmail" : "in Slack";
   const out = !came.link ? null : run ? () => go(`/automation/${came.link}`) : () => window.open(came.link, "_blank", "noopener");
   return (

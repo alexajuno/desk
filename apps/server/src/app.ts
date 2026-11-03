@@ -36,6 +36,7 @@ import * as terminal from "./terminal.ts";
 import * as transcript from "./transcript.ts";
 import * as updates from "./updates.ts";
 import * as turns from "./turns.ts";
+import * as wakes from "./wakes.ts";
 import * as web from "./web.ts";
 import * as window from "./window.ts";
 
@@ -430,6 +431,20 @@ export async function create(): Promise<FastifyInstance> {
     if (b.ended === false) await logins.holds(source);
     else await logins.end(source, typeof b.why === "string" && b.why ? b.why : "made up, on a test desk");
     return { ended: logins.of(source) };
+  });
+  // The verdict of the chat a thread's new messages woke, as its turn ends (wakes.ts): now, later or noted, with the
+  // line its row shows after who wrote where.
+  app.post("/api/wakes/:id", async (req: Req) => {
+    const { verdict, why } = (req.body ?? {}) as { verdict?: unknown; why?: unknown };
+    if (typeof verdict !== "string" || !wakes.VERDICTS.has(verdict)) throw new HttpError(400, "verdict is now, later or noted.");
+    try {
+      const w = await wakes.answer(req.params.id, verdict as wakes.Verdict, typeof why === "string" ? why : "");
+      const row = { now: "the issue's row comes up unread and pops up", later: "the issue's row comes up unread, with no pop-up", noted: "the issue's row stays as it was" }[w.verdict!];
+      return { wake: w.id, verdict: w.verdict, why: w.why, says: `${row}. Leave the issue's state as it is.` };
+    } catch (e) {
+      if (e instanceof wakes.NoWake) throw new HttpError(404, e.message);
+      throw e;
+    }
   });
   // A made-up notice, on a test desk alone, which connects to neither Slack nor Gmail (config.ts, CONNECT): a test of
   // the Inbox's rows and pop-ups writes its own. 8790's come only from its connectors.

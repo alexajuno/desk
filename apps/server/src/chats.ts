@@ -531,6 +531,10 @@ export function followerOf(thread: string, issues: Map<string, Issue>): Chat | n
   return found ? structuredClone(found) : null;
 }
 
+// Every thread attached to a chat not deleted, as Slack's door lets them in from a non-work channel too, and its
+// read-back reads each (slack.ts).
+export const attached = (): Set<string> => new Set([...all().values()].filter((c) => !c.deleted).flatMap((c) => c.threads ?? []));
+
 // The same, reading the issue of the chat it is attached to.
 export async function follower(thread: string): Promise<Chat | null> {
   const slugs = [...all().values()].filter((c) => c.issue && c.threads?.includes(thread)).map((c) => c.issue!);

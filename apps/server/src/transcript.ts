@@ -54,6 +54,7 @@ export interface Came {
   kind: string; // Slack thread, Slack DM, Slack group DM, Mail thread, Automation
   link?: string; // the thread in Slack or Gmail, or the automation's slug; none on a thread's chat from before 3 Nov
   said: Said[]; // oldest first: a thread's messages, or what gave a run its work, its who saying which
+  fresh?: boolean; // a followed thread's new messages, which woke the chat later in its talk (wakes.ts)
 }
 
 interface Said {
@@ -212,24 +213,24 @@ function summary(name: string, input: Record<string, unknown>): string {
 export const PUSH = /^<desk-push from="([^"]*)"[^>]*>/;
 
 // What desk adds after the user's first words in a chat from a thread's Inbox row (threads.ts): the thread and what
-// Claude may do with it, which the panel leaves out, showing only the words.
-export const THREAD = /\s*<desk-thread id="[^"]*">[\s\S]*<\/desk-thread>\s*$/;
+// Claude may do with it, which the panel leaves out, showing only the words. A wake's block stands alone (wakes.ts).
+export const THREAD = /\s*<desk-thread id="[^"]*"[^>]*>[\s\S]*<\/desk-thread>\s*$/;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const BLOCK = /<desk-thread id="(slack|mail):[^"]*">\n([\s\S]*)\n<\/desk-thread>\s*$/;
+const BLOCK = /<desk-thread id="(slack|mail):[^"]*"( wake="[^"]*")?>\n([\s\S]*)\n<\/desk-thread>\s*$/;
 // Each message of the thread as threads.ts' asText writes it: "minhnt, Nov 3 08:40:" on a line, then its text.
 const SAID = new RegExp(`(?:^|\\n\\n)([^\\n]+), (${MONTHS.join("|")}) (\\d{1,2}) (\\d\\d):(\\d\\d):\\n`, "g");
 
-// The thread in a chat's first message, or null when it holds none. Its time has no year: it is the message's own, or
-// the year before for a month still to come.
+// The thread in a chat's first message, or a followed thread's new messages in a wake's (prompts.ts, WAKE), or null
+// when it holds none. Its time has no year: it is the message's own, or the year before for a month still to come.
 function threadCame(content: string, sent: number): Came | null {
   const block = BLOCK.exec(content);
   if (!block) return null;
-  const source = block[1] as "slack" | "mail", body = block[2];
-  const what = /^desk's firewall let (.+?) through to the user/.exec(body)?.[1] ?? "";
+  const source = block[1] as "slack" | "mail", fresh = Boolean(block[2]), body = block[3];
+  const what = (fresh ? /^(?:A new message|\d+ new messages) in (.+?), which this chat follows\. / : /^desk's firewall let (.+?) through to the user/).exec(body)?.[1] ?? "";
   const [kind, name] = namedBy(what, source);
   const link = / Its link in (?:Slack|Gmail): (\S+?)\. /.exec(body)?.[1];
-  const START = " holds it now:\n\n", start = body.indexOf(START);
+  const START = fresh ? "The new messages, oldest first:\n\n" : " holds it now:\n\n", start = body.indexOf(START);
   const thread = start < 0 ? "" : body.slice(start + START.length);
   const heads = [...thread.matchAll(SAID)];
   const year = new Date(sent).getFullYear(), month = new Date(sent).getMonth();
@@ -238,7 +239,7 @@ function threadCame(content: string, sent: number): Came | null {
     const at = new Date(m > month ? year - 1 : year, m, Number(h[3]), Number(h[4]), Number(h[5])).getTime() / 1000;
     return { who: h[1], at, text: thread.slice(h.index! + h[0].length, heads[n + 1]?.index ?? thread.length).trim() };
   });
-  return { source, name, kind, ...(link ? { link } : {}), said };
+  return { source, name, kind, ...(link ? { link } : {}), said, ...(fresh ? { fresh } : {}) };
 }
 
 // What the thread is and its name, from how threads.ts' kindOf said it.
@@ -335,6 +336,8 @@ function entryItems(e: Entry): Item[] {
   // The host's stream carries no time: what it sends is made as it comes.
   const at = Date.parse(e.timestamp ?? "") || Date.now();
   if (e.type === "attachment" && e.attachment?.type === "queued_command" && typeof e.attachment.prompt === "string") {
+    const came = threadCame(e.attachment.prompt, at);
+    if (came && !typed(e.attachment.prompt)) return [{ t: "came", key: `${uuid}:came`, came, at }]; // a wake read mid-turn
     const note = notice(e.attachment.prompt);
     return note !== null ? noted(uuid, note) : [{ ...you(uuid, e.attachment.prompt, at), queued: true }];
   }

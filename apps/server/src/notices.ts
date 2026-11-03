@@ -5,13 +5,16 @@
 // and the Inbox shows one row per thread holding a notice now or later (pages.ts, threadRow), or, for a thread a chat
 // follows, its newest such notice on the chat's row (withNews).
 //
+// A thread a chat follows skips the firewall: its notice goes to that chat, which judges it knowing the issue, as now,
+// later or noted (nothing for the user), once desk wakes it with the thread's new messages (wakes.ts).
+//
 // What a rule drops at the door (an edit, a join, a reaction, a non-work channel) is never written. Every mail is, the
 // ordinary ones too, since bin/mail-daily lists each mail of the day with its topic. A notice is kept KEEP_DAYS, enough
 // for bin/mail-daily after a few days off. The app holds the Inbox's rows, not these: it asks for a thread's notices
 // when one is opened.
 import { sql } from "./db.ts";
 
-export type Verdict = "now" | "later" | "dropped";
+export type Verdict = "now" | "later" | "dropped" | "noted"; // noted: a chat's, for a message with nothing for the user
 
 export interface Notice {
   id: string; // slack:<channel>:<ts>, or mail:<Gmail's id>
@@ -24,6 +27,8 @@ export interface Notice {
   at: number; // seconds
   verdict: Verdict | null;
   why: string;
+  chat?: string | null; // the chat following its thread, which judges it in the firewall's place (wakes.ts)
+  wake?: string | null; // the wake that gave it to that chat
 }
 
 const KEEP_DAYS = 14;
@@ -35,14 +40,21 @@ const asNotice = (r: Record<string, unknown>): Notice => ({ ...(r as unknown as 
 let judged = () => {};
 export const onJudged = (fn: () => void) => { judged = fn; };
 
-// A notice as it comes; one already written, as a socket's reconnect may send again, is left as it was. True when new.
+// The chat following a thread, by id, or null: wakes.ts says, once it starts.
+let followerOf: (thread: string) => Promise<string | null> = async () => null;
+export const routeWith = (fn: typeof followerOf) => { followerOf = fn; };
+
+// A notice as it comes; one already written, as a socket's reconnect may send again, is left as it was. One in a thread
+// a chat follows goes to the chat unjudged, whatever verdict a rule at the door gave it. True when new.
 export async function add(n: Omit<Notice, "verdict" | "why"> & Partial<Pick<Notice, "verdict" | "why">>): Promise<boolean> {
+  const chat = await followerOf(n.thread);
+  const [verdict, why] = chat ? [null, ""] : [n.verdict ?? null, n.why ?? ""];
   const r = await sql().query(
-    `insert into notices (id, source, thread, place, who, text, link, at, verdict, why) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `insert into notices (id, source, thread, place, who, text, link, at, verdict, why, chat) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      on conflict (id) do nothing`,
-    [n.id, n.source, n.thread, n.place, n.who, n.text, n.link, n.at, n.verdict ?? null, n.why ?? ""]);
+    [n.id, n.source, n.thread, n.place, n.who, n.text, n.link, n.at, verdict, why, chat]);
   const added = (r.affectedRows ?? 0) > 0;
-  if (added && n.verdict) judged();
+  if (added && verdict) judged();
   return added;
 }
 
@@ -78,9 +90,30 @@ export async function newest(source: Notice["source"]): Promise<number | null> {
   return r.rows[0]?.at == null ? null : Number(r.rows[0].at);
 }
 
-// The notices the firewall has yet to judge, oldest first.
+// The notices the firewall has yet to judge, oldest first: those of a thread a chat follows are the chat's.
 export async function unjudged(): Promise<Notice[]> {
-  return (await sql().query<Record<string, unknown>>("select * from notices where verdict is null order by at")).rows.map(asNotice);
+  return (await sql().query<Record<string, unknown>>("select * from notices where verdict is null and chat is null order by at")).rows.map(asNotice);
+}
+
+// The notices waiting to wake the chat following their thread, oldest first.
+export async function forChats(): Promise<Notice[]> {
+  return (await sql().query<Record<string, unknown>>("select * from notices where chat is not null and wake is null and verdict is null order by at")).rows.map(asNotice);
+}
+
+// The notices given to a chat in a wake.
+export async function carried(ids: string[], wake: string) {
+  await sql().query("update notices set wake = $2 where id = any($1)", [ids, wake]);
+}
+
+// The notices back to the firewall, as their chat no longer follows their thread.
+export async function toFirewall(ids: string[]) {
+  await sql().query("update notices set chat = null where id = any($1) and wake is null", [ids]);
+}
+
+// The chat's verdict on the notices a wake carried, again each time it changes its mind.
+export async function judgeWake(wake: string, verdict: Verdict, why: string) {
+  await sql().query("update notices set verdict = $2, why = $3 where wake = $1", [wake, verdict, why]);
+  judged();
 }
 
 // A thread's notices, oldest first, as its Inbox row opens them: all but the dropped ones, the ones still unjudged too.

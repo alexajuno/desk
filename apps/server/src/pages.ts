@@ -32,6 +32,7 @@ import type { Team } from "./teams.ts";
 import * as turns from "./turns.ts";
 import * as updates from "./updates.ts";
 import * as views from "./views.ts";
+import * as wakes from "./wakes.ts";
 import { nearDay, parseLocal, shortDate, waited } from "./when.ts";
 
 import { HttpError } from "./httperror.ts";
@@ -222,9 +223,11 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
   const marks = inbox.filling() ? inbox.before() : null, now = Date.now() / 1000;
   const wanted: inbox.Want[] = [];
   const shownThreads = new Map((await notices.threads()).map((n) => [n.thread, n]));
+  const answered = await wakes.answeredAt([...shownThreads.values()].flatMap((n) => (n.wake ? [n.wake] : [])));
   const followed = new Set<string>(); // the threads a chat follows here, which have no row of their own
   for (const h of held(all)) {
-    const i = h.issue, replied = turns.replied(h.session);
+    // Its own last word to you: a turn on a thread's new messages, which you did not ask for, leaves it (wakes.ts)
+    const i = h.issue, replied = wakes.own(h.session, turns.replied(h.session));
     let why = "", waits = true;
     if (i?.state === "landing") { // and no further: a landing session works, asks and replies on its way to Done
       if (landingStuck(i, asks)) why = "landing stuck";
@@ -235,7 +238,9 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
     }
     const follows = h.chat ? chats.follows(h.chat, all) : [];
     for (const thread of follows) followed.add(thread);
-    const news = follows.map((t) => shownThreads.get(t)).filter((n) => n !== undefined).sort((a, b) => b.at - a.at)[0];
+    // When each reached you: once the chat judged it, as one that came during a turn waited for its end (wakes.ts)
+    const reached = (n: notices.Notice) => Math.max(n.at, answered.get(n.wake ?? "") ?? 0);
+    const news = follows.map((t) => shownThreads.get(t)).filter((n) => n !== undefined).sort((a, b) => reached(b) - reached(a))[0];
     if (!why && !news) continue;
     const want: inbox.Want = {
       id: h.session, slug: i?.slug ?? h.chat!.id, issue: Boolean(i), session: h.session, title: i ? i.title : chatTitle(h.chat!),
@@ -243,7 +248,7 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
       waits, at: waits ? null : replied, looked: live_.watching(h.session) ? now : turns.prompted(h.session) ?? 0,
       seed: marks && !waits ? readBefore(h, replied!, marks) : null, source: null, who: null,
     };
-    wanted.push(news && (!why || (!waits && news.at > replied!)) ? withNews(want, news) : want);
+    wanted.push(news && (!why || (!waits && reached(news) > replied!)) ? withNews(want, news, reached(news)) : want);
   }
   // Linear's due date notifications: one the day before an open issue is due, and one the day after it passed, each
   // from 09:00 (linear.app/docs/issue-property#due-date-notifications; the hour is desk's).
@@ -293,14 +298,16 @@ function whatOf(n: notices.Notice) {
 }
 
 // A chat's row, which for desk's agent chat is its issue's, carrying the newest message of the threads it follows,
-// newer than its own last word: "chinhdt in #imagenhub: still failing on flux-dev", by the firewall's verdict, now
-// popping up and later waiting unread, as the thread's own row did. It stays a review row while Go or Approve waits,
-// only its second line taking the news; a question or a landing stuck it never covers (the desk issue "A chat from a
-// Slack message, mail or event starts with its context", 3 Nov). The title and the read stay the chat's: you read the
-// news by opening the chat.
-function withNews(want: inbox.Want, n: notices.Notice): inbox.Want {
+// newer than its own last word: "chinhdt in #imagenhub: still failing on flux-dev", by the chat's verdict once the
+// message woke it (wakes.ts), now popping up and later waiting unread, as the thread's own row did; one it noted
+// leaves the row as it was. It stays a review row while Go or Approve waits, only its second line taking the news; a
+// question or a landing stuck it never covers (the desk issue "A chat from a Slack message, mail or event starts with
+// its context", 3 Nov). The title and the read stay the chat's: you read the news by opening the chat. Its time is
+// when it reached you, once the chat judged it, as the message may have waited out a long turn: newer than the chat's
+// last word by then, and a now pops up only while fresh.
+function withNews(want: inbox.Want, n: notices.Notice, at: number): inbox.Want {
   const where = n.source === "mail" ? `“${threads.titleOf(n)}”` : n.place === "DM" ? "a DM" : n.place.startsWith("group DM") ? "a group DM" : n.place;
-  return { ...want, why: n.verdict!, says: `${n.who} in ${where}: ${whatOf(n)}`, at: n.at, waits: false, source: n.source, who: n.who };
+  return { ...want, why: n.verdict!, says: `${n.who} in ${where}: ${whatOf(n)}`, at, waits: false, source: n.source, who: n.who };
 }
 
 // A Slack or Gmail login that ended (logins.ts): one row, which pops up once as a thread's now does, from when desk

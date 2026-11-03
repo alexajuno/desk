@@ -34,7 +34,7 @@ export function titleOf(n: notices.Notice) {
 }
 
 // What the thread is, for Claude: "the Slack thread in #imagenhub", "chinhdt's Slack DM", "the mail thread “Interview”".
-function kindOf(n: notices.Notice) {
+export function kindOf(n: notices.Notice) {
   if (n.source === "mail") return `the mail thread “${titleOf(n)}”${n.place === "mail" ? "" : n.place.slice(4)}`;
   if (n.place === "DM") return `${n.who}'s Slack DM to the user`;
   return n.place.startsWith("group DM") ? `the Slack ${n.place}` : `the Slack thread in ${n.place}`;

@@ -25,6 +25,7 @@ import * as slack from "./slack.ts";
 import * as sync from "./sync.ts";
 import * as teams from "./teams.ts";
 import * as turns from "./turns.ts";
+import * as wakes from "./wakes.ts";
 import * as web from "./web.ts";
 
 await db.open();
@@ -52,6 +53,7 @@ await web.build();
 const app = await create();
 await sync.start();
 auto.start(); // Auto says next for the user as a turn ends
+await wakes.start(); // a followed thread's new messages wake its chat, each minute, on a test desk's made-up ones too
 // Once a host's code lands, a host of it starts beside the older one, at once, so that no new chat waits for its start
 // (1 Nov: "i start a new chat from ctrl shift o and there was a few seconds delay"); the older one quits once it holds
 // no session (hosted.ts).
@@ -84,6 +86,7 @@ async function stop() {
   slack.stop();
   mail.stop();
   firewall.stop();
+  wakes.stop();
   const late = setTimeout(() => process.exit(0), 5000);
   try {
     await app.close();

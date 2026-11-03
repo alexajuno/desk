@@ -213,10 +213,24 @@ create table if not exists notices ( -- each Slack message and mail that came in
   text text not null, -- the message; a mail's subject and start
   link text not null default '', -- opens it in Slack or Gmail
   at double precision not null, -- when it was sent, in seconds
-  verdict text, -- now, later or dropped; null until the firewall judged it
-  why text not null default '' -- the firewall's line, or a mail's topic
+  verdict text, -- now, later or dropped, or noted by a chat; null until the firewall, or the chat following it, judged it
+  why text not null default '' -- the firewall's line, the chat's, or a mail's topic
 );
 create index if not exists notices_thread on notices (thread, at);
+create table if not exists wakes ( -- each time a thread's new messages woke the chat following it (wakes.ts)
+  id text primary key, -- wake-<random>
+  chat text not null, -- the chat it woke, by id
+  session text not null, -- that chat's session then
+  thread text not null, -- the thread its messages came in, as notices.thread
+  messages integer not null, -- how many it carried
+  at double precision not null, -- when desk gave them to the chat, in seconds
+  before double precision, -- the chat's own last word to the user then, which its row keeps through the wake's turn
+  verdict text, -- now, later or noted: the chat's call, later when its turn ended with none; null until then
+  why text not null default '', -- the chat's line for the row
+  answered double precision, -- when the verdict came, in seconds: the row's time for a now or a later
+  error text not null default '' -- why desk could not give it to the chat
+);
+create index if not exists wakes_session on wakes (session, at);
 create table if not exists replies ( -- each reply to a thread as the user (replies.ts): Claude's draft, then what the user's Send posted
   id text primary key, -- reply-<random>
   thread text not null, -- the Slack thread, DM or mail thread it answers, as notices.thread
@@ -301,6 +315,8 @@ export async function open(): Promise<PGlite> {
   await opened.exec("alter table chats add column if not exists deleted text;"); // a chat's Delete (chats.ts, remove), from 25 Oct
   await opened.exec("alter table chats add column if not exists auto boolean not null default false;"); // its composer's Auto (chats.ts, setAuto), from 29 Oct
   await opened.exec("alter table chats add column if not exists threads text[];"); // the threads it follows (chats.ts, follow), from 3 Nov
+  // The chat a notice went to rather than the firewall, and the wake that carried it to the chat (wakes.ts), from 3 Nov
+  await opened.exec(["chat", "wake"].map((c) => `alter table notices add column if not exists ${c} text;`).join(" "));
   await opened.exec("alter table teams add column if not exists aliases text not null default '';"); // a team's rename (teams.ts), from 25 Oct
   await opened.exec("drop table if exists slack_filed; drop table if exists slack_threads;"); // Slack's tags, out since 22 Oct
   // Try's line for desk's own checkout and the copies of the files from before 19 Oct, out since 2 Nov: a branch is

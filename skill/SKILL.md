@@ -187,6 +187,12 @@ curl -s "http://127.0.0.1:8790/api/chats/<chat id>/threads" --json '{"thread": "
 curl -s "http://127.0.0.1:8790/api/chats/<chat id>/threads" -X DELETE --json '{"thread": "slack:C0123ABCD:1730612345.678900"}'
 ```
 
+Each new message in a thread your chat follows comes to you rather than to desk's firewall: desk gathers a minute of them, the user's own left out, and gives them to you in a `<desk-thread wake="…">` block, once your turn ends if you are at work. The user has not seen it. Read it against your work, and end that turn on the call the block names, in place of the call that sets the issue's state, which you leave as it is: a thread's message is not the user's, so a plan waiting on Go still waits on Go. `now` makes the issue's row unread and pops it up, for someone who needs the user today; `later` makes it unread, with no pop-up; `noted` leaves the row as it was, for a message with nothing for the user. When torn, pick later; a turn with no call counts as later. `why` is the row's line after who wrote where; leave it out to show the message itself.
+
+```bash
+curl -s "http://127.0.0.1:8790/api/wakes/<wake id>" --json '{"verdict": "now", "why": "flux-dev fails too, which the plan left out"}'
+```
+
 ## A chat's terminal
 
 Each desk chat has a terminal of its own, in the right half of its screen, which the user opens with the terminal button beside Attach or Ctrl \` and types in: a tmux session named after the chat's id, on the interactive-terminal skill's server, `tmux -L agent`. It starts only when the user or you open it, in the chat's folder with the user's shell, and ends when that shell exits. When the user should watch something run or take it over, such as a dev server, a REPL, a login or a prompt for a code, run it there rather than in your Bash tool ("agent can either drive it or i type it", the user, 31 Oct): start it, which opens it beside the chat on the user's screen, then type into it with that skill's `tt`, by the chat's id. The reply's `started` is false when it ran already: read its screen first, since the user may be typing in it. Never `tt start` or `tt stop` it.
