@@ -33,6 +33,7 @@ export interface Came {
   name: string;
   kind: string;
   link?: string; // the thread in Slack or Gmail, or the automation's slug
+  thread?: string; // desk's id for a Slack or mail thread, which the card's Reply opens your box on (YourReply.tsx)
   said: { who: string; at: number; text: string }[]; // oldest first; at in seconds
   fresh?: boolean; // the new messages of a wake, not the thread as the chat started on it
 }

@@ -35,47 +35,16 @@ import { SessionView } from "../sessions/Dock";
 import { issues, type InboxRow, type Reply } from "../store/issues";
 import { closeMenu, openMenu } from "../ui/menu";
 import { toast } from "../ui/toast";
+import { slackMark } from "../ui/icons";
 import { charOf, emojiGroups } from "./emoji";
+import { whereTo, type Message, type Reaction, type Where } from "./where";
 
-interface Message {
-  id: string;
-  source: "slack" | "mail";
-  place: string;
-  who: string;
-  text: string;
-  link: string;
-  at: number;
-  verdict: "now" | "later" | null;
-  why: string;
-  mine: boolean; // yours
-  desk: boolean; // sent from desk
-  reactions: Reaction[];
-  files: { name: string; kind: string; size: number | null; link: string }[];
-}
-interface Reaction {
-  name: string; // Slack's, such as +1 or eyes, ::skin-tone-2 after it for a tone
-  count: number;
-  mine: boolean;
-  image?: string; // the workspace's own emoji, its picture's address
-}
 
 const HASH = <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6.5 2.5l-1 11M10.5 2.5l-1 11M3 6h10.5M2.5 10H13" /></svg>;
 const BUBBLE = <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2c3.6 0 6.5 2.4 6.5 5.4S11.6 12.8 8 12.8c-.6 0-1.2-.1-1.8-.2L3 14.1c-.4.2-.8-.2-.7-.6l.6-2.4C2 10.1 1.5 8.8 1.5 7.4 1.5 4.4 4.4 2 8 2z" /></svg>;
 const ENVELOPE = <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><rect x="1.75" y="3.25" width="12.5" height="9.5" rx="1.5" /><path d="M2.25 4l5.75 4.5L13.75 4" /></svg>;
 const OUT = <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" /></svg>;
 
-// Slack's mark in its four colours, as Slack's brand draws it (the paths are Simple Icons'), on a Slack row's badge and its
-// thread's head: "inside inbox, with slack icon" (the user, 3 Nov).
-const SLACK_PATHS = [
-  "M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z",
-  "M8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z",
-  "M18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312z",
-  "M15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z",
-];
-const SLACK_FILLS = ["var(--slack-red)", "var(--slack-blue)", "var(--slack-green)", "var(--slack-yellow)"];
-export const slackMark = (px: number) => (
-  <svg width={px} height={px} viewBox="0 0 24 24">{SLACK_PATHS.map((d, i) => <path key={i} d={d} style={{ fill: SLACK_FILLS[i] }} />)}</svg>
-);
 const SMILE_PLUS = <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M13.6 7.2A5.75 5.75 0 1 1 8.8 2.3" /><path d="M5.75 9.5c.5.8 1.3 1.25 2.25 1.25s1.75-.45 2.25-1.25" /><path d="M6 6.5h.01M10 6.5h.01" strokeWidth="1.8" /><path d="M12.5 1.5v4M10.5 3.5h4" /></svg>;
 const FILE = <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 1.75H4.75a1.25 1.25 0 0 0-1.25 1.25v10c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V5.25z" /><path d="M9 1.75v3.5h3.5" /></svg>;
 
@@ -159,19 +128,6 @@ const ThreadPane = observer(function ThreadPane({ row }: { row: InboxRow }) {
     </div>
   );
 });
-
-// Where your reply goes, as your box's foot and its placeholder say it: in whose thread in which channel, to whom in a
-// DM or by mail. A mail goes to the thread's last sender who is not you, as Gmail's Reply.
-function whereTo(thread: string, all: Message[]) {
-  const last = all[all.length - 1], root = all[0];
-  const them = [...all].reverse().find((n) => !n.mine)?.who ?? last.who;
-  if (last.source === "mail") return { source: last.source, chip: `to ${them}`, placeholder: `Reply to ${them}, as you` };
-  if (last.place === "DM") return { source: last.source, chip: `DM with ${them}`, placeholder: `Reply to ${them}, as you` };
-  if (last.place.startsWith("group DM")) return { source: last.source, chip: last.place.replace(/^g/, "G"), placeholder: "Reply in the group DM, as you" };
-  if (thread.split(":").length !== 3) return { source: last.source, chip: last.place, placeholder: `Reply in ${last.place}, as you` };
-  const whose = root.mine ? "your" : `${root.who}’s`;
-  return { source: last.source, chip: `${last.place}, in ${whose} thread`, placeholder: `Reply in ${whose} thread, as you` };
-}
 
 // A login that ended: since when, what refused it, and what mends it. The row leaves once desk is signed in again.
 function LoginView({ row }: { row: InboxRow }) {
@@ -264,7 +220,7 @@ function ReplyBox({ reply }: { reply: Reply }) {
 // Your box, under the thread: Enter posts to Slack as you, Shift Enter makes a new line; a mail's Enter makes a new line
 // and Ctrl Enter sends it from Gmail. What you sent shows in the thread at once, as from desk until Slack's copy is
 // read; a refusal keeps your text, with the reason under it, to send again.
-function YourBox({ row, to }: { row: InboxRow; to: ReturnType<typeof whereTo> }) {
+function YourBox({ row, to }: { row: InboxRow; to: Where }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState("");
@@ -274,7 +230,7 @@ function YourBox({ row, to }: { row: InboxRow; to: ReturnType<typeof whereTo> })
     if (!text.trim() || busy) return;
     setBusy(true);
     setRefused("");
-    const res = await postJson(`/api/threads/${encodeURIComponent(row.slug)}/send`, { text });
+    const res = await postJson(`/api/threads/${encodeURIComponent(row.slug)}/send`, { text, whom: to.whom });
     setBusy(false);
     if (!res.ok) {
       setRefused(await reason(res));

@@ -3,7 +3,8 @@
 // or stops it (Ctrl C). A chat opens to read, with desk's keys, unless nothing is said in it yet; I or Enter goes into
 // the composer and Esc leaves it, as vim's modes. An issue's chat shows its steps above the composer (StepsCard.tsx),
 // and its page or its Changes in its place, on a tab in its head (store/dock.ts says where each stands). Its right
-// half, beside it, holds what Claude drives: its terminal (Half.tsx).
+// half, beside it, holds what Claude drives: its terminal (Half.tsx). A chat that follows a Slack or mail thread has
+// your box to it above the composer, which Reply on the thread's card opens (YourReply.tsx).
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -19,19 +20,20 @@ import { useLive as useIssueLive } from "../issues/useLive";
 import { folderMenu } from "../issues/menus";
 import { toClipboard } from "../issues/actions";
 import { dock, type Layout, type View } from "../store/dock";
-import { issues } from "../store/issues";
+import { issues, type Reply as SentReply } from "../store/issues";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { CHEVRON, GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
 import { isDrawn, StepParts, type PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
-import { CameCard } from "./Came";
+import { CameCard, RepliedLine } from "./Came";
 import { anyCommit, Changes, Counts, useChanges } from "./Changes";
 import { rising } from "./glide";
 import { clock, sent, whole } from "./time";
 import { Half } from "./Half";
 import { followParts } from "./StepHalf";
 import { StepsCard } from "./StepsCard";
+import { replyTo, YourReply } from "./YourReply";
 import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
 import { EFFORTS, effortName, loadModels, runsMenu, tokens, warm, type Runs as RunsShown } from "./models";
 
@@ -176,6 +178,7 @@ const phone = matchMedia("(max-width: 640px)");
 const StepSide = createContext({ can: false, beside: false });
 
 // foot: what sits over its composer, the reply waiting for your Send in a chat from a thread's Inbox row (inbox/Thread.tsx).
+// Your box to a thread the chat follows sits between them, once Reply on its card opened it (YourReply.tsx).
 export const SessionView = observer(function SessionView({ id, foot }: { id: string; foot?: ReactNode }) {
   const s = useLive(id)!;
   useSplash(!s.loaded); // desk opening on a chat shows it with its conversation, never "Connecting…"
@@ -297,6 +300,7 @@ export const SessionView = observer(function SessionView({ id, foot }: { id: str
             <Running s={s} />
             {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
             {foot}
+            <YourReply session={id} />
             <Composer s={s} />
           </div>
         </div>
@@ -406,6 +410,7 @@ type Row =
   | { kind: "text"; item: Item }
   | { kind: "note"; item: Item }
   | { kind: "came"; item: Item }
+  | { kind: "replied"; key: string; reply: SentReply }
   | { kind: "steps"; key: string; items: Item[] }
   | { kind: "sent"; key: string; section: Section }
   | { kind: "step"; key: string; place: string; title: string | null };
@@ -430,10 +435,16 @@ function stepsSentBy(tool: Item, result: Item | undefined, slug: string | null):
 }
 
 // The items in the order drawn, the tool steps and thoughts between two replies folded into one row. A step that sent
-// the issue its plan or its card leaves the fold and shows as what it sent.
-function rowsOf(items: Item[], results: Map<string, Item>, slug: string | null): Row[] {
+// the issue its plan or its card leaves the fold and shows as what it sent. replied: what you sent from your box to the
+// chat's threads, oldest first, each a line where it went among the items.
+function rowsOf(items: Item[], results: Map<string, Item>, slug: string | null, replied: SentReply[] = []): Row[] {
   const rows: Row[] = [];
+  let r = 0;
+  const upto = (at: number) => {
+    for (; r < replied.length && (replied[r].sent ?? replied[r].at) * 1000 <= at; r++) rows.push({ kind: "replied", key: `replied:${replied[r].id}`, reply: replied[r] });
+  };
   for (const item of items) {
+    if (item.at) upto(item.at);
     const bash = item.t === "tool" && item.name === "Bash";
     const sent = bash ? sentBy(item, results.get(item.id!), slug) : [];
     const drew = bash ? stepsSentBy(item, results.get(item.id!), slug) : [];
@@ -448,7 +459,19 @@ function rowsOf(items: Item[], results: Map<string, Item>, slug: string | null):
       else rows.push({ kind: "steps", key: item.key, items: [item] });
     } else if (item.t === "you" || item.t === "text" || item.t === "note" || item.t === "came") rows.push({ kind: item.t, item } as Row);
   }
+  upto(Infinity);
   return rows;
+}
+
+// What you sent from your box to the threads the chat's cards are from (the replies the app holds), since its first card
+// of each came: the line in the talk costs no turn.
+function repliedIn(items: Item[]): SentReply[] {
+  const since = new Map<string, number>();
+  for (const i of items) if (i.t === "came" && i.came?.thread && i.at && !since.has(i.came.thread)) since.set(i.came.thread, i.at);
+  if (!since.size) return [];
+  return [...issues.replies.values()]
+    .filter((r) => (r.state === "sent" || r.state === "kept") && (r.sent ?? r.at) * 1000 >= (since.get(r.thread) ?? Infinity))
+    .sort((a, b) => (a.sent ?? a.at) - (b.sent ?? b.at));
 }
 
 // An issue's chat: its conversation, with the plan and the card its session sent drawn from the issue's page, kept
@@ -498,7 +521,8 @@ function stepSends(s: LiveSession, slug: string, steps: PlanStep[]): Map<string,
 
 const Conversation = observer(function Conversation({ s, page, slug }: { s: LiveSession; page: IssuePageData | null; slug: string | null }) {
   const sends = s.results.size; // a send shows as what it sent once desk's answer to it is in
-  const rows = useMemo(() => rowsOf(s.items, s.results, slug), [s.items, sends, slug]); // eslint-disable-line react-hooks/exhaustive-deps
+  const replied = repliedIn(s.items), went = replied.map((r) => r.id).join();
+  const rows = useMemo(() => rowsOf(s.items, s.results, slug, replied), [s.items, sends, slug, went]); // eslint-disable-line react-hooks/exhaustive-deps
   // Desk keeps only the latest plan and card, which show at their last send; an earlier send is a line.
   const latest: Record<Section, number> = { Plan: -1, Result: -1 };
   rows.forEach((r, n) => { if (r.kind === "sent") latest[r.section] = n; });
@@ -533,7 +557,8 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
         // One typed mid-turn is in the transcript once Claude takes it in, at its next step: by then it's sent, not queued.
         if (r.kind === "you") return <You key={r.item.key} text={r.item.text ?? ""} images={r.item.images} files={r.item.files} when={r.item.at} />;
         if (r.kind === "text") return <Reply key={r.item.key} at={r.item.key} text={r.item.text ?? ""} when={r.item.at} />;
-        if (r.kind === "came") return r.item.came ? <CameCard key={r.item.key} came={r.item.came} at={r.item.at} /> : null;
+        if (r.kind === "came") return r.item.came ? <CameCard key={r.item.key} came={r.item.came} at={r.item.at} reply={(thread) => replyTo(s.id, thread)} /> : null;
+        if (r.kind === "replied") return <RepliedLine key={r.key} reply={r.reply} />;
         if (r.kind === "sent") return <Sent key={r.key} at={r.key} page={page} section={r.section} latest={n === latest[r.section]} />;
         if (r.kind === "step") {
           const step = stepNamed(steps, r);

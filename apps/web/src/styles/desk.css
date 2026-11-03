@@ -154,7 +154,7 @@
   --diff-del-text: lch(80% 80 29);
   --diff-line-no: lch(39.452% 1.425 272);
   --diff-pick-bg: rgb(94 105 209 / 0.22);  /* lines picked to comment on: the accent over the line's own tint, desk's own */
-  /* Slack's mark (inbox/Thread.tsx, slackMark), in Slack's own brand colours, the same in both themes as Slack's is */
+  /* Slack's mark (ui/icons.tsx, slackMark), in Slack's own brand colours, the same in both themes as Slack's is */
   --slack-red: #e01e5a;
   --slack-blue: #36c5f0;
   --slack-green: #2eb67d;
@@ -1019,6 +1019,12 @@ button.thread-out.on { background: var(--bg-active); color: var(--text-1); }
 .reply-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .reply-note { flex: 1; min-width: 0; font: 450 12px var(--font); color: var(--text-4); }
 .reply-note.failed { color: var(--text-error); }
+/* Your box above an issue's chat's composer (sessions/YourReply.tsx), which Reply on a thread's card opens: the same
+   card, mockup 6 of step 1.9, with a quiet 24px × at its head's end, as the shortcuts panel's (.keys-close). */
+.reply-head .spacer { flex: 1; }
+.reply-close { flex: none; display: grid; place-items: center; width: 24px; height: 24px; margin: -4px -4px -4px 0; padding: 0; border: 0;
+               border-radius: 9999px; background: none; color: var(--text-3); }
+.reply-close:hover { background: var(--bg-hover); color: var(--text-1); }
 /* The line offering desktop notifications (desk.js), above the rows, until Chrome has your answer. */
 .notify-ask { display: flex; align-items: center; gap: 8px; margin: 0 10px 8px; padding: 6px 6px 6px 10px;
               border: 1px solid var(--border-2); border-radius: 8px; font: 500 13px var(--font); color: var(--text-2); }

@@ -243,6 +243,18 @@ button.came-out { flex: none; height: 24px; padding: 0 8px; gap: 5px; font: 500 
 .came-text { font: 450 14px/22px var(--font); color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .came-fold { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
 .came-show { align-self: flex-start; margin: 2px 0 0 -8px; }
+/* What you sent from your box to a thread the chat follows (Came.tsx, RepliedLine): a line in the talk where you sent
+   it, not a card, since nobody else's words are in it, your text under it set off by a rule as a quote. */
+.replied { display: flex; flex-direction: column; gap: 6px; }
+.replied-head { display: flex; align-items: center; gap: 6px; min-width: 0; height: 24px; font: 450 12px var(--font); color: var(--text-3); }
+.replied-icon { flex: none; display: flex; }
+.replied-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replied-what b { font-weight: 500; color: var(--text-1); }
+.replied-at { flex: none; white-space: nowrap; }
+.replied-head .spacer { flex: 1; }
+.replied-text { margin-left: 5px; padding-left: 12px; border-left: 2px solid var(--border-2); font: 450 14px/22px var(--font); color: var(--text-2);
+                white-space: pre-wrap; overflow-wrap: anywhere; }
+.replied .came-show { margin-left: 11px; }
 /* a message waiting for the turn to end: greyed in a dashed outline, so it reads as not sent yet at a glance */
 .you.queued .you-bubble { background: transparent; border: 1px dashed var(--border-3); color: var(--text-3); }
 .you.queued .you-images { color: var(--text-4); }

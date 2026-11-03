@@ -6,28 +6,33 @@
 // the whole thread and a quote on your first words; the desk issue "A chat from a Slack message, mail or event starts
 // with its context, then we file the issue"). A followed thread's new messages, which woke the chat (the server's
 // wakes.ts), are the same card where they came in its talk, "1 new message".
+//
+// A thread's card has Reply beside Open in Slack, which opens your box above the composer on its thread
+// (YourReply.tsx), and what you sent there shows as a line in the talk where you sent it (RepliedLine): "next", the user,
+// 3 Nov, on mockup 6 of step 1.9.
 import { useLayoutEffect, useRef, useState } from "react";
 import { go } from "../app/nav";
+import type { Reply } from "../store/issues";
+import { slackMark } from "../ui/icons";
 import type { Came } from "./live";
 import { sent, whole } from "./time";
 
-const HASH = <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6.5 2.5l-1 11M10.5 2.5l-1 11M3 6h10.5M2.5 10H13" /></svg>;
-const BUBBLE = <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2c3.6 0 6.5 2.4 6.5 5.4S11.6 12.8 8 12.8c-.6 0-1.2-.1-1.8-.2L3 14.1c-.4.2-.8-.2-.7-.6l.6-2.4C2 10.1 1.5 8.8 1.5 7.4 1.5 4.4 4.4 2 8 2z" /></svg>;
 const ENVELOPE = <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><rect x="1.75" y="3.25" width="12.5" height="9.5" rx="1.5" /><path d="M2.25 4l5.75 4.5L13.75 4" /></svg>;
 const CLOCK = <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="5.75" /><path d="M8 5v3.25l2 1.25" /></svg>;
 const OUT = <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" /></svg>;
+const REPLY = <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3.5 2.5 7 6 10.5" /><path d="M2.5 7h7a4 4 0 0 1 4 4v1.5" /></svg>;
 const CARET = <svg className="steps-caret" width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M3 1.5l4 3.5-4 3.5z" /></svg>;
 
 const initial = (who: string) => who.trim().slice(0, 1).toUpperCase() || "?";
 const many = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
-// at: when the chat's first message was sent, in ms, the time a run came.
-export function CameCard({ came, at }: { came: Came; at?: number }) {
+// at: when the chat's first message was sent, in ms, the time a run came. reply: opens your box on its thread.
+export function CameCard({ came, at, reply }: { came: Came; at?: number; reply?: (thread: string) => void }) {
   const [open, setOpen] = useState(false);
   const run = came.source === "automation";
   const earlier = run ? 0 : came.said.length - 1;
   const shown = run || open ? came.said : came.said.slice(-1);
-  const icon = run ? CLOCK : came.source === "mail" ? ENVELOPE : came.name.startsWith("#") ? HASH : BUBBLE;
+  const icon = run ? CLOCK : came.source === "mail" ? ENVELOPE : slackMark(12);
   const kind = run ? `Automation${at ? ` · ${sent(at)}` : ""}` : `${came.kind} · ${many(came.said.length, came.fresh ? "new message" : "message")}`;
   const where = run ? "automation" : came.source === "mail" ? "in Gmail" : "in Slack";
   const out = !came.link ? null : run ? () => go(`/automation/${came.link}`) : () => window.open(came.link, "_blank", "noopener");
@@ -38,6 +43,7 @@ export function CameCard({ came, at }: { came: Came; at?: number }) {
         <span className="came-place">{came.name}</span>
         <span className="came-kind">{kind}</span>
         <span className="spacer" />
+        {came.thread && reply && <button className="ghost came-out" type="button" title="Reply as you, in the box above the composer" onClick={() => reply(came.thread!)}>{REPLY}Reply</button>}
         {out && <button className="ghost came-out" type="button" onClick={out}>{OUT}Open {where}</button>}
       </div>
       {earlier > 0 && (
@@ -66,6 +72,27 @@ export function CameCard({ came, at }: { came: Came; at?: number }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// What you sent from your box to a thread this chat follows, where you sent it in the talk: "You replied in #imagenhub,
+// in minhnt’s thread · 11:45", your text under it, and Open in Slack once it went. Claude hears of it the next time it
+// reads the thread, as of your own messages in Slack: it wakes nothing.
+export function RepliedLine({ reply }: { reply: Reply }) {
+  const at = (reply.sent ?? reply.at) * 1000;
+  const where = reply.source === "mail" ? "Gmail" : "Slack";
+  return (
+    <div className="replied">
+      <div className="replied-head">
+        <span className="replied-icon">{reply.source === "mail" ? ENVELOPE : slackMark(12)}</span>
+        <span className="replied-what"><b>You replied</b> {reply.whom}</span>
+        <time className="replied-at" title={whole(at)}>· {sent(at)}</time>
+        {reply.state === "kept" && <span className="replied-at">· kept, a test desk sends nothing</span>}
+        <span className="spacer" />
+        {reply.link && <button className="ghost came-out" type="button" onClick={() => window.open(reply.link, "_blank", "noopener")}>{OUT}Open in {where}</button>}
+      </div>
+      <Folded text={reply.text} className="replied-text" />
     </div>
   );
 }

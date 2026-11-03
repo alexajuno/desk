@@ -4,7 +4,8 @@
 // (PUT /api/threads/<id>/draft), where the user may edit it, and only their Send, from desk's page, posts it
 // (POST /api/replies/<id>/send): Claude has no call that sends, since a thread holds other people's words, a mail a
 // stranger's, and a line in one could ask it to. The user's own reply, written in the box under a thread's pane
-// (POST /api/threads/<id>/send, from desk's page alone), goes at once, with no card (yours). Each reply stays in the
+// (POST /api/threads/<id>/send, from desk's page alone), or in the box above the composer of the chat that follows the
+// thread, goes at once, with no card (yours). Each reply stays in the
 // replies table, which the app holds, once sent: what desk sent as the user, when, and its link. A desk that connects
 // to nothing, a test desk, keeps it and sends nothing.
 import { randomUUID } from "node:crypto";
@@ -112,18 +113,20 @@ async function deliver(source: Reply["source"], thread: string, body: string): P
   return done;
 }
 
-// The user's own reply, from the box under the thread's pane: it goes at once, as they wrote it, and is kept once it
-// went, to show in the thread as from desk until Slack's copy comes back. A refusal keeps nothing, and the box keeps
-// their text, with the reason, to send again ("we have to make the reply cheap enough, mechanically i suppose?", the
-// user, 3 Nov). A draft of Claude's on the thread stays on its card.
-export async function yours(thread: string, text: string): Promise<Reply> {
+// The user's own reply, from the box under the thread's pane or above the composer of the chat following it: it goes at
+// once, as they wrote it, and is kept once it went, to show in the thread as from desk until Slack's copy comes back. A
+// refusal keeps nothing, and the box keeps their text, with the reason, to send again ("we have to make the reply cheap
+// enough, mechanically i suppose?", the user, 3 Nov). A draft of Claude's on the thread stays on its card.
+//
+// A thread a chat follows is answered from its cards in the chat too, after desk pruned its notices (notices.ts,
+// KEEP_DAYS): then its source is its id's, and where it went is what the box said, as the page read it from the thread.
+export async function yours(thread: string, text: string, said = ""): Promise<Reply> {
   const body = bodyOf(text);
   const shown = await notices.ofThread(thread);
-  if (!shown.length) throw new HttpError(404, "No such thread.");
-  const source = shown[0].source;
+  const source = shown[0]?.source ?? (thread.startsWith("mail:") ? "mail" : "slack");
   const done = await deliver(source, thread, body);
   if (done.state === "failed") throw new HttpError(502, `${source === "mail" ? "Gmail" : "Slack"} refused it: ${done.error}`);
-  const whom = await whomOf(thread, shown);
+  const whom = shown.length ? await whomOf(thread, shown) : said.slice(0, 200);
   return db.write(async (tx) => asReply((await tx.query<Record<string, unknown>>(
     `insert into replies (id, thread, source, text, whom, state, at, sent, link) values ($1, $2, $3, $4, $5, $6, $7, $7, $8) returning *`,
     [`reply-${randomUUID().slice(0, 8)}`, thread, source, body, whom, done.state, now(), done.link])).rows[0]));

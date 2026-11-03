@@ -404,12 +404,15 @@ export async function create(): Promise<FastifyInstance> {
     const r = await replies.send(req.params.id, String(((req.body ?? {}) as { text?: unknown }).text ?? ""));
     return { state: r.state, link: r.link, error: r.error };
   });
-  // Your own reply, from the box under the thread's pane: it goes at once, as you, from desk's page alone (replies.ts, yours).
+  // Your own reply, from the box under the thread's pane or above the composer of the chat following it: it goes at
+  // once, as you, from desk's page alone (replies.ts, yours). whom is where the box said it goes, kept on the reply once
+  // desk pruned the thread's notices.
   app.post("/api/threads/:id/send", async (req: Req) => {
-    if (!fromPage(req)) throw new HttpError(403, "Only your box under the thread in desk sends a reply.");
+    if (!fromPage(req)) throw new HttpError(403, "Only your box in desk sends a reply.");
     const id = req.params.id;
-    if (!threads.IS.test(id)) throw new HttpError(404, "No such thread.");
-    const r = await replies.yours(id, String(((req.body ?? {}) as { text?: unknown }).text ?? ""));
+    if (!threads.IS.test(id) || (!(await notices.ofThread(id)).length && !(await chats.follower(id)))) throw new HttpError(404, "No such thread.");
+    const { text, whom } = (req.body ?? {}) as { text?: unknown; whom?: unknown };
+    const r = await replies.yours(id, String(text ?? ""), typeof whom === "string" ? whom : "");
     return { state: r.state, link: r.link };
   });
   app.delete("/api/replies/:id", async (req: Req) => {

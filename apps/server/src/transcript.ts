@@ -53,6 +53,7 @@ export interface Came {
   name: string; // a channel, a DM's sender, a group DM's people, a mail's subject, an automation's title
   kind: string; // Slack thread, Slack DM, Slack group DM, Mail thread, Automation
   link?: string; // the thread in Slack or Gmail, or the automation's slug; none on a thread's chat from before 3 Nov
+  thread?: string; // desk's id for a Slack or mail thread, which the card's Reply opens your box on (Came.tsx)
   said: Said[]; // oldest first: a thread's messages, or what gave a run its work, its who saying which
   fresh?: boolean; // a followed thread's new messages, which woke the chat later in its talk (wakes.ts)
 }
@@ -249,7 +250,7 @@ export const PUSH = /^<desk-push from="([^"]*)"[^>]*>/;
 export const THREAD = /\s*<desk-thread id="[^"]*"[^>]*>[\s\S]*<\/desk-thread>\s*$/;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const BLOCK = /<desk-thread id="(slack|mail):[^"]*"( wake="[^"]*")?>\n([\s\S]*)\n<\/desk-thread>\s*$/;
+const BLOCK = /<desk-thread id="((slack|mail):[^"]*)"( wake="[^"]*")?>\n([\s\S]*)\n<\/desk-thread>\s*$/;
 // Each message of the thread as threads.ts' asText writes it: "minhnt, Nov 3 08:40:" on a line, then its text.
 const SAID = new RegExp(`(?:^|\\n\\n)([^\\n]+), (${MONTHS.join("|")}) (\\d{1,2}) (\\d\\d):(\\d\\d):\\n`, "g");
 
@@ -258,20 +259,23 @@ const SAID = new RegExp(`(?:^|\\n\\n)([^\\n]+), (${MONTHS.join("|")}) (\\d{1,2})
 function threadCame(content: string, sent: number): Came | null {
   const block = BLOCK.exec(content);
   if (!block) return null;
-  const source = block[1] as "slack" | "mail", fresh = Boolean(block[2]), body = block[3];
+  const thread = block[1], source = block[2] as "slack" | "mail", fresh = Boolean(block[3]), body = block[4];
   const what = (fresh ? /^(?:A new message|\d+ new messages) in (.+?), which this chat follows\. / : /^desk's firewall let (.+?) through to the user/).exec(body)?.[1] ?? "";
   const [kind, name] = namedBy(what, source);
   const link = / Its link in (?:Slack|Gmail): (\S+?)\. /.exec(body)?.[1];
   const START = fresh ? "The new messages, oldest first:\n\n" : " holds it now:\n\n", start = body.indexOf(START);
-  const thread = start < 0 ? "" : body.slice(start + START.length);
-  const heads = [...thread.matchAll(SAID)];
+  const messages = start < 0 ? "" : body.slice(start + START.length);
+  const heads = [...messages.matchAll(SAID)];
   const year = new Date(sent).getFullYear(), month = new Date(sent).getMonth();
-  const said = heads.map((h, n) => {
-    const m = MONTHS.indexOf(h[2]);
-    const at = new Date(m > month ? year - 1 : year, m, Number(h[3]), Number(h[4]), Number(h[5])).getTime() / 1000;
-    return { who: h[1], at, text: thread.slice(h.index! + h[0].length, heads[n + 1]?.index ?? thread.length).trim() };
-  });
-  return { source, name, kind, ...(link ? { link } : {}), said, ...(fresh ? { fresh } : {}) };
+  return {
+    source, name, kind, ...(link ? { link } : {}), thread,
+    said: heads.map((h, n) => {
+      const m = MONTHS.indexOf(h[2]);
+      const at = new Date(m > month ? year - 1 : year, m, Number(h[3]), Number(h[4]), Number(h[5])).getTime() / 1000;
+      return { who: h[1], at, text: messages.slice(h.index! + h[0].length, heads[n + 1]?.index ?? messages.length).trim() };
+    }),
+    ...(fresh ? { fresh } : {}),
+  };
 }
 
 // What the thread is and its name, from how threads.ts' kindOf said it.
