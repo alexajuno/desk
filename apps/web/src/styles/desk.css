@@ -938,12 +938,10 @@ button.thread-out { flex: none; gap: 6px; }
 .thread-at { font: 450 12px var(--font); color: var(--text-4); }
 .thread-text { margin-top: 2px; font: 450 14px/22px var(--font); color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .thread-text strong { font-weight: 500; color: var(--text-1); }
-/* Under a thread no chat is on yet, the chat's composer (dock.css), stuck to the pane's foot; once you wrote, the
-   thread heads the chat's conversation, its column the conversation's, over a line saying the rest is yours alone. */
+/* Under a thread no chat is on yet, the chat's composer (dock.css), stuck to the pane's foot; once you wrote, the chat
+   opens on a card of the thread instead (dock.css, .came). */
 .thread-pane { display: flex; flex-direction: column; min-height: 100%; }
 .thread-pane > .thread-view { flex: 1 0 auto; }
-.convo > .thread-view { width: auto; margin: 0; padding: 0 0 6px; }
-.convo-note.thread-private { margin-bottom: 4px; }
 /* The Inbox's pane ends where the corner's pills begin (sessions.css, .corner): a composer there sits clear above them. */
 .inbox-open .composer { margin-bottom: 30px; }
 /* A thread's reply waiting for your Send, above its chat's composer, as a question card sits (dock.css, .ask), picked

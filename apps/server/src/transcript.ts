@@ -14,6 +14,8 @@
 //     {"t": "note", "key": …, "text": "Stopped"}                                 the user stopped the turn, or it compacted,
 //                                                                                or a script sent the agent a message for the user,
 //                                                                                or a task ended, or a command printed a line
+//     {"t": "came", "key": "<uuid>:came", "came": {…}, "at": …}                 what a chat desk started from something that
+//                                                                                came in opens on: the thread or the run (Came)
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -38,6 +40,26 @@ export interface Item {
   images?: number;
   files?: string[];
   queued?: boolean;
+  came?: Came;
+}
+
+// What came in, for a chat desk started from it (chats.ts, cameIn): a Slack or mail thread, read from the <desk-thread>
+// block behind the user's first words (threads.ts), or a run of an automation with no agent, from its <desk-push> block
+// (automations.ts, runMessage). The chat draws it as a card above the first words, so it says what "this" is wherever
+// the chat opens. It is what Claude read, and it lasts as the chat does, where desk's own copy of a message goes after
+// 14 days (notices.ts, KEEP_DAYS).
+export interface Came {
+  source: "slack" | "mail" | "automation";
+  name: string; // a channel, a DM's sender, a group DM's people, a mail's subject, an automation's title
+  kind: string; // Slack thread, Slack DM, Slack group DM, Mail thread, Automation
+  link?: string; // the thread in Slack or Gmail, or the automation's slug; none on a thread's chat from before 3 Nov
+  said: Said[]; // oldest first: a thread's messages, or what gave a run its work, its who saying which
+}
+
+interface Said {
+  who: string;
+  at: number; // seconds
+  text: string;
 }
 
 // Every transcript by its session, listed again once it is a second old, or at once for a session it lacks. Listing
@@ -187,11 +209,69 @@ function summary(name: string, input: Record<string, unknown>): string {
 
 // A script's message for the user, which desk gives an agent to pass on (chats.ts, push). The agent's reply is what the
 // user reads; the panel says only who sent it.
-export const PUSH = /^<desk-push from="([^"]*)">/;
+export const PUSH = /^<desk-push from="([^"]*)"[^>]*>/;
 
 // What desk adds after the user's first words in a chat from a thread's Inbox row (threads.ts): the thread and what
 // Claude may do with it, which the panel leaves out, showing only the words.
 export const THREAD = /\s*<desk-thread id="[^"]*">[\s\S]*<\/desk-thread>\s*$/;
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const BLOCK = /<desk-thread id="(slack|mail):[^"]*">\n([\s\S]*)\n<\/desk-thread>\s*$/;
+// Each message of the thread as threads.ts' asText writes it: "minhnt, Nov 3 08:40:" on a line, then its text.
+const SAID = new RegExp(`(?:^|\\n\\n)([^\\n]+), (${MONTHS.join("|")}) (\\d{1,2}) (\\d\\d):(\\d\\d):\\n`, "g");
+
+// The thread in a chat's first message, or null when it holds none. Its time has no year: it is the message's own, or
+// the year before for a month still to come.
+function threadCame(content: string, sent: number): Came | null {
+  const block = BLOCK.exec(content);
+  if (!block) return null;
+  const source = block[1] as "slack" | "mail", body = block[2];
+  const what = /^desk's firewall let (.+?) through to the user/.exec(body)?.[1] ?? "";
+  const [kind, name] = namedBy(what, source);
+  const link = / Its link in (?:Slack|Gmail): (\S+?)\. /.exec(body)?.[1];
+  const START = " holds it now:\n\n", start = body.indexOf(START);
+  const thread = start < 0 ? "" : body.slice(start + START.length);
+  const heads = [...thread.matchAll(SAID)];
+  const year = new Date(sent).getFullYear(), month = new Date(sent).getMonth();
+  const said = heads.map((h, n) => {
+    const m = MONTHS.indexOf(h[2]);
+    const at = new Date(m > month ? year - 1 : year, m, Number(h[3]), Number(h[4]), Number(h[5])).getTime() / 1000;
+    return { who: h[1], at, text: thread.slice(h.index! + h[0].length, heads[n + 1]?.index ?? thread.length).trim() };
+  });
+  return { source, name, kind, ...(link ? { link } : {}), said };
+}
+
+// What the thread is and its name, from how threads.ts' kindOf said it.
+function namedBy(what: string, source: "slack" | "mail"): [string, string] {
+  const m = (re: RegExp) => re.exec(what)?.[1];
+  const channel = m(/^the Slack thread in (.+)$/), dm = m(/^(.+)'s Slack DM to the user$/), group = m(/^the Slack group DM with (.+)$/);
+  const subject = m(/^the mail thread “(.*?)”/);
+  if (channel) return ["Slack thread", channel];
+  if (dm) return ["Slack DM", dm];
+  if (group) return ["Slack group DM", group];
+  if (subject !== undefined) return ["Mail thread", subject || "(no subject)"];
+  return [source === "mail" ? "Mail thread" : "Slack", what];
+}
+
+// A run of an automation with no agent, which starts desk's agent chat (automations.ts, runMessage, which names its
+// slug only then), or null for any other push: an agent's run, or a script's message, which keeps its line. What gave
+// it its work is the call's message, else what its check printed, else what it does.
+const RUN = /^<desk-push from="automation ([^"]*)" automation="([^"]*)">\n([\s\S]*?)\n<\/desk-push>/;
+const CALLED = "\n\nThe call that started it said:\n\n";
+function runCame(content: string, sent: number): Came | null {
+  const run = RUN.exec(content);
+  if (!run) return null;
+  const [, title, slug, body] = run;
+  const at = sent / 1000, [before, call] = body.split(CALLED);
+  const check = /\n\nIts check, `[^`\n]*`, printed:\n\n([\s\S]*)$/.exec(before)?.[1];
+  const failed = /\n\n(Its check failed[^\n]*)/.exec(before)?.[1];
+  const said = [
+    ...(check ? [{ who: "Its check printed", at, text: check.trim() }] : []),
+    ...(call ? [{ who: "The call that started it said", at, text: call.trim() }] : []),
+  ];
+  if (!said.length) said.push(failed ? { who: "", at, text: failed } : { who: "What it does", at, text: before.split("\n\nIts check")[0].trim() });
+  return { source: "automation", name: title, kind: "Automation", link: slug, said };
+}
 
 const resultText = (content: unknown): string =>
   typeof content === "string" ? content
@@ -277,14 +357,18 @@ function entryItems(e: Entry): Item[] {
       const note = notice(content);
       if (note !== null) return noted(uuid, note);
       const push = PUSH.exec(content);
-      if (push) return [{ t: "note", key: uuid, text: `Sent by ${push[1]}` }];
+      if (push) {
+        const run = runCame(content, at);
+        return [run ? { t: "came", key: `${uuid}:came`, came: run, at } : { t: "note", key: uuid, text: `Sent by ${push[1]}` }];
+      }
       const text = typed(content);
       if (text === "[Request interrupted by user]") return [{ t: "note", key: uuid, text: "Stopped" }];
-      return text ? [you(uuid, text, at)] : [];
+      const came = threadCame(content, at);
+      return [...(came ? [{ t: "came", key: `${uuid}:came`, came, at }] : []), ...(text ? [you(uuid, text, at)] : [])];
     }
     const items: Item[] = [];
     const texts: string[] = [];
-    let images = 0;
+    let images = 0, came: Came | null = null;
     (content as Entry[] ?? []).forEach((b, n) => {
       if (b.type === "tool_result") {
         const text = resultText(b.content), output = commandOutput(e, b, text);
@@ -292,12 +376,14 @@ function entryItems(e: Entry): Item[] {
       } else if (b.type === "text") {
         const note = notice(b.text ?? "");
         if (note !== null) return void items.push(...noted(`${uuid}:${n}`, note));
+        came ??= threadCame(b.text ?? "", at);
         const text = typed(b.text ?? "");
         if (text.startsWith("[Request interrupted by user")) items.push({ t: "note", key: `${uuid}:${n}`, text: "Stopped" });
         else if (text) texts.push(text);
       } else if (b.type === "image") images++;
     });
     if (texts.length || images) items.unshift({ ...you(uuid, texts.join("\n\n"), at), ...(images ? { images } : {}) });
+    if (came) items.unshift({ t: "came", key: `${uuid}:came`, came, at });
     return items;
   }
   const msg = String(e.message?.id ?? "");

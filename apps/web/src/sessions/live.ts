@@ -8,7 +8,7 @@ import { toast } from "../ui/toast";
 import type { Context } from "./models";
 
 export interface Item {
-  t: "you" | "text" | "thinking" | "tool" | "result" | "note";
+  t: "you" | "text" | "thinking" | "tool" | "result" | "note" | "came";
   key: string;
   msg?: string;
   text?: string;
@@ -22,6 +22,17 @@ export interface Item {
   error?: boolean;
   images?: number;
   files?: string[]; // the names of the files attached by path
+  came?: Came; // what came in, which a chat desk started from it opens on
+}
+
+// A Slack or mail thread, or an automation's run, as the chat desk started from it read it (the server's transcript.ts,
+// Came), drawn as a card at the chat's top (Came.tsx).
+export interface Came {
+  source: "slack" | "mail" | "automation";
+  name: string;
+  kind: string;
+  link?: string; // the thread in Slack or Gmail, or the automation's slug
+  said: { who: string; at: number; text: string }[]; // oldest first; at in seconds
 }
 
 export interface Ask {

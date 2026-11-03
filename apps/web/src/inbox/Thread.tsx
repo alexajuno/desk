@@ -5,8 +5,9 @@
 // for the rest of it: your own replies are no notices, so they are not here.
 //
 // A composer under it starts a chat with Claude on the thread, which only you see (the server's threads.ts: "pops up
-// and carry it on with me", the user, 2 Nov); from then on the row opens on that chat, the thread above its
-// conversation, picked from two mockups on 2 Nov over one with Draft a reply, File an issue and Mark done above the box.
+// and carry it on with me", the user, 2 Nov), picked from two mockups on 2 Nov over one with Draft a reply, File an
+// issue and Mark done above the box. From then on the row opens on that chat, which opens on a card of the thread as
+// Claude read it, wherever it is opened (sessions/Came.tsx, 3 Nov): the whole thread shows only before you wrote.
 //
 // A reply the chat's Claude drafted waits on a card above the composer (ReplyCard; the server's replies.ts), yours to
 // edit, and only your Send there posts it to Slack or sends it from Gmail as you: Claude has no call that sends.
@@ -77,7 +78,7 @@ export const chatOf = (row: InboxRow) => row.session ?? started.get(row.slug) ??
 export const ThreadView = observer(function ThreadView({ row }: { row: InboxRow }) {
   if (isLogin(row)) return <LoginView row={row} />;
   const session = chatOf(row);
-  if (session) return <SessionView id={session} above={<><ThreadBody row={row} /><p className="convo-note thread-private">With Claude: only you see this</p></>} foot={<ReplyCard thread={row.slug} />} />;
+  if (session) return <SessionView id={session} foot={<ReplyCard thread={row.slug} />} />;
   return (
     <div className="thread-pane">
       <ThreadBody row={row} />

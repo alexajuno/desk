@@ -266,7 +266,7 @@ export async function fire(a: Automation, why: string, message = ""): Promise<st
       await note(a.slug, { fired: now(), note: said });
       return said;
     }
-    const chat = await chats.automationRun(agent, a.title, a.slug, runMessage(a, why, output, failed, message));
+    const chat = await chats.automationRun(agent, a.title, a.slug, runMessage(a, why, output, failed, message, !agent));
     await note(a.slug, { fired: now(), chat: chat.id, ran: now(), note: failed });
     return "Started a run.";
   } finally {
@@ -274,9 +274,10 @@ export async function fire(a: Automation, why: string, message = ""): Promise<st
   }
 }
 
-// The run's first message: what the automation does, and what its check and its call gave it. The panel shows it only as
-// who sent it (transcript.ts, PUSH); the agent's reply is what the user reads.
-function runMessage(a: Automation, why: string, output: string, failed: string, message: string): string {
+// The run's first message: what the automation does, and what its check and its call gave it. An agent's run shows it
+// only as who sent it (transcript.ts, PUSH), the agent's reply being what the user reads; desk's agent chat, on a run
+// with no agent, opens on it as a card (transcript.ts, runCame), which the block's slug marks.
+function runMessage(a: Automation, why: string, output: string, failed: string, message: string, card: boolean): string {
   const parts = [a.body || `(${a.title} has no description: report what its check found.)`];
   if (failed) parts.push(`${failed}\nTell the user, so they can fix it; desk will not tell them again while it keeps failing.`);
   if (output) {
@@ -285,7 +286,7 @@ function runMessage(a: Automation, why: string, output: string, failed: string, 
   }
   if (message) parts.push(`The call that started it said:\n\n${message}`);
   const who = `automation ${a.title.replace(/["<>\n]/g, " ").slice(0, 60)}`;
-  return `<desk-push from="${who}">\n${parts.join("\n\n")}\n</desk-push>\n\ndesk ran the user's automation "${a.title}" ${why}. Do what it says, then ` +
+  return `<desk-push from="${who}"${card ? ` automation="${a.slug}"` : ""}>\n${parts.join("\n\n")}\n</desk-push>\n\ndesk ran the user's automation "${a.title}" ${why}. Do what it says, then ` +
     "report: your reply is the first thing the user reads, in desk's Inbox, and they may answer you there. Keep it brief: what matters, and what they need to do, if anything.";
 }
 

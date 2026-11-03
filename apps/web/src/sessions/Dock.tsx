@@ -25,8 +25,10 @@ import { CHEVRON, GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
 import { isDrawn, StepParts, type PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
+import { CameCard } from "./Came";
 import { anyCommit, Changes, Counts, useChanges } from "./Changes";
 import { rising } from "./glide";
+import { clock, sent, whole } from "./time";
 import { Half } from "./Half";
 import { followParts } from "./StepHalf";
 import { StepsCard } from "./StepsCard";
@@ -173,9 +175,8 @@ function browse(e: React.MouseEvent, session: string) {
 const phone = matchMedia("(max-width: 640px)");
 const StepSide = createContext({ can: false, beside: false });
 
-// above: what the conversation follows, the thread a chat from a thread's Inbox row is on (inbox/Thread.tsx); foot:
-// what sits over its composer, that thread's reply waiting for your Send.
-export const SessionView = observer(function SessionView({ id, above, foot }: { id: string; above?: ReactNode; foot?: ReactNode }) {
+// foot: what sits over its composer, the reply waiting for your Send in a chat from a thread's Inbox row (inbox/Thread.tsx).
+export const SessionView = observer(function SessionView({ id, foot }: { id: string; foot?: ReactNode }) {
   const s = useLive(id)!;
   useSplash(!s.loaded); // desk opening on a chat shows it with its conversation, never "Connecting…"
   const scroller = useRef<HTMLDivElement>(null);
@@ -273,8 +274,7 @@ export const SessionView = observer(function SessionView({ id, above, foot }: { 
         <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>
           {here && shown === "changes" && <ChangesOf slug={here.issue.slug} />}
           <div className="convo" hidden={shown !== "chat"} onClick={docked && m?.chat ? (e) => browse(e, id) : undefined}>
-            {above}
-            {above ? null : !s.loaded ? <p className="convo-empty">Connecting…</p>
+            {!s.loaded ? <p className="convo-empty">Connecting…</p>
               : quiet(s) ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
                 : m?.chat && m.issue ? "This issue's chat. Write to carry the issue on: it starts from the issue's document."
                 : m?.bare || (m?.chat && s.startAs === "chat") ? `Just Claude, as claude runs in a terminal ${startsIn(s) === "~" ? "from your home folder" : `in ${startsIn(s)}`}: no issue and no desk instructions.`
@@ -404,6 +404,7 @@ type Row =
   | { kind: "you"; item: Item }
   | { kind: "text"; item: Item }
   | { kind: "note"; item: Item }
+  | { kind: "came"; item: Item }
   | { kind: "steps"; key: string; items: Item[] }
   | { kind: "sent"; key: string; section: Section }
   | { kind: "step"; key: string; place: string; title: string | null };
@@ -444,7 +445,7 @@ function rowsOf(items: Item[], results: Map<string, Item>, slug: string | null):
       const last = rows[rows.length - 1];
       if (last?.kind === "steps") last.items.push(item);
       else rows.push({ kind: "steps", key: item.key, items: [item] });
-    } else if (item.t === "you" || item.t === "text" || item.t === "note") rows.push({ kind: item.t, item } as Row);
+    } else if (item.t === "you" || item.t === "text" || item.t === "note" || item.t === "came") rows.push({ kind: item.t, item } as Row);
   }
   return rows;
 }
@@ -531,6 +532,7 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
         // One typed mid-turn is in the transcript once Claude takes it in, at its next step: by then it's sent, not queued.
         if (r.kind === "you") return <You key={r.item.key} text={r.item.text ?? ""} images={r.item.images} files={r.item.files} when={r.item.at} />;
         if (r.kind === "text") return <Reply key={r.item.key} at={r.item.key} text={r.item.text ?? ""} when={r.item.at} />;
+        if (r.kind === "came") return r.item.came ? <CameCard key={r.item.key} came={r.item.came} at={r.item.at} /> : null;
         if (r.kind === "sent") return <Sent key={r.key} at={r.key} page={page} section={r.section} latest={n === latest[r.section]} />;
         if (r.kind === "step") {
           const step = stepNamed(steps, r);
@@ -710,24 +712,9 @@ function elapsed(from: number): string {
   return secs < 60 ? `${secs}s` : secs < 3600 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${Math.floor(secs / 3600)}h ${Math.floor(secs / 60) % 60}m`;
 }
 
-const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-
 // A moment as its time today, and with its weekday on another day: 18:40, Thu 04:00.
 const moment = (ms: number) =>
   new Date(ms).toDateString() === new Date().toDateString() ? clock(ms) : `${new Date(ms).toLocaleDateString([], { weekday: "short" })} ${clock(ms)}`;
-
-// When a message was sent: its time today, with its weekday this past week, and with its day and month before:
-// 12:07, Thu 12:07, 28 Oct 12:07.
-function sent(ms: number): string {
-  const d = new Date(ms), midnight = new Date().setHours(0, 0, 0, 0);
-  if (ms >= midnight) return clock(ms);
-  if (ms >= midnight - 6 * 86400_000) return `${d.toLocaleDateString([], { weekday: "short" })} ${clock(ms)}`;
-  return `${d.getDate()} ${d.toLocaleDateString([], { month: "short" })} ${clock(ms)}`;
-}
-
-// A moment whole, for a tooltip: Sunday, November 1, 2026, 15:55.
-const whole = (ms: number) =>
-  `${new Date(ms).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long", year: "numeric" })}, ${clock(ms)}`;
 
 // Each of the plan's limits, by rate_limit_info's rateLimitType.
 const limits: Record<string, string> = {
