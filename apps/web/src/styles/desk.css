@@ -288,7 +288,7 @@ kbd { font: 500 11px var(--font); color: var(--text-3); border: 1px solid var(--
 /* sidebar */
 /* Linear's sidebar scrolls with a thin scrollbar whose room is always kept, its right padding 2px beside it (measured
    2026-10-19 on /team/OE/all, dark and light): the rows stay as wide with or without it. */
-.side { position: fixed; top: 0; left: 0; bottom: 0; width: 244px; box-sizing: border-box; padding: 12px 2px 12px 12px;
+.side { position: fixed; top: 0; left: 0; bottom: var(--status-bar-h); width: 244px; box-sizing: border-box; padding: 12px 2px 12px 12px;
         overflow: auto; display: flex; flex-direction: column;
         scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; scrollbar-gutter: stable; }
 .side > * { flex: none; }
@@ -328,10 +328,11 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
 /* desk running a branch for a review, a row that is no link when no issue is known to have switched it */
 .nav-item.static { cursor: default; } .nav-item.static:hover { background: none; color: var(--text-3); }
 /* Linear's Help button, measured 2026-10-15: a 24px circle 10px in from the window's bottom left corner,
-   level with the Agent button, its 16px question mark text-3 until hovered. It sat in a bar along the window's
-   bottom from 2 Nov until the bar left on 3 Nov ("remove this bottom in desk. i don't think i need it"). The foot stays at the sidebar's bottom while the chats scroll under it, fading out
+   level with the Agent button, its 16px question mark text-3 until hovered. desk's sits in the window's bar, at its
+   left end (2 Nov, below); the sidebar's foot keeps it only on a phone, which has no bar (phone.css), so on a wider
+   screen the foot does not show. The foot stays at the sidebar's bottom while the chats scroll under it, fading out
    over its first 14px (28 Oct); the sidebar still scrolls as one. */
-.side-foot { position: sticky; bottom: -12px; display: flex; flex-direction: column; gap: 6px; margin: auto 0 -12px;
+.side-foot { position: sticky; bottom: -12px; display: none; margin: auto 0 -12px;
              padding: 14px 0 10px; background: linear-gradient(to bottom, transparent, var(--bg-app) 14px); }
 .side-icon.help-open { width: 24px; height: 24px; margin-left: -2px; background: none; }
 /* Hiding the sidebar ([ or its toggle). On a wide window it slides out and the panel takes its space; at
@@ -350,7 +351,7 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
    Linear's logo fades in at the panel's middle, in 0.4s, only once a load has taken 1s; desk's penguin does the same,
    greyed and faint as Linear's grey logo is. */
 #splash { position: fixed; inset: 0; z-index: 100; background: var(--bg-app); pointer-events: none; transition: opacity 0.1s; }
-.splash-panel { position: absolute; top: 8px; right: 8px; bottom: 8px; left: 244px; display: grid; place-items: center;
+.splash-panel { position: absolute; top: 8px; right: 8px; bottom: var(--status-bar-h); left: 244px; display: grid; place-items: center;
                 background: var(--bg-panel); border: 0.5px solid var(--border-2); border-radius: 12px; box-shadow: var(--shadow-panel); }
 .side-collapsed .splash-panel { left: 8px; }
 @media (max-width: 900px) { .splash-panel { left: 8px; } }
@@ -359,10 +360,25 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
 .splashed #splash { opacity: 0; }
 
 /* the inset panel and its top bar */
-.panel { position: fixed; top: 8px; right: 8px; bottom: 8px; left: 244px; display: flex; flex-direction: column;
+.panel { position: fixed; top: 8px; right: 8px; bottom: var(--status-bar-h); left: 244px; display: flex; flex-direction: column;
          background: var(--bg-panel); border: 0.5px solid var(--border-2); border-radius: 12px;
          box-shadow: var(--shadow-panel); overflow: hidden; transition: left 0.2s ease; }
 .side-collapsed .panel { left: 8px; }
+/* The window's bar (frame/StatusBar.tsx), as VS Code's status bar: on the window's background under the sidebar and
+   the panel, which end where it starts, in the band that was the panel's 8px gap, grown to hold its 24px numbers,
+   with the Help menu's ? at its left end.
+   A phone has none (phone.css). */
+:root { --status-bar-h: 32px; }
+.status-bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: flex-end;
+              height: var(--status-bar-h); padding: 0 9px; box-sizing: border-box; }
+.status-bar .used > span { height: 24px; }
+/* The Help menu's ? at the bar's left end, 10px in, where Linear's Help button sits ("A. proceed", the user, 2 Nov) */
+.status-bar .help-open { margin: 0 auto 0 1px; }
+/* seat's live profile by name, before its own numbers ("A", the user, 2 Nov): a quiet chip, filled only under the mouse,
+   in the numbers' height, its name a step brighter than them. Linear has no such bar, so nothing here is measured. */
+.status-bar button.profile { gap: 4px; height: 24px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); }
+.status-bar button.profile:hover { background: var(--bg-icon-hover); color: var(--text-1); }
+.status-bar button.profile svg { color: var(--text-4); }
 .bar { display: flex; align-items: center; gap: 8px; height: 44px; flex: none; padding: 0 16px; border-bottom: 1px solid var(--border-1);
        font-weight: 500; color: var(--text-2); }
 .bar a { text-decoration: none; color: var(--text-3); } .bar a:hover { color: var(--text-1); }
@@ -702,6 +718,10 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 .menu.actions { width: 224px; } .menu.actions ul { padding-top: 4px; }
 .menu.help { width: 248px; }
 .menu.wide { width: 340px; } .menu.wide ul { max-height: 300px; overflow: auto; }
+/* seat's profiles, from the window's bar (frame/StatusBar.tsx): wide enough for a plan's two numbers, over the corner's
+   chat pill, which sits just above the bar and drew over its last row, and Auto switch's box always shown, since it is a
+   setting rather than a value to filter by, as the mockup the user picked drew it (2 Nov). */
+.menu.profiles { z-index: 16; width: 300px; } .menu.profiles li .check { visibility: visible; }
 
 /* Linear's command menu, as O then T, P and I open it, measured on linear.app on 2026-10-21 (an issue page, dark and light,
    at 2x): 720px wide, centred, 106px down an 815px window (taken as 13vh: not checked at another height), with no
@@ -790,8 +810,9 @@ div.menu-filter:empty::before, div.menu-filter:not(:empty)::after { content: "";
 div.menu-filter:empty::after { content: attr(data-placeholder); color: var(--text-3); }
 @keyframes caret { 50% { opacity: 0; } }
 
-/* a Linear-style toast, bottom right ("bottom right corner", the user, 29 Oct) */
-.toast { position: fixed; right: 16px; bottom: 16px; z-index: 40; display: flex; align-items: center; gap: 8px; height: 40px;
+/* a Linear-style toast, bottom right ("bottom right corner", the user, 29 Oct), above the corner's buttons
+   (sessions.css .corner, which end 28px above the window's bar) */
+.toast { position: fixed; right: 16px; bottom: calc(var(--status-bar-h) + 32px); z-index: 40; display: flex; align-items: center; gap: 8px; height: 40px;
          padding: 0 8px 0 14px; background: var(--bg-pop); border: 0.5px solid var(--border-pop); border-radius: 8px;
          box-shadow: var(--shadow-pop); font-size: 13px; color: var(--text-1); }
 .toast:not(:has(button)) { padding-right: 14px; }
@@ -982,9 +1003,8 @@ button.thread-out.on { background: var(--bg-active); color: var(--text-1); }
 .reply-refused { margin-top: 6px; font: 450 12px var(--font); color: var(--text-error); overflow-wrap: anywhere; }
 .thread-pane { display: flex; flex-direction: column; min-height: 100%; }
 .thread-pane > .thread-view { flex: 1 0 auto; }
-/* On a phone the Inbox's pane ends where the left chat's pill begins (sessions.css, .corner): a composer there sits
-   clear above it. */
-@media (max-width: 640px) { .inbox-open .composer { margin-bottom: 30px; } }
+/* The Inbox's pane ends where the corner's pills begin (sessions.css, .corner): a composer there sits clear above them. */
+.inbox-open .composer { margin-bottom: 30px; }
 /* A thread's reply waiting for your Send, above its chat's composer, as a question card sits (dock.css, .ask), picked
    from two mockups on 2 Nov over one in the conversation: where it goes, the text yours to edit, Discard and Send. */
 .reply-card { flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); margin: 0 auto 8px; padding: 10px 12px;
@@ -1299,7 +1319,7 @@ button.set-pick svg { color: var(--text-3); }
 .tree .item:hover .select-box, .projects-row:hover .select-box, .item.selected .select-box,
 :root:has(.item.selected) :is(.tree .item, .projects-row) .select-box { opacity: 1; }
 .item.selected .select-box { border-color: var(--accent); background: var(--accent); color: var(--on-accent); } /* as a menu's ticked box */
-.select-bar { position: fixed; bottom: 24px; left: calc(244px + (100vw - 252px) / 2); translate: -50% 0; z-index: 30; display: flex;
+.select-bar { position: fixed; bottom: calc(var(--status-bar-h) + 16px); left: calc(244px + (100vw - 252px) / 2); translate: -50% 0; z-index: 30; display: flex;
               align-items: center; gap: 4px; height: 40px; padding: 0 6px 0 14px; box-sizing: border-box; background: var(--bg-pop);
               border: 0.5px solid var(--border-pop); border-radius: 10px; box-shadow: var(--shadow-pop); white-space: nowrap; }
 .side-collapsed .select-bar { left: 50%; }

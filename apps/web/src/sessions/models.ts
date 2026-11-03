@@ -49,8 +49,8 @@ export interface Runs {
 }
 
 // The menu under the chip: the models, the efforts the current one takes, and the usage: the live profile by name, as
-// seat says, its own numbers, a plan's 5-hour and Week or api's credits, and how full the session's
-// context is. This is where they are read, since the window's bottom bar left on 3 Nov.
+// seat says, its own numbers, a plan's 5-hour and Week or api's credits, as the window's bar shows them, and how full
+// the session's context is. A phone has no bar, so this is where it reads them.
 export function runsMenu(anchor: Element, session: string, runs: Runs, pick: (set: { model?: string; effort?: string }, shown?: Partial<Runs>) => void) {
   openMenu({
     anchor, className: "runs-menu",

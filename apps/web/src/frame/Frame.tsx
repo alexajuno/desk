@@ -1,5 +1,5 @@
 // Every page's frame (templates/base.html): the sidebar, the panel the page draws into, the chat that takes the middle
-// on a page that is one (an issue with a chat, its issue on its tabs, or /sessions/<id>), a phone's left-chat pill,
+// on a page that is one (an issue with a chat, its issue on its tabs, or /sessions/<id>), the corner's session buttons,
 // the shortcuts panel, the new issue panel, and the menus and toasts over them. desk's keys and the clicks that act
 // across the page live here, as desk.js read them on the document.
 import { compareStructural, reaction } from "mobx";
@@ -31,6 +31,7 @@ import { Catcher } from "../search/catcher";
 import { openSearch, search, SearchHost } from "../search/SearchBox";
 import { deleteReadKey, deleteRow, markAllKey, toggleRead } from "../inbox/actions";
 import { Corner } from "./Corner";
+import { StatusBar } from "./StatusBar";
 import { CreatorHost } from "./Creator";
 import { ProjectCreatorHost } from "./ProjectCreator";
 import { TeamCreatorHost } from "./TeamCreator";
@@ -420,6 +421,7 @@ export const Frame = observer(function Frame() {
       <Dock />
       <Catcher />
       <Corner />
+      <StatusBar />
       <Tabs />
       <KeysPanel />
       <SelectionBar />

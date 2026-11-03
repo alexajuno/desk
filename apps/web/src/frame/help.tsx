@@ -1,5 +1,6 @@
-// The Help menu, at the sidebar's foot: Linear's Help menu, cut to the keyboard shortcuts, plus Settings, which Linear
-// opens from its workspace menu and desk has none of. The theme is set in Settings › Preferences.
+// The Help menu, at the window bar's left end (frame/StatusBar.tsx), and at the sidebar's foot on a phone, which has no
+// bar: Linear's Help menu, cut to the keyboard shortcuts, plus Settings, which Linear opens from its workspace menu and
+// desk has none of. The theme is set in Settings › Preferences.
 import { GLYPH } from "../ui/icons";
 import { openMenu, toggled } from "../ui/menu";
 import { go } from "../app/nav";

@@ -1,6 +1,6 @@
 /* desk on a phone (25 Oct), which Chrome installs as an app from the manifest and reaches over Tailscale: at 640px and
-   under, the page and a chat fill the screen above the tabs (frame/Tabs.tsx), and the
-   pill of a chat you left floats above them (frame/Corner.tsx), which a wider screen does without. Linear's phone app is native, so nothing here is measured on
+   under, the page and a chat fill the screen above the tabs (frame/Tabs.tsx), which take the corner's place; the
+   corner keeps only the pill of a chat you left. Linear's phone app is native, so nothing here is measured on
    linear.app: it follows desk's heights and colours. */
 :root { --tabs-h: calc(56px + env(safe-area-inset-bottom)); }
 /* What the page keeps clear at the screen's bottom: the tabs, or the keyboard drawn over them while it is up, whose
@@ -24,6 +24,12 @@
   #splash::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--tabs-h); box-sizing: border-box;
                    border-top: 1px solid var(--border-1); background: var(--bg-panel); }
 
+  /* No window bar (frame/StatusBar.tsx): the model menu shows the 5 hours and the week ("A", the user, 1 Nov). */
+  :root { --status-bar-h: 0px; }
+  .status-bar { display: none; }
+  /* so the Help menu's ? stays at the sidebar's foot, as before the bar (desk.css) */
+  .side-foot { display: flex; }
+
   .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 7; display: flex; box-sizing: border-box; height: var(--tabs-h);
           padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--border-1); background: var(--bg-panel); }
   .tabs .tab { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
@@ -43,8 +49,9 @@
   .menu.command.search ul { max-height: calc(100dvh - var(--floor) - 140px); }
   .menu.command.search li .m { display: none; }
 
-  .corner { display: flex; left: 8px; right: 8px; bottom: calc(var(--floor) + 8px); justify-content: center; pointer-events: none; }
+  .corner { left: 8px; right: 8px; bottom: calc(var(--floor) + 8px); justify-content: center; pointer-events: none; }
   .corner > * { pointer-events: auto; }
+  .corner-new { display: none; }
   .dock-pill { max-width: 100%; box-shadow: var(--shadow-pop); }
   .corner .dock-pill .dock-pill-x { opacity: 1; } /* no mouse to show it */
   .toast { left: 8px; right: 8px; bottom: calc(var(--floor) + 8px); }

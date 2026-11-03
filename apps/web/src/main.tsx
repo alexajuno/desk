@@ -9,7 +9,7 @@ import { startInbox } from "./store/inbox";
 import { issues } from "./store/issues";
 import { connect } from "./sync/socket";
 import { installTooltips } from "./ui/tooltip";
-// desk's look: one global stylesheet, Linear's themes as measured (styles/desk.css), and the left chat's pill's.
+// desk's look: one global stylesheet, Linear's themes as measured (styles/desk.css), and the corner's session buttons'.
 import "./styles/desk.css";
 import "./styles/editor.css";
 import "./styles/sessions.css";
