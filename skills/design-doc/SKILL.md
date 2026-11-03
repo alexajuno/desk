@@ -14,7 +14,7 @@ Plan as a discussion partner, the way two engineers talk at a whiteboard: one sa
 - **Short in the chat, in full on the step.** Each reply is plain words, a few lines: what the piece settled and what you need. Assume nothing the user knows ("never explaining in short way or assume i knew anything", 3 Nov): in desk the step itself explains its piece from the basics up, in parts, below, and the reply only points at it.
 - **Detail goes in a picture, and the text says it.** Where cases or states matter, draw them: a state diagram for states, a sequence for who does what in order, a table of cases for edge cases. The user reads the diagrams first ("honestly i've never read text in the plan, in the design", 27 Oct), so whatever decides the design is drawn; in desk each part's text is the voice over its diagram ("text equals to voice on the left and diagrams equals to video on the right", 3 Nov).
 - **A piece about how a UI looks gets mockups too**, one picture per option in the app's own look, the user's pick going on its step: the ui-mockup skill draws them.
-- **What exists, then the change.** A part that changes is drawn as Today and After, from the code as it is; one diagram when nothing exists yet ("at each step that touch the design of the pr, we need two diagrams: current state and what gonna be changed", 27 Oct). Today and After are two d2 blocks, one after the other, fenced ```` ```d2 Today ```` and ```` ```d2 After ````: desk draws each as a picture of its own, the fence's word above it in small grey, and the page places them, side by side when both still read, one under the other when not ("we need two artifacts. two different pictures... and then the browser would handle positioning", 28 Oct). One diagram holding both, stacked with `grid-columns: 1`, shrank its text past reading on a wide pair ("hard to be seen. it depends on the size of the image", 30 Oct). A table is drawn as a table, its new columns marked. A column or a table is never Decide alone: IGH-314's fee and cap were each built twice because the columns sat there, and the user's every cut ("isn't it the same as owed column?") came only once the code showed them.
+- **What exists, then the change.** A part that changes is drawn as Today and After, from the code as it is; one diagram when nothing exists yet ("at each step that touch the design of the pr, we need two diagrams: current state and what gonna be changed", 27 Oct). Today and After are two d2 blocks, one after the other, fenced ```` ```d2 Today ```` and ```` ```d2 After ````: desk draws each as a picture of its own, the fence's word above it in small grey, and the page places them, side by side when both still read, one under the other when not ("we need two artifacts. two different pictures... and then the browser would handle positioning", 28 Oct). One diagram holding both, stacked with `grid-columns: 1`, shrank its text past reading on a wide pair ("hard to be seen. it depends on the size of the image", 30 Oct). A table of rows and columns, such as cases, roles or states, is one shape holding a Markdown table, `t: |||md`, a header line, a `|---|` line and one line per row, then `|||`, the cell it changes in bold; a database table's columns are a `sql_table`, its new columns marked (patterns 7 and 8 in the d2 reference). Never a grid of boxes, one per cell: d2 fills a grid column by column, so the cells land out of place ("table is broken in d2. it looks... scattered", 3 Nov). A column or a table is never Decide alone: IGH-314's fee and cap were each built twice because the columns sat there, and the user's every cut ("isn't it the same as owed column?") came only once the code showed them.
 - **They ask back.** You can't know what the user knows, so assume nothing: start from the basics and let them skip what they know, and when they ask back, answer a level lower, as a part of the step it belongs to, so the bigger picture stays around it ("so probably just let the model does what it does and i'll ask back", 27 Oct).
 - **End each reply on what you need:** a reaction, a pick, or "go".
 
@@ -63,7 +63,7 @@ A design issue's plan lives on its steps, which desk keeps ("i think we need dat
 <Its cases, states and edges, a part each where one needs its own diagram.>
 
 ```d2
-<a table of cases, a state diagram or a sequence>
+<a table of cases, as one |||md shape, a state diagram or a sequence>
 ```
 
 ### Decisions
@@ -136,7 +136,7 @@ One file on one screen, under about 250 words outside the diagrams, with a `# <w
 
 ## Diagrams
 
-desk draws each ```d2 block, and each .d2 file, as SVG in its dark and light themes. The syntax, seven patterns and the pitfalls are in [references/d2.md](references/d2.md). Read it before the first diagram: three common label mistakes compile and silently draw the wrong thing.
+desk draws each ```d2 block, and each .d2 file, as SVG in its dark and light themes. The syntax, eight patterns and the pitfalls are in [references/d2.md](references/d2.md). Read it before the first diagram: three common label mistakes compile and silently draw the wrong thing.
 
 Check that every diagram compiles before you show it; one that does not shows in desk as an error box:
 
