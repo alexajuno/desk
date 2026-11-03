@@ -181,6 +181,8 @@ create table if not exists sessions ( -- what each session does, as the session 
   prompted timestamptz, -- when the user last wrote to it, or desk for them
   replied timestamptz, -- when its last turn ended with its reply
   ended timestamptz, -- when its last turn ended, however: its reply, Stop, an error, or its process going
+  cost double precision, -- the dollars it has spent so far, as Claude Code counts them on each turn's result
+  tokens double precision, -- the tokens its model calls read so far, fresh or from the cache
   updated timestamptz not null default now()
 );
 -- The Sessions menu's search (sessiontext.ts). desk_words reads a text as simple does, its words whole and lowercased,
@@ -228,7 +230,11 @@ create table if not exists wakes ( -- each time a thread's new messages woke the
   verdict text, -- now, later or noted: the chat's call, later when its turn ended with none; null until then
   why text not null default '', -- the chat's line for the row
   answered double precision, -- when the verdict came, in seconds: the row's time for a now or a later
-  error text not null default '' -- why desk could not give it to the chat
+  error text not null default '', -- why desk could not give it to the chat
+  spent double precision, -- the dollars the chat's session had spent before it, as Claude Code counts them
+  spent_tokens double precision, -- and the tokens it had read
+  cost double precision, -- the dollars its turn cost; null until its turn ended, or when no host heard what it cost
+  tokens double precision -- the tokens its turn read, fresh or from the cache
 );
 create index if not exists wakes_session on wakes (session, at);
 create table if not exists replies ( -- each reply to a thread as the user (replies.ts): Claude's draft, then what the user's Send posted
@@ -314,6 +320,8 @@ export async function open(): Promise<PGlite> {
   await opened.exec(["source", "who"].map((c) => `alter table inbox add column if not exists ${c} text;`).join(" "));
   await opened.exec("alter table chats add column if not exists deleted text;"); // a chat's Delete (chats.ts, remove), from 25 Oct
   await opened.exec("alter table chats add column if not exists auto boolean not null default false;"); // its composer's Auto (chats.ts, setAuto), from 29 Oct
+  // What each session has spent so far, as its host hears it (turns.ts), from 3 Nov
+  await opened.exec(["cost", "tokens"].map((c) => `alter table sessions add column if not exists ${c} double precision;`).join(" "));
   await opened.exec("alter table chats add column if not exists threads text[];"); // the threads it follows (chats.ts, follow), from 3 Nov
   // The chat a notice went to rather than the firewall, and the wake that carried it to the chat (wakes.ts), from 3 Nov
   await opened.exec(["chat", "wake"].map((c) => `alter table notices add column if not exists ${c} text;`).join(" "));

@@ -446,6 +446,12 @@ export async function create(): Promise<FastifyInstance> {
       throw e;
     }
   });
+  // The wakes of the last days and what they cost, summed by day, by chat and by verdict (wakes.ts, report).
+  app.get("/api/wakes", async (req: Req) => {
+    const days = Number((req.query as { days?: string }).days ?? 7);
+    if (!Number.isFinite(days) || days <= 0) throw new HttpError(400, "days is a number of days back, such as 7.");
+    return wakes.report(Math.min(days, wakes.DAYS));
+  });
   // A made-up notice, on a test desk alone, which connects to neither Slack nor Gmail (config.ts, CONNECT): a test of
   // the Inbox's rows and pop-ups writes its own. 8790's come only from its connectors.
   app.post("/api/notices", async (req: Req) => {

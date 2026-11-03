@@ -138,6 +138,38 @@ export function cwdOf(session: string): string | null {
 
 export type Entry = Record<string, any>;
 
+// What the session had spent as its last process ended: Claude Code writes its running totals into the transcript then,
+// a "cost-state" line, and a resumed session carries on from them (host.ts, spentOf). Its dollars and the tokens its
+// model calls read, fresh or from the cache; null when no process of it has ended, or none in the transcript's last MB.
+const SAVED_TAIL = 1 << 20;
+
+export function saved(session: string): { cost: number; tokens: number } | null {
+  const path = pathOf(session);
+  if (!path) return null;
+  let text: string;
+  try {
+    const size = statSync(path).size, from = Math.max(0, size - SAVED_TAIL), fd = openSync(path, "r");
+    const buf = Buffer.alloc(size - from);
+    readSync(fd, buf, 0, buf.length, from);
+    closeSync(fd);
+    text = buf.toString("utf8");
+  } catch {
+    return null;
+  }
+  for (const line of text.split("\n").reverse()) {
+    if (!line.startsWith('{"type":"cost-state"')) continue;
+    try {
+      const e = JSON.parse(line) as { totalCostUSD?: unknown; modelUsage?: Record<string, Record<string, number>> };
+      if (typeof e.totalCostUSD !== "number") return null;
+      const tokens = Object.values(e.modelUsage ?? {}).reduce((n, u) => n + (u.inputTokens ?? 0) + (u.cacheReadInputTokens ?? 0) + (u.cacheCreationInputTokens ?? 0), 0);
+      return { cost: e.totalCostUSD, tokens };
+    } catch {
+      return null; // cut short
+    }
+  }
+  return null;
+}
+
 // The whole lines from byte `from` on, and where the next read starts; a line Claude Code is still writing waits.
 export function read(path: string, from: number): [Entry[], number] {
   const size = statSync(path).size;

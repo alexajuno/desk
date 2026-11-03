@@ -14,6 +14,12 @@
 // A thread's message is not the user's: the host counts no message in a <…> block as their prompt (host.ts, said), so
 // the user's last look, the issue's state (pages.ts, advance) and Auto (auto.ts) stay where they were, and the chat's
 // row keeps its own last word to the user through the wake's turn (own), the news on it only by the verdict.
+//
+// Each wake keeps what its turn cost, in Claude Code's own count, to learn whether a fixed rule could skip the noted
+// ones for free: "we'll try to measure the cost and find if there is a mechanical mechanism (likely not because real
+// world is too complex for fixed minute rule)" (the user, 3 Nov). Claude Code counts a session's spend as a running
+// total, so a wake keeps the total before it and takes the difference once its turn ended (costed); GET /api/wakes sums
+// them (report).
 import { randomBytes } from "node:crypto";
 import * as agents from "./agents.ts";
 import * as chats from "./chats.ts";
@@ -23,6 +29,7 @@ import * as store from "./issues.ts";
 import * as notices from "./notices.ts";
 import { fill, WAKE } from "./prompts.ts";
 import * as threads from "./threads.ts";
+import * as transcript from "./transcript.ts";
 import * as turns from "./turns.ts";
 
 export type Verdict = "now" | "later" | "noted";
@@ -40,6 +47,10 @@ export interface Wake {
   why: string;
   answered: number | null;
   error: string;
+  spent: number | null; // the dollars its session had spent before it
+  spentTokens: number | null; // and the tokens it had read
+  cost: number | null; // the dollars its turn cost, once it ended
+  tokens: number | null; // the tokens its turn read
 }
 
 const EVERY = 60_000; // the firewall's own beat: what came in a minute is one wake
@@ -48,9 +59,11 @@ const STALL = 15 * 60; // seconds an open wake waits for a turn that never came,
 const BASE = `http://127.0.0.1:${PORT}`;
 
 const latest = new Map<string, Wake>(); // each session's newest wake
+const num = (v: unknown) => (v == null ? null : Number(v));
 const asWake = (r: Record<string, unknown>): Wake => ({
-  ...(r as unknown as Wake), messages: Number(r.messages), at: Number(r.at), before: r.before == null ? null : Number(r.before),
-  answered: r.answered == null ? null : Number(r.answered),
+  id: String(r.id), chat: String(r.chat), session: String(r.session), thread: String(r.thread), messages: Number(r.messages), at: Number(r.at),
+  before: num(r.before), verdict: (r.verdict as Verdict | null) ?? null, why: String(r.why ?? ""), answered: num(r.answered), error: String(r.error ?? ""),
+  spent: num(r.spent), spentTokens: num(r.spent_tokens), cost: num(r.cost), tokens: num(r.tokens),
 });
 const now = () => Date.now() / 1000;
 
@@ -83,21 +96,46 @@ export async function answer(id: string, verdict: Verdict, why: string): Promise
   return w;
 }
 
-// The open wakes whose turn ended with no verdict, or never came: later, with nothing said.
+// What the chat's session had spent before a wake: its host's word while its process runs, else what its transcript
+// saved as its last process ended, which the wake's turn resumes from; nothing, for a session no process of which ended.
+async function spentBefore(session: string): Promise<{ cost: number; tokens: number }> {
+  const heard = turns.spent(session);
+  if (heard && (await turns.hosting(session))) return heard;
+  return transcript.saved(session) ?? heard ?? { cost: 0, tokens: 0 };
+}
+
+// A wake's own cost, once its turn ended: what its session spent since, by its host's word. Unchanged, its turn's result
+// was not heard (a host from before 3 Nov, or a process that died mid-turn), and it waits; less, a /clear or a resume
+// with no total saved started the count again, from the wake's turn.
+async function costed(w: Wake) {
+  const after = turns.spent(w.session);
+  if (!after || w.spent === null || after.cost === w.spent) return;
+  const cost = after.cost > w.spent ? after.cost - w.spent : after.cost;
+  const tokens = after.tokens >= (w.spentTokens ?? 0) ? after.tokens - (w.spentTokens ?? 0) : after.tokens;
+  await sql().query("update wakes set cost = $2, tokens = $3 where id = $1", [w.id, cost, tokens]);
+  if (latest.get(w.session)?.id === w.id) latest.set(w.session, { ...latest.get(w.session)!, cost, tokens });
+}
+
+// Each chat's newest wake, once its turn ended: what it cost, and later, with nothing said, when it ended with no
+// verdict; later too when its turn never came.
 async function close() {
   for (const w of latest.values()) {
-    if (w.verdict || w.error || turns.working(w.session)) continue;
-    if ((turns.ended(w.session) ?? 0) > w.at || now() - w.at > STALL) await answer(w.id, "later", "");
+    if (w.error || turns.working(w.session)) continue;
+    const ended = (turns.ended(w.session) ?? 0) > w.at;
+    if (ended && w.cost === null) await costed(w);
+    if (!w.verdict && (ended || now() - w.at > STALL)) await answer(w.id, "later", "");
   }
 }
 
 // The chat woken with a thread's new messages, oldest first.
 async function wake(chat: chats.Chat, carried: notices.Notice[]) {
   const id = `wake-${randomBytes(4).toString("hex")}`, thread = carried[0].thread, newest = carried[carried.length - 1];
+  const was = await spentBefore(chat.session);
   const w: Wake = { id, chat: chat.id, session: chat.session, thread, messages: carried.length, at: now(),
-    before: own(chat.session, turns.replied(chat.session)), verdict: null, why: "", answered: null, error: "" };
-  await sql().query(`insert into wakes (id, chat, session, thread, messages, at, before) values ($1, $2, $3, $4, $5, $6, $7)`,
-    [w.id, w.chat, w.session, w.thread, w.messages, w.at, w.before]);
+    before: own(chat.session, turns.replied(chat.session)), verdict: null, why: "", answered: null, error: "",
+    spent: was.cost, spentTokens: was.tokens, cost: null, tokens: null };
+  await sql().query(`insert into wakes (id, chat, session, thread, messages, at, before, spent, spent_tokens)
+    values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [w.id, w.chat, w.session, w.thread, w.messages, w.at, w.before, w.spent, w.spentTokens]);
   await notices.carried(carried.map((n) => n.id), id);
   latest.set(chat.session, w);
   const shown = carried.slice(-LAST), left = carried.length - shown.length;
@@ -141,6 +179,49 @@ async function round() {
     if (open && !open.verdict && !open.error) continue; // its turn has yet to start
     await wake(chat, kept.filter((n) => n.thread === kept[0].thread));
   }
+}
+
+// The wakes of the last days and their sums, by day, by chat and by verdict, for GET /api/wakes: what a wake costs, and
+// which ones changed nothing for the user (noted), to read for a rule. A sum's cost and tokens are its costed wakes'.
+export interface Sum {
+  wakes: number;
+  messages: number;
+  costed: number; // the wakes whose cost is known
+  cost: number; // dollars, Claude Code's estimate at list price
+  tokens: number; // read, fresh or from the cache
+  per_wake: number | null; // dollars, on average over the costed
+}
+
+const rounded = (n: number, places: number) => Math.round(n * 10 ** places) / 10 ** places;
+
+function sum(list: Wake[]): Sum {
+  const known = list.filter((w) => w.cost !== null), cost = known.reduce((n, w) => n + (w.cost ?? 0), 0);
+  return { wakes: list.length, messages: list.reduce((n, w) => n + w.messages, 0), costed: known.length, cost: rounded(cost, 4),
+    tokens: known.reduce((n, w) => n + (w.tokens ?? 0), 0), per_wake: known.length ? rounded(cost / known.length, 4) : null };
+}
+
+function by(list: Wake[], key: (w: Wake) => string): Map<string, Wake[]> {
+  const groups = new Map<string, Wake[]>();
+  for (const w of list) groups.set(key(w), [...(groups.get(key(w)) ?? []), w]);
+  return groups;
+}
+
+export const DAYS = 90; // the most a report reads back
+
+export async function report(days: number) {
+  const r = await sql().query<Record<string, unknown>>("select * from wakes where at >= $1 order by at desc", [now() - days * 86400]);
+  const list = r.rows.map(asWake);
+  const titled = (id: string) => (chats.exists(id) ? chats.load(id) : null);
+  return {
+    days,
+    total: sum(list),
+    by_day: [...by(list, (w) => new Date(w.at * 1000).toLocaleDateString("sv"))].map(([day, ws]) => ({ day, ...sum(ws) })),
+    by_chat: [...by(list, (w) => w.chat)].map(([chat, ws]) => ({ chat, title: titled(chat)?.named || titled(chat)?.title || "", ...sum(ws) }))
+      .sort((a, b) => b.cost - a.cost),
+    by_verdict: [...by(list, (w) => w.verdict ?? "open")].map(([verdict, ws]) => ({ verdict, ...sum(ws) })),
+    wakes: list.slice(0, 200).map((w) => ({ id: w.id, at: new Date(w.at * 1000).toISOString(), chat: w.chat, thread: w.thread, messages: w.messages,
+      verdict: w.verdict, why: w.why, cost: w.cost === null ? null : rounded(w.cost, 4), tokens: w.tokens, error: w.error || undefined })),
+  };
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;

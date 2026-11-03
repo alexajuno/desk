@@ -193,6 +193,12 @@ Each new message in a thread your chat follows comes to you rather than to desk'
 curl -s "http://127.0.0.1:8790/api/wakes/<wake id>" --json '{"verdict": "now", "why": "flux-dev fails too, which the plan left out"}'
 ```
 
+desk keeps what each wake's turn cost, in Claude Code's own count, at list price: when the user asks what following threads costs, read it for them. `GET /api/wakes` gives the last 7 days' wakes (`?days=30` for more), each with its verdict, its line, its dollars and the tokens it read, and their sums by day, by chat and by verdict, `per_wake` the average.
+
+```bash
+curl -s "http://127.0.0.1:8790/api/wakes?days=7"
+```
+
 ## A chat's terminal
 
 Each desk chat has a terminal of its own, in the right half of its screen, which the user opens with the terminal button beside Attach or Ctrl \` and types in: a tmux session named after the chat's id, on the interactive-terminal skill's server, `tmux -L agent`. It starts only when the user or you open it, in the chat's folder with the user's shell, and ends when that shell exits. When the user should watch something run or take it over, such as a dev server, a REPL, a login or a prompt for a code, run it there rather than in your Bash tool ("agent can either drive it or i type it", the user, 31 Oct): start it, which opens it beside the chat on the user's screen, then type into it with that skill's `tt`, by the chat's id. The reply's `started` is false when it ran already: read its screen first, since the user may be typing in it. Never `tt start` or `tt stop` it.

@@ -23,13 +23,13 @@
 // A <status> is what holds the turn up, which the panel's working line says: {kind: "retry" | "compacting" | "limit", …}.
 //
 // desk itself hears what each session does from the host, which keeps a WebSocket open to desk's /api/host (turns.ts
-// there says what goes over it): whether its process runs, whether a turn runs, the questions waiting, and when the user
-// last wrote to it and it last replied.
+// there says what goes over it): whether its process runs, whether a turn runs, the questions waiting, when the user
+// last wrote to it and it last replied, and what it has spent so far.
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { query, type PermissionResult, type Query, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query, type PermissionResult, type Query, type SDKMessage, type SDKResultMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import { WebSocket } from "ws";
@@ -100,6 +100,7 @@ interface Session {
   prompted: number | null; // when the user last wrote to it, or desk for them, in ms
   replied: number | null; // when its last turn ended with its reply
   finished: number | null; // when its last turn ended, however: its reply, Stop, an error, or its process going
+  spent: Spent | null; // what it has spent so far, from its last turn's result (spentOf)
   asks: Map<string, Ask>;
   tasks: Map<string, Task>; // what runs now, by task id
   status: Status | null;
@@ -200,7 +201,7 @@ function userMessage(content: Content, uuid?: string, priority?: SDKUserMessage[
 function start(o: StartOptions): Session {
   const id = o.id ?? randomUUID();
   const s: Session = { id, cwd: o.cwd, title: o.title ?? "", q: null as unknown as Query, inbox: [], wake: null, compacting: false, working: false, since: Date.now(),
-    prompted: null, replied: null, finished: null, asks: new Map(), tasks: new Map(), status: null, partial: new Map(), watchers: new Set(), closed: false, ended: Promise.resolve(), streaming: "" };
+    prompted: null, replied: null, finished: null, spent: null, asks: new Map(), tasks: new Map(), status: null, partial: new Map(), watchers: new Set(), closed: false, ended: Promise.resolve(), streaming: "" };
   // The first message waits in the inbox before the SDK first reads it, which it does as query() starts.
   if (o.message) s.inbox.push(userMessage(o.message));
   s.q = query({
@@ -356,6 +357,7 @@ function take(s: Session, m: SDKMessage) {
   } else if (m.type === "result") {
     s.finished = Date.now();
     if (m.subtype === "success") s.replied = s.finished;
+    s.spent = spentOf(m) ?? s.spent;
     tell(s);
     s.partial.clear();
     setStatus(s, null);
@@ -380,7 +382,23 @@ let desk: WebSocket | null = null; // open
 const changed = new Set<Session>();
 
 const stateOf = (s: Session) => ({ id: s.id, open: !s.closed, working: s.working && !s.closed, asks: s.closed ? 0 : s.asks.size, prompted: s.prompted, replied: s.replied,
-  ended: s.finished });
+  ended: s.finished, cost: s.spent?.cost ?? null, tokens: s.spent?.tokens ?? null });
+
+// What the session has spent so far, as Claude Code counts it on each turn's result: its dollars, and the tokens its
+// model calls read, fresh or from the cache, subagents' and compactions' included. Both are running totals, which a
+// resumed session carries on from the total its transcript saved as its last process ended, so desk takes a turn's own
+// as the difference (wakes.ts). A crash's result, zeroed, says nothing. Probed on 3 Nov with Claude Code's SDK 0.3.301:
+// three turns of one process gave 0.00011, 0.00109 and 0.00115 dollars; a resume's first, 0.00013 then 0.00025.
+interface Spent {
+  cost: number;
+  tokens: number;
+}
+
+function spentOf(m: SDKResultMessage): Spent | null {
+  const used = Object.values(m.modelUsage ?? {});
+  if (typeof m.total_cost_usd !== "number" || (!m.total_cost_usd && !used.length)) return null;
+  return { cost: m.total_cost_usd, tokens: used.reduce((n, u) => n + (u.inputTokens ?? 0) + (u.cacheReadInputTokens ?? 0) + (u.cacheCreationInputTokens ?? 0), 0) };
+}
 
 function tell(s: Session) {
   if (!changed.size) queueMicrotask(flush);

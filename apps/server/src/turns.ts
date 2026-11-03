@@ -12,7 +12,9 @@
 // Its hello also says the version of its code (none from a host before 2 Nov), whether its browser relay runs and the
 // tabs it noted, which desk answers (tabs.ts).
 //
-// A <state> is {id, open, working, asks, prompted, replied, ended}, its times in ms, null while the host has seen none.
+// A <state> is {id, open, working, asks, prompted, replied, ended, cost, tokens}, its times in ms, null while the host
+// has seen none; cost and tokens are what the session has spent so far, Claude Code's running totals from its last
+// turn's result (host.ts, spentOf), null too until a turn of its process ended, and absent from a host before 3 Nov.
 // More than one host runs while one of older code drains beside the newest (hosted.ts), each on its own socket, and desk
 // keeps the sessions each holds, from its hello and its words since. A socket closing says that host is gone, and every
 // process it held with it. A session moving to the newest says closed on one socket and open on the other, in either
@@ -40,6 +42,8 @@ interface Row {
   prompted: number | null; // in seconds, as pages.ts counts
   replied: number | null;
   ended: number | null;
+  cost: number | null; // dollars spent so far, as Claude Code counts them
+  tokens: number | null; // tokens its model calls read so far
   updated: number;
 }
 
@@ -51,6 +55,8 @@ interface State {
   prompted: number | null; // in ms, as the host sends it
   replied: number | null;
   ended: number | null;
+  cost?: number | null;
+  tokens?: number | null;
 }
 
 // The table, as desk last wrote it: desk is its one writer, so the copy here is what the table holds.
@@ -72,7 +78,7 @@ const listeners = new Set<Listener>();
 const waiters = new Set<() => void>(); // settled's, each looking again at every change
 
 const COLUMNS = `id, open, working, asks, extract(epoch from prompted)::float8 as prompted, extract(epoch from replied)::float8 as replied,
-  extract(epoch from ended)::float8 as ended, extract(epoch from updated)::float8 as updated`;
+  extract(epoch from ended)::float8 as ended, cost, tokens, extract(epoch from updated)::float8 as updated`;
 
 // The sessions that changed, or null when every one may have, as when the host first says hello; and those of them
 // whose turn ended, so that what they wrote beside their issue is read again.
@@ -126,6 +132,13 @@ export function ended(session: string): number | null {
   return asked === null ? null : Math.max(asked, sessions.replied(session) ?? 0);
 }
 
+// What the session has spent so far, as its host last heard it: dollars and tokens read, Claude Code's running totals.
+// Null while no turn of it ended on a host of this code since desk kept them.
+export function spent(session: string): { cost: number; tokens: number } | null {
+  const r = reporting ? rows.get(session) : undefined;
+  return r?.cost == null ? null : { cost: r.cost, tokens: r.tokens ?? 0 };
+}
+
 // The sessions waiting on the user now: a tool to allow, or AskUserQuestion's questions.
 export async function asking(): Promise<Set<string>> {
   if (!reporting) return new Set((await hosted.sessions()).filter((h) => h.asks).map((h) => h.id));
@@ -157,14 +170,17 @@ export function settled(session: string, seconds: number): Promise<boolean> {
 const seconds = (ms: number | null) => (ms === null ? null : ms / 1000);
 
 // The host's word for a session. Its times only move on: a host that has not yet seen the session's prompt or reply,
-// as one that just resumed it, leaves the table's.
+// as one that just resumed it, leaves the table's. What it spent is taken as said, since a /clear starts it again, and
+// left as it was by a host that has seen no turn of it end.
 async function upsert(tx: db.Db, s: State): Promise<Row> {
-  return (await tx.query<Row>(`insert into sessions (id, open, working, asks, prompted, replied, ended)
-    values ($1, $2, $3, $4, to_timestamp($5), to_timestamp($6), to_timestamp($7))
+  return (await tx.query<Row>(`insert into sessions (id, open, working, asks, prompted, replied, ended, cost, tokens)
+    values ($1, $2, $3, $4, to_timestamp($5), to_timestamp($6), to_timestamp($7), $8, $9)
     on conflict (id) do update set open = excluded.open, working = excluded.working, asks = excluded.asks,
       prompted = greatest(sessions.prompted, excluded.prompted), replied = greatest(sessions.replied, excluded.replied),
-      ended = greatest(sessions.ended, excluded.ended), updated = now()
-    returning ${COLUMNS}`, [s.id, s.open, s.open && s.working, s.open ? s.asks : 0, seconds(s.prompted), seconds(s.replied), seconds(s.ended)])).rows[0];
+      ended = greatest(sessions.ended, excluded.ended), cost = coalesce(excluded.cost, sessions.cost),
+      tokens = coalesce(excluded.tokens, sessions.tokens), updated = now()
+    returning ${COLUMNS}`, [s.id, s.open, s.open && s.working, s.open ? s.asks : 0, seconds(s.prompted), seconds(s.replied), seconds(s.ended),
+    s.cost ?? null, s.tokens ?? null])).rows[0];
 }
 
 async function upsertAll(tx: db.Db, states: State[]): Promise<Row[]> {
