@@ -1,8 +1,9 @@
 // A chat from a Slack thread's, DM's or mail thread's Inbox row (pages.ts, threadRow): writing in the open row starts a
 // chat with Claude on it, which carries the thread whole, and only the user sees ("a layer in desk handles noti
 // filtering, that only when sth worth notified about that it pops up and carry it on with me", the user, 2 Nov; the
-// desk issue "desk as my notification center"). It is a Chat, Claude Code as `claude` runs from the home folder, with
-// the user's skills (slack, desk, job), named after the thread; the row opens on it from then on, the thread above it.
+// desk issue "desk as my notification center"). It is desk's agent chat, named after the thread, which files its issue
+// in Triage from its first reply, its Context quoting the message, then the user (3 Nov; chats.ts, cameIn); the row
+// opens on it from then on, the thread above it. One started before then is a bare Chat, and stays one.
 //
 // desk reads the thread again from Slack or Gmail as the chat starts, the user's own messages too, since the notices
 // hold only what the door let in; the chat reads it again on GET /api/threads/<id> as the talk goes on. A desk that
@@ -72,7 +73,7 @@ export async function startChat(thread: string, text: string): Promise<chats.Cha
   const judged = [...shown].reverse().find((n) => n.verdict === "now") ?? [...shown].reverse().find((n) => n.verdict === "later");
   const message = fill(ON_THREAD, {
     text: text.trim(), id: thread, kind: kindOf(newest), verdict: judged?.verdict ?? "later", why: judged?.why || "no reason given",
-    where: newest.source === "mail" ? "Gmail" : "Slack", read: `curl -s "${BASE}/api/threads/${encodeURIComponent(thread)}"`,
+    where: newest.source === "mail" ? "Gmail" : "Slack", link: newest.link || "none kept", read: `curl -s "${BASE}/api/threads/${encodeURIComponent(thread)}"`,
     draft: `curl -s "${BASE}/api/threads/${encodeURIComponent(thread)}/draft" -X PUT --data-binary @<the file>`,
     markup: newest.source === "mail" ? "the mail's plain text, its greeting and sign-off too" : "Slack's markup: *bold*, _italic_, <url|text> for a link, and a person as @ and their name as the thread shows it",
     whom: newest.source === "mail" ? "from their Gmail to the thread's last sender, under its subject with Re:" : newest.place === "DM" || newest.place.startsWith("group DM") ? "as them, in the DM" : "as them, in the thread",

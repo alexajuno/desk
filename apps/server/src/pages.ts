@@ -330,15 +330,15 @@ export async function threadPage(thread: string) {
 // or holds a reply you have not read. "the chats section only has at max 8 latest chats, which sounds wrong to me" (the
 // user, 19 Oct): the newest 8 of any kind dropped a quiet issue in progress. "it drops the issue instantly, but i still
 // wanna read the report of chatting a bit longer" (the user, 21 Oct): a closed issue's chat left at once. An
-// automation's runs are its own page's, and a chat nobody wrote in has nothing to show. Older ones are in the corner's
-// history.
+// automation's runs are its own page's, but for one that filed an issue, as desk's agent chat does on a run of an
+// automation with no agent; a chat nobody wrote in has nothing to show. Older ones are in the corner's history.
 const IN_HAND = new Set(["triage", "running", "waiting", "review", "landing"]);
 const DAY = 24 * 3600 * 1000;
 
 function chatsNow(all: Map<string, Issue>) {
   const table = sessions.refresh();
   const moved = (h: Held) => Math.max(h.chat ? chats.movedAt(h.chat) : 0, (table.get(h.session)?.moved ?? 0) * 1000);
-  const shown = held(all).filter((h) => table.has(h.session) && !h.chat?.automation);
+  const shown = held(all).filter((h) => table.has(h.session) && (!h.chat?.automation || h.issue));
   const row = (h: Held) => ({
     session: h.session, title: h.issue?.title ?? chatTitle(h.chat!), issue: h.issue && { slug: h.issue.slug, state: h.issue.state },
     working: turns.working(h.session), auto: auto.quiet(h.session, h.chat, h.issue),

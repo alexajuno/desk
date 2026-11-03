@@ -482,9 +482,22 @@ export function push(agent: Agent, text: string, from: string): Promise<Chat> {
   return agentChat(agent, message, { from: who });
 }
 
-// A chat on a Slack thread's, DM's or mail thread's Inbox row (threads.ts): a bare one, named after the thread, which
-// starts on the message.
-export const onThread = (thread: string, title: string, message: string) => agentChat(null, message, { thread, named: title });
+// desk's agent chat on something that came in, started on its message, which files its issue in Triage from its first
+// reply, its Context quoting the message: "it's just a normal chat. but i want instead, it starts with the context of
+// that msg/email/event, then we'll create issue in desk" (the user, 3 Nov). Until then a thread's row and an automation
+// with no agent started a bare Chat, which did real work with no issue to show for it.
+async function cameIn(message: string, more: Partial<Chat>): Promise<Chat> {
+  const chat: Chat = { id: newId(), kind: "panel", title: "New chat", created: now(), session: randomUUID(), ...more };
+  const s = settings.load();
+  await models.keep(chat.session, { model: s.chat_model, effort: s.chat_effort });
+  await hosted.start({ ...(await hostOptions(chat)), title: `desk chat ${stamp()}`, message });
+  await save(chat);
+  return chat;
+}
+
+// A chat on a Slack thread's, DM's or mail thread's Inbox row (threads.ts), named after the thread until it files its
+// issue. One started before 3 Nov stays bare: a chat never changes kind.
+export const onThread = (thread: string, title: string, message: string) => cameIn(message, { thread, named: title });
 
 // The thread's chat, the newest the user kept, or null.
 export function ofThread(thread: string): Chat | null {
@@ -492,10 +505,10 @@ export function ofThread(thread: string): Chat | null {
   return found ? structuredClone(found) : null;
 }
 
-// An automation's run (automations.ts): a chat with its agent, or a bare one, named after it, which starts on the
-// message and waits in the Inbox with its reply.
+// An automation's run (automations.ts), named after it, which starts on the message and waits in the Inbox with its
+// reply: a chat with its agent, or, with none, desk's agent chat, which files its issue from the run.
 export const automationRun = (agent: Agent | null, title: string, slug: string, message: string) =>
-  agentChat(agent, message, { named: title, automation: slug });
+  agent ? agentChat(agent, message, { named: title, automation: slug }) : cameIn(message, { named: title, automation: slug });
 
 // The user's own title for the chat, or none to give it back Claude Code's. "Rename by hand" (the user, 18 Oct).
 export async function rename(session: string, title: string) {
@@ -566,7 +579,8 @@ export function* said(chat: Chat): Generator<[string, string]> {
 }
 
 // A chat nobody has written in yet: no issue, and no transcript, which its session writes only from its first message.
-export const empty = (chat: Chat) => !chat.issue && !chat.agent && !chat.bare && !transcripts.pathOf(chat.session);
+// One desk started on a thread or a run has its message, though its transcript may not be written yet.
+export const empty = (chat: Chat) => !chat.issue && !chat.agent && !chat.bare && !chat.thread && !chat.automation && !transcripts.pathOf(chat.session);
 
 // Every chat as kept, to read, not to change: load() gives one to change.
 const chats = (): Chat[] => [...all().values()];
