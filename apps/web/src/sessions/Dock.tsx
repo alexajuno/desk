@@ -1,9 +1,9 @@
 // A session's chat, in the middle of the screen, drawn as claude.ai draws a chat: replies stream in as Markdown, tool
 // steps fold under one line, questions come as buttons, and the composer queues a message while Claude works (Enter)
 // or stops it (Ctrl C). A chat opens to read, with desk's keys, unless nothing is said in it yet; I or Enter goes into
-// the composer and Esc leaves it, as vim's modes. An issue's chat shows its steps above the composer (StepsCard.tsx),
-// and its page or its Changes in its place, on a tab in its head (store/dock.ts says where each stands). Its right
-// half, beside it, holds what Claude drives: its terminal (Half.tsx). A chat that follows a Slack or mail thread has
+// the composer and Esc leaves it, as vim's modes. An issue's chat shows its steps above the composer (StepsCard.tsx)
+// (store/dock.ts says where each stands). Its right half, beside it, holds what Claude drives, its terminal and its
+// browser, and what you read beside the chat, a step's diagram and the issue's Changes (Half.tsx). A chat that follows a Slack or mail thread has
 // your box to it above the composer, which Reply on the thread's card opens (YourReply.tsx).
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
@@ -19,7 +19,7 @@ import { HeadStatus, IssueDetails, landSkip, Lands, StepButtons, Title, useStep,
 import { useLive as useIssueLive } from "../issues/useLive";
 import { folderMenu } from "../issues/menus";
 import { toClipboard } from "../issues/actions";
-import { dock, type Layout, type View } from "../store/dock";
+import { dock, type Layout } from "../store/dock";
 import { issues, type Reply as SentReply } from "../store/issues";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { CHEVRON, GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
@@ -27,7 +27,7 @@ import { isDrawn, StepParts, type PlanStep } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { CameCard, RepliedLine } from "./Came";
-import { anyCommit, Changes, Counts, useChanges } from "./Changes";
+import { anyCommit, lastCommit } from "./Changes";
 import { rising } from "./glide";
 import { clock, sent, whole } from "./time";
 import { Half } from "./Half";
@@ -90,34 +90,17 @@ export function arrange(session: string | null) {
   move(dock.layoutAfter(session), () => dock.arrange(session));
 }
 
-// The views a chat has, in its head's order: Chat, and for an issue's, its Changes once a step has sent its commit. Its
-// page is no view of it since 1 Nov: its step is in the head, its details drop open under it, and its Plan and
-// card are drawn in the chat ("for content, it's all in the chat huh", the user).
-function viewsOf(here: IssuePageData | null): View[] {
-  const views: View[] = ["chat"];
-  if (here && anyCommit(here.plan_steps)) views.push("changes");
-  return views;
-}
-
-// Whether the chat in the middle is an issue's, whose details and Changes it can show.
+// Whether the chat in the middle is an issue's, whose details it can show.
 const hasIssue = () => dock.center && chatPage.get()?.issue.session === dock.session;
 
-// The view each of 1 and 2 opens, in the head's order, so a key always means one view.
-const BY_DIGIT: View[] = ["chat", "changes"];
-
-// The keys of an issue's chat in the middle while you read it, the reply box keeping its own Tab: Tab and Shift Tab walk
-// its views, 1 and 2 open one of them and again go back to Chat (Tabs to its views were "too long", the user, 29 Oct),
-// and Esc goes back to Chat from another one; ], as [ the sidebar, drops its issue's details open under its head, or
-// folds them. I goes into the reply box on any view, and V opens the diagram on screen (Frame.tsx).
-export function viewKey(e: KeyboardEvent): boolean {
-  if (e.ctrlKey || e.metaKey || e.altKey || !hasIssue()) return false;
-  const views = viewsOf(chatPage.get()), at = Math.max(0, views.indexOf(dock.view));
-  if (e.key === "Tab") { dock.setView(views[(at + (e.shiftKey ? views.length - 1 : 1)) % views.length]); return true; }
-  const to = BY_DIGIT[["1", "2"].indexOf(e.key)];
-  if (to && views.includes(to)) { dock.setView(to === views[at] ? "chat" : to); return true; }
-  if (e.key === "Escape" && views[at] !== "chat") { dock.setView("chat"); return true; }
-  if (e.key === "]") { dock.setDetails(!dock.details); return true; }
-  return false;
+// ] on an issue's chat in the middle while you read it, as [ the sidebar: its issue's details drop open under its head,
+// or fold. Its page is no view of it since 1 Nov: its step is in the head, its details drop open under it, and its Plan
+// and card are drawn in the chat ("for content, it's all in the chat huh", the user); its Changes are in the right half
+// since 4 Nov (Half.tsx), so Tab, 1 and 2, which walked the chat's views, have nothing to do.
+export function detailsKey(e: KeyboardEvent): boolean {
+  if (e.ctrlKey || e.metaKey || e.altKey || !hasIssue() || e.key !== "]") return false;
+  dock.setDetails(!dock.details);
+  return true;
 }
 
 export const Dock = observer(function Dock() {
@@ -187,28 +170,19 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   // Not following it, which the Jump to latest pill says, "fresh" once words came below, which its dot says.
   const [away, setAway] = useState<false | "quiet" | "fresh">(false);
   const m = s.meta;
-  // The chat in the middle keeps its view in the store, where the keys reach it; the Inbox's pane keeps its own, and
-  // shows only the chat and its Changes.
+  // The chat in the middle, rather than the Inbox's pane showing the same chat.
   const docked = dock.center && dock.session === id;
-  const [own, setOwn] = useState<View>("chat");
   const page = chatPage.get(), here = m?.issue && page?.issue.slug === m.issue.slug ? page : null;
-  const views = viewsOf(here);
-  const want = docked ? dock.view : own;
-  const shown = views.includes(want) ? want : "chat";
-  const setView = (v: View) => (docked ? dock.setView(v) : setOwn(v));
-  // The chat in the middle may have its right half open beside it, which a step's diagram needs its issue's steps for.
+  // The chat in the middle may have its right half open beside it, which a step's diagram needs its issue's steps for,
+  // and its Changes a step's commit.
   const opened = docked && m?.chat ? dock.halves[id] : undefined;
-  const half = opened === "step" && (phone.matches || !here) ? undefined : opened;
+  const half = (opened === "step" && (phone.matches || !here)) || (opened === "changes" && !anyCommit(here?.plan_steps)) ? undefined : opened;
   const side = { can: Boolean(docked && m?.chat && !phone.matches), beside: half === "step" };
   const beside = useRef(false); // the half follows the part being read as the chat scrolls or grows
   beside.current = side.beside;
-  // A view opens at its top, and the chat again at its end, where its words keep coming.
-  useLayoutEffect(() => {
-    const el = scroller.current!;
-    stuck.current = shown === "chat";
-    setAway(false);
-    el.scrollTo({ top: shown === "chat" ? el.scrollHeight : 0 });
-  }, [shown]);
+  // A build step ticked with its commit opens the half on its Changes, once, while the issue is open (store/dock.ts).
+  const commit = here && !["done", "dropped"].includes(here.issue.state) ? lastCommit(here.plan_steps) : null;
+  useEffect(() => { if (commit && side.can) dock.showChanges(id, commit); }, [id, commit, side.can]);
 
   // Only the reader scrolling up lets go of the end, and coming back near it takes it again. A chat opened cold grows
   // as its pictures load, between a scroll to its end and that scroll's own event, which then finds it far from the
@@ -272,11 +246,10 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   return (
     <div className="session-split" style={half ? ({ "--chat-w": `${dock.chatWidth}px` } as CSSProperties) : undefined}>
       <div className="session-view">
-        <ChatHead s={s} views={views} view={shown} setView={setView} docked={docked} />
+        <ChatHead s={s} docked={docked} />
         {here && docked && dock.details && <IssueDetails data={here} />}
         <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>
-          {here && shown === "changes" && <ChangesOf slug={here.issue.slug} />}
-          <div className="convo" hidden={shown !== "chat"} onClick={docked && m?.chat ? (e) => browse(e, id) : undefined}>
+          <div className="convo" onClick={docked && m?.chat ? (e) => browse(e, id) : undefined}>
             {!s.loaded ? <p className="convo-empty">Connecting…</p>
               : quiet(s) ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
                 : m?.chat && m.issue ? "This issue's chat. Write to carry the issue on: it starts from the issue's document."
@@ -289,14 +262,14 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
             </StepSide.Provider>
           </div>
           <div className="dock-foot">
-            {shown === "chat" && away && (
+            {away && (
               <button className="jump-latest" type="button" onClick={toEnd}>
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5" /></svg>
                 Jump to latest
                 {away === "fresh" && <span className="view-dot" />}
               </button>
             )}
-            {here && shown === "chat" && <ChatSteps s={s} here={here} />}
+            {here && <ChatSteps s={s} here={here} />}
             <Running s={s} />
             {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
             <YourReply session={id} />
@@ -304,7 +277,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
           </div>
         </div>
       </div>
-      {half && <Half session={id} view={half} steps={here?.plan_steps ?? []} />}
+      {half && <Half session={id} view={half} issue={here && { slug: here.issue.slug, steps: here.plan_steps ?? [] }} />}
     </div>
   );
 });
@@ -317,15 +290,15 @@ const ChatSteps = observer(function ChatSteps({ s, here }: { s: LiveSession; her
 });
 
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, then its issue's status and
-// title, with a ⌄ that drops the issue's details open under the head (IssueDetails), its views (Chat, Changes), and
-// at its right the terminal and, in desk's app, the globe, which open the half beside it (1 Nov: "since terminal and
+// title, with a ⌄ that drops the issue's details open under the head (IssueDetails), and at its right the buttons that
+// open the half beside it, a step's diagram, the issue's Changes, the terminal and, in desk's app, the globe (1 Nov: "since terminal and
 // browser are opened in right sidebar, so having these icons in composer doesn't sound valid"), then the issue's next step, Go
 // or Approve (1 Nov: "the approve button is not there, but i have to tab to issue"); the Inbox, which shows a
 // chat without its head, has its own. Where its work stands is in the steps
 // above the composer. A chat with no issue is renamed in its title, and shows its folder, which only an issue's Properties would
 // show otherwise. Whether the chat works shows in the chat itself, its Working… line and its stop button (28 Oct: "the
 // header in chat interface looks kinda tight").
-const ChatHead = observer(function ChatHead({ s, views, view, setView, docked }: { s: LiveSession; views: View[]; view: View; setView: (v: View) => void; docked: boolean }) {
+const ChatHead = observer(function ChatHead({ s, docked }: { s: LiveSession; docked: boolean }) {
   const m = s.meta;
   const page = chatPage.get(), here = m?.issue && page?.issue.slug === m.issue.slug ? page : null;
   return (
@@ -341,10 +314,10 @@ const ChatHead = observer(function ChatHead({ s, views, view, setView, docked }:
             title={dock.details ? "Hide the issue's details  ]" : "The issue's details  ]"} onClick={() => dock.setDetails(!dock.details)}>{CHEVRON}</button>
         )}
       </div>
-      {views.length > 1 && m?.issue && <ViewTabs slug={m.issue.slug} views={views} view={view} setView={setView} />}
       {m?.chat && docked && (
         <span className="head-halves">
           {here && !phone.matches && hasParts(here.plan_steps ?? []) && <HalfButton id={s.id} view="step" />}
+          {here && anyCommit(here.plan_steps) && <HalfButton id={s.id} view="changes" />}
           <HalfButton id={s.id} view="terminal" />{APP && <HalfButton id={s.id} view="browser" />}
         </span>
       )}
@@ -372,34 +345,6 @@ function pressStep(box: HTMLElement) {
   step?.click();
   return Boolean(step);
 }
-
-// The chat, or its Changes, each build step's diff (Changes.tsx), in the view tabs' pills, the Changes tab with how much
-// the steps changed. The reply box stays under each ("A", the user, 28 Oct, picking the tabs in the head over a row of
-// their own).
-const VIEW_TAB: Record<View, [string, string]> = {
-  chat: ["Chat", "The conversation  1 or Esc"],
-  changes: ["Changes", "Each build step's diff, from its commit  2"],
-};
-const ViewTabs = observer(function ViewTabs({ slug, views, view, setView }: { slug: string; views: View[]; view: View; setView: (v: View) => void }) {
-  return (
-    <div className="dock-tabs" role="tablist">
-      {views.map((v) => (
-        <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "here" : undefined} title={VIEW_TAB[v][1]}
-          onClick={() => setView(v)}>{VIEW_TAB[v][0]}{v === "changes" && <ChangesCounts slug={slug} />}</button>
-      ))}
-    </div>
-  );
-});
-
-const ChangesCounts = observer(function ChangesCounts({ slug }: { slug: string }) {
-  const steps = useChanges(slug);
-  const sum = (key: "added" | "deleted") => (steps ?? []).reduce((n, st) => n + st[key], 0);
-  return steps && <Counts added={sum("added")} deleted={sum("deleted")} />;
-});
-
-const ChangesOf = observer(function ChangesOf({ slug }: { slug: string }) {
-  return <Changes steps={useChanges(slug)} />;
-});
 
 // --- the conversation ------------------------------------------------------------------------------------------------
 
@@ -1520,11 +1465,13 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
 // The terminal and the globe in the chat's head: the chat's right half, on its terminal or its browser, open, switched
 // to the other or hidden (Half.tsx), each lit while the half shows its view. They are the only place it is, as the half
 // has no head of its own ("yeah A", 1 Nov). The globe is only in desk's app, which alone has the Browser (lib/desktop.ts).
-// Before them, in an issue's chat with a step written as parts, the diagram, for the part being read (StepHalf.tsx).
+// Before them, in an issue's chat with a step written as parts, the diagram, for the part being read (StepHalf.tsx),
+// then, once a build step has sent its commit, its Changes: the two you read, then the two Claude drives.
 // Each tooltip names its view and key, open or not, the lit button saying it shows ("just 'diagram' is enough when
 // it's showed", the user, 4 Nov).
 const HALF_BUTTONS = {
   step: { icon: GLYPH.diagram, label: "Diagram", key: "Ctrl ⇧ D" },
+  changes: { icon: GLYPH.changes, label: "Changes", key: "Ctrl ⇧ G" },
   terminal: { icon: GLYPH.terminal, label: "Terminal", key: "Ctrl `" },
   browser: { icon: GLYPH.globe, label: "Browser", key: "Ctrl ⇧ B" },
 } as const;

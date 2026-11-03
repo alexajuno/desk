@@ -24,7 +24,7 @@ import { datePicker } from "../ui/datepicker";
 import { ToastHost, toast } from "../ui/toast";
 import { closeViewer, openNearest, openPicture, stepViewer, viewerOpen } from "../ui/viewer";
 import { commentKey, dropPick } from "../sessions/Changes";
-import { arrange, Dock, focusComposer, newSession, openSession, viewKey } from "../sessions/Dock";
+import { arrange, detailsKey, Dock, focusComposer, newSession, openSession } from "../sessions/Dock";
 import { ease, glide, jump, letGo, LINE } from "../sessions/glide";
 import { toggleHalf } from "../sessions/Half";
 import { Catcher } from "../search/catcher";
@@ -135,10 +135,11 @@ function onKeyDown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.key === "/") { ui.setKeys(!ui.keysOpen); e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyO") { newSession(); e.preventDefault(); return; }
   // Ctrl `, as VS Code's: the chat's terminal, beside it, from its reply box and from the terminal itself too; Ctrl ⇧ B
-  // its browser, and Ctrl ⇧ D its step's diagrams.
+  // its browser, Ctrl ⇧ D its step's diagrams, and Ctrl ⇧ G, VS Code's for its changes, its issue's Changes.
   if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.code === "Backquote" && toggleHalf("terminal")) { e.preventDefault(); return; }
   if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === "KeyB" && toggleHalf("browser")) { e.preventDefault(); return; }
   if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === "KeyD" && toggleHalf("step")) { e.preventDefault(); return; }
+  if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === "KeyG" && toggleHalf("changes")) { e.preventDefault(); return; }
   // Ctrl End and Ctrl Home, as in Claude Code: the chat to its end or its start, from its composer too. At the end it
   // follows the reply again, as the chat does while you stay at its bottom (Dock).
   const view = e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && (e.key === "End" || e.key === "Home") && chatView();
@@ -229,8 +230,8 @@ function onKeyDown(e: KeyboardEvent) {
   if (key === "o" && !e.shiftKey) { oPressed = Date.now(); return; }
   // P, R and Delete on the sidebar's chat under the mouse pin, rename and delete it, before any row in focus.
   if (chatKey(e)) { e.preventDefault(); return; }
-  // Tab, 1 to 3 and Esc on an issue's chat in the middle: its views.
-  if (viewKey(e)) { e.preventDefault(); return; }
+  // ] on an issue's chat in the middle: its details, under its head.
+  if (detailsKey(e)) { e.preventDefault(); return; }
 
   const focused = focusedRow();
   // Linear's Shift ↑ ↓: the selection grows from the row in focus, a row at a time.

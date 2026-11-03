@@ -1,5 +1,7 @@
-// An issue's Changes, the tab beside its chat: a card per build step, holding the step's diff from the commit its
-// session sent as it ticked the step (changes.ts). "we have diff show while coding, allowing user to catches the
+// An issue's Changes, a view of the right half beside its chat (Half.tsx): a card per build step, holding the step's
+// diff from the commit its session sent as it ticked the step (changes.ts). Until 4 Nov it took the chat's place, on a
+// tab in the chat's head, so that reading a diff hid the chat explaining it ("wanna bring the changes tab to the right
+// sidebar similar to diagrams and browser and all other things", the user, 4 Nov). "we have diff show while coding, allowing user to catches the
 // problem early" (the user, 28 Oct). The lines are drawn as Linear Diffs draws them, measured on the demo on
 // linear.app's Reviews page on 28 Oct: one number column, a tinted line with a coloured edge for what was added or
 // deleted, and the counts in green and red.
@@ -25,6 +27,10 @@ export const useChanges = (slug: string) => usePage<{ steps: StepDiff[] }>(`/api
 // Whether any of the steps carries a commit, so has a diff to show.
 export const anyCommit = (steps: (PlanStep & { commit?: string })[] | null | undefined): boolean =>
   Boolean(steps?.some((s) => s.commit || anyCommit(s.kids)));
+
+// The commit of the last step in the list that carries one: the newest step's diff.
+export const lastCommit = (steps: (PlanStep & { commit?: string })[] | null | undefined): string | null =>
+  (steps ?? []).reduce<string | null>((last, s) => lastCommit(s.kids) ?? s.commit ?? last, null);
 
 // Lines picked in a step's diff to comment on, as GitHub's + picks them: a click on a line's number picks the line, and
 // a drag along the numbers or a shift-click picks a range, inside the hunk it started in ("line selection effect similar
@@ -87,6 +93,28 @@ export function commentKey(): boolean {
 export function Counts({ added, deleted }: { added: number; deleted: number }) {
   return <span className="diff-counts"><span className="diff-added">+{added}</span><span className="diff-deleted">−{deleted}</span></span>;
 }
+
+// The half on the Changes: a head line level with the chat's, as the diagram's (StepHalf.tsx), saying how much the
+// steps changed, which the Changes tab carried until 4 Nov, then the steps' cards, scrolling under it.
+export const ChangesHalf = observer(function ChangesHalf({ slug }: { slug: string }) {
+  const steps = useChanges(slug);
+  const sum = (key: "added" | "deleted") => (steps ?? []).reduce((n, st) => n + st[key], 0);
+  const files = new Set(steps?.flatMap((st) => st.files.map((f) => f.path))).size;
+  return (
+    <div className="changes-half">
+      <div className="changes-half-head">
+        <span className="changes-half-name">Changes</span>
+        {steps && steps.length > 0 && (
+          <span className="changes-half-at">
+            {steps.length} {steps.length === 1 ? "step" : "steps"} · {files} {files === 1 ? "file" : "files"}
+            <Counts added={sum("added")} deleted={sum("deleted")} />
+          </span>
+        )}
+      </div>
+      <div className="changes-half-scroll"><Changes steps={steps} /></div>
+    </div>
+  );
+});
 
 export const Changes = observer(function Changes({ steps }: { steps: StepDiff[] | null }) {
   if (!steps) return <p className="convo-empty">Reading the changes…</p>;

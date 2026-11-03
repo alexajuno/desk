@@ -9,12 +9,8 @@
 .tabs { display: none; }
 
 @media (max-width: 640px) {
-  /* a chat's head keeps room for its title: a chat with no issue leaves its folder out, and Changes its counts
-     (Dock.tsx, ChatHead and ViewTabs) */
-  .dock-head .dock-folder, .dock-tabs .diff-counts { display: none; }
-  /* An issue's chat in the middle keeps its tabs, a little narrower. */
-  .dock .dock-tabs { gap: 2px; }
-  .dock .dock-tabs button { padding: 0 8px; }
+  /* a chat's head keeps room for its title: a chat with no issue leaves its folder out (Dock.tsx, ChatHead) */
+  .dock-head .dock-folder { display: none; }
   .panel, .side-collapsed .panel, .dock, .side-collapsed .dock {
     top: 0; left: 0; right: 0; bottom: var(--floor); width: auto; border: 0; border-radius: 0; box-shadow: none;
   }

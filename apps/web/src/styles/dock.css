@@ -150,19 +150,20 @@
 .convo-note { margin: 0; text-align: center; font-size: 12px; color: var(--text-3); }
 .convo[hidden] { display: none; }
 
-/* The chat or its issue's Changes (Changes.tsx): Linear's view tabs, 28px pills (desk.css, .view-bar), in the head. */
-.dock-tabs { flex: none; display: flex; gap: 4px; }
-.dock-tabs button { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 9999px; background: transparent;
-                    font: 500 12px var(--font); color: var(--text-3); }
-.dock-tabs button:hover { background: var(--btn-ghost-hover); color: var(--text-2); }
-.dock-tabs button.here { background: var(--bg-tab-on); color: var(--text-1); box-shadow: 0 0 0 0.5px var(--ring-btn); }
 /* how much changed, as Linear Diffs counts it beside a file: 11px, green then red (measured 28 Oct) */
 .diff-counts { display: inline-flex; gap: 4px; font: 400 11px var(--font); font-variant-numeric: tabular-nums; }
 .diff-added { color: var(--diff-add-text); }
 .diff-deleted { color: var(--diff-del-text); }
 
-/* A card per build step, its files under it, as wide as the conversation. */
-.changes { flex: 1 0 auto; box-sizing: border-box; width: 100%; max-width: 808px; margin: 0 auto; padding: 20px 24px var(--foot-fade);
+/* The half on an issue's Changes (Changes.tsx, ChangesHalf), as on a step's diagram (.step-half): a 44px line level
+   with the chat's head, "Changes" and how much the steps changed at its right, then the cards, scrolling under it. */
+.changes-half { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.changes-half-head { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 20px; font: 500 13px var(--font); color: var(--text-2); }
+.changes-half-at { flex: none; display: flex; align-items: center; gap: 8px; margin-left: auto; font-weight: 450; color: var(--text-4); }
+.changes-half-at .diff-counts { font-size: 12px; }
+.changes-half-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+/* A card per build step, its files under it, as wide as the half, up to the conversation's width. */
+.changes { box-sizing: border-box; width: 100%; max-width: 808px; margin: 0 auto; padding: 0 20px 20px;
            display: flex; flex-direction: column; gap: 8px; }
 .change-step { border: 0.5px solid var(--border-2); border-radius: 10px; background: var(--bg-panel); overflow: hidden; }
 .change-step-head, .change-file-head { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; border: 0; border-radius: 0;
@@ -174,7 +175,7 @@
 .change-fold svg { fill: currentColor; }
 [aria-expanded=true] > .change-fold { transform: rotate(90deg); }
 .change-place { flex: none; font: 400 12px var(--mono); color: var(--text-4); }
-.change-title { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); }
+.change-title { flex: 0 1 auto; min-width: 0; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); }
 .change-note { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 450 12px var(--font); color: var(--text-3); }
 .change-files { flex: none; margin-left: auto; font: 450 12px var(--font); color: var(--text-3); }
 .change-note + .change-files { margin-left: 0; }
@@ -525,7 +526,7 @@ button.foot-step:hover { background: var(--bg-hover); }
 .dock-pill:hover .dock-pill-x { opacity: 1; }
 
 /* The chat's right half (sessions/Half.tsx), beside it at the window's full height: what Claude drives, its terminal
-   or its browser. It takes all the room the chat leaves, the chat a column of --chat-w, 480px until its edge is
+   or its browser, or what you read beside the chat, a step's diagram or the issue's Changes. It takes all the room the chat leaves, the chat a column of --chat-w, 480px until its edge is
    dragged ("ok. A", 2 Nov), so a wider window widens only the half. Its left edge is a hairline, which drags. It has
    no head: the chat's head picks and hides its view ("yeah A", 1 Nov), and the browser's tabs stand level with that
    head. */
@@ -538,8 +539,9 @@ button.foot-step:hover { background: var(--bg-hover); }
 .half-grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: var(--border-3); opacity: 0; transition: opacity 0.1s; }
 .half-grip:hover::after, .half-dragging .half-grip::after { opacity: 1; }
 .half-dragging, .half-dragging * { cursor: col-resize; user-select: none; }
-/* The terminal and globe buttons at the chat head's right (Dock.tsx, ChatHead), before the step's buttons, each lit
-   while the half shows its view, as a current control is: the only place the half is opened, switched or hidden. */
+/* The diagram, Changes, terminal and globe buttons at the chat head's right (Dock.tsx, ChatHead), before the step's
+   buttons, each lit while the half shows its view, as a current control is: the only place the half is opened,
+   switched or hidden. */
 .head-halves { flex: none; display: flex; gap: 2px; }
 .half-btn.on { background: var(--bg-active); color: var(--text-1); }
 
