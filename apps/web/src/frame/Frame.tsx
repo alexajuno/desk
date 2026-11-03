@@ -135,9 +135,10 @@ function onKeyDown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.key === "/") { ui.setKeys(!ui.keysOpen); e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyO") { newSession(); e.preventDefault(); return; }
   // Ctrl `, as VS Code's: the chat's terminal, beside it, from its reply box and from the terminal itself too; Ctrl ⇧ B
-  // its browser.
+  // its browser, and Ctrl ⇧ D its step's diagrams.
   if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.code === "Backquote" && toggleHalf("terminal")) { e.preventDefault(); return; }
   if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === "KeyB" && toggleHalf("browser")) { e.preventDefault(); return; }
+  if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === "KeyD" && toggleHalf("step")) { e.preventDefault(); return; }
   // Ctrl End and Ctrl Home, as in Claude Code: the chat to its end or its start, from its composer too. At the end it
   // follows the reply again, as the chat does while you stay at its bottom (Dock).
   const view = e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && (e.key === "End" || e.key === "Home") && chatView();

@@ -51,11 +51,13 @@ function drag(e: PointerEvent<HTMLDivElement>) {
   e.preventDefault();
 }
 
-// Ctrl `, as VS Code's, and Ctrl ⇧ B: the half of the chat in the middle open on its terminal or its browser, or
-// hidden when it shows that one, the reply box taking the cursor back. False when no chat is there, and for the browser
-// in a web page, which has none (lib/desktop.ts), so that the key goes on to your browser.
+// Ctrl `, as VS Code's, Ctrl ⇧ B and Ctrl ⇧ D: the half of the chat in the middle open on its terminal, its browser or
+// its step's diagrams, or hidden when it shows that one, the reply box taking the cursor back. False when no chat is
+// there, for the browser in a web page, which has none (lib/desktop.ts), and for the diagram where its button is not
+// in the chat's head (Dock.tsx), so that the key goes on to your browser.
 export function toggleHalf(view: View): boolean {
   if (!dock.center || !dock.session || (view === "browser" && !APP)) return false;
+  if (view === "step" && !document.querySelector(".dock .half-btn.half-step")) return false;
   if (!live(dock.session).meta?.chat) return (toast(`Only a desk chat has a ${view}.`), true);
   const open = dock.halves[dock.session] === view;
   const inside = document.activeElement?.closest(".half");

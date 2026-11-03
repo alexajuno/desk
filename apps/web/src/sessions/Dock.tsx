@@ -1513,8 +1513,10 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
 // to the other or hidden (Half.tsx), each lit while the half shows its view. They are the only place it is, as the half
 // has no head of its own ("yeah A", 1 Nov). The globe is only in desk's app, which alone has the Browser (lib/desktop.ts).
 // Before them, in an issue's chat with a step written as parts, the diagram, for the part being read (StepHalf.tsx).
+// Each tooltip names its view and key, open or not, the lit button saying it shows ("just 'diagram' is enough when
+// it's showed", the user, 4 Nov).
 const HALF_BUTTONS = {
-  step: { icon: GLYPH.diagram, label: "Diagram", key: "" },
+  step: { icon: GLYPH.diagram, label: "Diagram", key: "Ctrl ⇧ D" },
   terminal: { icon: GLYPH.terminal, label: "Terminal", key: "Ctrl `" },
   browser: { icon: GLYPH.globe, label: "Browser", key: "Ctrl ⇧ B" },
 } as const;
@@ -1524,7 +1526,7 @@ const hasParts = (steps: PlanStep[]): boolean => steps.some((s) => Boolean(s.par
 const HalfButton = observer(function HalfButton({ id, view }: { id: string; view: keyof typeof HALF_BUTTONS }) {
   const open = dock.halves[id] === view, { icon, label, key } = HALF_BUTTONS[view];
   return (
-    <button className={`dock-btn half-btn half-${view}${open ? " on" : ""}`} type="button" title={`${open ? `Hide the ${label.toLowerCase()}` : label}${key && `  ${key}`}`}
+    <button className={`dock-btn half-btn half-${view}${open ? " on" : ""}`} type="button" title={`${label}${key && `  ${key}`}`}
       aria-pressed={open} onClick={() => dock.setHalf(id, open ? null : view, true)}>{icon}</button>
   );
 });
