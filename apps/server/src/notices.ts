@@ -2,7 +2,7 @@
 // up), later (it waits in the Inbox, unread) or dropped. desk is the user's notification center: "a layer in desk handles
 // noti filtering, that only when sth worth notified about that it pops up and carry it on with me" (the user, 2 Nov;
 // the desk issue "desk as my notification center"). The connectors write a notice as it comes, the firewall judges it,
-// and the Inbox shows one row per thread holding a Slack message now or later, or a mail now (pages.ts, threadRow).
+// and the Inbox shows one row per thread holding a notice now or later (pages.ts, threadRow).
 //
 // What a rule drops at the door (an edit, a join, a reaction, a non-work channel) is never written. Every mail is, the
 // ordinary ones too, since bin/mail-daily lists each mail of the day with its topic. A notice is kept KEEP_DAYS, enough
@@ -53,9 +53,10 @@ export async function judge(id: string, verdict: Verdict, why: string) {
 // The whys slack.ts's door writes on what a rule lets through as now: the Inbox's line shows such a message's own text.
 export const RULED = new Set(["a DM", "a group DM", "@you", "a reply in your thread"]);
 
-// The notices the Inbox shows: a Slack message now or later, and a mail now, since a mail judged later waits for the
-// 08:00 report (bin/mail-daily) and a dropped one never shows.
-const SHOWN = "(verdict = 'now' or (verdict = 'later' and source = 'slack'))";
+// The notices the Inbox shows: now or later, a mail as a Slack message, and a dropped one never. Until 3 Nov a mail
+// judged later waited for the 08:00 report (bin/mail-daily), up to a day: "later in inbox but no popup is good enough"
+// (the user, 3 Nov, of a YC co-founder invite that came at 10:53). Only now pops up (store/inbox.ts).
+const SHOWN = "verdict in ('now', 'later')";
 
 // Each thread holding a notice the Inbox shows, by its newest such notice: one Inbox row each.
 export async function threads(): Promise<Notice[]> {

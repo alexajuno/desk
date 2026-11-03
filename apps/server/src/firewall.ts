@@ -50,8 +50,7 @@ their focus: what comes in from them reaches the user only through you. Decide f
 waits until they next look: someone asks the user something or waits on them, a decision or a reply only they can give, \
 production failing in a way someone must act on now with nobody on it yet, a deadline today, and in their job search an \
 interview, a test, an offer or a step with a date.
-- "later": it waits, unread, until the user looks: a Slack message in desk's Inbox, a mail in the morning report. \
-Whatever is worth seeing but can wait.
+- "later": it waits, unread, in desk's Inbox until the user looks, with no pop-up. Whatever is worth seeing but can wait.
 - "dropped": for mail only: it fits one of the user's ordinary topics, below, and says nothing the topic's "Report it \
 when" names. A Slack message is never dropped.
 

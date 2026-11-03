@@ -379,7 +379,7 @@ export async function create(): Promise<FastifyInstance> {
   });
   // The firewall's verdict on each mail that came since a time, for muse's bin/mail-daily, which reads them at 08:00
   // rather than judging the day's mail again (firewall.ts): by Gmail's own id, now (it popped up, and its row is in the
-  // Inbox), later (worth the report), dropped (an ordinary topic, the why naming it), or null while the firewall has yet
+  // Inbox), later (its row in the Inbox, with no pop-up, and worth the report), dropped (an ordinary topic, the why naming it), or null while the firewall has yet
   // to judge it. A mail desk does not list, as one from before KEEP_DAYS or while desk was down long, has no verdict here.
   // No mail's text: bin/mail-daily reads that from Gmail.
   app.get("/api/mail/verdicts", async (req: Req) => {
