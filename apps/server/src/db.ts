@@ -245,10 +245,10 @@ create table if not exists replies ( -- each reply to a thread as the user (repl
   id text primary key, -- reply-<random>
   thread text not null, -- the Slack thread, DM or mail thread it answers, as notices.thread
   source text not null, -- slack or mail
-  text text not null, -- what goes out, as the user left it on the card
+  text text not null, -- what goes out, as the user left it on the card or wrote it in their box
   whom text not null default '', -- where it goes, as the card says: in #imagenhub, in minhnt's thread; to Talent team <talent@…>
   state text not null, -- draft, sending, sent, failed, or kept: a test desk sends nothing
-  at double precision not null, -- when Claude drafted it, in seconds
+  at double precision not null, -- when Claude drafted it, or the user wrote it in their box, in seconds
   sent double precision, -- when it went
   link text not null default '', -- opens it in Slack or Gmail, once sent
   error text not null default '' -- why Slack or Gmail refused it

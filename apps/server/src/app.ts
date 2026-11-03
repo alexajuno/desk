@@ -404,6 +404,14 @@ export async function create(): Promise<FastifyInstance> {
     const r = await replies.send(req.params.id, String(((req.body ?? {}) as { text?: unknown }).text ?? ""));
     return { state: r.state, link: r.link, error: r.error };
   });
+  // Your own reply, from the box under the thread's pane: it goes at once, as you, from desk's page alone (replies.ts, yours).
+  app.post("/api/threads/:id/send", async (req: Req) => {
+    if (!fromPage(req)) throw new HttpError(403, "Only your box under the thread in desk sends a reply.");
+    const id = req.params.id;
+    if (!threads.IS.test(id)) throw new HttpError(404, "No such thread.");
+    const r = await replies.yours(id, String(((req.body ?? {}) as { text?: unknown }).text ?? ""));
+    return { state: r.state, link: r.link };
+  });
   app.delete("/api/replies/:id", async (req: Req) => {
     if (!fromPage(req)) throw new HttpError(403, "Only its card in desk discards a reply.");
     await replies.discard(req.params.id);

@@ -987,8 +987,20 @@ button.react img { width: 16px; height: 16px; object-fit: contain; }
 .emoji-grid button:hover { background: var(--bg-pop-on); }
 .emoji-grid img { width: 20px; height: 20px; object-fit: contain; }
 .emoji-none { padding: 12px 4px; font: 450 13px var(--font); color: var(--text-3); }
-/* Under a thread no chat is on yet, the chat's composer (dock.css), stuck to the pane's foot; once you wrote, the chat
-   opens on a card of the thread instead (dock.css, .came). */
+/* Under a thread no chat is on yet, the chat's composer (dock.css), stuck to the pane's foot, yours: its foot says where
+   your reply goes, with Slack's mark or the mail's envelope, then the emoji picker and send (mockup 5 of step 1.8).
+   Ask Claude, in the head beside Open in Slack, puts Claude's box in its place, lit while it is there; once you wrote
+   to Claude, the chat opens on a card of the thread instead (dock.css, .came). */
+.thread-head .thread-out + .thread-out { margin-left: -6px; }
+button.thread-out.on { background: var(--bg-active); color: var(--text-1); }
+.reply-to { display: inline-flex; flex: 0 1 auto; align-items: center; gap: 6px; min-width: 0; height: 28px; padding: 0 8px 0 6px; border-radius: 6px;
+            font: 450 12px var(--font); color: var(--text-3); white-space: nowrap; }
+.reply-to > svg { flex: none; }
+.reply-to > span { overflow: hidden; text-overflow: ellipsis; }
+.composer-foot button.emoji { flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%;
+                              background: none; color: var(--text-3); }
+.composer-foot button.emoji:hover { background: var(--bg-icon-hover); color: var(--text-1); }
+.reply-refused { margin-top: 6px; font: 450 12px var(--font); color: var(--text-error); overflow-wrap: anywhere; }
 .thread-pane { display: flex; flex-direction: column; min-height: 100%; }
 .thread-pane > .thread-view { flex: 1 0 auto; }
 /* The Inbox's pane ends where the corner's pills begin (sessions.css, .corner): a composer there sits clear above them. */

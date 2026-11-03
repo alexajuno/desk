@@ -3,9 +3,10 @@
 // a message to people"). The thread's chat (threads.ts) puts Claude's reply on a card above the user's composer
 // (PUT /api/threads/<id>/draft), where the user may edit it, and only their Send, from desk's page, posts it
 // (POST /api/replies/<id>/send): Claude has no call that sends, since a thread holds other people's words, a mail a
-// stranger's, and a line in one could ask it to. Each reply stays in the replies table, which the app holds, once sent:
-// what desk sent as the user, when, and its link. A desk that connects to nothing, a test desk, keeps it and sends
-// nothing.
+// stranger's, and a line in one could ask it to. The user's own reply, written in the box under a thread's pane
+// (POST /api/threads/<id>/send, from desk's page alone), goes at once, with no card (yours). Each reply stays in the
+// replies table, which the app holds, once sent: what desk sent as the user, when, and its link. A desk that connects
+// to nothing, a test desk, keeps it and sends nothing.
 import { randomUUID } from "node:crypto";
 import { CONNECT } from "./config.ts";
 import * as db from "./db.ts";
@@ -74,9 +75,7 @@ export async function draft(thread: string, text: string): Promise<Reply> {
 // The user's Send, with the text as they left it on the card: posted to Slack or sent from Gmail as them. One Send
 // alone goes, though they press it twice. A refusal leaves the card, saying why, to send again.
 export async function send(id: string, text: string): Promise<Reply> {
-  const body = text.replace(/\r\n/g, "\n").trim();
-  if (!body) throw new HttpError(400, "The reply is empty.");
-  if (body.length > LONG) throw new HttpError(400, `The reply is ${body.length} characters: keep it under ${LONG}.`);
+  const body = bodyOf(text);
   const taken = await db.write(async (tx) =>
     (await tx.query<Record<string, unknown>>("update replies set state = 'sending', text = $2, error = '' where id = $1 and state in ('draft', 'failed') returning *", [id, body])).rows[0]);
   if (!taken) {
@@ -84,19 +83,50 @@ export async function send(id: string, text: string): Promise<Reply> {
     throw new HttpError(r ? 409 : 404, !r ? "No such reply." : r.state === "sending" ? "It is on its way." : "It went already.");
   }
   const reply = asReply(taken);
+  const done = await deliver(reply.source, reply.thread, body);
+  return db.write(async (tx) => asReply((await tx.query<Record<string, unknown>>(
+    "update replies set state = $2, link = $3, error = $4, sent = $5 where id = $1 returning *",
+    [id, done.state, done.link, done.error, done.state === "failed" ? null : now()])).rows[0]));
+}
+
+// The reply's text as it goes: its line ends Unix's, its ends trimmed, and not empty or past what a reply runs to.
+function bodyOf(text: string) {
+  const body = text.replace(/\r\n/g, "\n").trim();
+  if (!body) throw new HttpError(400, "The reply is empty.");
+  if (body.length > LONG) throw new HttpError(400, `The reply is ${body.length} characters: keep it under ${LONG}.`);
+  return body;
+}
+
+// Posted to Slack or sent from Gmail as the user, or on a test desk kept; a refusal says why.
+async function deliver(source: Reply["source"], thread: string, body: string): Promise<Pick<Reply, "state" | "link" | "error">> {
   let done: Pick<Reply, "state" | "link" | "error">;
   if (!CONNECT) done = { state: "kept", link: "", error: "" };
   else {
     try {
-      done = { state: "sent", link: reply.source === "slack" ? await slack.post(reply.thread, body) : await mail.send(reply.thread, body), error: "" };
+      done = { state: "sent", link: source === "slack" ? await slack.post(thread, body) : await mail.send(thread, body), error: "" };
     } catch (e) {
       done = { state: "failed", link: "", error: (e as Error).message };
     }
   }
-  console.log(`replies: a ${reply.source} reply ${done.state}${done.error ? `, ${done.error}` : ""}`); // its text and where stay out of the log
+  console.log(`replies: a ${source} reply ${done.state}${done.error ? `, ${done.error}` : ""}`); // its text and where stay out of the log
+  return done;
+}
+
+// The user's own reply, from the box under the thread's pane: it goes at once, as they wrote it, and is kept once it
+// went, to show in the thread as from desk until Slack's copy comes back. A refusal keeps nothing, and the box keeps
+// their text, with the reason, to send again ("we have to make the reply cheap enough, mechanically i suppose?", the
+// user, 3 Nov). A draft of Claude's on the thread stays on its card.
+export async function yours(thread: string, text: string): Promise<Reply> {
+  const body = bodyOf(text);
+  const shown = await notices.ofThread(thread);
+  if (!shown.length) throw new HttpError(404, "No such thread.");
+  const source = shown[0].source;
+  const done = await deliver(source, thread, body);
+  if (done.state === "failed") throw new HttpError(502, `${source === "mail" ? "Gmail" : "Slack"} refused it: ${done.error}`);
+  const whom = await whomOf(thread, shown);
   return db.write(async (tx) => asReply((await tx.query<Record<string, unknown>>(
-    "update replies set state = $2, link = $3, error = $4, sent = $5 where id = $1 returning *",
-    [id, done.state, done.link, done.error, done.state === "failed" ? null : now()])).rows[0]));
+    `insert into replies (id, thread, source, text, whom, state, at, sent, link) values ($1, $2, $3, $4, $5, $6, $7, $7, $8) returning *`,
+    [`reply-${randomUUID().slice(0, 8)}`, thread, source, body, whom, done.state, now(), done.link])).rows[0]));
 }
 
 // Discard on the card: an unsent reply goes.

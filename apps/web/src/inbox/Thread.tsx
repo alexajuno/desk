@@ -11,12 +11,15 @@
 // a bar of four quick reactions and the picker does the same, as you in Slack (the server's threads.ts, react): only
 // your click sends it. The pane shows the change at once and reads the thread again behind it.
 //
-// A composer under it starts a chat with Claude on the thread, which only you see (the server's threads.ts: "pops up
-// and carry it on with me", the user, 2 Nov), picked from two mockups on 2 Nov over one with Draft a reply, File an
-// issue and Mark done above the box. From then on the row opens on that chat, which opens on a card of the thread as
-// Claude read it, wherever it is opened (sessions/Came.tsx, 3 Nov): the whole thread shows only before you wrote. The
-// chat follows the thread, so the thread's row leaves the Inbox for the chat's, which carries its news (the server's
-// pages.ts, withNews), and the pane goes with it.
+// The box under it is yours: what you write there posts to Slack as you on Enter, or on Ctrl Enter sends from Gmail,
+// since a mail runs long, and shows in the thread at once (YourBox; the server's replies.ts, yours): "we have to make
+// the reply cheap enough, mechanically i suppose?" (the user, 3 Nov; mockup 5 of step 1.8). Its foot says where it
+// goes. Ask Claude in the head opens Claude's box in its place, and Esc brings yours back: what you write there starts
+// a chat with Claude on the thread, which only you see (the server's threads.ts: "pops up and carry it on with me", the
+// user, 2 Nov). From then on the row opens on that chat, which opens on a card of the thread as Claude read it,
+// wherever it is opened (sessions/Came.tsx, 3 Nov): the whole thread shows only before you wrote. The chat follows the
+// thread, so the thread's row leaves the Inbox for the chat's, which carries its news (the server's pages.ts,
+// withNews), and the pane goes with it.
 //
 // A reply the chat's Claude drafted waits on a card above the composer (ReplyCard; the server's replies.ts), yours to
 // edit, and only your Send there posts it to Slack or sends it from Gmail as you: Claude has no call that sends.
@@ -25,7 +28,7 @@
 // what to do (LoginView), picked from two mockups over a strip above the Inbox's list, which the phone hides.
 import { observable, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { postJson, reason } from "../api/http";
 import { usePage } from "../api/page";
 import { SessionView } from "../sessions/Dock";
@@ -114,6 +117,9 @@ function sizeOf(bytes: number | null) {
 // The door's whys (the server's notices.ts, RULED), as the line on why it reached you says them.
 const RULED: Record<string, string> = { "a DM": "a DM to you", "a group DM": "a group DM with you", "@you": "it mentions you", "a reply in your thread": "a reply in your thread" };
 
+const SMILE = <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="5.75" /><path d="M5.75 9.5c.5.8 1.3 1.25 2.25 1.25s1.75-.45 2.25-1.25" /><path d="M6 6.5h.01M10 6.5h.01" strokeWidth="1.8" /></svg>;
+// The chat icon of desk's sidebar (ui/icons.tsx, chat), on Ask Claude
+const CHAT = <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M11.869 11.52c.946-.767 1.631-1.956 1.631-3.77s-.685-3.003-1.631-3.77C10.879 3.178 9.486 2.75 8 2.75c-1.694 0-3.065.44-3.985 1.213-.88.74-1.515 1.918-1.515 3.787 0 1.104.255 1.96.641 2.622.541.81.224 1.65.119 1.906-.073.177-.16.344-.219.455l-.03.057a7 7 0 0 0-.136.268c.242.18.563.217 1.1.078a7 7 0 0 0 .893-.32l.027-.01c.124-.052.29-.12.438-.17.08-.027.21-.067.36-.092.09-.014.365-.057.695.03A7.3 7.3 0 0 0 8 12.75c1.486 0 2.88-.428 3.869-1.23m-5.852 2.507A8.8 8.8 0 0 0 8 14.25c3.501 0 7-2.005 7-6.5s-3.499-6.5-7-6.5c-3.866 0-7 2.005-7 6.5 0 1.372.326 2.512.878 3.434.168.222.003.535-.19.901-.3.565-.665 1.257.02 1.942 1.215 1.215 2.864.534 3.739.173.289-.119.493-.203.57-.173" /></svg>;
 const SEND = <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" /></svg>;
 
 // The chat each thread started from this tab, by thread, until its row says so itself.
@@ -125,18 +131,47 @@ export const chatOf = (row: InboxRow) => row.session ?? started.get(row.slug) ??
 // The chat you started on a thread from this tab, once its row left for the chat's (InboxPage).
 export const startedOn = (thread: string) => started.get(thread);
 
-// The thread open on the right: the thread with a composer under it, or once you wrote, the chat on it.
+// The thread open on the right: the thread with your box under it, or once you asked Claude, the chat on it.
 export const ThreadView = observer(function ThreadView({ row }: { row: InboxRow }) {
   if (isLogin(row)) return <LoginView row={row} />;
   const session = chatOf(row);
   if (session) return <SessionView id={session} foot={<ReplyCard thread={row.slug} />} />;
+  return <ThreadPane row={row} />;
+});
+
+interface Page { messages: Message[]; me?: string }
+
+// The thread, asked of desk each time its row moves, or a reply you sent goes into it (the app holds no notices), and
+// under it your box, or Claude's while you ask it.
+const ThreadPane = observer(function ThreadPane({ row }: { row: InboxRow }) {
+  const sent = [...issues.replies.values()].filter((r) => r.thread === row.slug && (r.state === "sent" || r.state === "kept")).length;
+  const page = usePage<Page>(`/api/page/thread?id=${encodeURIComponent(row.slug)}`, `${row.at}:${sent}`);
+  const [asking, setAsking] = useState(false);
+  const all = page.data?.messages ?? [];
   return (
     <div className="thread-pane">
-      <ThreadBody row={row} />
-      <ThreadComposer row={row} />
+      <ThreadBody row={row} page={page} asking={asking} ask={() => setAsking((a) => !a)} />
+      <div className="dock-foot">
+        <ReplyCard thread={row.slug} />
+        {asking ? <AskBox row={row} back={() => setAsking(false)} />
+          : all.length > 0 && <YourBox row={row} to={whereTo(row.slug, all)} />}
+      </div>
     </div>
   );
 });
+
+// Where your reply goes, as your box's foot and its placeholder say it: in whose thread in which channel, to whom in a
+// DM or by mail. A mail goes to the thread's last sender who is not you, as Gmail's Reply.
+function whereTo(thread: string, all: Message[]) {
+  const last = all[all.length - 1], root = all[0];
+  const them = [...all].reverse().find((n) => !n.mine)?.who ?? last.who;
+  if (last.source === "mail") return { source: last.source, chip: `to ${them}`, placeholder: `Reply to ${them}, as you` };
+  if (last.place === "DM") return { source: last.source, chip: `DM with ${them}`, placeholder: `Reply to ${them}, as you` };
+  if (last.place.startsWith("group DM")) return { source: last.source, chip: last.place.replace(/^g/, "G"), placeholder: "Reply in the group DM, as you" };
+  if (thread.split(":").length !== 3) return { source: last.source, chip: last.place, placeholder: `Reply in ${last.place}, as you` };
+  const whose = root.mine ? "your" : `${root.who}’s`;
+  return { source: last.source, chip: `${last.place}, in ${whose} thread`, placeholder: `Reply in ${whose} thread, as you` };
+}
 
 // A login that ended: since when, what refused it, and what mends it. The row leaves once desk is signed in again.
 function LoginView({ row }: { row: InboxRow }) {
@@ -226,10 +261,77 @@ function ReplyBox({ reply }: { reply: Reply }) {
   );
 }
 
-// The box under a thread no chat is on yet: what you write starts the chat, and the pane turns to it.
-function ThreadComposer({ row }: { row: InboxRow }) {
+// Your box, under the thread: Enter posts to Slack as you, Shift Enter makes a new line; a mail's Enter makes a new line
+// and Ctrl Enter sends it from Gmail. What you sent shows in the thread at once, as from desk until Slack's copy is
+// read; a refusal keeps your text, with the reason under it, to send again.
+function YourBox({ row, to }: { row: InboxRow; to: ReturnType<typeof whereTo> }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState("");
+  const box = useRef<HTMLTextAreaElement>(null);
+  const mail = to.source === "mail";
+  const send = async () => {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    setRefused("");
+    const res = await postJson(`/api/threads/${encodeURIComponent(row.slug)}/send`, { text });
+    setBusy(false);
+    if (!res.ok) {
+      setRefused(await reason(res));
+      return;
+    }
+    setText(""); // it shows in the thread, as from desk, or kept on a test desk
+    requestAnimationFrame(() => box.current?.focus());
+  };
+  // An emoji from the picker, where the caret is: its character, or a workspace's own as :name:, which Slack draws
+  const put = (name: string, image?: string) => {
+    const el = box.current, emoji = image ? `:${name}:` : charOf(name) ?? `:${name}:`;
+    const at = el?.selectionStart ?? text.length, upto = el?.selectionEnd ?? at;
+    setText(text.slice(0, at) + emoji + text.slice(upto));
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(at + emoji.length, at + emoji.length);
+    });
+  };
+  return (
+    <div className="composer">
+      <div className="composer-text">
+        <textarea ref={box} rows={1} value={text} spellCheck={false} disabled={busy} placeholder={to.placeholder}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return; // a Vietnamese or other IME word still being typed
+            if (e.key === "Enter" && (mail ? e.ctrlKey || e.metaKey : !e.shiftKey)) {
+              e.preventDefault();
+              void send();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation(); // the frame's Esc would also leave the page: that is the next Esc's to do
+              e.currentTarget.blur();
+            }
+          }} />
+      </div>
+      {refused && <div className="reply-refused">{refused}</div>}
+      <div className="composer-foot" onMouseDown={(e) => e.preventDefault()}>
+        <span className="reply-to">{mail ? ENVELOPE : slackMark(12)}<span>{to.chip}</span></span>
+        {!mail && <button className="emoji" type="button" title="Emoji" onClick={(e) => pickEmoji(e.currentTarget, put)}>{SMILE}</button>}
+        <span className="spacer" />
+        <button className="send" type="button" title={mail ? "Send from Gmail  Ctrl Enter" : "Send to Slack  Enter"} disabled={!text.trim() || busy}
+          onClick={() => void send()}>{SEND}</button>
+      </div>
+    </div>
+  );
+}
+
+// Claude's box, in yours' place while you ask it: what you write starts a chat on the thread, which only you see, and
+// the pane turns to it. Esc brings your box back.
+function AskBox({ row, back }: { row: InboxRow; back: () => void }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { // once the click on Ask Claude is done with the focus
+    const f = requestAnimationFrame(() => box.current?.focus());
+    return () => cancelAnimationFrame(f);
+  }, []);
   const send = async () => {
     if (!text.trim() || busy) return;
     setBusy(true);
@@ -243,37 +345,33 @@ function ThreadComposer({ row }: { row: InboxRow }) {
     runInAction(() => started.set(row.slug, session));
   };
   return (
-    <div className="dock-foot">
-      <ReplyCard thread={row.slug} />
-      <div className="composer">
-        <div className="composer-text">
-          <textarea rows={1} value={text} spellCheck={false} disabled={busy} placeholder="Ask Claude about it: draft a reply, file it, look into it"
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.nativeEvent.isComposing) return; // a Vietnamese or other IME word still being typed
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void send();
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                e.stopPropagation(); // the frame's Esc would also leave the page: that is the next Esc's to do
-                e.currentTarget.blur();
-              }
-            }} />
-        </div>
-        <div className="composer-foot" onMouseDown={(e) => e.preventDefault()}>
-          <span className="spacer" />
-          <button className="send" type="button" title="Send  Enter" disabled={!text.trim() || busy} onClick={() => void send()}>{SEND}</button>
-        </div>
+    <div className="composer">
+      <div className="composer-text">
+        <textarea ref={box} rows={1} value={text} spellCheck={false} disabled={busy} placeholder="Ask Claude about it: draft a reply, file it, look into it"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return;
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void send();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation(); // your box again, not the frame's Esc
+              back();
+            }
+          }} />
+      </div>
+      <div className="composer-foot" onMouseDown={(e) => e.preventDefault()}>
+        <span className="reply-to">{CHAT}<span>Claude, only you see it</span></span>
+        <span className="spacer" />
+        <button className="send" type="button" title="Ask Claude  Enter" disabled={!text.trim() || busy} onClick={() => void send()}>{SEND}</button>
       </div>
     </div>
   );
 }
 
-// The thread itself, asked of desk each time its row moves, or a reply you sent goes into it (the app holds no notices).
-const ThreadBody = observer(function ThreadBody({ row }: { row: InboxRow }) {
-  const sent = [...issues.replies.values()].filter((r) => r.thread === row.slug && (r.state === "sent" || r.state === "kept")).length;
-  const { data, reload } = usePage<{ messages: Message[]; me?: string }>(`/api/page/thread?id=${encodeURIComponent(row.slug)}`, `${row.at}:${sent}`);
+// The thread itself, its head holding Ask Claude, then Open in Slack or Gmail.
+function ThreadBody({ row, page: { data, reload }, asking, ask }: { row: InboxRow; page: { data: Page | null; reload: () => unknown }; asking: boolean; ask: () => void }) {
   // Your reactions as you clicked them, shown until the thread is read again with them
   const [clicked, setClicked] = useState<Map<string, Reaction[]>>(() => new Map());
   useEffect(() => setClicked(new Map()), [data]);
@@ -284,6 +382,7 @@ const ThreadBody = observer(function ThreadBody({ row }: { row: InboxRow }) {
   if (!last) return <div className="thread-view" />;
   const why = judged ? RULED[judged.why] ?? judged.why : "";
   const slackThread = row.slug.startsWith("slack:");
+  const out = [...all].reverse().find((n) => n.link)?.link; // a reply of yours a test desk kept has none
   const reactionsOf = (n: Message) => clicked.get(n.id) ?? n.reactions;
   // Yours on the message, added or taken back: on Slack's pill, its quick bar and its picker alike
   const react = async (n: Message, name: string, image?: string) => {
@@ -303,7 +402,8 @@ const ThreadBody = observer(function ThreadBody({ row }: { row: InboxRow }) {
           {slackThread && <span className="thread-mark">{slackMark(16)}</span>}
           <span className="thread-place">{row.title}</span><span className="thread-kind">{kindOf(last, all[0], row.slug)}</span>
         </div>
-        {last.link && <button type="button" className="thread-out" onClick={() => window.open(last.link, "_blank", "noopener")}>
+        <button type="button" className={`thread-out${asking ? " on" : ""}`} title={asking ? "Back to your reply  Esc" : "Ask Claude about it"} onClick={ask}>{CHAT}Ask Claude</button>
+        {out && <button type="button" className="thread-out" onClick={() => window.open(out, "_blank", "noopener")}>
           {OUT}Open in {last.source === "mail" ? "Gmail" : "Slack"}</button>}
       </div>
       {judged && (
@@ -357,7 +457,7 @@ const ThreadBody = observer(function ThreadBody({ row }: { row: InboxRow }) {
       </div>
     </div>
   );
-});
+}
 
 // The bar under the mouse: Slack's own four quick reactions, then the picker.
 const QUICK = ["+1", "white_check_mark", "eyes", "pray"];
