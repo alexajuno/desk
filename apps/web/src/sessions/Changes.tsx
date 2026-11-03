@@ -39,10 +39,12 @@ export const lastCommit = (steps: (PlanStep & { commit?: string })[] | null | un
   (steps ?? []).reduce<string | null>((last, s) => lastCommit(s.kids) ?? s.commit ?? last, null);
 
 // Lines picked in a step's diff to comment on, as GitHub's + picks them: a click on a line's number picks the line, and
-// a drag along the numbers or a shift-click picks a range, inside the hunk it started in ("line selection effect similar
-// to github's", the user, 28 Oct). from is where the pick started and to where it ends, either way round; drag holds
-// while the mouse is down.
-type Picked = { place: string; path: string; hunk: number; from: number; to: number; drag: boolean };
+// a drag along the numbers or a shift-click picks a range ("line selection effect similar to github's", the user, 28
+// Oct), the hunks' lines and those opened round them alike, inside the stretch of lines you can see that it started in:
+// a row that still hides lines ends it (step 1.3, 4 Nov). from is the line where the pick started and to where it ends,
+// either way round, by their keys (Row), so the pick stays on its lines while more open round it; drag holds while the
+// mouse is down.
+type Picked = { place: string; path: string; from: string; to: string; drag: boolean };
 export const picked = observable.box<Picked | null>(null, { deep: false });
 
 // What is typed in the box under the picked lines: kept while the pick grows, shrinks or moves, dropped with it.
@@ -63,35 +65,43 @@ function quoted(place: string, path: string, lines: Line[]) {
   return `Step ${place}, ${path}:${from === to ? from : `${from}-${to}`}\n\`\`\`diff\n${lines.map((l) => l[0] + l[3]).join("\n")}\n\`\`\`\n`;
 }
 
-const rowAt = (target: EventTarget) => (target as Element).closest<HTMLTableRowElement>("tr[data-i]");
+const rowAt = (target: EventTarget) => (target as Element).closest<HTMLTableRowElement>("tr[data-key]");
+// Whether a line's row is in the same stretch of lines as the line a pick started on, in the same file's table.
+const besides = (row: HTMLTableRowElement, from: string) =>
+  row.closest("table")!.querySelector<HTMLElement>(`tr[data-key="${from}"]`)?.dataset.stretch === row.dataset.stretch;
+
+// Where the mouse went down to pick. The box under the old pick goes as it does, and the rows under the mouse move up
+// with it: the browser says the mouse is over another row though it has not moved, which grew a click into a pick of
+// six lines (found on the test desk, 4 Nov). Only a mouse that moved drags.
+let downAt = "";
 
 function pickDown(e: React.MouseEvent, path: string) {
   const row = rowAt(e.target);
   if (e.button !== 0 || !row || !(e.target as Element).closest(".diff-no")) return;
   e.preventDefault(); // no text selection from the numbers
-  const place = row.closest<HTMLElement>("[data-place]")!.dataset.place!, hunk = +row.dataset.hunk!, i = +row.dataset.i!;
+  downAt = `${e.clientX},${e.clientY}`;
+  const place = row.closest<HTMLElement>("[data-place]")!.dataset.place!, key = row.dataset.key!;
   const p = picked.get();
-  const extend = e.shiftKey && p && p.place === place && p.path === path && p.hunk === hunk;
-  runInAction(() => picked.set(extend ? { ...p, to: i, drag: true } : { place, path, hunk, from: i, to: i, drag: true }));
+  const extend = e.shiftKey && p && p.place === place && p.path === path && besides(row, p.from);
+  runInAction(() => picked.set(extend ? { ...p, to: key, drag: true } : { place, path, from: key, to: key, drag: true }));
   addEventListener("mouseup", () => runInAction(() => { const q = picked.get(); if (q) picked.set({ ...q, drag: false }); }), { once: true });
 }
 
 function pickOver(e: React.MouseEvent, path: string) {
   const p = picked.get(), row = rowAt(e.target);
-  if (!p?.drag || !row || p.path !== path || +row.dataset.hunk! !== p.hunk || row.closest<HTMLElement>("[data-place]")!.dataset.place !== p.place) return;
-  if (+row.dataset.i! !== p.to) runInAction(() => picked.set({ ...p, to: +row.dataset.i! }));
+  if (!p?.drag || !row || `${e.clientX},${e.clientY}` === downAt || p.path !== path || row.closest<HTMLElement>("[data-place]")!.dataset.place !== p.place || !besides(row, p.from)) return;
+  if (row.dataset.key !== p.to) runInAction(() => picked.set({ ...p, to: row.dataset.key! }));
 }
 
 // C on a line of a diff picks it and opens the box under it, as a click on its number does; on a line already picked it
 // goes back into the box. Over Changes but off its lines it says how, rather than filing a new issue, which C does
 // elsewhere (Frame.tsx). Selecting the code's text only copies it.
 export function commentKey(): boolean {
-  const row = document.querySelector<HTMLTableRowElement>(".changes table.diff tr[data-i]:hover");
+  const row = document.querySelector<HTMLTableRowElement>(".changes table.diff tr[data-key]:hover");
   if (!row) return Boolean(document.querySelector(".changes:hover") && (toast("Point at a line to comment on it, or click its number"), true));
   const place = row.closest<HTMLElement>("[data-place]")!.dataset.place!, path = row.closest<HTMLElement>("[data-path]")!.dataset.path!;
-  const hunk = +row.dataset.hunk!, i = +row.dataset.i!, p = picked.get();
-  const inside = p && p.place === place && p.path === path && p.hunk === hunk && i >= Math.min(p.from, p.to) && i <= Math.max(p.from, p.to);
-  if (!inside) runInAction(() => picked.set({ place, path, hunk, from: i, to: i, drag: false }));
+  const key = row.dataset.key!;
+  if (!row.classList.contains("picked")) runInAction(() => picked.set({ place, path, from: key, to: key, drag: false }));
   requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".diff-comment textarea")?.focus({ preventScroll: true }));
   return true;
 }
@@ -163,7 +173,8 @@ const FileCard = observer(function FileCard({ f, place, at }: { f: FileDiff; pla
   const canWhole = Boolean(runs && f.length! <= WHOLE_LINES && runs.some((r) => r.to >= r.from));
   const whole = canWhole && hiddenLeft(at, runs!) === 0;
   const slash = f.path.lastIndexOf("/");
-  const p = picked.get(), mine = p && p.place === place && p.path === f.path ? p : null;
+  const rows = rowsOf(f, at, runs);
+  const p = picked.get(), lit = p && p.place === place && p.path === f.path ? litOf(p, rows) : null;
   return (
     <div className="change-file" data-path={f.path}>
       <div className="change-file-head">
@@ -186,17 +197,14 @@ const FileCard = observer(function FileCard({ f, place, at }: { f: FileDiff; pla
           <table className="diff" onMouseDown={(e) => pickDown(e, f.path)} onMouseOver={(e) => pickOver(e, f.path)}>
             <colgroup><col className="diff-no-col" /><col /></colgroup>
             <tbody>
-              {f.hunks.map((h, n) => {
-                const lit: [number, number] | null = mine?.hunk === n ? [Math.min(mine.from, mine.to), Math.max(mine.from, mine.to)] : null;
-                return (
-                  <Fragment key={n}>
-                    {runs && <Gap at={at} k={n} last={false} run={runs[n]} header={h.header} />}
-                    <Hunk n={n} header={runs ? null : h.header} lines={h.lines} lit={lit}
-                      box={lit && !mine!.drag ? <CommentBox quote={quoted(place, f.path, h.lines.slice(lit[0], lit[1] + 1))} /> : null} />
+              {rows.map((r, n) => r.t === "gap" ? <Gap key={r.key} at={at} k={r.k} last={r.last} left={r.left} header={r.header} />
+                : r.t === "head" ? <tr key={r.key} className="diff-hunk"><td colSpan={2}>{r.header || " "}</td></tr>
+                : (
+                  <Fragment key={r.key}>
+                    <LineRow r={r} picked={Boolean(lit && n >= lit[0] && n <= lit[1])} />
+                    {lit && n === lit[1] && !p!.drag && <CommentBox quote={quoted(place, f.path, rows.slice(lit[0], lit[1] + 1).flatMap((l) => (l.t === "line" ? [l.line] : [])))} />}
                   </Fragment>
-                );
-              })}
-              {runs && <Gap at={at} k={runs.length - 1} last run={runs[runs.length - 1]} header="" />}
+                ))}
             </tbody>
           </table>
         ))}
@@ -279,64 +287,84 @@ function foldBack(at: FileAt) {
   runInAction(() => opened.delete(fileKey(at)));
 }
 
-// A run of hidden lines, opened as GitHub opens them (step 1.3 of the issue "Read code inside desk", 4 Nov: "how about
-// nav between code and expand the code"): a row with arrows in the number column, the function the hunk below is in,
-// and how many lines it hides. ↓ opens 20 under the hunk above, ↑ 20 over the hunk below, and ↕ the rest once 20 or
-// fewer are left; above the first hunk there is only ↑, under the last only ↓. Once none is hidden the row goes, and
-// the hunks round it read as one run of lines. An opened line reads as the unchanged lines round it.
-const Gap = observer(function Gap({ at, k, last, run, header }: { at: FileAt; k: number; last: boolean; run: Run; header: string }) {
-  const size = run.to - run.from + 1, lines = read.get(fileKey(at));
-  if (size <= 0) return null;
-  const o = (lines && opened.get(fileKey(at))?.[k]) || { top: 0, bottom: 0 };
-  const top = Math.min(o.top, size), bottom = Math.min(o.bottom, size - top), left = size - top - bottom;
-  const shown = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => (
-    <tr key={from + i} className="diff-open">
-      <td className="diff-no">{from + i}</td>
-      <td className="diff-code">{lines![from + i - 1] || " "}</td>
-    </tr>
-  ));
+// What a file's table draws, top to bottom: its lines, the hunks' and those opened round them, and between them the rows
+// that still hide lines (Gap), or, where none can open, each hunk's dim row holding the function it is in. Each line has
+// a key that stays while more lines open round it, its hunk's place in the diff or its number in the file once opened,
+// and the stretch of lines it is in, which a row between ends: a pick stays inside one.
+type LineAt = { t: "line"; key: string; line: Line; stretch: number; open: boolean };
+type Row = LineAt | { t: "gap"; key: string; k: number; last: boolean; left: number; header: string } | { t: "head"; key: string; header: string };
+
+function rowsOf(f: FileDiff, at: FileAt, runs: Run[] | null): Row[] {
+  const rows: Row[] = [], lines = read.get(fileKey(at)), o = lines ? opened.get(fileKey(at)) : undefined;
+  let stretch = 0;
+  // An opened line reads as the unchanged lines round it, and is quoted as one, by its number in the file.
+  const shown = (from: number, to: number) => {
+    for (let n = from; n <= to; n++) rows.push({ t: "line", key: `o${n}`, line: [" ", null, n, lines![n - 1] ?? ""], stretch, open: true });
+  };
+  const hidden = (k: number, header: string) => {
+    const r = runs![k], size = r.to - r.from + 1;
+    if (size <= 0) return;
+    const top = Math.min(o?.[k]?.top ?? 0, size), bottom = Math.min(o?.[k]?.bottom ?? 0, size - top), left = size - top - bottom;
+    shown(r.from, r.from + top - 1);
+    if (left > 0) {
+      rows.push({ t: "gap", key: `g${k}`, k, last: k === runs!.length - 1, left, header });
+      stretch++;
+    }
+    shown(r.to - bottom + 1, r.to);
+  };
+  f.hunks.forEach((h, n) => {
+    if (runs) hidden(n, h.header);
+    else {
+      rows.push({ t: "head", key: `d${n}`, header: h.header });
+      stretch++;
+    }
+    h.lines.forEach((line, i) => rows.push({ t: "line", key: `h${n}.${i}`, line, stretch, open: false }));
+  });
+  if (runs) hidden(runs.length - 1, "");
+  return rows;
+}
+
+// Where a pick lies in its file's rows, its first and last line, while both show in one stretch of lines: none once
+// Whole file folds back the lines it ran across.
+function litOf(p: Picked, rows: Row[]): [number, number] | null {
+  const a = rows.findIndex((r) => r.key === p.from), b = rows.findIndex((r) => r.key === p.to);
+  if (a < 0 || b < 0 || (rows[a] as LineAt).stretch !== (rows[b] as LineAt).stretch) return null;
+  return [Math.min(a, b), Math.max(a, b)];
+}
+
+// A row of hidden lines, opened as GitHub opens them (step 1.3 of the issue "Read code inside desk", 4 Nov: "how about
+// nav between code and expand the code"): arrows in the number column, the function the hunk below is in, and how many
+// lines it hides. ↓ opens 20 under the hunk above, ↑ 20 over the hunk below, and ↕ the rest once 20 or fewer are left;
+// above the first hunk there is only ↑, under the last only ↓. Once none is hidden the row goes, and the hunks round it
+// read as one stretch of lines.
+function Gap({ at, k, last, left, header }: { at: FileAt; k: number; last: boolean; left: number; header: string }) {
   const arrow = (icon: React.ReactNode, title: string, more: Partial<Opened>) => (
     <button type="button" className="diff-gap-open" title={title} onClick={() => void openRun(at, k, more)}>{icon}</button>
   );
   const lineWord = left === 1 ? "line" : "lines";
   return (
-    <>
-      {top > 0 && shown(run.from, run.from + top - 1)}
-      {left > 0 && (
-        <tr className="diff-gap">
-          <td className="diff-gap-arrows">
-            {left <= MORE_LINES ? arrow(GLYPH.openAll, `Show the ${left} hidden ${lineWord}`, k === 0 ? { bottom: left } : { top: left }) : (
-              <>
-                {k > 0 && arrow(GLYPH.openDown, `Show ${MORE_LINES} more lines down`, { top: MORE_LINES })}
-                {!last && arrow(GLYPH.openUp, `Show ${MORE_LINES} more lines up`, { bottom: MORE_LINES })}
-              </>
-            )}
-          </td>
-          <td className="diff-gap-line"><span className="diff-gap-count">{left} hidden {lineWord}</span>{header}</td>
-        </tr>
-      )}
-      {bottom > 0 && shown(run.to - bottom + 1, run.to)}
-    </>
+    <tr className="diff-gap">
+      <td className="diff-gap-arrows">
+        {left <= MORE_LINES ? arrow(GLYPH.openAll, `Show the ${left} hidden ${lineWord}`, k === 0 ? { bottom: left } : { top: left }) : (
+          <>
+            {k > 0 && arrow(GLYPH.openDown, `Show ${MORE_LINES} more lines down`, { top: MORE_LINES })}
+            {!last && arrow(GLYPH.openUp, `Show ${MORE_LINES} more lines up`, { bottom: MORE_LINES })}
+          </>
+        )}
+      </td>
+      <td className="diff-gap-line"><span className="diff-gap-count">{left} hidden {lineWord}</span>{header}</td>
+    </tr>
   );
-});
+}
 
-// A hunk's lines, the picked ones lit, and the box under the last of them once the mouse lets go. Its header row is the
-// row of the lines hidden above it (Gap), or, where they cannot open, a dim row holding the function it is in.
-function Hunk({ n: hunk, header, lines, lit, box }: { n: number; header: string | null; lines: Line[]; lit: [number, number] | null; box: React.ReactNode }) {
+// A line of the file's table, lit while picked, its key and stretch on its row for the pick's mouse (pickDown).
+function LineRow({ r: { key, line: [kind, old, now, text], stretch, open }, picked }: { r: LineAt; picked: boolean }) {
+  const tint = kind === "+" ? "diff-add" : kind === "-" ? "diff-del" : open ? "diff-open" : "";
   return (
-    <>
-      {header !== null && <tr className="diff-hunk"><td colSpan={2}>{header || " "}</td></tr>}
-      {lines.map(([kind, old, now, text], i) => (
-        <Fragment key={i}>
-          <tr className={`${kind === "+" ? "diff-add" : kind === "-" ? "diff-del" : ""}${lit && i >= lit[0] && i <= lit[1] ? " picked" : ""}`.trim() || undefined}
-            data-no={kind === "-" ? old! : now!} data-kind={kind} data-hunk={hunk} data-i={i}>
-            <td className="diff-no">{kind === "-" ? old : now}</td>
-            <td className="diff-code">{text || " "}</td>
-          </tr>
-          {i === lit?.[1] && box}
-        </Fragment>
-      ))}
-    </>
+    <tr className={`${tint}${picked ? " picked" : ""}`.trim() || undefined} data-key={key} data-stretch={stretch} data-no={kind === "-" ? old! : now!} data-kind={kind}>
+      <td className="diff-no">{kind === "-" ? old : now}</td>
+      <td className="diff-code">{text || " "}</td>
+    </tr>
   );
 }
 

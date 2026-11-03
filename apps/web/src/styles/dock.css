@@ -205,7 +205,7 @@ table.diff .diff-no-col { width: 48px; }
    as GitHub's does, to pick it by a click or a range by a drag (Changes.tsx) */
 table.diff tr[data-no]:hover .diff-no { color: var(--text-1); }
 table.diff .diff-no { position: relative; cursor: pointer; }
-table.diff tr[data-i]:hover > .diff-no::after { content: "+"; position: absolute; top: 1px; right: -9px; z-index: 1; width: 18px; height: 18px;
+table.diff tr[data-key]:hover > .diff-no::after { content: "+"; position: absolute; top: 1px; right: -9px; z-index: 1; width: 18px; height: 18px;
   border-radius: 4px; background: var(--accent); box-shadow: var(--shadow-panel); font: 500 14px/18px var(--font); text-align: center; color: var(--on-accent); }
 /* the picked lines: the accent over their own tint, their number bright and their edge the accent */
 table.diff tr.picked > td { background-image: linear-gradient(var(--diff-pick-bg), var(--diff-pick-bg)); }
@@ -233,8 +233,6 @@ table.diff .diff-gap-arrows { padding: 1px 0; }
 .diff-gap-open:hover { background: var(--bg-hover); color: var(--text-1); }
 table.diff .diff-gap-line { padding: 0 12px 0 0; font: 400 11px var(--mono); color: var(--text-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .diff-gap-count { float: right; margin-left: 12px; font: 450 11px var(--font); }
-/* an opened line, until it can be picked as the hunks' lines are: its number takes no click */
-table.diff tr.diff-open .diff-no { cursor: default; }
 
 .you { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .you-bubble { max-width: 85%; box-sizing: border-box; padding: 7px 11px; border-radius: 14px; background: var(--bg-raised);
