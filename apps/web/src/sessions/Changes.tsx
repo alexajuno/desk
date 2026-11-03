@@ -5,22 +5,25 @@
 // problem early" (the user, 28 Oct). The lines are drawn as Linear Diffs draws them, measured on the demo on
 // linear.app's Reviews page on 28 Oct: one number column, a tinted line with a coloured edge for what was added or
 // deleted, and the counts in green and red.
-import { observable, runInAction } from "mobx";
+import { compareStructural, observable, reaction, runInAction } from "mobx";
 import { observer } from "mobx-react-lite";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { usePage } from "../api/page";
 import type { PlanStep } from "../issues/Steps";
 import { dock } from "../store/dock";
-import { StateIcon, TRIANGLE } from "../ui/icons";
+import { GLYPH, StateIcon, TRIANGLE } from "../ui/icons";
 import { toast } from "../ui/toast";
 import { live } from "./live";
 
 type Line = [kind: " " | "+" | "-", old: number | null, now: number | null, text: string];
-type FileDiff = { path: string; was?: string; added: number; deleted: number; binary?: true; cut?: true; hunks: { header: string; lines: Line[] }[] };
+// A file's length is how many lines it has at the step's commit (changes.ts), there when its hidden lines can open.
+type FileDiff = { path: string; was?: string; added: number; deleted: number; binary?: true; cut?: true; length?: number; hunks: { header: string; lines: Line[] }[] };
 export type StepDiff = { place: string; title: string; state: PlanStep["state"]; note?: string; commit: string; added: number; deleted: number; files: FileDiff[] };
 
 // A file with more changed lines than this starts folded, so one big file doesn't bury the rest.
 const OPEN_LINES = 400;
+// How many hidden lines an arrow opens, as GitHub's do: the hunk you read stays in view.
+const MORE_LINES = 20;
 
 export const useChanges = (slug: string) => usePage<{ steps: StepDiff[] }>(`/api/page/issue/${slug}/changes`).data?.steps ?? null;
 
@@ -111,26 +114,26 @@ export const ChangesHalf = observer(function ChangesHalf({ slug }: { slug: strin
           </span>
         )}
       </div>
-      <div className="changes-half-scroll"><Changes steps={steps} /></div>
+      <div className="changes-half-scroll"><Changes slug={slug} steps={steps} /></div>
     </div>
   );
 });
 
-export const Changes = observer(function Changes({ steps }: { steps: StepDiff[] | null }) {
+export const Changes = observer(function Changes({ slug, steps }: { slug: string; steps: StepDiff[] | null }) {
   if (!steps) return <p className="convo-empty">Reading the changes…</p>;
   if (!steps.length) return <p className="convo-empty">No step has sent its commit yet.</p>;
   const last = steps[steps.length - 1].place;
   return (
     <div className="changes">
       <p className="changes-hint">Click a line’s number to comment on it, or drag along the numbers for a range; <kbd>C</kbd> picks the line you point at.</p>
-      {steps.map((s) => <StepCard key={s.place} s={s} open={s.place === last} />)}
+      {steps.map((s) => <StepCard key={s.place} slug={slug} s={s} open={s.place === last} />)}
     </div>
   );
 });
 
 // A step's card: its place, title and note, how much it changed, then its files. The latest step starts open, as the
 // one to look at before saying "next".
-const StepCard = observer(function StepCard({ s, open: first }: { s: StepDiff; open: boolean }) {
+const StepCard = observer(function StepCard({ slug, s, open: first }: { slug: string; s: StepDiff; open: boolean }) {
   const [open, setOpen] = useState(first);
   return (
     <section className={`change-step${open ? " open" : ""}`} data-place={s.place}>
@@ -144,13 +147,14 @@ const StepCard = observer(function StepCard({ s, open: first }: { s: StepDiff; o
         <span className="change-files">{s.files.length} {s.files.length === 1 ? "file" : "files"}</span>
         <Counts added={s.added} deleted={s.deleted} />
       </button>
-      {open && s.files.map((f) => <FileCard key={f.path} f={f} place={s.place} />)}
+      {open && s.files.map((f) => <FileCard key={f.path} f={f} place={s.place} at={{ slug, commit: s.commit, path: f.path }} />)}
     </section>
   );
 });
 
-const FileCard = observer(function FileCard({ f, place }: { f: FileDiff; place: string }) {
+const FileCard = observer(function FileCard({ f, place, at }: { f: FileDiff; place: string; at: FileAt }) {
   const [open, setOpen] = useState(f.added + f.deleted <= OPEN_LINES);
+  const runs = f.length && !f.cut ? hiddenRuns(f, f.length) : null; // none to open with no length, or past the cut
   const slash = f.path.lastIndexOf("/");
   const p = picked.get(), mine = p && p.place === place && p.path === f.path ? p : null;
   return (
@@ -170,10 +174,14 @@ const FileCard = observer(function FileCard({ f, place }: { f: FileDiff; place: 
               {f.hunks.map((h, n) => {
                 const lit: [number, number] | null = mine?.hunk === n ? [Math.min(mine.from, mine.to), Math.max(mine.from, mine.to)] : null;
                 return (
-                  <Hunk key={n} n={n} header={h.header} lines={h.lines} lit={lit}
-                    box={lit && !mine!.drag ? <CommentBox quote={quoted(place, f.path, h.lines.slice(lit[0], lit[1] + 1))} /> : null} />
+                  <Fragment key={n}>
+                    {runs && <Gap at={at} k={n} last={false} run={runs[n]} header={h.header} />}
+                    <Hunk n={n} header={runs ? null : h.header} lines={h.lines} lit={lit}
+                      box={lit && !mine!.drag ? <CommentBox quote={quoted(place, f.path, h.lines.slice(lit[0], lit[1] + 1))} /> : null} />
+                  </Fragment>
                 );
               })}
+              {runs && <Gap at={at} k={runs.length - 1} last run={runs[runs.length - 1]} header="" />}
             </tbody>
           </table>
         ))}
@@ -182,11 +190,111 @@ const FileCard = observer(function FileCard({ f, place }: { f: FileDiff; place: 
   );
 });
 
-// A hunk's lines, the picked ones lit, and the box under the last of them once the mouse lets go.
-function Hunk({ n: hunk, header, lines, lit, box }: { n: number; header: string; lines: Line[]; lit: [number, number] | null; box: React.ReactNode }) {
+// Where a file of a step's diff is read: the issue, the step's commit and the file's path.
+type FileAt = { slug: string; commit: string; path: string };
+const fileKey = ({ slug, commit, path }: FileAt) => `${slug}\0${commit}\0${path}`;
+
+// The runs of lines a file's hunks leave out, in the file's numbers at the step's commit: one above each hunk, then one
+// under the last, down to the file's end. A run can be empty, as above a hunk that starts on line 1.
+type Run = { from: number; to: number };
+function hiddenRuns(f: FileDiff, length: number): Run[] {
+  const runs: Run[] = [];
+  let end = 0;
+  for (const h of f.hunks) {
+    const nows = h.lines.flatMap(([, , now]) => (now === null ? [] : [now]));
+    runs.push({ from: end + 1, to: (nows[0] ?? end + 1) - 1 });
+    end = nows[nows.length - 1] ?? end;
+  }
+  runs.push({ from: end + 1, to: length });
+  return runs;
+}
+
+// A file as the step's commit left it, read the first time one of its hidden lines opens (changes.ts, fileAt), and what
+// is open of each of its runs: so many lines from the run's top, under the hunk above, and from its bottom, over the hunk
+// below. Both stay while the chat does, through a step folded and opened again, and go when you leave it, so each visit
+// starts on the changes alone.
+type Opened = { top: number; bottom: number };
+const read = observable.map<string, string[]>({}, { deep: false });
+const opened = observable.map<string, Opened[]>({}, { deep: false });
+const asking = new Map<string, Promise<string[] | null>>();
+reaction(() => [dock.session, dock.center], () => runInAction(() => { read.clear(); opened.clear(); }), { equals: compareStructural });
+
+function readFile(at: FileAt): Promise<string[] | null> {
+  const key = fileKey(at), had = read.get(key);
+  if (had) return Promise.resolve(had);
+  let got = asking.get(key);
+  if (!got) {
+    got = fetch(`/api/page/issue/${at.slug}/changes/file?commit=${encodeURIComponent(at.commit)}&path=${encodeURIComponent(at.path)}`, { cache: "no-store" })
+      .then(async (r) => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.detail ?? `desk answered ${r.status}`);
+        return (body as { lines: string[] }).lines;
+      })
+      .then((lines) => { runInAction(() => read.set(key, lines)); return lines; },
+        (e: Error) => { toast(`Could not read ${at.path}: ${e.message}`); return null; })
+      .finally(() => asking.delete(key));
+    asking.set(key, got);
+  }
+  return got;
+}
+
+async function openRun(at: FileAt, k: number, more: Partial<Opened>) {
+  if (!(await readFile(at))) return;
+  const key = fileKey(at);
+  runInAction(() => {
+    const all = [...(opened.get(key) ?? [])], was = all[k] ?? { top: 0, bottom: 0 };
+    all[k] = { top: was.top + (more.top ?? 0), bottom: was.bottom + (more.bottom ?? 0) };
+    opened.set(key, all);
+  });
+}
+
+// A run of hidden lines, opened as GitHub opens them (step 1.3 of the issue "Read code inside desk", 4 Nov: "how about
+// nav between code and expand the code"): a row with arrows in the number column, the function the hunk below is in,
+// and how many lines it hides. ↓ opens 20 under the hunk above, ↑ 20 over the hunk below, and ↕ the rest once 20 or
+// fewer are left; above the first hunk there is only ↑, under the last only ↓. Once none is hidden the row goes, and
+// the hunks round it read as one run of lines. An opened line reads as the unchanged lines round it.
+const Gap = observer(function Gap({ at, k, last, run, header }: { at: FileAt; k: number; last: boolean; run: Run; header: string }) {
+  const size = run.to - run.from + 1, lines = read.get(fileKey(at));
+  if (size <= 0) return null;
+  const o = (lines && opened.get(fileKey(at))?.[k]) || { top: 0, bottom: 0 };
+  const top = Math.min(o.top, size), bottom = Math.min(o.bottom, size - top), left = size - top - bottom;
+  const shown = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => (
+    <tr key={from + i} className="diff-open">
+      <td className="diff-no">{from + i}</td>
+      <td className="diff-code">{lines![from + i - 1] || " "}</td>
+    </tr>
+  ));
+  const arrow = (icon: React.ReactNode, title: string, more: Partial<Opened>) => (
+    <button type="button" className="diff-gap-open" title={title} onClick={() => void openRun(at, k, more)}>{icon}</button>
+  );
+  const lineWord = left === 1 ? "line" : "lines";
   return (
     <>
-      <tr className="diff-hunk"><td colSpan={2}>{header || " "}</td></tr>
+      {top > 0 && shown(run.from, run.from + top - 1)}
+      {left > 0 && (
+        <tr className="diff-gap">
+          <td className="diff-gap-arrows">
+            {left <= MORE_LINES ? arrow(GLYPH.openAll, `Show the ${left} hidden ${lineWord}`, k === 0 ? { bottom: left } : { top: left }) : (
+              <>
+                {k > 0 && arrow(GLYPH.openDown, `Show ${MORE_LINES} more lines down`, { top: MORE_LINES })}
+                {!last && arrow(GLYPH.openUp, `Show ${MORE_LINES} more lines up`, { bottom: MORE_LINES })}
+              </>
+            )}
+          </td>
+          <td className="diff-gap-line"><span className="diff-gap-count">{left} hidden {lineWord}</span>{header}</td>
+        </tr>
+      )}
+      {bottom > 0 && shown(run.to - bottom + 1, run.to)}
+    </>
+  );
+});
+
+// A hunk's lines, the picked ones lit, and the box under the last of them once the mouse lets go. Its header row is the
+// row of the lines hidden above it (Gap), or, where they cannot open, a dim row holding the function it is in.
+function Hunk({ n: hunk, header, lines, lit, box }: { n: number; header: string | null; lines: Line[]; lit: [number, number] | null; box: React.ReactNode }) {
+  return (
+    <>
+      {header !== null && <tr className="diff-hunk"><td colSpan={2}>{header || " "}</td></tr>}
       {lines.map(([kind, old, now, text], i) => (
         <Fragment key={i}>
           <tr className={`${kind === "+" ? "diff-add" : kind === "-" ? "diff-del" : ""}${lit && i >= lit[0] && i <= lit[1] ? " picked" : ""}`.trim() || undefined}

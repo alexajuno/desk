@@ -212,6 +212,11 @@ export const GLYPH = {
   // A chat message's Copy, and the tick it shows once copied, drawn as claude.ai's (1 Nov).
   copy: glyph(<><rect x="5.75" y="5.75" width="8" height="8" rx="1.75" /><path d="M10.25 5.75V4A1.75 1.75 0 0 0 8.5 2.25H4A1.75 1.75 0 0 0 2.25 4v4.5c0 .97.78 1.75 1.75 1.75h1.75" /></>),
   check: glyph(<path d="M3.5 8.25l3 3 6-6.5" />),
+  // A diff's row of hidden lines (sessions/Changes.tsx), desk's own: 20 lines down from the change above it, 20 up from
+  // the change below it, or all of them; the bar is where they open from.
+  openDown: glyph(<path d="M4 3h8M8 5.5v7M5.5 10 8 12.5 10.5 10" />),
+  openUp: glyph(<path d="M4 13h8M8 10.5v-7M5.5 6 8 3.5 10.5 6" />),
+  openAll: glyph(<path d="M4 8h8M8 5.5V1.75M6 3.75l2-2 2 2M8 10.5v3.75M6 12.25l2 2 2-2" />),
 };
 
 export const TICK = (

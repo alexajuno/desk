@@ -213,6 +213,17 @@ table.diff tr.diff-comment > td { padding: 8px 12px 10px 48px; }
 .diff-del .diff-no { border-left-color: var(--diff-del-edge); }
 table.diff .diff-hunk td { padding: 4px 12px 4px 48px; font: 400 11px var(--mono); color: var(--text-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
                 border-top: 0.5px solid var(--border-1); }
+/* A run of hidden lines (Changes.tsx, Gap), where a hunk's dim row was: its arrows fill the number column, one under
+   the other, and its line holds the function the hunk below is in, with how many lines it hides at its right. */
+table.diff tr.diff-gap > td { vertical-align: middle; border-top: 0.5px solid var(--border-1); border-bottom: 0.5px solid var(--border-1); }
+table.diff .diff-gap-arrows { padding: 1px 0; }
+.diff-gap-open { display: flex; align-items: center; justify-content: center; width: 100%; height: 22px; padding: 0; border: 0; border-radius: 0;
+                 background: transparent; color: var(--text-3); }
+.diff-gap-open:hover { background: var(--bg-hover); color: var(--text-1); }
+table.diff .diff-gap-line { padding: 0 12px 0 0; font: 400 11px var(--mono); color: var(--text-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.diff-gap-count { float: right; margin-left: 12px; font: 450 11px var(--font); }
+/* an opened line, until it can be picked as the hunks' lines are: its number takes no click */
+table.diff tr.diff-open .diff-no { cursor: default; }
 
 .you { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .you-bubble { max-width: 85%; box-sizing: border-box; padding: 7px 11px; border-radius: 14px; background: var(--bg-raised);
