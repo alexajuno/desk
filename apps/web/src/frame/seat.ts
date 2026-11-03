@@ -1,10 +1,8 @@
 // seat, the router between the user's Claude profiles, personal and work, two plans, and api, the $100 of API credits,
 // as desk's server reads it (seat.ts there): each profile's numbers, the live one, and whether seat switches on its own.
-// The window's bar shows the live one, and its name opens the profiles, to switch one or Auto switch ("A", the user, 2
-// Nov; StatusBar.tsx); a phone, which has no bar, shows the live one under the model menu's Usage (sessions/models.ts).
+// The model menu shows the live one under its Usage (sessions/models.ts). The bar along the window's bottom that also
+// showed it, and switched profiles, left on 3 Nov ("i don't think i need it"); `seat switch` does that now.
 import { action, makeObservable, observableRef } from "mobx";
-import { postJson, reason } from "../api/http";
-import { toast } from "../ui/toast";
 
 export interface Window {
   percent: number;
@@ -45,18 +43,6 @@ class Seats {
   async load() {
     const res = await fetch("/api/seat").catch(() => null);
     if (res) this.set(res.ok ? ((await res.json()) as Seat | null) : null);
-  }
-
-  // Makes a profile the live one, as `seat switch` does; the bar then shows what seat says.
-  use = (name: string) => this.ask("switch", { name });
-
-  // Turns seat's own switching on or off, as `seat auto on|off` does.
-  setAuto = (on: boolean) => this.ask("auto", { on });
-
-  private async ask(what: "switch" | "auto", body: object) {
-    const res = await postJson(`/api/seat/${what}`, body).catch(() => null);
-    if (!res?.ok) return void toast(res ? await reason(res) : "desk did not answer");
-    this.set((await res.json()) as Seat | null);
   }
 }
 

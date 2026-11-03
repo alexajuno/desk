@@ -191,7 +191,7 @@ export const Sidebar = observer(function Sidebar() {
       {d && d.pinned.length > 0 && <Fold name="Pinned" folded={folded} toggle={toggle}>{d.pinned.map((c) => chatRow(c, true))}</Fold>}
       {d && d.chats.length > 0 && <Fold name="Chats" folded={folded} toggle={toggle}>{d.chats.map((c) => chatRow(c, false))}</Fold>}
       {/* The foot stays at the sidebar's bottom while the chats scroll under it ("sticky to the bottom", the user, 28
-          Oct), holding the Help menu's ?. It shows only on a phone, which has no window bar to hold the ? (phone.css). */}
+          Oct), holding the Help menu's ?, back from the window's bottom bar, which left on 3 Nov. */}
       <div className="side-foot">
         <HelpButton />
       </div>
