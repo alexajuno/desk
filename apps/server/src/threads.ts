@@ -12,6 +12,7 @@
 import * as chats from "./chats.ts";
 import { CONNECT, PORT } from "./config.ts";
 import { HttpError } from "./httperror.ts";
+import type * as inbox from "./inbox.ts";
 import * as mail from "./mail.ts";
 import * as notices from "./notices.ts";
 import { fill, ON_THREAD } from "./prompts.ts";
@@ -134,4 +135,33 @@ export async function idOf(given: string, attaching: boolean): Promise<string> {
   if (kind !== "channel") return `slack:${channel}`;
   if (!ts) throw new Refused("A channel is followed a thread at a time: give the thread’s link, or slack:<channel>:<its first message’s ts>.");
   return `slack:${channel}:${ts}`;
+}
+
+// ---- Read in desk, read in Slack
+
+// The Slack threads Inbox rows showed you, read in Slack too as the rows turn read (inbox.ts, onRead; slack.ts,
+// markRead): a thread's own row shows its notices, all but the dropped ones, and a chat's row the threads the chat
+// follows, whose messages its wakes drew in the chat as cards, so only those a wake carried. A mail stays unread in
+// Gmail, whose login desk holds to read only. Each thread once at a time, in order, so that two reads in a row never
+// move one mark twice at once.
+let marking = Promise.resolve();
+
+export function seen(rows: inbox.Row[]) {
+  const wanted = new Set<string>();
+  for (const r of rows) {
+    if (r.id.startsWith("slack:")) wanted.add(r.id);
+    else for (const t of chats.agentChatOf(r.session)?.threads ?? []) if (t.startsWith("slack:")) wanted.add(t);
+  }
+  for (const thread of wanted) marking = marking.then(() => markRead(thread)).catch((e) => console.error(`threads: marking a Slack thread read, ${(e as Error).message}`));
+}
+
+async function markRead(thread: string) {
+  const shown = (await notices.ofThread(thread)).filter((n) => n.source === "slack" && (n.chat == null || n.wake != null));
+  if (!shown.length) return;
+  if (!CONNECT) {
+    // A test desk connects to nothing: it says what it would mark, by ids only, as a thread's words stay out of the log
+    console.log(`threads: would mark ${thread} read in Slack over ${shown.length} shown, the newest ${shown[shown.length - 1].id}`);
+    return;
+  }
+  await slack.markRead(thread, new Set(shown.map((n) => n.id)));
 }

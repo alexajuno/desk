@@ -8,9 +8,9 @@
 // A thread a chat follows skips the firewall: its notice goes to that chat, which judges it knowing the issue, as now,
 // later or noted (nothing for the user), once desk wakes it with the thread's new messages (wakes.ts).
 //
-// What a rule drops at the door (an edit, a join, a reaction, a non-work channel) is never written. Every mail is, the
-// ordinary ones too, since bin/mail-daily lists each mail of the day with its topic. A notice is kept KEEP_DAYS, enough
-// for bin/mail-daily after a few days off. The app holds the Inbox's rows, not these: it asks for a thread's notices
+// What a rule drops at the door (an edit, a join, a reaction, a non-work channel's but an @you) is never written. Every
+// mail is, the ordinary ones too, since bin/mail-daily lists each mail of the day with its topic. A notice is kept
+// KEEP_DAYS, enough for bin/mail-daily after a few days off. The app holds the Inbox's rows, not these: it asks for a thread's notices
 // when one is opened.
 import { sql } from "./db.ts";
 

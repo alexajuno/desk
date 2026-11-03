@@ -105,8 +105,10 @@ async function put(tx: db.Db, r: Row) {
 // it keeps its time, its read, its delete and its mark, and says what it says now, as when its issue moved. A row you
 // marked unread stays unread though you saw the session. A row no longer wanted leaves, as a deleted one a day old, and
 // the oldest read rows past KEEP; one the table never had that is a day old is no news, and stays out.
-export function take(wanted: Want[]): Promise<void> {
-  return db.write(async (tx) => {
+export async function take(wanted: Want[]): Promise<void> {
+  const turned: Row[] = [];
+  await db.write(async (tx) => {
+    turned.length = 0; // a write tried again starts over
     const now = Date.now() / 1000, next = new Map<string, Row>();
     for (const w of wanted) {
       const had = rows.get(w.id);
@@ -118,6 +120,7 @@ export function take(wanted: Want[]): Promise<void> {
       const row: Row = { ...shown, at: fresh ? at : had.at, read, gone: fresh ? null : had.gone, marked: fresh ? null : had.marked };
       if (row.read !== null && !row.waits && row.at < now - DAY && (!had || row.gone !== null)) continue;
       next.set(row.id, row);
+      if (filled && row.read !== null && (had ? had.read === null || fresh : at >= now - DAY)) turned.push(row); // you saw it come
     }
     const old = [...next.values()].filter((r) => r.read !== null && !r.waits).sort((a, b) => b.at - a.at).slice(KEEP);
     for (const r of old) next.delete(r.id);
@@ -132,7 +135,13 @@ export function take(wanted: Want[]): Promise<void> {
     for (const [id, r] of next) rows.set(id, r);
     filled = true;
   });
+  if (turned.length) readNow(turned);
 }
+
+// Rows that just turned read, whichever way: you opened one, marked it read or deleted it, or saw what it says come in.
+// What they showed from Slack is then read in Slack too (threads.ts, seen).
+let readNow: (rows: Row[]) => void = () => {};
+export const onRead = (fn: (rows: Row[]) => void) => { readNow = fn; };
 
 // You read the session's row: now, unless already read.
 export async function read(by: { session: string }) {
@@ -141,16 +150,20 @@ export async function read(by: { session: string }) {
   const done = await db.write((tx) => tx.query<Row>(`update inbox set read = $1, marked = null where id = $2 and read is null
     returning ${COLUMNS.join(", ")}`, [Date.now() / 1000, row.id]));
   for (const r of done.rows) rows.set(r.id, r);
+  if (done.rows.length) readNow(done.rows);
 }
 
 // The Inbox's ⋯ menu, U and Backspace, Linear's: the rows read, or unread again, or deleted. A deleted row is read
 // too, so the count drops with it; a row that waits on you stays until you answer it.
 export async function mark(act: "read" | "unread" | "delete", ids: string[]) {
   if (!ids.length) return 0;
+  const unread = new Set(ids.filter((id) => rows.get(id)?.read === null));
   const set = { read: "read = coalesce(read, $1), marked = null", unread: "read = null, marked = $1",
     delete: "gone = $1, read = coalesce(read, $1), marked = null" }[act];
   const done = await db.write((tx) => tx.query<Row>(`update inbox set ${set} where id = any($2)${act === "delete" ? " and not waits" : ""}
     returning ${COLUMNS.join(", ")}`, [Date.now() / 1000, ids]));
   for (const r of done.rows) rows.set(r.id, r);
+  const turned = done.rows.filter((r) => unread.has(r.id) && r.read !== null);
+  if (turned.length) readNow(turned);
   return done.rows.length;
 }

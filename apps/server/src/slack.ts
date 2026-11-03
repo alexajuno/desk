@@ -10,11 +10,11 @@
 //
 // Each message passes the door (take): an edit, a deletion, a join, a topic change, the user's own message and anything
 // in their sidebar's "non-work" section is dropped there and never written ("i think currently there are a few channels
-// in work category and DMs, that's all matter", 2 Nov). A DM or group DM from a person, an @mention of the user and a
-// reply in a thread they wrote in are written as now, by rule; the rest of a work channel is written unjudged, for the
-// firewall's Claude to judge. A DM from an app (Jira, Calendar, Slackbot) goes to Claude too, not straight to now. A
-// thread attached to a chat comes in from a non-work channel too, and goes to that chat rather than to a rule or the
-// firewall (notices.ts, add).
+// in work category and DMs, that's all matter", 2 Nov), save an @mention of the user, which Slack's tab would have
+// pinged wherever it came. A DM or group DM from a person, an @mention of the user and a reply in a thread they wrote in
+// are written as now, by rule; the rest of a work channel is written unjudged, for the firewall's Claude to judge. A DM
+// from an app (Jira, Calendar, Slackbot) goes to Claude too, not straight to now. A thread attached to a chat comes in
+// from a non-work channel too, and goes to that chat rather than to a rule or the firewall (notices.ts, add).
 //
 // What came while no socket was open, a desk that was down, a socket that closed or one Slack refused, desk reads back
 // (readBack): once a socket opens, and each minute while none does. A login that ended (SignedOut) the Inbox says once
@@ -286,12 +286,12 @@ export async function take(m: Message): Promise<notices.Notice | null> {
   }
   const at = await place(m.channel);
   const thread = at.kind === "channel" ? `slack:${m.channel}:${m.thread_ts ?? m.ts}` : `slack:${m.channel}`;
-  if (at.nonWork && !chats.attached().has(thread)) return null;
-  const app = fromApp(m), raw = rawOf(m);
+  const app = fromApp(m), raw = rawOf(m), mentioned = raw.includes(`<@${login.me}>`);
+  if (at.nonWork && !mentioned && !chats.attached().has(thread)) return null; // an @you comes in from anywhere, as Slack's tab would ping it
   const verdict =
     !app && at.kind === "dm" ? "a DM"
     : !app && at.kind === "group" ? "a group DM"
-    : raw.includes(`<@${login.me}>`) ? "@you"
+    : mentioned ? "@you"
     : reply && (await wroteIn(m.channel, m.thread_ts!, m.parent_user_id)) ? "a reply in your thread"
     : null; // a work channel, or an app's DM: the firewall's Claude judges it
   const n: notices.Notice = {
@@ -353,6 +353,46 @@ export async function post(id: string, text: string): Promise<string> {
   return `${WORKSPACE}/archives/${channel}/p${String(r.ts).replace(".", "")}` + (ts ? `?thread_ts=${ts}&cid=${channel}` : "");
 }
 
+// ---- Read in desk, read in Slack
+
+// What you read in desk is read in Slack too, so that Slack's own badge, on your phone or a tab, says only what you have
+// not seen ("Read in desk is read in Slack", the desk issue "A chat from a Slack message, mail or event starts with its
+// context", step 1.7). Slack keeps one read mark per conversation, a DM's, a group DM's or a channel's, and one per
+// thread you follow, and its own client moves them with conversations.mark and subscriptions.thread.mark, which take the
+// user's session as they are (tried on 3 Nov: a thread's mark moved onto the one reply desk had shown). A mark only ever
+// moves on, over the messages desk showed you (shown, by their notices' ids) and those that need no reading, your own,
+// an edit or a join, and stops before the first other one, such as one the firewall dropped: Slack still says what you
+// have not read. A channel's own mark moves only over the thread's first message, as a thread row shows no other.
+export async function markRead(thread: string, shown: Set<string>) {
+  const [, channel, ts] = thread.split(":");
+  if (!login) await signIn();
+  const seen = (m: Message) => m.user === login!.me || Boolean(m.hidden) || !KEPT.has(m.subtype) || shown.has(`slack:${channel}:${m.ts}`);
+  // How far the run of messages after a mark is seen, oldest first: the last one seen, or null when the first is not.
+  const reach = (after: string, list: Message[]) => {
+    let to: string | null = null;
+    for (const m of list.filter((x) => Number(x.ts) > Number(after)).sort((a, b) => Number(a.ts) - Number(b.ts))) {
+      if (!seen(m)) break;
+      to = m.ts;
+    }
+    return to;
+  };
+  const newest = [...shown].map((id) => id.split(":")[2]).filter((t) => t && t !== ts).sort((a, b) => Number(b) - Number(a))[0];
+  const upTo = ts ?? newest; // a DM's newest shown, or a channel thread's first message
+  const mark = String((await call("conversations.info", { channel })).channel?.last_read ?? "0");
+  if (upTo && Number(mark) < Number(upTo)) {
+    const r = await call("conversations.history", { channel, oldest: mark, latest: upTo, inclusive: "true", limit: "200" });
+    const to = r.has_more ? null : reach(mark, r.messages as Message[]); // more than 200 unread: not all seen
+    if (to) await call("conversations.mark", { channel, ts: to });
+  }
+  if (!ts || !newest) return;
+  const r = await call("conversations.replies", { channel, ts, oldest: "0", limit: "1" });
+  const root = (r.messages as (Message & { subscribed?: boolean; last_read?: string })[])[0];
+  if (!root?.subscribed || !(Number(root.last_read ?? 0) < Number(newest))) return; // Slack counts no unread in a thread you do not follow
+  const replies = await call("conversations.replies", { channel, ts, oldest: root.last_read ?? "0", limit: "200" });
+  const to = reach(root.last_read ?? "0", (replies.messages as Message[]).filter((m) => m.ts !== ts && Number(m.ts) <= Number(newest)));
+  if (to) await call("subscriptions.thread.mark", { channel, thread_ts: ts, ts: to, read: "1" });
+}
+
 // ---- What came while desk was not listening
 
 // A desk that was down, a socket that closed, or one Slack refused: desk reads back what came meanwhile, from how far it
@@ -389,8 +429,8 @@ function readBack(): Promise<number> {
       const take_ = (m: Message, channel: string) => take({ ...m, type: "message", channel });
       let written = 0;
       const counts = await call("client.counts", {});
-      for (const c of [...(counts.channels ?? []), ...(counts.mpims ?? []), ...(counts.ims ?? [])] as { id: string; latest?: string }[]) {
-        if (!(Number(c.latest) > Number(from)) || places.get(c.id)?.nonWork) continue;
+      for (const c of [...(counts.channels ?? []), ...(counts.mpims ?? []), ...(counts.ims ?? [])] as { id: string; latest?: string; mention_count?: number }[]) {
+        if (!(Number(c.latest) > Number(from)) || (places.get(c.id)?.nonWork && !c.mention_count)) continue; // a non-work one only for an @you
         const got: Message[] = [];
         let cursor = "";
         do {
@@ -403,7 +443,7 @@ function readBack(): Promise<number> {
       const followed = (await call("subscriptions.thread.getView", { limit: "50" })).threads as { root_msg?: Message & { latest_reply?: string } }[];
       const read = new Set<string>();
       for (const { root_msg: root } of followed ?? []) {
-        if (!root?.channel || !(Number(root.latest_reply) > Number(from)) || places.get(root.channel)?.nonWork) continue;
+        if (!root?.channel || !(Number(root.latest_reply) > Number(from))) continue; // a non-work one's: the door keeps an @you
         const r = await call("conversations.replies", { channel: root.channel, ts: root.thread_ts ?? root.ts, oldest: from, limit: "200" });
         read.add(`slack:${root.channel}:${root.thread_ts ?? root.ts}`);
         for (const m of r.messages as Message[]) if (m.ts !== root.ts && (await take_(m, root.channel))) written++;

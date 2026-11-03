@@ -24,6 +24,7 @@ import * as settings from "./settings.ts";
 import * as slack from "./slack.ts";
 import * as sync from "./sync.ts";
 import * as teams from "./teams.ts";
+import * as threads from "./threads.ts";
 import * as turns from "./turns.ts";
 import * as wakes from "./wakes.ts";
 import * as web from "./web.ts";
@@ -62,6 +63,7 @@ keepCurrent();
 setInterval(keepCurrent, 10_000);
 setInterval(() => void db.prune().catch((error) => console.error("pruning the log", error)), 3600_000);
 notices.onJudged(sync.frameChanged); // a notice let through makes or moves its thread's Inbox row (pages.ts)
+inbox.onRead(threads.seen); // what you read in desk is read in Slack
 await replies.recover(); // a reply a stop caught on its way says so on its card
 await logins.load(); // a Slack or Gmail login that ended keeps its one row (pages.ts, loginRow)
 logins.onChange(sync.frameChanged);
