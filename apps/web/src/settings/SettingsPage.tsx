@@ -1,7 +1,7 @@
 // Settings, as Linear's (linear.app/<workspace>/settings, measured 17 Oct): its own sidebar in place of the app's, with
 // Back to app and a list of pages, and each page a 640px column of cards, one row per setting. desk keeps what it
-// has a setting for: Preferences (the theme, how an issue's steps card starts, the model and effort a new chat
-// starts with, and how many test desks sessions may run at once) and Workflows & automations (the two auto-close toggles). The server's settings are settings.ts. Linear keeps the auto-close toggles under each team; desk's
+// has a setting for: Preferences (the theme, how an issue's steps card starts, whether the stash comes back on the next
+// message, the model and effort a new chat starts with, and how many test desks sessions may run at once) and Workflows & automations (the two auto-close toggles). The server's settings are settings.ts. Linear keeps the auto-close toggles under each team; desk's
 // teams have no settings of their own, so they are desk's.
 import { observer } from "mobx-react-lite";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -24,6 +24,7 @@ interface Settings {
   chat_model: string;
   chat_effort: string;
   steps_card: string;
+  stash_back_on_send: boolean;
   test_slots: number;
 }
 
@@ -39,6 +40,8 @@ export const SETTINGS = [
   { page: "preferences", section: "Interface and theme", id: "theme", title: "Interface theme", about: "Follow the system, or keep desk light or dark" },
   { page: "preferences", section: "Interface and theme", id: "steps_card", title: "Steps above the composer",
     about: "Start an issue’s steps in its chat as one line, or open while a step is left" },
+  { page: "preferences", section: "Composer", id: "stash_back_on_send", title: "Bring the stash back on send",
+    about: "What Ctrl S put away comes back into the box as soon as you send the next message, as in Claude Code. Off, it waits for Ctrl S" },
   { page: "preferences", section: "Sessions", id: "chat_model", title: "Model", about: "The model a new chat or issue session starts with" },
   { page: "preferences", section: "Sessions", id: "chat_effort", title: "Effort", about: "How hard a new chat or issue session thinks before it answers" },
   { page: "preferences", section: "Sessions", id: "test_slots", title: "Test desks at once",
@@ -241,6 +244,19 @@ function Preferences() {
   );
 }
 
+// The composer's stash (sessions/Dock.tsx, Composer): whether it comes back as the next message is entered.
+function ComposerPrefs() {
+  const [shown, change] = useSettings();
+  if (!shown) return null;
+  return (
+    <Section title="Composer">
+      <Row id="stash_back_on_send">
+        <Switch id="stash_back_on_send" on={shown.stash_back_on_send} change={(on) => change({ stash_back_on_send: on })} />
+      </Row>
+    </Section>
+  );
+}
+
 function Workflow() {
   const [shown, set] = useSettings();
   if (!shown) return null;
@@ -268,7 +284,7 @@ export function SettingsPage() {
         <div className="settings">
           <h1>{TITLES[section]}</h1>
           {section === "workflow" && <p className="set-lead">Manage issue automations and other workflows.</p>}
-          {section === "preferences" ? <><Preferences /><Sessions /></> : <Workflow />}
+          {section === "preferences" ? <><Preferences /><ComposerPrefs /><Sessions /></> : <Workflow />}
         </div>
       </div>
     </>

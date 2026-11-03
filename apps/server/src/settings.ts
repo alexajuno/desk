@@ -6,10 +6,12 @@
 //     chat_model             the model a new desk chat or issue session starts with, a Claude Code alias or model id such as opus
 //     chat_effort            the effort it starts with: low, medium, high, xhigh or max
 //     steps_card             how an issue's steps above its chat's composer start: collapsed, one line, or expanded
+//     stash_back_on_send     what Ctrl S put away comes back into the composer as the next message is entered, as
+//                            Claude Code's stash does; off, it waits in its chip for Ctrl S
 //     test_slots             how many test desks run at once (pool.ts), from 1 to 4
 //
 // Linear keeps the first two in Settings > Team > Workflow (linear.app/docs/parent-and-sub-issues#status-automation);
-// desk has no teams, so they are Settings > Workflow. The sessions' three and the steps card are Settings > Preferences.
+// desk has no teams, so they are Settings > Workflow. The sessions' three, the steps card and the stash are Settings > Preferences.
 import * as db from "./db.ts";
 import { sql } from "./db.ts";
 
@@ -23,16 +25,18 @@ export interface Settings {
   chat_model: string;
   chat_effort: Effort;
   steps_card: (typeof STEPS_CARD)[number];
+  stash_back_on_send: boolean;
   test_slots: number;
 }
 
 // Sub-issue auto-close is on from the start, as the user asked for it (17 Oct); Parent auto-close is off, Linear's default.
 // A chat starts on Opus at extra high effort, as every chat ran before the setting. The steps card starts collapsed, as
 // the user asked with the setting ("set it to collapse by default", 1 Nov). One test desk runs at a time, as the user
-// asked ("my machine's resource likely won't be able to handle that... likely just start at one", 2 Nov).
+// asked ("my machine's resource likely won't be able to handle that... likely just start at one", 2 Nov). The stash comes
+// back on the next message, as Claude Code's does ("mirror claude's stash msg", 4 Nov).
 export const DEFAULTS: Settings = {
   sub_issue_auto_close: true, parent_auto_close: false, chat_model: "opus", chat_effort: "xhigh", steps_card: "collapsed",
-  test_slots: 1,
+  stash_back_on_send: true, test_slots: 1,
 };
 export const MAX_SLOTS = 4;
 

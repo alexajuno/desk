@@ -1215,6 +1215,9 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
     return t ? { text: t, attached: [], caret: t.length } : null;
   });
   useEffect(() => keep("composerStashes", s.id, stash?.text ?? ""), [s.id, stash]);
+  const stashBack = usePage<{ stash_back_on_send: boolean }>("/api/settings").data?.stash_back_on_send ?? true;
+  const attachedNow = useRef(attached); // the box's files as they stand, for a send that fails after the stash came back
+  attachedNow.current = attached;
   const picker = useRef<HTMLInputElement>(null);
   const [picks, setPicks] = useState<Pick[]>([]);
   const [at, setAt] = useState(0);
@@ -1299,14 +1302,8 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   async function send() {
     const typed = text.trim();
     if (!typed && !attached.length) return;
-    setText("");
-    const sending = attached;
-    setAttached([]);
-    setPicks([]);
-    const putBack = () => { // what failed to go
-      setText(typed);
-      setAttached(sending);
-    };
+    const sending = attached, giveBack = nextBox(typed);
+    const putBack = () => giveBack(typed, sending); // what failed to go
     let t = typed;
     try {
       const runs = await runsIn(typed);
@@ -1322,38 +1319,49 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
       return putBack();
     }
     if (!(await s.send(t, sending))) putBack();
-    else unstash();
   }
 
   // Ctrl+Enter while Claude works, Claude Code's send now: what is typed and what is queued go in at once.
   async function sendNow() {
     const t = text.trim(), sending = attached;
-    setText("");
-    setAttached([]);
-    setPicks([]);
+    if (!t && !sending.length && !queued) return; // nothing goes, so the stash stays put
+    const putBack = nextBox(t);
     const left = await s.sendNow(t, sending);
-    if (left) {
-      setText(left.text); // put back what failed to go
-      setAttached(left.attached);
-    } else unstash();
+    if (left) putBack(left.text, left.attached);
   }
 
   // Ctrl S, Claude Code's stash: what is typed goes away and the box empties, to write something else first. Ctrl S on
-  // an empty box brings it back, and so does the next message sent; Ctrl S over both swaps them, so neither is lost.
+  // an empty box brings it back, and so does the next message entered, unless Settings says to wait for Ctrl S; Ctrl S
+  // over both swaps them, so neither is lost.
   function swapStash() {
     const now = text.trim() || attached.length ? { text, attached, caret: box.current!.selectionStart } : null;
-    if (!now && !stash) return toast("Ctrl S puts away what is typed, until the next message is sent.");
+    if (!now && !stash) return toast(stashBack ? "Ctrl S puts away what is typed, until the next message is sent." : "Ctrl S puts away what is typed, until Ctrl S again.");
     setStash(now);
     restore(stash ?? { text: "", attached: [], caret: 0 });
   }
 
-  // A message gone: the stash comes back into the box, unless something was typed meanwhile. What send saw as typed
-  // is gone already, so this reads the box itself.
-  function unstash() {
-    if (!stash || box.current?.value.trim()) return;
-    setStash(null);
-    restore(stash);
-    toast("Stash restored");
+  // A message entered leaves the box: the stash comes back into it at once, as Claude Code's does as the message is
+  // submitted, not once desk has it, unless Settings says to wait for Ctrl S, or the message is a slash command, which
+  // Claude Code's skips. Otherwise the box empties. Gives back what puts a message that failed to go back in the box:
+  // a stash that came back goes away again, as the box holds it then.
+  function nextBox(typed: string) {
+    const back = stashBack && !typed.startsWith("/") ? stash : null;
+    if (back) {
+      setStash(null);
+      restore(back);
+      toast("Stash restored");
+    } else {
+      setText("");
+      setAttached([]);
+      setPicks([]);
+    }
+    return (failed: string, files: Attachment[]) => {
+      const el = box.current;
+      if (back && el && (el.value.trim() || attachedNow.current.length))
+        setStash({ text: el.value, attached: attachedNow.current, caret: el.selectionStart });
+      setText(failed);
+      setAttached(files);
+    };
   }
 
   function restore(back: Stash) {
