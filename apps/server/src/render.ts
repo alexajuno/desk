@@ -5,7 +5,7 @@ import MarkdownIt, { type Token } from "markdown-it";
 import { spawnSync } from "node:child_process";
 
 // A ```d2 block, and its caption: what follows "d2" on its fence line, such as ```d2 Today.
-const D2_BLOCK = /^```d2(?:[ \t]+([^\n]*?))?[ \t]*\n([\s\S]*?)^```/gm;
+export const D2_BLOCK = /^```d2(?:[ \t]+([^\n]*?))?[ \t]*\n([\s\S]*?)^```/gm;
 // D2's theme for each of desk's: 200 is "Dark Mauve", 0 its default light one. Both renders go on the page and desk.css
 // shows the one for the theme in use.
 const D2_THEMES: [string, number][] = [["dark", 200], ["light", 0]];

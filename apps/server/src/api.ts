@@ -60,6 +60,7 @@ import * as updates from "./updates.ts";
 import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
 import * as roster from "./roster.ts";
+import { tableOfBoxes } from "./boxes.ts";
 import { DECISIONS, partsText, picturesText, takeParts, takePictures, type StepPart, type StepPicture } from "./render.ts";
 import { find } from "./search.ts";
 import * as settings from "./settings.ts";
@@ -523,6 +524,8 @@ export function routes(app: FastifyInstance) {
       const i = await loadIssue(req.params.slug), name = req.params.name;
       const sent = typeof req.body === "string" ? req.body : str(((req.body ?? {}) as Record<string, unknown>).text);
       if (!/^[\p{L}\p{N}][\p{L}\p{N} ’'-]*$/u.test(name)) throw new HttpError(422, `${name} is no section name: use words, such as Plan.`);
+      const boxes = tableOfBoxes(sent);
+      if (boxes) throw new HttpError(422, boxes);
       try {
         store.setSection(i, name, store.sectionText(name, sent));
       } catch (error) {
@@ -542,6 +545,8 @@ export function routes(app: FastifyInstance) {
       const sent = typeof req.body === "string" ? req.body : str(((req.body ?? {}) as Record<string, unknown>).text);
       const written = takeParts(sent);
       if (written?.before) throw new HttpError(422, `A step written as parts starts with its first ### heading, its basics: put the lines above it in a part, or under ### ${DECISIONS} after the last part.`);
+      const boxes = tableOfBoxes(sent);
+      if (boxes) throw new HttpError(422, boxes);
       const { pictures, rest: said } = written ? { pictures: [], rest: written.said } : takePictures(sent);
       if (/^##\s/m.test(said)) throw new HttpError(422, "A step's decisions are lines, not sections: start a heading at ### or leave it out.");
       delete step.pictures;
