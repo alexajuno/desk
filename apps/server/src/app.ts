@@ -463,6 +463,12 @@ export async function create(): Promise<FastifyInstance> {
     const verdict = ["now", "later", "dropped"].includes(text("verdict")) ? (text("verdict") as notices.Verdict) : null;
     const n = { id, source, thread: text("thread") || id, place: text("place") || (source === "mail" ? "mail" : "DM"), who: text("who") || "someone",
       text: text("text"), link: text("link"), at: typeof b.at === "number" ? b.at : Date.now() / 1000, verdict, why: text("why") } as const;
+    // Its made-up reactions and files, for the thread's pane, which reads them from Slack on 8790 (threads.ts, pane)
+    const list = (k: string) => (Array.isArray(b[k]) ? (b[k] as Record<string, unknown>[]).filter((x) => x && typeof x === "object") : []);
+    threads.makeUp(id, {
+      reactions: list("reactions").map((r) => ({ name: String(r.name ?? "+1"), count: Number(r.count ?? 1), mine: r.mine === true })),
+      files: list("files").map((f) => ({ name: String(f.name ?? "a file"), kind: String(f.kind ?? "File"), size: typeof f.size === "number" ? f.size : null, link: String(f.link ?? "") })),
+    });
     return { added: await notices.add(n) };
   });
   // The Inbox's ⋯ menu, U and Backspace (Linear's): rows read, or unread again, or deleted, by their ids; with none,

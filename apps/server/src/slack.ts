@@ -58,7 +58,18 @@ export interface Message {
   thread_ts?: string;
   parent_user_id?: string;
   attachments?: { fallback?: string; pretext?: string; title?: string; text?: string }[];
-  files?: { name?: string; title?: string }[];
+  files?: SlackFile[];
+  reactions?: { name: string; count?: number; users?: string[] }[]; // name as Slack's :name:, a skin tone after ::
+}
+
+interface SlackFile {
+  name?: string;
+  title?: string;
+  pretty_type?: string; // PNG, PDF, Plain Text
+  filetype?: string;
+  size?: number; // bytes
+  permalink?: string;
+  mode?: string; // hosted, external, snippet; tombstone once deleted
 }
 
 interface Place {
@@ -263,6 +274,10 @@ const fromApp = (m: Message) => Boolean(m.bot_id) || m.subtype === "bot_message"
 const rawOf = (m: Message) =>
   m.text || m.attachments?.map((a) => [a.pretext, a.title, a.text || a.fallback].filter(Boolean).join("\n")).join("\n") || "";
 
+// Its address in Slack, a reply's in its thread.
+const linkOf = (m: Message) => `${WORKSPACE}/archives/${m.channel}/p${m.ts.replace(".", "")}`
+  + (m.thread_ts && m.thread_ts !== m.ts ? `?thread_ts=${m.thread_ts}&cid=${m.channel}` : "");
+
 // Its words as the user reads them, with the files it shares named.
 async function textOf(m: Message) {
   const files = m.files?.map((f) => `[file: ${f.title || f.name}]`).join(" ") ?? "";
@@ -301,7 +316,7 @@ export async function take(m: Message): Promise<notices.Notice | null> {
     place: at.name,
     who: app ? await appOf(m) : await nameOf(m.user ?? ""),
     text: await textOf(m),
-    link: `${WORKSPACE}/archives/${m.channel}/p${m.ts.replace(".", "")}` + (reply ? `?thread_ts=${m.thread_ts}&cid=${m.channel}` : ""),
+    link: linkOf(m),
     at: Number(m.ts),
     verdict: verdict ? "now" : null,
     why: verdict ?? "",
@@ -311,20 +326,80 @@ export async function take(m: Message): Promise<notices.Notice | null> {
 
 // ---- A thread, whole
 
-// A thread as Slack holds it now, for a chat on its Inbox row (threads.ts): every message the door would keep, the
-// user's own too, as "you", oldest first. A channel's thread is its replies, a DM's or group DM's its last DM_LAST.
+// A thread as Slack holds it now: every message the door would keep, the user's own too, oldest first. A channel's
+// thread is its replies, a DM's or group DM's its last DM_LAST, which leave out the replies in a DM's own threads.
 const DM_LAST = 30;
 
-export async function thread(id: string): Promise<{ who: string; at: number; text: string }[]> {
+async function read(id: string): Promise<Message[]> {
   const [, channel, ts] = id.split(":");
   if (!login) await signIn();
   const r = ts ? await call("conversations.replies", { channel, ts, limit: "200" }) : await call("conversations.history", { channel, limit: String(DM_LAST) });
-  const kept = (r.messages as Message[]).filter((m) => !m.hidden && KEPT.has(m.subtype)).sort((a, b) => Number(a.ts) - Number(b.ts));
+  return (r.messages as Message[]).filter((m) => !m.hidden && KEPT.has(m.subtype)).map((m) => ({ ...m, channel }))
+    .sort((a, b) => Number(a.ts) - Number(b.ts));
+}
+
+const whoOf = async (m: Message) => (m.user === login!.me ? "you" : fromApp(m) ? await appOf(m) : await nameOf(m.user ?? ""));
+
+// The thread for a chat on its Inbox row and the gate (threads.ts, whole): who wrote each message, the user as "you",
+// and its words with its files named.
+export async function thread(id: string): Promise<{ who: string; at: number; text: string }[]> {
+  return Promise.all((await read(id)).map(async (m) => ({ who: await whoOf(m), at: Number(m.ts), text: await textOf(m) })));
+}
+
+// The thread as its pane in the Inbox shows it, so that Slack's tab need not stay open ("inside inbox, with slack icon,
+// with reply box", the user, 3 Nov; the desk issue "A chat from a Slack message, mail or event starts with its context",
+// step 1.8): each message with its reactions, how many and whether one is the user's, and its files as cards, by name,
+// kind and size, with their address in Slack; desk draws no image of them.
+export interface Shown {
+  id: string; // slack:<channel>:<ts>, as its notice's
+  who: string;
+  at: number;
+  text: string; // its words, its files left to the cards
+  link: string;
+  mine: boolean;
+  reactions: Reaction[];
+  files: { name: string; kind: string; size: number | null; link: string }[];
+}
+export interface Reaction {
+  name: string; // Slack's, such as +1 or eyes, with ::skin-tone-2 after it for a tone
+  count: number;
+  mine: boolean;
+  image?: string; // the workspace's own emoji, its picture's address
+}
+
+export async function messages(id: string): Promise<Shown[]> {
+  const kept = await read(id), custom = kept.some((m) => m.reactions?.length) ? await customEmoji() : new Map<string, string>();
   return Promise.all(kept.map(async (m) => ({
-    who: m.user === login!.me ? "you" : fromApp(m) ? await appOf(m) : await nameOf(m.user ?? ""),
+    id: `slack:${m.channel}:${m.ts}`,
+    who: await whoOf(m),
     at: Number(m.ts),
-    text: await textOf(m),
+    text: (await plain(rawOf(m))).slice(0, LONG),
+    link: linkOf(m),
+    mine: m.user === login!.me,
+    reactions: (m.reactions ?? []).map((r) => {
+      const image = custom.get(r.name.split("::")[0]);
+      return { name: r.name, count: r.count ?? r.users?.length ?? 1, mine: Boolean(r.users?.includes(login!.me)), ...(image ? { image } : {}) };
+    }),
+    files: (m.files ?? []).filter((f) => f.mode !== "tombstone").map((f) => ({
+      name: f.title || f.name || "a file", kind: f.pretty_type || f.filetype?.toUpperCase() || "File",
+      size: typeof f.size === "number" ? f.size : null, link: f.permalink || linkOf(m),
+    })),
   })));
+}
+const LONG = 20_000; // characters of one message's words, past which a message is no message
+
+// The workspace's own emoji, by name, each its picture's address, an alias's too; read again after REFRESH.
+let emoji: { at: number; byName: Map<string, string> } | null = null;
+async function customEmoji(): Promise<Map<string, string>> {
+  if (emoji && Date.now() - emoji.at < REFRESH) return emoji.byName;
+  const listed = ((await call("emoji.list").catch(() => ({ emoji: {} }))).emoji ?? {}) as Record<string, string>;
+  const byName = new Map<string, string>();
+  for (const [name, url] of Object.entries(listed)) {
+    const target = url.startsWith("alias:") ? listed[url.slice("alias:".length)] : url;
+    if (target && !target.startsWith("alias:")) byName.set(name, target);
+  }
+  emoji = { at: Date.now(), byName };
+  return byName;
 }
 
 // ---- A reply, as the user
@@ -363,25 +438,30 @@ export async function post(id: string, text: string): Promise<string> {
 // moves on, over the messages desk showed you (shown, by their notices' ids) and those that need no reading, your own,
 // an edit or a join, and stops before the first other one, such as one the firewall dropped: Slack still says what you
 // have not read. A channel's own mark moves only over the thread's first message, as a thread row shows no other.
-export async function markRead(thread: string, shown: Set<string>) {
+//
+// A thread's own row (whole) opens on the thread as Slack holds it (messages, above), so there every message up to the
+// newest shown is seen, in the thread or the DM, though not the rest of the channel round a thread.
+export async function markRead(thread: string, shown: Set<string>, whole = false) {
   const [, channel, ts] = thread.split(":");
   if (!login) await signIn();
-  const seen = (m: Message) => m.user === login!.me || Boolean(m.hidden) || !KEPT.has(m.subtype) || shown.has(`slack:${channel}:${m.ts}`);
+  const newest = [...shown].map((id) => id.split(":")[2]).filter((t) => t && t !== ts).sort((a, b) => Number(b) - Number(a))[0];
+  const inPane = (m: Message) => whole && newest != null && Number(m.ts) <= Number(newest);
+  const seen = (m: Message, pane: boolean) => m.user === login!.me || Boolean(m.hidden) || !KEPT.has(m.subtype)
+    || shown.has(`slack:${channel}:${m.ts}`) || (pane && inPane(m));
   // How far the run of messages after a mark is seen, oldest first: the last one seen, or null when the first is not.
-  const reach = (after: string, list: Message[]) => {
+  const reach = (after: string, list: Message[], pane: boolean) => {
     let to: string | null = null;
     for (const m of list.filter((x) => Number(x.ts) > Number(after)).sort((a, b) => Number(a.ts) - Number(b.ts))) {
-      if (!seen(m)) break;
+      if (!seen(m, pane)) break;
       to = m.ts;
     }
     return to;
   };
-  const newest = [...shown].map((id) => id.split(":")[2]).filter((t) => t && t !== ts).sort((a, b) => Number(b) - Number(a))[0];
   const upTo = ts ?? newest; // a DM's newest shown, or a channel thread's first message
   const mark = String((await call("conversations.info", { channel })).channel?.last_read ?? "0");
   if (upTo && Number(mark) < Number(upTo)) {
     const r = await call("conversations.history", { channel, oldest: mark, latest: upTo, inclusive: "true", limit: "200" });
-    const to = r.has_more ? null : reach(mark, r.messages as Message[]); // more than 200 unread: not all seen
+    const to = r.has_more ? null : reach(mark, r.messages as Message[], !ts); // more than 200 unread: not all seen
     if (to) await call("conversations.mark", { channel, ts: to });
   }
   if (!ts || !newest) return;
@@ -389,7 +469,7 @@ export async function markRead(thread: string, shown: Set<string>) {
   const root = (r.messages as (Message & { subscribed?: boolean; last_read?: string })[])[0];
   if (!root?.subscribed || !(Number(root.last_read ?? 0) < Number(newest))) return; // Slack counts no unread in a thread you do not follow
   const replies = await call("conversations.replies", { channel, ts, oldest: root.last_read ?? "0", limit: "200" });
-  const to = reach(root.last_read ?? "0", (replies.messages as Message[]).filter((m) => m.ts !== ts && Number(m.ts) <= Number(newest)));
+  const to = reach(root.last_read ?? "0", (replies.messages as Message[]).filter((m) => m.ts !== ts && Number(m.ts) <= Number(newest)), true);
   if (to) await call("subscriptions.thread.mark", { channel, thread_ts: ts, ts: to, read: "1" });
 }
 

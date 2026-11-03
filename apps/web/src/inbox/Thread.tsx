@@ -1,8 +1,9 @@
 // The thread a Slack thread's, DM's or mail thread's Inbox row opens on the right (the server's
 // notices.ts and pages.ts, threadRow): what came in from Slack or Gmail that the firewall let through, now or later
 // (the desk issue "desk as my notification center", 2 Nov; its row is InboxPage.tsx's ThreadRow). It lists the thread's
-// messages as desk got them, oldest first, under the firewall's line on why it reached you, with Open in Slack or Gmail
-// for the rest of it: your own replies are no notices, so they are not here.
+// messages, oldest first, under the firewall's line on why it reached you, with Open in Slack or Gmail. A Slack thread
+// is read whole from Slack, your own messages too, with their reactions and files (the server's threads.ts, pane); a
+// mail thread is what desk got of it.
 //
 // A composer under it starts a chat with Claude on the thread, which only you see (the server's threads.ts: "pops up
 // and carry it on with me", the user, 2 Nov), picked from two mockups on 2 Nov over one with Draft a reply, File an
@@ -25,7 +26,7 @@ import { SessionView } from "../sessions/Dock";
 import { issues, type InboxRow, type Reply } from "../store/issues";
 import { toast } from "../ui/toast";
 
-interface Notice {
+interface Message {
   id: string;
   source: "slack" | "mail";
   place: string;
@@ -35,7 +36,10 @@ interface Notice {
   at: number;
   verdict: "now" | "later" | null;
   why: string;
-  mine: boolean; // a reply you sent from desk
+  mine: boolean; // yours
+  desk: boolean; // sent from desk
+  reactions: { name: string; count: number; mine: boolean; image?: string }[];
+  files: { name: string; kind: string; size: number | null; link: string }[];
 }
 
 const HASH = <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6.5 2.5l-1 11M10.5 2.5l-1 11M3 6h10.5M2.5 10H13" /></svg>;
@@ -60,7 +64,7 @@ function when(at: number) {
 }
 
 // What the thread is, beside its name.
-function kindOf(n: Notice) {
+function kindOf(n: Message) {
   if (n.source === "mail") return n.place === "mail" ? "Mail" : `Mail${n.place.slice(4)}`;
   return n.place === "DM" ? "DM · Slack" : n.place.startsWith("group DM") ? "Group DM · Slack" : "Slack";
 }
@@ -227,8 +231,8 @@ function ThreadComposer({ row }: { row: InboxRow }) {
 // The thread itself, asked of desk each time its row moves, or a reply you sent goes into it (the app holds no notices).
 const ThreadBody = observer(function ThreadBody({ row }: { row: InboxRow }) {
   const sent = [...issues.replies.values()].filter((r) => r.thread === row.slug && (r.state === "sent" || r.state === "kept")).length;
-  const { data } = usePage<{ notices: Notice[] }>(`/api/page/thread?id=${encodeURIComponent(row.slug)}`, `${row.at}:${sent}`);
-  const all = data?.notices ?? [];
+  const { data } = usePage<{ messages: Message[] }>(`/api/page/thread?id=${encodeURIComponent(row.slug)}`, `${row.at}:${sent}`);
+  const all = data?.messages ?? [];
   const last = all[all.length - 1];
   // Why it reached you: its newest ask that needs you, though a later reply came after it, else its newest message's
   const judged = [...all].reverse().find((n) => n.verdict === "now") ?? [...all].reverse().find((n) => n.verdict === "later");
@@ -255,7 +259,7 @@ const ThreadBody = observer(function ThreadBody({ row }: { row: InboxRow }) {
             <div className="thread-msg" key={n.id}>
               <span className="thread-avatar">{initial(n.who)}</span>
               <div className="thread-body">
-                <div className="thread-meta"><span className="thread-who">{n.who}</span><span className="thread-at">{when(n.at)}{n.mine && (n.link ? " · from desk" : " · kept, a test desk sends nothing")}</span></div>
+                <div className="thread-meta"><span className="thread-who">{n.who}</span><span className="thread-at">{when(n.at)}{n.desk && (n.link ? " · from desk" : " · kept, a test desk sends nothing")}</span></div>
                 {n.source === "mail"
                   ? <div className="thread-text"><strong>{first}</strong>{rest.length > 0 && <>{"\n"}{rest.join("\n")}</>}</div>
                   : <div className="thread-text">{n.text}</div>}

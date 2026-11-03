@@ -16,6 +16,7 @@ import type * as inbox from "./inbox.ts";
 import * as mail from "./mail.ts";
 import * as notices from "./notices.ts";
 import { fill, ON_THREAD } from "./prompts.ts";
+import * as replies from "./replies.ts";
 import * as slack from "./slack.ts";
 
 export interface Said {
@@ -85,6 +86,65 @@ export async function startChat(thread: string, text: string): Promise<chats.Cha
   return chats.onThread(thread, titleOf(newest), message);
 }
 
+// ---- The thread in its pane
+
+// What the thread's pane in the Inbox lists (pages.ts, threadPage), oldest first. A Slack thread is read whole from
+// Slack, so that the pane shows what Slack's tab would: the user's own messages, reactions and files too (slack.ts,
+// messages). Each keeps its notice's verdict and why, for the line on why it reached you, and a notice Slack's read
+// leaves out, a reply in a DM's own thread, stays. What the user sent from desk is Slack's copy, said to be from desk,
+// or, until Slack has it, desk's (replies.ts). A mail thread, and a Slack one Slack does not answer, is its notices.
+export interface Message extends Omit<slack.Shown, "link"> {
+  source: "slack" | "mail";
+  place: string;
+  link: string;
+  verdict: notices.Verdict | null;
+  why: string;
+  desk: boolean; // sent from desk
+}
+
+export async function pane(thread: string): Promise<Message[]> {
+  const found = await notices.ofThread(thread);
+  if (!found.length) return [];
+  const { source, place } = found[found.length - 1];
+  const byId = new Map(found.map((n) => [n.id, n]));
+  const sent = await replies.sentIn(thread);
+  const tsOf = (link: string) => link.match(/\/p(\d{10})(\d{6})/)?.slice(1).join(".");
+  const sentAt = new Set(sent.map((r) => tsOf(r.link)).filter(Boolean));
+  let read: slack.Shown[] | null = null;
+  if (source === "slack" && CONNECT) {
+    try {
+      read = await slack.messages(thread);
+    } catch (e) {
+      console.error(`threads: reading a Slack thread for its pane, ${(e as Error).message}`);
+    }
+  }
+  const asMessage = (n: notices.Notice): Message => ({ id: n.id, source: n.source, place: n.place, who: n.who, text: n.text, link: n.link,
+    at: n.at, mine: n.who === "you", verdict: n.verdict, why: n.why, desk: false, ...(madeUp.get(n.id) ?? { reactions: [], files: [] }) });
+  const all: Message[] = read
+    ? read.map((m) => {
+      const n = byId.get(m.id);
+      return { ...m, source, place, verdict: n?.verdict ?? null, why: n?.why ?? "", desk: sentAt.has(m.id.split(":")[2]) };
+    })
+    : found.map(asMessage);
+  if (read) {
+    const have = new Set(read.map((m) => m.id)), oldest = read[0]?.at ?? Infinity;
+    all.push(...found.filter((n) => !have.has(n.id) && n.at >= oldest).map(asMessage));
+  }
+  const have = new Set(all.map((m) => m.id.split(":")[2]));
+  for (const r of sent) {
+    if (read && have.has(tsOf(r.link) ?? "")) continue;
+    all.push({ id: r.id, source: r.source, place, who: "you", text: r.text, link: r.link, at: r.sent ?? r.at, mine: true, verdict: null, why: "",
+      desk: true, reactions: [], files: [] });
+  }
+  return all.sort((a, b) => a.at - b.at);
+}
+
+// A test desk's made-up reactions and files, by notice, as POST /api/notices gives them (app.ts): it reads no Slack.
+const madeUp = new Map<string, Pick<slack.Shown, "reactions" | "files">>();
+export function makeUp(id: string, extras: Pick<slack.Shown, "reactions" | "files">) {
+  madeUp.set(id, extras);
+}
+
 // ---- A thread a chat attaches or lets go of (chats.ts, follow), by the chat's own call to desk's API on the user's
 // word, such as "minhnt opened another thread about it, follow that too": one way, with no button ("maybe just need a
 // single way through the chat is enough. the model will handle call to api endpoint", the user, 3 Nov).
@@ -147,21 +207,23 @@ export async function idOf(given: string, attaching: boolean): Promise<string> {
 let marking = Promise.resolve();
 
 export function seen(rows: inbox.Row[]) {
-  const wanted = new Set<string>();
+  const wanted = new Map<string, boolean>(); // each thread, and whether its own row showed it, whole, in its pane
   for (const r of rows) {
-    if (r.id.startsWith("slack:")) wanted.add(r.id);
-    else for (const t of chats.agentChatOf(r.session)?.threads ?? []) if (t.startsWith("slack:")) wanted.add(t);
+    if (r.id.startsWith("slack:")) wanted.set(r.id, true);
+    else for (const t of chats.agentChatOf(r.session)?.threads ?? []) if (t.startsWith("slack:") && !wanted.has(t)) wanted.set(t, false);
   }
-  for (const thread of wanted) marking = marking.then(() => markRead(thread)).catch((e) => console.error(`threads: marking a Slack thread read, ${(e as Error).message}`));
+  for (const [thread, whole] of wanted) {
+    marking = marking.then(() => markRead(thread, whole)).catch((e) => console.error(`threads: marking a Slack thread read, ${(e as Error).message}`));
+  }
 }
 
-async function markRead(thread: string) {
+async function markRead(thread: string, whole: boolean) {
   const shown = (await notices.ofThread(thread)).filter((n) => n.source === "slack" && (n.chat == null || n.wake != null));
   if (!shown.length) return;
   if (!CONNECT) {
     // A test desk connects to nothing: it says what it would mark, by ids only, as a thread's words stay out of the log
-    console.log(`threads: would mark ${thread} read in Slack over ${shown.length} shown, the newest ${shown[shown.length - 1].id}`);
+    console.log(`threads: would mark ${thread} read in Slack over ${shown.length} shown${whole ? " and the thread up to it" : ""}, the newest ${shown[shown.length - 1].id}`);
     return;
   }
-  await slack.markRead(thread, new Set(shown.map((n) => n.id)));
+  await slack.markRead(thread, new Set(shown.map((n) => n.id)), whole);
 }
