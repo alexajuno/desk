@@ -221,7 +221,8 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
   const asks = await asking();
   const marks = inbox.filling() ? inbox.before() : null, now = Date.now() / 1000;
   const wanted: inbox.Want[] = [];
-  const onThreads = new Map<string, inbox.Want>(); // a chat's row, by each thread it follows: the thread's row says it (threadRow)
+  const shownThreads = new Map((await notices.threads()).map((n) => [n.thread, n]));
+  const followed = new Set<string>(); // the threads a chat follows here, which have no row of their own
   for (const h of held(all)) {
     const i = h.issue, replied = turns.replied(h.session);
     let why = "", waits = true;
@@ -232,16 +233,17 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
       why = i ? replyWhy(i, Boolean(store.result(i))) : turns.prompted(h.session) ? "agent replied" : "agent wrote";
       waits = false;
     }
-    if (!why) continue;
+    const follows = h.chat ? chats.follows(h.chat, all) : [];
+    for (const thread of follows) followed.add(thread);
+    const news = follows.map((t) => shownThreads.get(t)).filter((n) => n !== undefined).sort((a, b) => b.at - a.at)[0];
+    if (!why && !news) continue;
     const want: inbox.Want = {
       id: h.session, slug: i?.slug ?? h.chat!.id, issue: Boolean(i), session: h.session, title: i ? i.title : chatTitle(h.chat!),
       agent: i ? null : h.chat!.agent ?? null, why, says: saysOf(why, i), kind: i?.state === "review" && REVIEWED.has(why) ? "review" : "needs",
       waits, at: waits ? null : replied, looked: live_.watching(h.session) ? now : turns.prompted(h.session) ?? 0,
       seed: marks && !waits ? readBefore(h, replied!, marks) : null, source: null, who: null,
     };
-    const follows = h.chat ? chats.follows(h.chat, all) : [];
-    for (const thread of follows) onThreads.set(thread, want);
-    if (!follows.length) wanted.push(want);
+    wanted.push(news && (!why || (!waits && news.at > replied!)) ? withNews(want, news) : want);
   }
   // Linear's due date notifications: one the day before an open issue is due, and one the day after it passed, each
   // from 09:00 (linear.app/docs/issue-property#due-date-notifications; the hour is desk's).
@@ -260,7 +262,7 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
     if (i.state === "triage" && !sessionOf(i))
       wanted.push({ id: i.slug, slug: i.slug, issue: true, session: null, title: i.title, agent: null, why: "no chat", says: saysOf("no chat", i),
         kind: "needs", waits: true, at: parseLocal(i.created).getTime() / 1000, looked: 0, seed: null, source: null, who: null });
-  for (const n of await notices.threads()) wanted.push(threadRow(n, onThreads.get(n.thread), chats.followerOf(n.thread, all)?.session ?? null, now));
+  for (const n of shownThreads.values()) if (!followed.has(n.thread)) wanted.push(threadRow(n));
   for (const l of logins.all()) wanted.push(loginRow(l));
   await inbox.take(wanted);
   return inbox.listed(keep);
@@ -272,20 +274,33 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
 // Its why is the notice's verdict, now or later, which the app's pop-up reads (store/inbox.ts). Opening it reads it,
 // as any row; it leaves the Inbox once its notices are pruned (notices.ts, KEEP_DAYS).
 //
-// Once you wrote in it, the row opens on the chat following it (threads.ts), and is that chat's row too: Claude's reply
-// or question newer than the thread's newest notice says it, as a chat's own row would, the row keeping its place,
-// avatar and title.
-function threadRow(n: notices.Notice, chat: inbox.Want | undefined, session: string | null, now: number): inbox.Want {
+// A thread a chat follows (chats.ts, follows) has no row of its own: its news is on the chat's row (withNews).
+function threadRow(n: notices.Notice): inbox.Want {
+  const what = whatOf(n);
+  return {
+    id: n.thread, slug: n.thread, issue: false, session: null, title: threads.titleOf(n), agent: null, why: n.verdict!,
+    says: n.place === "DM" ? what : `${n.who}: ${what}`, kind: "needs", waits: false, at: n.at, looked: 0, seed: null,
+    source: n.source, who: n.who,
+  };
+}
+
+// What a thread's newest message needs from you, as the firewall's Claude put it, or the message itself where a rule let
+// it through: a mail's body, not its subject.
+function whatOf(n: notices.Notice) {
   const [first, ...rest] = n.text.split("\n");
   const said = (n.source === "mail" ? rest.join(" ") : first).trim() || first;
-  const what = n.why && !notices.RULED.has(n.why) ? n.why : said;
-  const row: inbox.Want = {
-    id: n.thread, slug: n.thread, issue: false, session, title: threads.titleOf(n), agent: null, why: n.verdict!,
-    says: n.place === "DM" ? what : `${n.who}: ${what}`, kind: "needs", waits: false, at: n.at,
-    looked: session && live_.watching(session) ? now : 0, seed: null, source: n.source, who: n.who,
-  };
-  if (!chat || !(chat.waits || chat.at! > n.at)) return row;
-  return { ...row, why: chat.why, says: `Claude ${chat.says}`, waits: chat.waits, at: chat.at, looked: chat.looked, seed: chat.seed };
+  return n.why && !notices.RULED.has(n.why) ? n.why : said;
+}
+
+// A chat's row, which for desk's agent chat is its issue's, carrying the newest message of the threads it follows,
+// newer than its own last word: "chinhdt in #imagenhub: still failing on flux-dev", by the firewall's verdict, now
+// popping up and later waiting unread, as the thread's own row did. It stays a review row while Go or Approve waits,
+// only its second line taking the news; a question or a landing stuck it never covers (the desk issue "A chat from a
+// Slack message, mail or event starts with its context", 3 Nov). The title and the read stay the chat's: you read the
+// news by opening the chat.
+function withNews(want: inbox.Want, n: notices.Notice): inbox.Want {
+  const where = n.source === "mail" ? `“${threads.titleOf(n)}”` : n.place === "DM" ? "a DM" : n.place.startsWith("group DM") ? "a group DM" : n.place;
+  return { ...want, why: n.verdict!, says: `${n.who} in ${where}: ${whatOf(n)}`, at: n.at, waits: false, source: n.source, who: n.who };
 }
 
 // A Slack or Gmail login that ended (logins.ts): one row, which pops up once as a thread's now does, from when desk
@@ -303,7 +318,7 @@ function loginRow(l: logins.Ended): inbox.Want {
 // its agent, or "Chat".
 export const inboxRows = async () => (await notifications(await store.loadAll())).map((r) => ({
   slug: r.slug, title: r.title, why: r.why, says: r.says, url: `/inbox?i=${encodeURIComponent(r.slug)}`, unread: r.read === null,
-  ...(r.issue ? {} : { who: r.id.startsWith("login:") ? "desk" : r.source ? `${r.who} on ${r.source === "mail" ? "mail" : "Slack"}` : r.agent ?? "Chat" }),
+  ...(r.issue ? {} : { who: r.id.startsWith("login:") ? "desk" : r.source && !r.session ? `${r.who} on ${r.source === "mail" ? "mail" : "Slack"}` : r.agent ?? "Chat" }),
 }));
 
 // A Slack thread's, DM's or mail thread's messages, oldest first, as its Inbox row opens them; the dropped ones left out.

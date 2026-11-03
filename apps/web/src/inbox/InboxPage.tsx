@@ -8,7 +8,8 @@
 // nobody"), then a dot while unread, the issue's title, then what the session did and how long ago. Opening a row
 // reads it, for every tab, and so does anything new on it while it is open. With Show unreads only, a row you read
 // stays until you leave the Inbox, so that reading never moves the list. A row may be a Slack or mail thread the
-// firewall let through (?i=slack:… or mail:…), whose messages open on the right (Thread.tsx). A row may instead be a chat with no issue,
+// firewall let through (?i=slack:… or mail:…), whose messages open on the right (Thread.tsx), until a chat follows it
+// and its news comes on the chat's row, the issue's for desk's agent chat. A row may instead be a chat with no issue,
 // one of the user's agents or a bare one (?i=<chat id>), whose chat opens on the right. The top
 // bar splits at the list's edge: over the list, "Inbox" with its ⋯ menu, and at the list's right edge Show unreads
 // only, Filter and Display options, as Linear's (measured on linear.app on 19 Oct), their keys in actions.ts; the open
@@ -23,7 +24,7 @@ import { Bar } from "../frame/Bar";
 import { IssueView } from "../issues/IssueView";
 import { actionsMenu } from "../issues/menus";
 import { painted } from "../issues/painted";
-import { SessionView } from "../sessions/Dock";
+import { HeadStep, SessionView } from "../sessions/Dock";
 import { STATE_NAMES } from "../lib/desk";
 import { listView, setView } from "../lists/current";
 import { DisplayPanel, filterMenu, FilterBar } from "../lists/parts";
@@ -35,7 +36,7 @@ import { GLYPH, StateIcon } from "../ui/icons";
 import { toggled } from "../ui/menu";
 import { DISPLAY_ICON, FILTER_ICON, inboxMenu, MORE_ICON, rowHref, UNREADS_ICON } from "./actions";
 import { listing } from "./listing";
-import { badgeOf, chatOf, initial, ThreadView } from "./Thread";
+import { badgeOf, chatOf, initial, startedOn, ThreadView } from "./Thread";
 
 // A due date's notifications (the server's pages.ts), which no session sent.
 const DEADLINE = new Set(["due soon", "overdue"]);
@@ -96,14 +97,26 @@ export const InboxPage = observer(function InboxPage() {
   }, [drawn]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => listView.clear(), []);
 
-  // The row open on the right: an issue's page, which desk pushes while it shows, or a chat with no issue.
+  // The row open on the right: a thread no chat follows yet, a chat, or an issue's page, which desk pushes while it
+  // shows. A chat's row opens its chat, and so does an issue's row carrying a thread's news (the server's pages.ts,
+  // withNews). Once the pane shows a chat it stays on it while the chat's row moves: a thread's row leaves for its
+  // chat's once you write in it, and a chat's row turns into its issue's once the chat files one.
+  const here = i ? [...issues.inbox.values()].find((r) => r.slug === i) : undefined;
+  const thread = here?.source && !here.session ? here : undefined;
+  const kept = useRef(new Map<string, string>()).current; // the chat each row's pane showed, by the row's slug
+  const talk = thread ? undefined : (here?.session && (!here.issue || here.source) ? here.session : null) ?? kept.get(i) ?? startedOn(i);
+  if (talk) kept.set(i, talk);
+  const chat = talk ? [...issues.inbox.values()].find((r) => r.session === talk) : undefined;
+  useEffect(() => {
+    if (here || !chat) return;
+    kept.set(chat.slug, talk!);
+    go(rowHref(query, chat.slug), { replace: true });
+  }, [here, chat?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
   const isIssue = issues.bySlug.has(i);
   useEffect(() => shown.show(isIssue ? i : null), [i, isIssue]);
   useEffect(() => () => shown.show(null), []);
   const open = isIssue ? shown.page : null, waiting = isIssue && shown.of !== i;
   useSplash(waiting);
-  const chat = isIssue || !i ? undefined : [...issues.inbox.values()].find((r) => r.slug === i && !r.issue && r.session);
-  const thread = isIssue || !i ? undefined : [...issues.inbox.values()].find((r) => r.slug === i && r.source);
   // Opening a row reads it, and anything new on it while it is open: as the server's inbox.ts reads a slug's rows.
   const unreadHere = [...issues.inbox.values()].filter((r) => r.slug === i && r.read === null).map((r) => r.id).join(" ");
   useEffect(() => { if (unreadHere) void postJson("/api/inbox/read", { keys: unreadHere.split(" ") }); }, [unreadHere]);
@@ -135,9 +148,13 @@ export const InboxPage = observer(function InboxPage() {
           {(p || chat || thread) && <><span className="sep">›</span><span className="inbox-crumb">{p ? p.title : thread ? thread.title : chat!.agent ? `${chat!.agent}: ${chat!.title}` : chat!.title}</span></>}
         </>}
         tools={p && (
-          <button className="more" title="Actions" onClick={(e) => { if (!toggled(e.currentTarget)) actionsMenu(p, { anchor: e.currentTarget }, p.slug); }}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25" /><circle cx="8" cy="8" r="1.25" /><circle cx="12.5" cy="8" r="1.25" /></svg>
-          </button>
+          <>
+            {/* An issue's chat open here has no head of its own: its Go or Approve sits here, as in the chat's head. */}
+            {talk && open?.issue.slug === i && <HeadStep data={open} inInbox />}
+            <button className="more" title="Actions" onClick={(e) => { if (!toggled(e.currentTarget)) actionsMenu(p, { anchor: e.currentTarget }, p.slug); }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.25" /><circle cx="8" cy="8" r="1.25" /><circle cx="12.5" cy="8" r="1.25" /></svg>
+            </button>
+          </>
         )}
       />
       <div className="scroll">
@@ -147,14 +164,14 @@ export const InboxPage = observer(function InboxPage() {
               <NotifyAsk />
               {chips.length > 0 && <div className="inbox-filters"><FilterBar list={{ chips }} /></div>}
               {rows.map((n) => {
-                if (n.source) return <ThreadRow key={n.id} n={n} open={i === n.slug} query={query} />;
+                if (n.source && !n.session) return <ThreadRow key={n.id} n={n} open={i === n.slug} query={query} />;
                 if (!n.issue) return <ChatRow key={n.id} n={n} open={i === n.slug} query={query} />;
                 const issue = issues.bySlug.get(n.slug);
                 return issue && <IssueNotice key={n.id} n={n} issue={issue} open={i} query={query} />;
               })}
             </div>
-            <div className={`inbox-open${chat || (thread && chatOf(thread)) ? " chat-open" : ""}`} data-keep-scroll="same" ref={pane}>
-              {thread ? <ThreadView key={thread.slug} row={thread} /> : chat ? <SessionView key={chat.session} id={chat.session!} /> : open ? <IssueView data={open} inInbox /> : !waiting && (
+            <div className={`inbox-open${talk || (thread && chatOf(thread)) ? " chat-open" : ""}`} data-keep-scroll="same" ref={pane}>
+              {thread ? <ThreadView key={thread.slug} row={thread} /> : talk ? <SessionView key={talk} id={talk} /> : open ? <IssueView data={open} inInbox /> : !waiting && (
                 <div className="inbox-empty">
                   {/* Linear's empty Inbox drawing, its strokes in desk's own text colours */}
                   <svg width="98" height="100" viewBox="0 0 78 80" fill="none" aria-hidden="true">
@@ -191,7 +208,7 @@ const IssueNotice = observer(function IssueNotice({ n, issue, open, query }: { n
       </span>
       <span className="lines">
         <span className="line"><span className="dot" aria-label="Unread" /><span className="title">{issue.title}</span></span>
-        <span className="line sub"><span className="says">{DEADLINE.has(n.why) ? n.says : `Session ${n.says}`}</span><span className="age" title={dayAndTime(n.at)}>{ago(n.at)}</span></span>
+        <span className="line sub"><span className="says">{DEADLINE.has(n.why) || n.source ? n.says : `Session ${n.says}`}</span><span className="age" title={dayAndTime(n.at)}>{ago(n.at)}</span></span>
       </span>
     </Go>
   );
@@ -210,7 +227,7 @@ const ChatRow = observer(function ChatRow({ n, open, query }: { n: InboxRow; ope
         : <span className="avatar" aria-label="Chat"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2c3.6 0 6.5 2.4 6.5 5.4S11.6 12.8 8 12.8c-.6 0-1.2-.1-1.8-.2L3 14.1c-.4.2-.8-.2-.7-.6l.6-2.4C2 10.1 1.5 8.8 1.5 7.4 1.5 4.4 4.4 2 8 2z" /></svg></span>}
       <span className="lines">
         <span className="line"><span className="dot" aria-label="Unread" /><span className="title">{n.title}</span></span>
-        <span className="line sub"><span className="says">{`${agent ?? "Chat"} ${n.says}`}</span><span className="age" title={dayAndTime(n.at)}>{ago(n.at)}</span></span>
+        <span className="line sub"><span className="says">{n.source ? n.says : `${agent ?? "Chat"} ${n.says}`}</span><span className="age" title={dayAndTime(n.at)}>{ago(n.at)}</span></span>
       </span>
     </Go>
   );

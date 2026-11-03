@@ -75,7 +75,7 @@ export function listed(keep = ""): Row[] {
   return [...rows.values()].filter((r) => r.read === null || r.waits || r.slug === keep).sort((a, b) => b.at - a.at);
 }
 
-// Whether the session said something you have not read, on its own row or its thread's.
+// Whether the session said something you have not read, or one of its threads did, on its row.
 export const unread = (session: string) => [...rows.values()].some((r) => r.session === session && r.read === null);
 
 export const unreadCount = () => [...rows.values()].filter((r) => r.read === null).length;
@@ -134,7 +134,7 @@ export function take(wanted: Want[]): Promise<void> {
   });
 }
 
-// You read the session's row, or the thread's row whose chat it is: now, unless already read.
+// You read the session's row: now, unless already read.
 export async function read(by: { session: string }) {
   const row = [...rows.values()].find((r) => r.session === by.session && r.read === null);
   if (!row) return;

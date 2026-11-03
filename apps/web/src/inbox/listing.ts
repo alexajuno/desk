@@ -57,7 +57,7 @@ const TYPES: Record<string, string> = { deadline: "Reminders and deadlines", pla
   now: "Messages that need you", later: "Messages that wait" };
 function typeOf(r: InboxRow): string {
   const why = r.why;
-  if (r.source && (why === "now" || why === "later")) return why; // else its chat's reply or question, as a chat's
+  if (r.source && (why === "now" || why === "later")) return why; // a thread's message, on its own row or its chat's
   if (why === "plan ready") return "plan";
   if (why === "result ready" || why === "check it") return "result";
   if (why === "asks you" || why === "waiting for you") return "question";
@@ -73,7 +73,7 @@ const folderName = (path: string | null) => (path ? path.replace(/\/+$/, "").rep
 // status, and comes From its agent, or from "chat".
 function valueOf(store: IssueStore, r: InboxRow, name: string): string {
   if (name === "type") return typeOf(r);
-  if (name === "from") return r.issue ? "issue" : r.source || r.agent || "chat";
+  if (name === "from") return r.issue ? "issue" : (!r.session && r.source) || r.agent || "chat";
   const i = r.issue ? store.bySlug.get(r.slug) : undefined;
   if (!i) return "none";
   if (name === "status") return i.state;

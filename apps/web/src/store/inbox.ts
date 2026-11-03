@@ -21,7 +21,7 @@ const keyOf = (row: InboxRow) => `${row.id}:${row.at}`;
 const FRESH = 15 * 60;
 
 // Whether a new unread row pops up, by what it is and whether a desk tab has the focus.
-// A thread's row that says its chat's reply or question (the server's pages.ts, threadRow) is a chat's row.
+// A chat's row carrying a thread's news (the server's pages.ts, withNews) has its source set, and goes by the verdict too.
 function popsUp(row: InboxRow, watched: boolean) {
   if (!row.source || (row.why !== "now" && row.why !== "later")) return !watched;
   return row.why === "now" && row.at > Date.now() / 1000 - FRESH;

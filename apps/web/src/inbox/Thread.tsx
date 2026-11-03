@@ -7,7 +7,9 @@
 // A composer under it starts a chat with Claude on the thread, which only you see (the server's threads.ts: "pops up
 // and carry it on with me", the user, 2 Nov), picked from two mockups on 2 Nov over one with Draft a reply, File an
 // issue and Mark done above the box. From then on the row opens on that chat, which opens on a card of the thread as
-// Claude read it, wherever it is opened (sessions/Came.tsx, 3 Nov): the whole thread shows only before you wrote.
+// Claude read it, wherever it is opened (sessions/Came.tsx, 3 Nov): the whole thread shows only before you wrote. The
+// chat follows the thread, so the thread's row leaves the Inbox for the chat's, which carries its news (the server's
+// pages.ts, withNews), and the pane goes with it.
 //
 // A reply the chat's Claude drafted waits on a card above the composer (ReplyCard; the server's replies.ts), yours to
 // edit, and only your Send there posts it to Slack or sends it from Gmail as you: Claude has no call that sends.
@@ -73,6 +75,9 @@ const started = observable.map<string, string>();
 
 // The session of the thread's chat, or null while you have not written in it.
 export const chatOf = (row: InboxRow) => row.session ?? started.get(row.slug) ?? null;
+
+// The chat you started on a thread from this tab, once its row left for the chat's (InboxPage).
+export const startedOn = (thread: string) => started.get(thread);
 
 // The thread open on the right: the thread with a composer under it, or once you wrote, the chat on it.
 export const ThreadView = observer(function ThreadView({ row }: { row: InboxRow }) {

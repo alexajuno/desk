@@ -351,9 +351,10 @@ const ChatHead = observer(function ChatHead({ s, views, view, setView, docked }:
 });
 
 // The issue's next step at the head's right, only while it is a click: Go on a plan, Approve on a card. Open chat,
-// the step while the issue's turn is said in its chat, has no button here, in that chat.
-const HeadStep = observer(function HeadStep({ data }: { data: IssuePageData }) {
-  const { p, step, trust, act } = useStep(data);
+// the step while the issue's turn is said in its chat, has no button here, in that chat. The Inbox's pane, which shows
+// an issue's chat without this head, puts it in its own top bar (inbox/InboxPage.tsx).
+export const HeadStep = observer(function HeadStep({ data, inInbox = false }: { data: IssuePageData; inInbox?: boolean }) {
+  const { p, step, trust, act } = useStep(data, inInbox);
   return (
     <div className="chat-acts">
       <StepButtons p={p} step={step} trust={trust} act={act} chat={null} />

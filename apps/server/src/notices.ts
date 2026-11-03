@@ -2,7 +2,8 @@
 // up), later (it waits in the Inbox, unread) or dropped. desk is the user's notification center: "a layer in desk handles
 // noti filtering, that only when sth worth notified about that it pops up and carry it on with me" (the user, 2 Nov;
 // the desk issue "desk as my notification center"). The connectors write a notice as it comes, the firewall judges it,
-// and the Inbox shows one row per thread holding a notice now or later (pages.ts, threadRow).
+// and the Inbox shows one row per thread holding a notice now or later (pages.ts, threadRow), or, for a thread a chat
+// follows, its newest such notice on the chat's row (withNews).
 //
 // What a rule drops at the door (an edit, a join, a reaction, a non-work channel) is never written. Every mail is, the
 // ordinary ones too, since bin/mail-daily lists each mail of the day with its topic. A notice is kept KEEP_DAYS, enough
