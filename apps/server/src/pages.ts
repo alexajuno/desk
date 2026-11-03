@@ -552,6 +552,19 @@ export async function changesPage(slug: string) {
   return { steps: await changes.ofIssue(await store.load(slug)) };
 }
 
+// A file one of the issue's build steps changed, whole as it stands at the step's commit, for the lines its diff leaves
+// out (Changes.tsx). Only such a file is read, so the page reads nothing else of the repo.
+export async function changedFilePage(slug: string, commit: string, path: string) {
+  if (!(await store.exists(slug))) throw new HttpError(404, "That issue is gone.");
+  const i = await store.load(slug);
+  const step = (await changes.ofIssue(i)).find((s) => s.commit === commit);
+  if (!step) throw new HttpError(404, "No step of this issue has that commit.");
+  if (!step.files.find((f) => f.path === path)?.length) throw new HttpError(404, "That step changed no such file, or left it with no lines.");
+  const lines = await changes.fileAt(agents.workdir(i), commit, path);
+  if (!lines) throw new HttpError(404, "git could not read that file.");
+  return { lines };
+}
+
 // A list's groups, chips and view. A group's + opens the new issue panel with what the group says, where the panel can
 // take it: its priority, its team, or Backlog, and with what the page adds (add), such as a team's page its team. No
 // add, no +.

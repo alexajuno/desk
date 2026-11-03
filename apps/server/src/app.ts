@@ -316,6 +316,7 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/api/page/frame", async () => pages.framePage(sync.oldTabs()));
   app.get("/api/page/issue/:slug", async (req: Req) => pages.issuePage(req.params.slug));
   app.get("/api/page/issue/:slug/changes", async (req: Req) => pages.changesPage(req.params.slug));
+  app.get("/api/page/issue/:slug/changes/file", async (req: Req) => pages.changedFilePage(req.params.slug, req.query.commit ?? "", req.query.path ?? ""));
   app.get("/api/page/issues", async (req) => pages.issuesPage("", rawQuery(req)));
   app.get("/api/page/issues/:tab", async (req: Req) => {
     if (!pages.TABS.includes(req.params.tab)) throw new HttpError(404, "No such tab.");

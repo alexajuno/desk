@@ -4,11 +4,14 @@
 import * as agents from "./agents.ts";
 import type { PlanStep } from "./api.ts";
 import type { Issue } from "./issues.ts";
+import { run } from "./proc.ts";
 
 // One line of a hunk: what it is (" " kept, "+" added, "-" deleted), its numbers in the old and the new file, its text.
 export type Line = [kind: " " | "+" | "-", old: number | null, now: number | null, text: string];
 export type Hunk = { header: string; lines: Line[] };
-export type FileDiff = { path: string; was?: string; added: number; deleted: number; binary?: true; cut?: true; hunks: Hunk[] };
+// A file's length is how many lines it has at the step's commit, which the page needs to open the lines its hunks leave
+// out (fileAt): none for a binary file, an empty one or one the step deleted.
+export type FileDiff = { path: string; was?: string; added: number; deleted: number; binary?: true; cut?: true; length?: number; hunks: Hunk[] };
 export type StepDiff = { place: string; title: string; state: PlanStep["state"]; note?: string; commit: string; added: number; deleted: number; files: FileDiff[] };
 
 // A file's hunks stop past this many lines, marked cut, so one generated file can't swamp the page.
@@ -43,12 +46,50 @@ function between(cwd: string, from: string, to: string): Promise<FileDiff[]> {
   const key = `${cwd}\0${from}..${to}`;
   if (!read.has(key)) {
     if (read.size > 500) read.delete(read.keys().next().value!);
-    const got = agents.git(cwd, "diff", "--no-color", "--no-ext-diff", "--find-renames", "-U3", from, to).then((text) => parse(text ?? ""));
+    const got = agents.git(cwd, "diff", "--no-color", "--no-ext-diff", "--find-renames", "-U3", from, to)
+      .then((text) => measured(cwd, to, parse(text ?? "")));
     got.then((files) => { if (!files.length) read.delete(key); }); // git may have failed: try again next time
     read.set(key, got);
   }
   return read.get(key)!;
 }
+
+// How long each file is at the step's commit, all in one git run: git grep counts the lines that match "", which is
+// every line, a last one with no line break too, and leaves out a binary file (-I), an empty one and one not there.
+async function measured(cwd: string, commit: string, files: FileDiff[]): Promise<FileDiff[]> {
+  const text = files.some((f) => !f.binary)
+    ? await agents.git(cwd, "grep", "-I", "-c", "", commit, "--", ...files.filter((f) => !f.binary).map((f) => `:(literal)${f.path}`))
+    : null;
+  const lengths = new Map<string, number>();
+  for (const line of (text ?? "").split("\n")) { // <commit>:<path>:<count>, the path perhaps holding a colon of its own
+    const end = line.lastIndexOf(":");
+    if (line.startsWith(`${commit}:`) && end > commit.length) lengths.set(line.slice(commit.length + 1, end), Number(line.slice(end + 1)));
+  }
+  for (const f of files) if (lengths.has(f.path)) f.length = lengths.get(f.path);
+  return files;
+}
+
+// A file's lines at a commit, for the lines its diff leaves out (pages.ts, changedFilePage), read from git as they are: not
+// through agents.git, whose trim would take a first line's indent and the empty lines at the end. A commit never
+// changes, so each file is read once, and the 50 read last are kept.
+const held = new Map<string, Promise<string[] | null>>();
+
+export function fileAt(cwd: string, commit: string, path: string): Promise<string[] | null> {
+  const key = `${cwd}\0${commit}:${path}`;
+  const got = held.get(key) ?? run(["git", "cat-file", "blob", `${commit}:${path}`], { cwd })
+    .then((r) => (r.code === 0 ? lines(r.stdout) : null), () => null);
+  held.delete(key); // so it counts as read last
+  held.set(key, got);
+  if (held.size > 50) held.delete(held.keys().next().value!);
+  got.then((read) => { if (!read) held.delete(key); }); // git may have failed: try again next time
+  return got;
+}
+
+const lines = (text: string) => {
+  const all = text.split("\n");
+  if (text.endsWith("\n")) all.pop();
+  return all;
+};
 
 // git's unified diff, file by file.
 export function parse(text: string): FileDiff[] {
