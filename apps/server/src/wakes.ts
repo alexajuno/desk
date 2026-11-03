@@ -20,11 +20,16 @@
 // world is too complex for fixed minute rule)" (the user, 3 Nov). Claude Code counts a session's spend as a running
 // total, so a wake keeps the total before it and takes the difference once its turn ended (costed); GET /api/wakes sums
 // them (report).
+//
+// Beside each wake, the gate (gate.ts) judges the same messages with the issue's document, Haiku saying wake or skip, in
+// the shadow: the chat still wakes, and the gate's answer goes on the wake's row, for GET /api/wakes to set against the
+// chat's verdict, so that it turns on only once it has skipped no now.
 import { randomBytes } from "node:crypto";
 import * as agents from "./agents.ts";
 import * as chats from "./chats.ts";
 import { PORT } from "./config.ts";
 import { sql } from "./db.ts";
+import * as gate from "./gate.ts";
 import * as store from "./issues.ts";
 import * as notices from "./notices.ts";
 import { fill, WAKE } from "./prompts.ts";
@@ -51,6 +56,10 @@ export interface Wake {
   spentTokens: number | null; // and the tokens it had read
   cost: number | null; // the dollars its turn cost, once it ended
   tokens: number | null; // the tokens its turn read
+  gate: gate.Gate | null; // the gate's answer on its messages, in the shadow; null until it came
+  gateWhy: string;
+  gateCost: number | null;
+  gateMs: number | null;
 }
 
 const EVERY = 60_000; // the firewall's own beat: what came in a minute is one wake
@@ -64,6 +73,7 @@ const asWake = (r: Record<string, unknown>): Wake => ({
   id: String(r.id), chat: String(r.chat), session: String(r.session), thread: String(r.thread), messages: Number(r.messages), at: Number(r.at),
   before: num(r.before), verdict: (r.verdict as Verdict | null) ?? null, why: String(r.why ?? ""), answered: num(r.answered), error: String(r.error ?? ""),
   spent: num(r.spent), spentTokens: num(r.spent_tokens), cost: num(r.cost), tokens: num(r.tokens),
+  gate: (r.gate as gate.Gate | null) ?? null, gateWhy: String(r.gate_why ?? ""), gateCost: num(r.gate_cost), gateMs: num(r.gate_ms),
 });
 const now = () => Date.now() / 1000;
 
@@ -127,17 +137,28 @@ async function close() {
   }
 }
 
+// The gate's answer on a wake's messages, kept on its row as it comes, the chat's turn going on meanwhile.
+async function gated(w: Wake, chat: chats.Chat, carried: notices.Notice[]) {
+  const g = await gate.judge(chat, carried);
+  await sql().query("update wakes set gate = $2, gate_why = $3, gate_cost = $4, gate_ms = $5 where id = $1", [w.id, g.gate, g.why, g.cost, g.ms])
+    .catch((e) => console.error(`wakes: keeping the gate's answer, ${e.message}`));
+  const kept = latest.get(w.session);
+  if (kept?.id === w.id) latest.set(w.session, { ...kept, gate: g.gate, gateWhy: g.why, gateCost: g.cost, gateMs: g.ms });
+  if (g.gate === "failed") console.error(`wakes: the gate on ${w.id}, ${g.why}`);
+}
+
 // The chat woken with a thread's new messages, oldest first.
 async function wake(chat: chats.Chat, carried: notices.Notice[]) {
   const id = `wake-${randomBytes(4).toString("hex")}`, thread = carried[0].thread, newest = carried[carried.length - 1];
   const was = await spentBefore(chat.session);
   const w: Wake = { id, chat: chat.id, session: chat.session, thread, messages: carried.length, at: now(),
     before: own(chat.session, turns.replied(chat.session)), verdict: null, why: "", answered: null, error: "",
-    spent: was.cost, spentTokens: was.tokens, cost: null, tokens: null };
+    spent: was.cost, spentTokens: was.tokens, cost: null, tokens: null, gate: null, gateWhy: "", gateCost: null, gateMs: null };
   await sql().query(`insert into wakes (id, chat, session, thread, messages, at, before, spent, spent_tokens)
     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [w.id, w.chat, w.session, w.thread, w.messages, w.at, w.before, w.spent, w.spentTokens]);
   await notices.carried(carried.map((n) => n.id), id);
   latest.set(chat.session, w);
+  void gated(w, chat, carried); // beside the wake, never in its way
   const shown = carried.slice(-LAST), left = carried.length - shown.length;
   const message = fill(WAKE, {
     id: thread, wake: id, count: carried.length === 1 ? "A new message" : `${carried.length} new messages`, kind: threads.kindOf(newest),
@@ -163,6 +184,7 @@ async function wake(chat: chats.Chat, carried: notices.Notice[]) {
 // their own.
 async function round() {
   await close();
+  gate.keepSpare(chats.attached().size > 0);
   const waiting = await notices.forChats();
   if (!waiting.length) return;
   const issues = await store.loadAll(), asks = await turns.asking();
@@ -206,6 +228,25 @@ function by(list: Wake[], key: (w: Wake) => string): Map<string, Wake[]> {
   return groups;
 }
 
+// The gate in the shadow, set against the chat: each pair of the gate's answer and the chat's verdict, the wakes a skip
+// would have saved (skipped, the chat noting them) and those it would have missed (skipped, the chat calling them now).
+function gateSum(list: Wake[]) {
+  const checked = list.filter((w) => w.gate !== null), costs = checked.filter((w) => w.gateCost !== null);
+  const ms = checked.map((w) => w.gateMs ?? 0).sort((a, b) => a - b);
+  const cost = costs.reduce((n, w) => n + (w.gateCost ?? 0), 0);
+  const pairs = [...by(checked, (w) => `${w.gate} ${w.verdict ?? "open"}`)].map(([pair, ws]) => {
+    const [gate, verdict] = pair.split(" ");
+    return { gate, verdict, wakes: ws.length, chat_cost: sum(ws).cost };
+  }).sort((a, b) => a.gate.localeCompare(b.gate) || a.verdict.localeCompare(b.verdict));
+  const skipped = (verdict: string) => checked.filter((w) => w.gate === "skip" && w.verdict === verdict);
+  return {
+    checked: checked.length, failed: checked.filter((w) => w.gate === "failed").length,
+    cost: rounded(cost, 4), per_check: costs.length ? rounded(cost / costs.length, 5) : null,
+    ms_median: ms.length ? Math.round(ms[Math.floor(ms.length / 2)]) : null, ms_max: ms.length ? Math.round(ms[ms.length - 1]) : null,
+    pairs, saved: { wakes: skipped("noted").length, cost: sum(skipped("noted")).cost }, missed: skipped("now").length,
+  };
+}
+
 export const DAYS = 90; // the most a report reads back
 
 export async function report(days: number) {
@@ -219,8 +260,10 @@ export async function report(days: number) {
     by_chat: [...by(list, (w) => w.chat)].map(([chat, ws]) => ({ chat, title: titled(chat)?.named || titled(chat)?.title || "", ...sum(ws) }))
       .sort((a, b) => b.cost - a.cost),
     by_verdict: [...by(list, (w) => w.verdict ?? "open")].map(([verdict, ws]) => ({ verdict, ...sum(ws) })),
+    gate: gateSum(list),
     wakes: list.slice(0, 200).map((w) => ({ id: w.id, at: new Date(w.at * 1000).toISOString(), chat: w.chat, thread: w.thread, messages: w.messages,
-      verdict: w.verdict, why: w.why, cost: w.cost === null ? null : rounded(w.cost, 4), tokens: w.tokens, error: w.error || undefined })),
+      verdict: w.verdict, why: w.why, cost: w.cost === null ? null : rounded(w.cost, 4), tokens: w.tokens, error: w.error || undefined,
+      gate: w.gate, gate_why: w.gateWhy, gate_cost: w.gateCost === null ? null : rounded(w.gateCost, 5), gate_ms: w.gateMs === null ? null : Math.round(w.gateMs) })),
   };
 }
 
@@ -231,6 +274,7 @@ export async function start() {
   const r = await sql().query<Record<string, unknown>>("select distinct on (session) * from wakes order by session, at desc");
   for (const row of r.rows) latest.set(String(row.session), asWake(row));
   notices.routeWith(async (thread) => (await chats.follower(thread))?.id ?? null);
+  gate.keepSpare(chats.attached().size > 0); // warm by the first round's wake
   const tick = async () => {
     if (busy) return;
     busy = true;
@@ -251,4 +295,5 @@ export async function start() {
 
 export function stop() {
   if (timer) clearInterval(timer);
+  gate.stop();
 }

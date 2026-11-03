@@ -91,10 +91,11 @@ function shown(n: notices.Notice, i: number): string {
   return `### ${i}, Slack, ${n.place === "DM" ? "a DM" : `in ${n.place}`}, from ${n.who}, sent ${local(n.at)}\n${text}`;
 }
 
-async function record(result: Record<string, unknown>) {
+// A run's usage, as bin/usage_record.py keeps it, by its job: desk-firewall's here, desk-gate's (gate.ts).
+export async function record(result: Record<string, unknown>, job = "desk-firewall") {
   const now = new Date();
   const day = now.toLocaleDateString("sv-SE");
-  const line = { ts: now.toISOString(), job: "desk-firewall", result: Object.fromEntries(KEEP.filter((k) => k in result).map((k) => [k, result[k]])) };
+  const line = { ts: now.toISOString(), job, result: Object.fromEntries(KEEP.filter((k) => k in result).map((k) => [k, result[k]])) };
   await mkdir(RUNS, { recursive: true });
   await appendFile(join(RUNS, `${day}.jsonl`), `${JSON.stringify(line)}\n`);
 }

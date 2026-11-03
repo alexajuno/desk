@@ -234,7 +234,11 @@ create table if not exists wakes ( -- each time a thread's new messages woke the
   spent double precision, -- the dollars the chat's session had spent before it, as Claude Code counts them
   spent_tokens double precision, -- and the tokens it had read
   cost double precision, -- the dollars its turn cost; null until its turn ended, or when no host heard what it cost
-  tokens double precision -- the tokens its turn read, fresh or from the cache
+  tokens double precision, -- the tokens its turn read, fresh or from the cache
+  gate text, -- the gate's answer on its messages, in the shadow: wake, skip, or failed (which wakes); null until it came (gate.ts)
+  gate_why text not null default '', -- the gate's why, in a few words
+  gate_cost double precision, -- the dollars its check cost
+  gate_ms double precision -- how long its check took, in milliseconds
 );
 create index if not exists wakes_session on wakes (session, at);
 create table if not exists replies ( -- each reply to a thread as the user (replies.ts): Claude's draft, then what the user's Send posted

@@ -193,7 +193,7 @@ Each new message in a thread your chat follows comes to you rather than to desk'
 curl -s "http://127.0.0.1:8790/api/wakes/<wake id>" --json '{"verdict": "now", "why": "flux-dev fails too, which the plan left out"}'
 ```
 
-desk keeps what each wake's turn cost, in Claude Code's own count, at list price: when the user asks what following threads costs, read it for them. `GET /api/wakes` gives the last 7 days' wakes (`?days=30` for more), each with its verdict, its line, its dollars and the tokens it read, and their sums by day, by chat and by verdict, `per_wake` the average.
+desk keeps what each wake's turn cost, in Claude Code's own count, at list price: when the user asks what following threads costs, read it for them. `GET /api/wakes` gives the last 7 days' wakes (`?days=30` for more), each with its verdict, its line, its dollars and the tokens it read, and their sums by day, by chat and by verdict, `per_wake` the average. Beside each wake a gate, Haiku reading the same messages with the issue's document, says wake or skip, in the shadow: the chat still wakes. Its `gate` part sets the two against each other: `pairs` counts each answer of the gate with each verdict of yours, `saved` the wakes a skip would have spared (you noted them), `missed` those it would have lost (you called them now), with what its checks cost and took.
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/wakes?days=7"
