@@ -181,7 +181,18 @@
 .change-note + .change-files { margin-left: 0; }
 /* a file: its name, then its folder in the quiet grey, as Linear's file rows are (11px, measured 28 Oct) */
 .change-file + .change-file { border-top: 0.5px solid var(--border-1); }
-.change-file-head { height: 32px; padding: 0 12px 0 22px; font: 400 12px var(--font); background: var(--bg-raised); }
+.change-file-head { height: 32px; padding: 0; font: 400 12px var(--font); background: var(--bg-raised); }
+/* the row folds its file from its name to its counts; Whole file, where the file has one, ends it */
+button.change-file-fold { flex: 1; min-width: 0; align-self: stretch; height: auto; gap: 8px; padding: 0 12px 0 22px; border: 0; border-radius: 0;
+                          background: transparent; font: inherit; color: inherit; text-align: left; }
+.change-file-head:has(> .change-whole) { padding-right: 4px; }
+.change-file-head:has(> .change-whole) > .change-file-fold { padding-right: 0; }
+button.change-file-fold:hover { background: transparent; }
+/* Whole file: a quiet 24px square in the row, as a group's + (desk.css .group-add), filled while the whole file shows */
+button.change-whole { flex: none; width: 24px; height: 24px; padding: 0; justify-content: center; border: 0; border-radius: 6px;
+                      background: transparent; color: var(--text-3); }
+button.change-whole:hover { background: var(--bg-active); color: var(--text-1); }
+button.change-whole.on { background: var(--bg-active); color: var(--text-1); }
 .change-file-name { flex: none; color: var(--text-1); }
 .change-file-dir { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
 .change-quiet { margin: 0; padding: 10px 16px; font-size: 12px; color: var(--text-3); }

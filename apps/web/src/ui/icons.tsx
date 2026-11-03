@@ -217,6 +217,8 @@ export const GLYPH = {
   openDown: glyph(<path d="M4 3h8M8 5.5v7M5.5 10 8 12.5 10.5 10" />),
   openUp: glyph(<path d="M4 13h8M8 10.5v-7M5.5 6 8 3.5 10.5 6" />),
   openAll: glyph(<path d="M4 8h8M8 5.5V1.75M6 3.75l2-2 2 2M8 10.5v3.75M6 12.25l2 2 2-2" />),
+  // A file's Whole file (sessions/Changes.tsx): the file with its lines.
+  wholeFile: glyph(<><path d="M9 1.75H4.75a1.25 1.25 0 0 0-1.25 1.25v10c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V5.25z" /><path d="M9 1.75v3.5h3.5M5.75 7.75h4.5M5.75 10h4.5M5.75 12.25h2.5" /></>),
 };
 
 export const TICK = (

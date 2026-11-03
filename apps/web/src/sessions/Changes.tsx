@@ -24,6 +24,9 @@ export type StepDiff = { place: string; title: string; state: PlanStep["state"];
 const OPEN_LINES = 400;
 // How many hidden lines an arrow opens, as GitHub's do: the hunk you read stays in view.
 const MORE_LINES = 20;
+// Whole file draws a file at once only up to this many lines; a longer one opens 20 at a time. desk's longest file,
+// pnpm-lock.yaml, has 3,799 (step 1.3, 4 Nov).
+const WHOLE_LINES = 5000;
 
 export const useChanges = (slug: string) => usePage<{ steps: StepDiff[] }>(`/api/page/issue/${slug}/changes`).data?.steps ?? null;
 
@@ -155,18 +158,30 @@ const StepCard = observer(function StepCard({ slug, s, open: first }: { slug: st
 const FileCard = observer(function FileCard({ f, place, at }: { f: FileDiff; place: string; at: FileAt }) {
   const [open, setOpen] = useState(f.added + f.deleted <= OPEN_LINES);
   const runs = f.length && !f.cut ? hiddenRuns(f, f.length) : null; // none to open with no length, or past the cut
+  // Whole file, on a file that hides lines and is short enough to draw at once: lit while none is hidden, by it or by
+  // the arrows, and pressed then it folds the file back to its changes alone.
+  const canWhole = Boolean(runs && f.length! <= WHOLE_LINES && runs.some((r) => r.to >= r.from));
+  const whole = canWhole && hiddenLeft(at, runs!) === 0;
   const slash = f.path.lastIndexOf("/");
   const p = picked.get(), mine = p && p.place === place && p.path === f.path ? p : null;
   return (
     <div className="change-file" data-path={f.path}>
-      <button type="button" className="change-file-head" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span className="change-fold">{TRIANGLE}</span>
-        <span className="change-file-name">{f.path.slice(slash + 1)}</span>
-        <span className="change-file-dir">{f.was ? `from ${f.was}` : f.path.slice(0, slash + 1)}</span>
-        <Counts added={f.added} deleted={f.deleted} />
-      </button>
+      <div className="change-file-head">
+        <button type="button" className="change-file-fold" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <span className="change-fold">{TRIANGLE}</span>
+          <span className="change-file-name">{f.path.slice(slash + 1)}</span>
+          <span className="change-file-dir">{f.was ? `from ${f.was}` : f.path.slice(0, slash + 1)}</span>
+          <Counts added={f.added} deleted={f.deleted} />
+        </button>
+        {canWhole && (
+          <button type="button" className={`change-whole${whole ? " on" : ""}`} aria-pressed={whole}
+            title={whole ? "Changes only" : "Whole file"} onClick={() => { setOpen(true); if (whole) foldBack(at); else void openWhole(at, runs!); }}>
+            {GLYPH.wholeFile}
+          </button>
+        )}
+      </div>
       {open && (f.binary ? <p className="change-quiet">A binary file: no lines to show.</p>
-        : !f.hunks.length ? <p className="change-quiet">{f.was ? "Moved, unchanged." : "No lines changed."}</p>
+        : !f.hunks.length && !whole ? <p className="change-quiet">{f.was ? "Moved, unchanged." : "No lines changed."}</p>
         : (
           <table className="diff" onMouseDown={(e) => pickDown(e, f.path)} onMouseOver={(e) => pickOver(e, f.path)}>
             <colgroup><col className="diff-no-col" /><col /></colgroup>
@@ -246,6 +261,22 @@ async function openRun(at: FileAt, k: number, more: Partial<Opened>) {
     all[k] = { top: was.top + (more.top ?? 0), bottom: was.bottom + (more.bottom ?? 0) };
     opened.set(key, all);
   });
+}
+
+// How many of a file's lines its runs still hide: all of them until the file is read.
+function hiddenLeft(at: FileAt, runs: Run[]): number {
+  const o = read.get(fileKey(at)) && opened.get(fileKey(at));
+  return runs.reduce((n, r, k) => n + Math.max(0, r.to - r.from + 1 - (o?.[k] ? o[k].top + o[k].bottom : 0)), 0);
+}
+
+// Whole file opens every run at once; pressed again it folds them all back, the ones the arrows opened too.
+async function openWhole(at: FileAt, runs: Run[]) {
+  if (!(await readFile(at))) return;
+  runInAction(() => opened.set(fileKey(at), runs.map((r) => ({ top: Math.max(0, r.to - r.from + 1), bottom: 0 }))));
+}
+
+function foldBack(at: FileAt) {
+  runInAction(() => opened.delete(fileKey(at)));
 }
 
 // A run of hidden lines, opened as GitHub opens them (step 1.3 of the issue "Read code inside desk", 4 Nov: "how about
