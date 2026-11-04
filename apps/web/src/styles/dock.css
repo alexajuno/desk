@@ -430,10 +430,11 @@ button.cmd-more:hover { background: none; color: var(--text-2); }
 
 /* an issue's steps, in the foot above the composer (StepsCard.tsx): a card as the question card is, in the running
    lines' type, the part being worked on open and the step being worked on filled ("go with A", the user, 31 Oct, on
-   its mockups). Not measured on linear.app: Claude's desktop app shows its todo list there. */
-.foot-steps { flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); max-height: 40vh; overflow-y: auto; margin: 0 auto 8px;
+   its mockups). Not measured on linear.app: Claude's desktop app shows its todo list there. Only the list scrolls, so
+   the head that folds it stays on top ("that collapse/expand bar is not sticked on top", the user, 4 Nov). */
+.foot-steps { display: flex; flex: none; flex-direction: column; box-sizing: border-box; width: min(760px, calc(100% - 48px)); max-height: 40vh; overflow: hidden; margin: 0 auto 8px;
               padding: 6px; border: 1px solid var(--border-2); border-radius: 12px; background: var(--bg-raised); animation: dock-rise 0.18s ease; }
-.foot-steps-head { display: flex; align-items: center; gap: 8px; width: 100%; height: 26px; padding: 0 8px; border: 0; border-radius: 6px;
+.foot-steps-head { display: flex; flex: none; align-items: center; gap: 8px; width: 100%; height: 26px; padding: 0 8px; border: 0; border-radius: 6px;
                    background: none; font: 450 12px var(--font); color: var(--text-3); }
 .foot-steps-head:hover { background: var(--bg-hover); }
 .foot-steps-name { flex: none; font-weight: 500; color: var(--text-2); }
@@ -442,6 +443,7 @@ button.cmd-more:hover { background: none; color: var(--text-2); }
 .foot-steps-fold { display: inline-flex; flex: none; margin-left: auto; transform: rotate(-90deg); transition: transform .15s; }
 .foot-steps.open .foot-steps-fold { transform: rotate(90deg); }
 .foot-steps-list { list-style: none; margin: 0; padding: 0; }
+.foot-steps > .foot-steps-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .foot-steps-list .foot-steps-list { margin-left: 15px; padding-left: 8px; border-left: 1px solid var(--border-3); }
 .foot-step { display: flex; box-sizing: border-box; align-items: center; gap: 9px; width: 100%; height: 26px; padding: 0 8px; border: 0; border-radius: 6px;
              background: none; font: 450 12px var(--font); text-align: left; color: var(--text-3); white-space: nowrap; }
