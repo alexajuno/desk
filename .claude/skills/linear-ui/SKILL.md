@@ -5,7 +5,7 @@ description: Linear's design rules as desk has measured them, the mistakes desk'
 
 # Building desk's UI the way Linear does
 
-desk copies Linear: "whatever linear does, clone exactly" (the user, 15 Oct). Each time a session built from memory or a screenshot instead of measuring, the user caught it and the work was redone. This skill is what desk has learned so far, so that no mistake is made twice. `.claude/rules/look.md` holds the standing rules (every colour a token in both themes, screenshots in light and dark); this is the design knowledge under them.
+desk copies Linear: "whatever linear does, clone exactly" (the user, 15 Oct). Each time a session built from memory or a screenshot instead of measuring, the user caught it and the work was redone. This skill is what desk has learned so far, so that no mistake is made twice. `.claude/rules/ui.md` holds the standing rules (every colour a token in both themes, screenshots in light and dark); this is the design knowledge under them.
 
 In order:
 
