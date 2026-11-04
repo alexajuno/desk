@@ -57,8 +57,8 @@ create table if not exists issues (
   link text,
   landing text,
   landed text,
-  lands text, -- JSON: the steps Approve runs to land the work, which its session gave with its Result (land.ts, Lands)
-  plan_steps text, -- JSON: a design issue's steps, which its session sets and ticks as it goes (api.ts, PlanStep)
+  lands text, -- JSON: the steps Approve runs to land the work, which its session gave with its last report (land.ts, Lands)
+  plan_steps text, -- JSON: its steps, which its session sets and ticks as it goes (api.ts, PlanStep)
   session text, -- unread since 29 Oct: an issue's chat holds its session (chats.issue)
   waiting_on text,
   waiting_since text,

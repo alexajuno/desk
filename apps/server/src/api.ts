@@ -5,8 +5,8 @@
 //     GET    /api/issues/<slug>         one issue, with its body and files
 //     POST   /api/issues                create one: title, body, priority, state, parent, team, project, milestone, due, folder
 //     PATCH  /api/issues/<slug>         set any of those fields; its session also says what its turn hands you (review_of)
-//                                       and where its work landed (landed), or with its Result, the steps Approve runs to
-//                                       land it (lands); a body sets the sections it holds
+//                                       and where its work landed (landed), or with its last report, the steps Approve
+//                                       runs to land it (lands); a body sets the sections it holds
 //     GET    /api/issues/<slug>/sections/<name>   one section of the issue's document, as Markdown
 //     PUT    /api/issues/<slug>/sections/<name>   write it, the Markdown as the request's body; empty takes it out
 //     GET    /api/issues/<slug>/steps/<place>     one step's diagram and decisions, as Markdown; 1.2 is the first's second
@@ -506,12 +506,13 @@ export function routes(app: FastifyInstance) {
     await applyLands(i, req.body);
     await applyPlanSteps(i, req.body);
     const closed = await store.save(i);
-    compact.noted(i, before, fields.review_of); // a step ticked done or the work handed over: a break, for its chat to compact
+    // A step ticked done or the work handed over: a break, for its chat to compact.
+    compact.noted(i, before, fields.review_of);
     return { ...asJson(i, true), ...(closed.length ? { closed } : {}) };
   });
 
-  // One section of the issue's document: Context, Plan, Result, or any other. A session writes its plan and its result
-  // here, as Markdown, from a draft it keeps where it likes: curl -X PUT --data-binary @<draft>.
+  // One section of the issue's document: Context, Plan, or any other. A session writes its plan here, as Markdown, from
+  // a draft it keeps where it likes: curl -X PUT --data-binary @<draft>.
   app.get("/api/issues/:slug/sections/:name", async (req: SectionReq, reply) => {
     const text = store.section(await loadIssue(req.params.slug), req.params.name);
     if (!text) throw new HttpError(404, `${req.params.slug} has no ## ${req.params.name} section.`);
@@ -740,8 +741,8 @@ export function routes(app: FastifyInstance) {
   });
 
   // Write the plan, when one comes, into the issue, then start its session on it: the one it already has, which goes on
-  // as if the user had said go in its chat, or a new one. With neither, a new session works out its own first move, from
-  // the agent chat's talk when one is named.
+  // as if the user had said go in its chat, or a new one. With neither a plan nor a session, a new session works out
+  // its own first move, from the agent chat's talk when one is named.
   app.post("/api/issues/:slug/start", async (req: Req) => {
     const slug = req.params.slug, i = await loadIssue(slug);
     const body = (req.body ?? {}) as Record<string, unknown>;

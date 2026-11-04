@@ -3,8 +3,8 @@
 // automated" (the user, 29 Oct), and "auto also say go on the plan". The session's rules stay as they are, each step
 // ending its turn, so Manual again stops at the very next step.
 //
-// It waits for the user, as Manual does, on a question, on the work handed over (the card, or a design issue's last
-// step), on a turn the agent ended with no call of its own (one the user stopped, or one an error cut short, which desk
+// It waits for the user, as Manual does, on a question, on the work handed over (a last step's report), on a turn
+// the agent ended with no call of its own (one the user stopped, or one an error cut short, which desk
 // shows as a reply: pages.ts, advance), on Stop pressed during the turn, and on a reply when no step is left, or none
 // moved since desk last said next, so that an agent that ends its Build on a reply rather than handing it over is not
 // told next forever.

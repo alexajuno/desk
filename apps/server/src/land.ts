@@ -1,6 +1,6 @@
 // Landing approved work (ported from desk/land.py, whose docstring, in git history, tells the whole story).
 //
-// Approve runs the steps the issue's session gave with its Result (runSteps), or hands the work to the session, which
+// Approve runs the steps the issue's session gave with its last report (runSteps), or hands the work to the session, which
 // lands it as its repo's rules say. One thing stays here for the sessions desk started in a worktree of its own
 // (`claude -w`), as it did until 15 Oct: Claude Code locks such a session's git to its worktree, so desk merges for it
 // (merge), rebasing on the way when main moved. A branch is tested on a test desk of its own (pool.ts), never in the
@@ -50,7 +50,7 @@ const isDesk = (top: string | null) => top !== null && resolve(top) === REPO;
 
 // --- Approve's steps ---------------------------------------------------------------------------------------------
 
-// How an issue's work lands, as its session says with its Result (issues.ts, lands): shell commands, which Approve runs
+// How an issue's work lands, as its session says with its last report (issues.ts, lands): shell commands, which Approve runs
 // in the issue's folder with no turn of the session's, and where the work will have landed, which Done shows. "we can ask
 // the agent how the work is landed, having a script or sth like that. then approve just runs those steps" (the user,
 // 22 Oct). No steps is nothing to land; no Lands at all, from a session that never said, leaves landing to the session.

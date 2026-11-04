@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Land a branch on main, as Approve's step: a session gives `~/projects/desk/bin/land feat/<name>` with its Result, and
+# Land a branch on main, as Approve's step: a session gives `~/projects/desk/bin/land feat/<name>` with its last report, and
 # desk runs it from the issue's folder when the user approves (apps/server/src/land.ts, runSteps). It runs in whichever
 # repo its folder is in, any repo whose work lands straight on main; desk restarts itself after, when its own checkout
 # moved.

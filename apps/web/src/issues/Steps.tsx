@@ -1,4 +1,4 @@
-// A design issue's steps, which its session sets and ticks (api.ts, PlanStep), drawn as Linear draws an issue's
+// An issue's steps, which its session sets and ticks (api.ts, PlanStep), drawn as Linear draws an issue's
 // sub-issues: a row each with the issues' own status circle, its own steps under it on a thin line, a parent's count
 // and a step's note in the quiet grey at its end, and the one being worked on filled ("similar statuses for issues i
 // suppose?", the user, 27 Oct). The issue's page shows it, and its chat a card of it above the composer

@@ -113,7 +113,7 @@ export function stop() {
 
 const cut = (text: string, at: number) => (text.length > at ? `${text.slice(0, at)}…` : text);
 
-// The steps of a design issue, its titles and notes, one a line.
+// An issue's steps, their titles and notes, one a line.
 function stepsOf(i: store.Issue): string {
   if (!i.plan_steps) return "";
   const lines: string[] = [];

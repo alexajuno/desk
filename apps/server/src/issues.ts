@@ -30,7 +30,7 @@ export const PRIORITIES = ["urgent", "high", "medium", "low", "none"];
 // The states (desk/issues.py, in git history, said why each exists).
 export const STATES = ["triage", "backlog", "running", "waiting", "review", "landing", "done", "dropped"];
 // What an issue in review holds for you, as its session said when its turn ended, or desk read from what the turn
-// wrote: a plan to say go to, a question to answer, a result to approve, or a reply in its chat.
+// wrote: a plan to say go to, a question to answer, work to approve, or a reply in its chat.
 export const REVIEWS = ["plan", "question", "result", "reply"];
 export const STATE_NAMES: Record<string, string> = {
   triage: "Triage", backlog: "Backlog", running: "In progress", waiting: "Waiting", review: "In review",
@@ -54,7 +54,7 @@ export interface Issue {
   landing: string | null; // in landing, when Approve told the session to land its work
   landed: string | null; // in done, where its session said the work landed: the commit, or the pull request's link
   lands: string | null; // while open, how its session said the work lands, which Approve runs: JSON, as Lands (land.ts)
-  plan_steps: string | null; // JSON: a design issue's steps, which its session sets and ticks (api.ts, PlanStep)
+  plan_steps: string | null; // JSON: its steps, which its session sets and ticks (api.ts, PlanStep)
   waiting_on: string | null; // in waiting, who or what it waits on, such as "QA on #570"
   waiting_since: string | null;
   review_of: string | null; // in review, one of REVIEWS; none in a review from before 19 Oct, which held a result
@@ -86,7 +86,7 @@ const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // --- the document ------------------------------------------------------------------------------------------------
 // An issue's body is its one document: ## Context, the ask; ## Plan, which its session keeps while the user plans with
-// it; ## Result, its review card and write-up, which a design issue does without. "seemingly we don't need multiple
+// it; on an older issue, ## Result, its review card and write-up. "seemingly we don't need multiple
 // files. instead having a single content for the issue would be better" (the user, 19 Oct). Sessions write a section at a time through the API, so the user's
 // edit to one and a session's to another never overwrite each other.
 

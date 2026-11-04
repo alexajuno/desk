@@ -48,16 +48,16 @@ export interface IssuePageData {
   plan: string; // the Plan, as Markdown, or ""
   plan_card: [string, string] | null; // the Plan drawn, above its "### Details" and under it, as its chat shows it
   context_html: string; // the Context drawn, which its chat opens on, folded
-  result: string; // the Result, as Markdown, or ""
+  result: string; // an older issue's Result, as Markdown, or ""
   result_html: string;
-  card: [string, string] | null; // the Result drawn, its card and its write-up, when it has a "### Details"
-  reviewing: boolean; // in review, holding a result to approve rather than a plan or a question
+  card: [string, string] | null; // that Result drawn, its card and its write-up, when it has a "### Details"
+  reviewing: boolean; // in review, holding work to approve rather than a plan or a question
   session_kind: string | null;
   live: string;
   step: { text: string; button: StepButton | null };
   landed: string | null; // in done, where its session said the work landed
   lands: { steps: string[]; landed?: string } | null; // in review, the steps Approve runs, as its session gave them
-  plan_steps: PlanStep[] | null; // a design issue's steps, which its session sets and ticks
+  plan_steps: PlanStep[] | null; // its steps, which its session sets and ticks
 }
 
 const Html = ({ className, html }: { className: string; html: string }) => (
@@ -75,7 +75,7 @@ const stepTip = (head: string, text: string, state: State) => (text === STATE_NA
 const LANDING: IssuePageData["step"] = { text: "Landing", button: { label: "Landing…", disabled: true } };
 
 // The landing steps you unticked, by their place, which Approve skips: by the issue and the steps it was given, so
-// that the card in its chat and the Approve in its chat's head skip the same ones, and a new set starts all ticked.
+// that the ticks at its chat's end and the Approve in its chat's head skip the same ones, and a new set starts all ticked.
 const skips = observable.map<string, number[]>();
 
 export function landSkip(slug: string, steps: string[] | null): [number[], (skip: number[]) => void] {
@@ -84,7 +84,7 @@ export function landSkip(slug: string, steps: string[] | null): [number[], (skip
 }
 
 // An issue's step, its one primary button, and the landing steps Approve runs, which you untick to skip: on its page,
-// and in its chat, the step in its head and the steps under the card its session sent.
+// and in its chat, the step in its head and the landing steps at its end.
 export function useStep(data: IssuePageData, inInbox = false) {
   const p = painted(data.issue);
   // Trust folder takes the step's place once starting the issue's session found its folder untrusted.
@@ -95,7 +95,7 @@ export function useStep(data: IssuePageData, inInbox = false) {
   const steps = data.lands?.steps ?? null;
   const [skip, setSkip] = landSkip(p.slug, steps);
 
-  // A form route of the old pages: Start, Approve, Trust folder. What its redirect says shows as a toast.
+  // A form route of the old pages: Start, Go, Approve, Trust folder. What its redirect says shows as a toast.
   // From the Inbox, Approve moves on as Linear does: the next notification opens, and a toast says what happened
   // (app.ts, onward).
   async function act(action: string) {
@@ -142,23 +142,24 @@ export const IssueView = observer(function IssueView({ data, inInbox = false, pa
           <Title title={p.title} save={(t) => setField(p.slug, "title", t)} />
           <Chips p={p} team={data.team} project={data.project} milestone={data.milestone} />
           {/* In review, what Approve runs comes first, right under the title. The last step's report, in the chat, says
-              what the work is; a Result an older chat wrote stays where it is in the document, and is not this work's. */}
+              what the work is; an older issue's Result stays below, with its document. */}
           {p.state === "review" && data.reviewing && steps && (
             <div className="review">
               <div className="section-label" style={{ marginTop: 0 }}>Review</div>
               <Lands steps={steps} skip={skip} setSkip={setSkip} />
             </div>
           )}
-          {/* A design issue's steps, the work's map, above the document they come from. */}
+          {/* Its steps, the work's map, above its document. */}
           {data.plan_steps && data.plan_steps.length > 0 && (
             <section className="sec" data-sec="steps">
               <div className="section-label sec-head"><Fold />Steps</div>
               <div className="sec-body"><Steps steps={data.plan_steps} /></div>
             </section>
           )}
-          {/* The issue's one document: its Context, then its Plan and its Result, which its session writes through the
-              API. An older issue's plan.md and result.md follow it, in the same order. Then the sub-issues, which the
-              agent files, so the section shows only once there is one (Add sub-issue is in the ⋯ menu). */}
+          {/* The issue's one document: its Context, then its Plan, which its session writes through the API, and an
+              older issue's Result. An older issue's plan.md and result.md follow it, in the same order. Then the
+              sub-issues, which the agent files, so the section shows only once there is one (Add sub-issue is in the ⋯
+              menu). */}
           <Description key={p.slug} body={data.body} html={data.body_html} save={(t, base) => setField(p.slug, "body", t, base)} />
           {"plan.md" in data.agent_files && (
             <section className="sec" data-sec="plan.md">

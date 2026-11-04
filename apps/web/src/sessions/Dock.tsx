@@ -95,7 +95,7 @@ const hasIssue = () => dock.center && chatPage.get()?.issue.session === dock.ses
 
 // ] on an issue's chat in the middle while you read it, as [ the sidebar: its issue's details drop open under its head,
 // or fold. Its page is no view of it since 1 Nov: its step is in the head, its details drop open under it, and its Plan
-// and card are drawn in the chat ("for content, it's all in the chat huh", the user); its Changes are in the right half
+// is drawn in the chat ("for content, it's all in the chat huh", the user); its Changes are in the right half
 // since 4 Nov (Half.tsx), so Tab, 1 and 2, which walked the chat's views, have nothing to do.
 export function detailsKey(e: KeyboardEvent): boolean {
   if (e.ctrlKey || e.metaKey || e.altKey || !hasIssue() || e.key !== "]") return false;
@@ -326,7 +326,7 @@ const ChatHead = observer(function ChatHead({ s, docked }: { s: LiveSession; doc
   );
 });
 
-// The issue's next step at the head's right, only while it is a click: Go on a plan, Approve on a card. Open chat,
+// The issue's next step at the head's right, only while it is a click: Go on a plan, Approve on a last report. Open chat,
 // the step while the issue's turn is said in its chat, has no button here, in that chat. The Inbox's pane, which shows
 // an issue's chat without this head, puts it in its own top bar (inbox/InboxPage.tsx).
 export const HeadStep = observer(function HeadStep({ data, inInbox = false }: { data: IssuePageData; inInbox?: boolean }) {
@@ -379,8 +379,8 @@ function stepsSentBy(tool: Item, result: Item | undefined, slug: string | null):
 }
 
 // The items in the order drawn, the tool steps and thoughts between two replies folded into one row. A step that sent
-// the issue its plan or its card leaves the fold and shows as what it sent. replied: what you sent from your box to the
-// chat's threads, oldest first, each a line where it went among the items.
+// the issue its plan, or in an older chat its card, leaves the fold and shows as what it sent. replied: what you sent
+// from your box to the chat's threads, oldest first, each a line where it went among the items.
 function rowsOf(items: Item[], results: Map<string, Item>, slug: string | null, replied: SentReply[] = []): Row[] {
   const rows: Row[] = [];
   let r = 0;
@@ -418,8 +418,8 @@ function repliedIn(items: Item[]): SentReply[] {
     .sort((a, b) => (a.sent ?? a.at) - (b.sent ?? b.at));
 }
 
-// An issue's chat: its conversation, with the plan and the card its session sent drawn from the issue's page, kept
-// current as the issue's page is.
+// An issue's chat: its conversation, with the plan its session sent, and an older chat's card, drawn from the issue's
+// page, kept current as the issue's page is.
 const IssueConversation = observer(function IssueConversation({ s, slug }: { s: LiveSession; slug: string }) {
   const { data, reload } = usePage<IssuePageData>(`/api/page/issue/${slug}`, `${issues.files.get(slug) ?? 0}`);
   useIssueLive(data, reload);

@@ -398,8 +398,8 @@ const DETAILS = /^#{2,3} Details[ \t]*$/m;
 // Python-Markdown starts a list only after a blank line, and a card's list often sits right under its label.
 const LIST_UNDER_LINE = /^(?![-*+] |\p{Nd}+\. )(\S[^\n]*)\n(?=[-*+] |\p{Nd}+\. )/gmu;
 
-// A result written as a review card: the card above its "### Details" heading (an older result.md's "## Details"), the
-// write-up under it; null for a result without one, which shows whole.
+// A Plan, or an older Result written as a review card: the text above its "### Details" heading (an older result.md's
+// "## Details"), the write-up under it; null for one without it, which shows whole.
 export function splitResult(text: string): [string, string] | null {
   const m = DETAILS.exec(text);
   if (!m) return null;
@@ -490,11 +490,11 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     session_kind: session.kind ?? null, live: talkOf(i),
     step: step(i, await asking()), landed: i.landed,
     lands: reviewing ? land.landsOf(i) : null, // the steps Approve runs, which the review lists to untick
-    plan_steps: i.plan_steps ? drawnSteps(JSON.parse(i.plan_steps), `/issue/${slug}/f/`) : null, // a design issue's steps (api.ts, PlanStep)
+    plan_steps: i.plan_steps ? drawnSteps(JSON.parse(i.plan_steps), `/issue/${slug}/f/`) : null, // its steps (api.ts, PlanStep)
   };
 }
 
-// A design issue's steps for its page and its chat, each one's diagram and decisions drawn, as its session sent them
+// An issue's steps for its page and its chat, each one's diagram and decisions drawn, as its session sent them
 // with PUT /steps/<place>.
 // Its pictures, such as Today and After, draw as a row; a step drawn before 31 Oct has its one diagram's source instead.
 // A step written as parts gives each its title, its text and its own diagram, which the chat shows beside the text.

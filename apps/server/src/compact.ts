@@ -2,9 +2,9 @@
 // going on. hard cap in reality is usually wrong" (the user, 30 Oct, on the issue "A long chat tries to compact again on
 // every message after I cancel it"). A compaction goes bad "when the model can't predict the direction your work is
 // going" (https://claude.com/blog/using-claude-code-session-management-and-1m-context), and at a break desk knows where
-// it goes next: the step after the one ticked done, or the review of the Result just sent. desk compacts the chat as that
-// turn ends, while you read its reply, rather than in front of your next message, where it held a message just typed
-// for about 76 s.
+// it goes next: the step after the one ticked done, or the review of the last report just sent. desk compacts the chat
+// as that turn ends, while you read its reply, rather than in front of your next message, where it held a message just
+// typed for about 76 s.
 import * as agents from "./agents.ts";
 import * as chats from "./chats.ts";
 import * as hosted from "./hosted.ts";

@@ -805,7 +805,7 @@ export async function create(): Promise<FastifyInstance> {
     } catch (error) {
       if (error instanceof land.MainMoved) {
         try {
-          await agents.say(i, `Approved, but ${error.message} Rebase onto it, resolve the conflicts, check the work again, then hand it over again: a fresh Result with a fresh card, or on a design issue a fresh last report with the steps that land it.`);
+          await agents.say(i, `Approved, but ${error.message} Rebase onto it, resolve the conflicts, check the work again, then hand it over again: a fresh last report with the steps that land it.`);
         } catch (failed) {
           return stay(`${error.message} ${(failed as Error).message}`);
         }
