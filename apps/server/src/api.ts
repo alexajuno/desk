@@ -506,7 +506,7 @@ export function routes(app: FastifyInstance) {
     await applyLands(i, req.body);
     await applyPlanSteps(i, req.body);
     const closed = await store.save(i);
-    // A step ticked done or the work handed over: a break, for its chat to compact.
+    // A step ticked done with another to go: a break, for its chat to compact.
     compact.noted(i, before, fields.review_of);
     return { ...asJson(i, true), ...(closed.length ? { closed } : {}) };
   });

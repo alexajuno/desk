@@ -2,9 +2,9 @@
 // going on. hard cap in reality is usually wrong" (the user, 30 Oct, on the issue "A long chat tries to compact again on
 // every message after I cancel it"). A compaction goes bad "when the model can't predict the direction your work is
 // going" (https://claude.com/blog/using-claude-code-session-management-and-1m-context), and at a break desk knows where
-// it goes next: the step after the one ticked done, or the review of the last report just sent. desk compacts the chat
-// as that turn ends, while you read its reply, rather than in front of your next message, where it held a message just
-// typed for about 76 s.
+// it goes next: the step after the one ticked done. desk compacts the chat as that turn ends, while you read its reply,
+// rather than in front of your next message, where it held a message just typed for about 76 s. The last step is no
+// break: "after the last step, the issue is done already so no compaction is needed" (the user, 4 Nov).
 import * as agents from "./agents.ts";
 import * as chats from "./chats.ts";
 import * as hosted from "./hosted.ts";
@@ -34,11 +34,10 @@ const done = (steps: Step[]) => steps.filter((s) => s.state === "done").length;
 export function noted(i: { slug: string; plan_steps: string | null }, before: string | null, reviewOf?: string | null) {
   const session = chats.sessionOfIssue(i.slug), steps = leaves(parsed(i.plan_steps));
   if (!session) return;
-  if (reviewOf === "result") breaks.set(session, "The work was just handed over: keep what its review and the landing need.");
-  else if (done(steps) > done(leaves(parsed(before)))) {
-    const next = steps.find((s) => s.state !== "done");
-    breaks.set(session, next ? `The work goes on to the next step, "${next.title}": keep what it needs.` : "Every step is done: keep what its review and the landing need.");
-  }
+  const next = steps.find((s) => s.state !== "done");
+  // Every step done or the work handed over: no break, and none an earlier tick of the same turn noted.
+  if (!next || reviewOf === "result") breaks.delete(session);
+  else if (done(steps) > done(leaves(parsed(before)))) breaks.set(session, `The work goes on to the next step, "${next.title}": keep what it needs.`);
 }
 
 // As the session's turn ends: a break noted during it compacts a chat over OVER, counted afresh, since the count desk
