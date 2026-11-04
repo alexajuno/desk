@@ -22,7 +22,7 @@ import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as models from "./models.ts";
 import { run, sleep } from "./proc.ts";
-import { fill, HANDED, HANDED_ON, HANDED_TODO, HANDED_TOLD, HANDED_WHERE, MOVED, NOT_MOVED, ON_ISSUE, PLAN_RULES, PROMPT, PROTOCOLS, WINDOW_RULES, WORK } from "./prompts.ts";
+import { fill, HANDED, HANDED_ON, HANDED_TODO, HANDED_TOLD, HANDED_WHERE, JUDGE, MOVED, NOT_MOVED, ON_ISSUE, PLAN_RULES, PROMPT, WINDOW_RULES, WORK } from "./prompts.ts";
 import type { Agent } from "./roster.ts";
 import * as settings from "./settings.ts";
 import type { Effort } from "./settings.ts";
@@ -311,7 +311,7 @@ export async function agentPrompt(chat: Chat, base: string): Promise<string> {
   // A chat may run for days, and Claude Code gives it the date.
   const plan_rules = fill(PLAN_RULES, { base, drafts: store.drafts(slug || "<slug>"), slug: slug || "<slug>" }); // its steps' call
   let prompt = fill(PROMPT, { today: "the date your environment gives", day: "15 Oct", reference, chat: chat.id, plan_rules, work,
-    protocols: PROTOCOLS, ...rules });
+    judge: JUDGE, ...rules });
   if (slug) prompt += `\n\nThis chat works the issue /issue/${slug}, in ${chat.folder}.`;
   // The chat it took the issue on from, by a handoff or when that chat went on to other work: its conversation is there.
   const before = chat.from && exists(chat.from) ? all().get(chat.from)! : null, path = before && transcripts.pathOf(before.session);

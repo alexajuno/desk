@@ -1,10 +1,10 @@
 // The one Claude Code session bound to an issue, from its plan to its landing (ported from desk/agents.py, which said
 // how each step works and what was checked on Claude Code 2.1.285 and 2.1.300).
 //
-//   Plan       a session in the session host (host.ts), in the issue's folder: the repo's own rules say where the
-//              session works. The session plans by the issue's protocol and keeps the plan in the issue's Plan section.
-//   "go"       said in its panel: the same session carries out the plan, then writes its review card in the Result, or
-//              on a design issue reports its last step, with no card.
+//   Start      a session in the session host (host.ts), in the issue's folder: the repo's own rules say where the
+//              session works. The session judges how much plan the issue needs, and lists its steps.
+//   "go"       said in its panel, when it talked first: the same session carries out the plan.
+//   Report     its last step's report hands the work over, with the steps that land it.
 //   Approve    the same session lands the work by the repo's rules: desk sends it the message, which waits its turn
 //              when the session is working.
 //
@@ -16,7 +16,7 @@ import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as hosted from "./hosted.ts";
 import { run, sleep, which } from "./proc.ts";
-import { BRIEF_FIRST, BRIEF_STEPS, DESIGN_GO_PROMPT, fill, GO_FIRST, GO_PROMPT, LAND_PROMPT, ON_ISSUE, PLAN_FIRST, PLAN_OF, STEPS_FAILED, TOLD } from "./prompts.ts";
+import { fill, FIRST, GO_FIRST, GO_PROMPT, LAND_PROMPT, ON_ISSUE, PLAN_OF, STEPS_FAILED, TOLD } from "./prompts.ts";
 
 export async function git(cwd: string, ...args: string[]): Promise<string | null> {
   try {
@@ -146,26 +146,21 @@ async function newSession(i: Issue, message: string): Promise<string> {
   return (await chats.onIssue(i, message)).session;
 }
 
-// The chat's first message, by the issue's protocol: a sketch planned with the user, or a brief, after which it waits
-// for "go" or goes on at once. chat is the agent chat it came from, if any.
-export function planPrompt(i: Issue, folder: string, chat = ""): string {
-  const p = paths(i, folder), runs = store.runs(i), told = chat ? fill(TOLD, { chat }) : "";
-  if (runs === "design") return fill(ON_ISSUE, { ...p, told, todo: PLAN_FIRST });
-  const [how, then] = BRIEF_STEPS[runs];
-  return fill(ON_ISSUE, { ...p, told, todo: fill(BRIEF_FIRST, { protocol: runs, how, then }) });
-}
+// The chat's first message: it judges how much plan the issue needs and lists its steps. chat is the agent chat it came
+// from, if any.
+const firstPrompt = (i: Issue, folder: string, chat = "") =>
+  fill(ON_ISSUE, { ...paths(i, folder), told: chat ? fill(TOLD, { chat }) : "", todo: FIRST });
 
-// Plan, or Start: the issue's chat plans it by its protocol; its session id.
-export const start = (i: Issue, folder: string) => newSession(i, planPrompt(i, folder));
-// Go, by the issue's protocol: a design issue is carried out one step at a time with the user.
-const goPrompt = (i: Issue, folder: string) => fill(store.runs(i) === "design" ? DESIGN_GO_PROMPT : GO_PROMPT, paths(i, folder));
+// Start: the issue's chat works out its own first move; its session id.
+export const start = (i: Issue, folder: string) => newSession(i, firstPrompt(i, folder));
+const goPrompt = (i: Issue, folder: string) => fill(GO_PROMPT, paths(i, folder));
 // Start the issue's chat straight on its written plan; its session id.
 export const runPlan = (i: Issue, folder: string) => {
-  const p = paths(i, folder), todo = `${GO_FIRST[store.runs(i) === "design" ? "design" : "other"]} ${fill(PLAN_OF, p)}`;
-  return newSession(i, fill(ON_ISSUE, { ...p, told: "", todo }));
+  const p = paths(i, folder);
+  return newSession(i, fill(ON_ISSUE, { ...p, told: "", todo: `${GO_FIRST} ${fill(PLAN_OF, p)}` }));
 };
-// Start the issue's chat to plan from the agent chat, then wait, or go on at once for a quick issue.
-export const planFromChat = (i: Issue, folder: string, chat: string) => newSession(i, planPrompt(i, folder, chat));
+// Start the issue's chat from the agent chat's talk.
+export const planFromChat = (i: Issue, folder: string, chat: string) => newSession(i, firstPrompt(i, folder, chat));
 // The session of the issue's chat, which takes the issue's messages: an issue holds none of its own since 29 Oct.
 async function chatOf(i: Issue): Promise<string> {
   const session = (await import("./chats.ts")).sessionOfIssue(i.slug);
