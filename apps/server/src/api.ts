@@ -3,7 +3,7 @@
 //
 //     GET    /api/issues?q=&state=      list and search issues
 //     GET    /api/issues/<slug>         one issue, with its body and files
-//     POST   /api/issues                create one: title, body, priority, state, parent, team, project, milestone, due, folder, protocol
+//     POST   /api/issues                create one: title, body, priority, state, parent, team, project, milestone, due, folder
 //     PATCH  /api/issues/<slug>         set any of those fields; its session also says what its turn hands you (review_of)
 //                                       and where its work landed (landed), or with its Result, the steps Approve runs to
 //                                       land it (lands); a body sets the sections it holds
@@ -73,7 +73,7 @@ const OPEN = store.STATES.filter((s) => s !== "done" && s !== "dropped");
 export function asJson(i: Issue, full = false) {
   const data: Record<string, unknown> = {
     slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, project: i.project, milestone: i.milestone, due: i.due, folder: i.folder,
-    protocol: store.runs(i), session: chats.sessionOfIssue(i.slug), created: i.created, url: `/issue/${i.slug}`, // its chat's session
+    session: chats.sessionOfIssue(i.slug), created: i.created, url: `/issue/${i.slug}`, // its chat's session
   };
   if (i.state === "waiting") Object.assign(data, { waiting_on: i.waiting_on, waiting_since: i.waiting_since });
   if (i.state === "review") Object.assign(data, { review_of: i.review_of ?? "result", review_since: i.review_since });
@@ -89,7 +89,7 @@ async function loadIssue(slug: string): Promise<Issue> {
   return store.load(slug);
 }
 
-const FIELDS = ["title", "body", "priority", "state", "parent", "team", "project", "milestone", "due", "folder", "protocol", "waiting_on", "review_of", "landed"];
+const FIELDS = ["title", "body", "priority", "state", "parent", "team", "project", "milestone", "due", "folder", "waiting_on", "review_of", "landed"];
 export const PULL = /https:\/\/github\.com\/\S+\/pull\/\d+/;
 const AUTOMATION_FIELDS = ["title", "when", "check", "agent", "body", "state"];
 
@@ -117,7 +117,7 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
     delete fields.state;
     delete fields.review_of;
   }
-  for (const [name, allowed] of [["priority", store.PRIORITIES], ["state", store.STATES], ["protocol", store.PROTOCOLS], ["review_of", store.REVIEWS]] as const)
+  for (const [name, allowed] of [["priority", store.PRIORITIES], ["state", store.STATES], ["review_of", store.REVIEWS]] as const)
     if (name in fields && !allowed.includes(fields[name] as string)) throw new HttpError(422, `${name} must be one of: ${allowed.join(", ")}`);
   if (fields.state === "landing" && i.state !== "landing") throw new HttpError(422, "Only Approve lands an issue: the user presses it in desk.");
   if (fields.waiting_on && (fields.state ?? i.state) !== "waiting")

@@ -54,7 +54,6 @@ create table if not exists issues (
   milestone text,
   due text, -- a day, 2026-11-08: its due date, Linear's
   folder text,
-  protocol text,
   link text,
   landing text,
   landed text,
@@ -334,6 +333,7 @@ export async function open(): Promise<PGlite> {
   // Try's line for desk's own checkout and the copies of the files from before 19 Oct, out since 2 Nov: a branch is
   // tested on a test desk of its own (pool.ts, tests).
   await opened.exec("drop table if exists line; drop table if exists tries; drop table if exists trying; drop table if exists copies;");
+  await opened.exec("alter table issues drop column if exists protocol;"); // an issue's protocol, out since 4 Nov
   // desk's database is a few MB: Postgres's default 128 MB of shared buffers only holds memory, about 50 MB of it. Set
   // once in postgresql.auto.conf, it applies from the next start.
   if ((await opened.query<{ shared_buffers: string }>("show shared_buffers")).rows[0]?.shared_buffers !== "16MB")
