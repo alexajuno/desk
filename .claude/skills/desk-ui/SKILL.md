@@ -5,7 +5,7 @@ description: What desk's web app does with Linear's UI, screen by screen - what 
 
 # desk's UI
 
-desk copies Linear, so read the `linear-ui` skill first: it says what Linear does. This file says what desk does with it, and each line is one of three kinds:
+desk copies Linear: "whatever linear does, clone exactly" (the user, 15 Oct). So read the `linear-ui` skill first: it says what Linear does, and how to read linear.app. If linear.app can't be reached, say so and stop rather than build from that skill's words, as it allows elsewhere. This file says what desk does with it, and each line is one of three kinds:
 
 - **What desk adds**, where Linear has nothing to copy.
 - **Where desk leaves Linear on purpose.** Don't "fix" these to match Linear. The user's words stand beside the ones a chat could undo in good faith.
@@ -25,13 +25,15 @@ Where they disagree, `desk-ui` beats `linear-ui`, and `apps/web/src/styles/desk.
 - Pinned and Chats fold like Linear's sidebar sections (`.nav-fold`).
 - A chat's row takes keys while the mouse is on it, which Linear's sidebar rows don't: P pins, R renames, Delete deletes, and a key with no action says why in a toast rather than reaching the issue open beside it (`chatKey` in `frame/Sidebar.tsx`).
 - A page holds the splash until it can draw whole. Anything new that waits for data holds it with `useSplash`, and must not glide or fade in under it (`splashUp`, both in `app/splash.ts`).
+- desk's plain `button` has no ring, unlike its filled controls, and hasn't been measured again since Linear's rings were found on `::after`. Measure one of Linear's and fix it when you next touch buttons.
+- Copy a Linear key from Linear's own Ctrl / panel, never from memory.
 - Linear's pieces: menus are `.menu` (`ui/menu.tsx`), the command menu `.menu.command` (`frame/open.tsx`), toasts `ui/toast.tsx`, the date picker `ui/datepicker.tsx`, a project's status icon `ProjectStatusIcon`, a link in a document `editor/links.ts`, and a name or description edited where it is shown `Title` and `Description`.
 
 ## The pages
 
 - There is one search, a box over the page you are on, with a tab per kind and Chats first, not Linear's search page (`search/SearchBox.tsx`): "wanna search for sessions, usually the most" (the user, 1 Nov).
 - An issue's project and milestone are links, not pickers, and Shift P and Shift M change them: "honestly i never edit project" (the user, 29 Oct). An empty one still opens its picker.
-- An issue's action row, over Properties, adds Open chat, and ends in the step (Plan, Go, Approve), the one primary button (`Actions` in `issues/IssueView.tsx`).
+- An issue's action row, over Properties, adds Open chat, and ends in the step (Start, Go, Approve), the one primary button (`Actions` in `issues/IssueView.tsx`).
 - An issue has no "7 / 187" walker: "i find myself not using that at all" (the user, 28 Oct). The user walks issues through the Inbox.
 - I is Open chat, a key Linear doesn't have.
 - Where no top bar names an issue's parents, as in a chat's details or the Inbox, a line over its title does (`.issue-parents`).
@@ -42,12 +44,12 @@ Where they disagree, `desk-ui` beats `linear-ui`, and `apps/web/src/styles/desk.
 
 ## The chat
 
-- An issue's chat is one screen: "i don't like the plan and issue as a separate panel... all could be on a single screen" (the user, 28 Oct). Something to read beside a chat is a view of it or a card in it, never a panel over it. Before drawing a sheet or a modal over a screen, ask whether it is another view of the same thing.
+- An issue's chat is one screen: "i don't like the plan and issue as a separate panel... all could be on a single screen" (the user, 28 Oct). Something to read beside a chat is a view of it or a card in it, never a panel over it. Before drawing a sheet or a modal over a screen, ask whether it is another view of the same thing. One you do draw to read in takes most of the window, not a form's size.
 - Add nothing to the chat's head without taking something out: "the header in chat interface looks kinda tight" (the user, 28 Oct). It holds the issue's status, its title with a ⌄ for its details, the buttons that open the right half, and the next step (`ChatHead` in `sessions/Dock.tsx`; `IssueDetails` in `issues/IssueView.tsx`).
 - Whether the chat is working shows in the chat, not in its head.
 - Put an action where it belongs. What opens the right half goes in the head, not the composer: "having these icons in composer doesn't sound valid" (the user, 1 Nov). What holds for the whole account goes in the window's bar, and what holds for this chat in the composer's foot.
 - A number shown outright is a ring and its percent after a grey word, in black and white (`Gauge` in `sessions/Dock.tsx`): "coloring is bad. usually we should use black and white" (the user, 1 Nov).
-- A design issue's steps are a card above the composer, not a tab (`sessions/StepsCard.tsx`). Your pick, 31 Oct.
+- An issue's steps are a card above the composer, not a tab (`sessions/StepsCard.tsx`). Your pick, 31 Oct.
 - A chat lets go of its end only when you scroll up, since a chat opened cold grows as its pictures load. Then it shows Jump to latest (`.jump-latest`). Your pick, 31 Oct.
 - Each message has claude.ai's Copy under it and its time beside it, since Linear has neither (`CopyMessage`, `.msg-time`).
 - Claude's own commands are drawn in the chat as a terminal shows them, not copied into the right half (`Command` in `sessions/Dock.tsx`). Your pick, 31 Oct.
@@ -76,7 +78,7 @@ Up to 640px (`styles/phone.css`). Linear's phone app is native, so none of this 
 `.claude/rules/ui.md` says what to screenshot. Run the branch on a test desk as CLAUDE.md says, and read computed values in the agents' Chrome through the `chrome` skill.
 
 - Before styling a class, grep it across `apps/web/src`, and name a new component's classes after it (`plan-step`, not `step`), since a shared name restyles whatever else carries it.
-- A value measured on linear.app goes in `desk.css`: reuse a token with the same value if one exists, and put a comment above the block saying what was measured, on which page and date, and in which themes.
+- A value measured on linear.app goes in `desk.css`, with `getComputedStyle`'s `lch(L C H)` written `lch(L% C H)`: reuse a token with the same value if one exists, and put a comment above the block saying what was measured, on which page and date, and in which themes.
 - `localStorage.theme` beats an emulated scheme. Set it, reload, and take it out again when done.
 - Wait for the page's data before reading: some controls appear only once a list has loaded.
 - Work only in your own tab. Vimium there takes `/`, `f` and Esc before desk does, X closes the tab and T opens one, so open a page by its address and send such keys with `dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }))`.
