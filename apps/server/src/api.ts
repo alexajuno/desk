@@ -178,9 +178,20 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
   for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "team", "project", "milestone", "due", "folder", "waiting_on", "landed"].includes(name) ? value || null : value;
 }
 
-// How the work lands, which a session sends with its Result, and Approve runs (land.ts, Lands): {"steps": [<bash
-// commands>], "landed": <where it will have landed>}, or null to take it back. A Result with nothing to land is done at
-// once, as Approve would leave it, since Approve would only press Done for you: "i just wanna remove that manual step
+// Every issue lists its steps from its chat's first reply, one step or twenty, so a turn that hands the user anything
+// holds them: the list it sends, or the one desk keeps. A question can come at any point. Triage has no work yet, which
+// apply says by leaving review_of out, and the page's status menu goes through its own route (app.ts, checked).
+function mustList(i: Issue, fields: Record<string, string | null>, body: unknown) {
+  if (!fields.review_of || fields.review_of === "question") return;
+  const sent = (body as { plan_steps?: unknown } | null)?.plan_steps;
+  const list: unknown = sent === undefined ? JSON.parse(i.plan_steps ?? "null") : sent;
+  if (Array.isArray(list) && list.length) return;
+  throw new HttpError(422, `Every issue lists its steps before a turn ends on ${fields.review_of}: send them with this call, as "plan_steps": [{"title": "<a few words>", "state": "done"}], one step or twenty. Only "review_of": "question" goes without them.`);
+}
+
+// How the work lands, which a session sends with its hand-over, and Approve runs (land.ts, Lands): {"steps": [<bash
+// commands>], "landed": <where it will have landed>}, or null to take it back. A hand-over with nothing to land is done
+// at once, as Approve would leave it, since Approve would only press Done for you: "i just wanna remove that manual step
 // when we both know that it's done" (the user, 30 Oct).
 async function applyLands(i: Issue, body: unknown) {
   if (!body || typeof body !== "object" || !("lands" in body)) return;
@@ -194,7 +205,7 @@ async function applyLands(i: Issue, body: unknown) {
   const { steps, landed } = lands as { steps?: unknown; landed?: unknown };
   if (!Array.isArray(steps) || !steps.every((s) => typeof s === "string") || (landed !== undefined && landed !== null && typeof landed !== "string"))
     throw new HttpError(422, shape);
-  if (i.state !== "review") throw new HttpError(422, 'lands goes with the Result: send "state": "review", "review_of": "result" with it');
+  if (i.state !== "review") throw new HttpError(422, 'lands goes with the hand-over: send "state": "review", "review_of": "result" with it');
   const kept = (steps as string[]).map((s) => s.trim()).filter(Boolean);
   const where = typeof landed === "string" ? landed.trim() : "";
   i.lands = JSON.stringify({ steps: kept, ...(where && { landed: where }) });
@@ -204,7 +215,7 @@ async function applyLands(i: Issue, body: unknown) {
   if (pr && !i.link) i.link = pr[0];
 }
 
-// A design issue's steps, which its session sends whole each time one changes, and desk draws as a tree with the
+// An issue's steps, which its session sends whole each time one changes, and desk draws as a tree with the
 // issues' own status circles: "ai has to gimme the plan, do each step", "i think we need database and new column here
 // rather than text rendering level only" (the user, 27 Oct). null takes them back.
 // A build step also carries its commit, the one that ends it, from which desk draws the step's diff: "we have diff show
@@ -491,10 +502,11 @@ export function routes(app: FastifyInstance) {
   app.patch("/api/issues/:slug", async (req: Req) => {
     const i = await loadIssue(req.params.slug), fields = given(req.body, FIELDS), before = i.plan_steps;
     await apply(i, fields);
+    mustList(i, fields, req.body);
     await applyLands(i, req.body);
     await applyPlanSteps(i, req.body);
     const closed = await store.save(i);
-    compact.noted(i, before, fields.review_of); // a step ticked done or the Result sent: a break, for its chat to compact
+    compact.noted(i, before, fields.review_of); // a step ticked done or the work handed over: a break, for its chat to compact
     return { ...asJson(i, true), ...(closed.length ? { closed } : {}) };
   });
 
@@ -727,9 +739,9 @@ export function routes(app: FastifyInstance) {
     return { deleted: req.params.id };
   });
 
-  // Write the plan into the issue, then start its session on it: the one it already has, which carries it out as if the
-  // user had said go in its chat, or a new one. With no plan, a session plans it from the agent chat, or, for a quick
-  // or brief issue, writes its own brief.
+  // Write the plan, when one comes, into the issue, then start its session on it: the one it already has, which goes on
+  // as if the user had said go in its chat, or a new one. With neither, a new session works out its own first move, from
+  // the agent chat's talk when one is named.
   app.post("/api/issues/:slug/start", async (req: Req) => {
     const slug = req.params.slug, i = await loadIssue(slug);
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -742,11 +754,7 @@ export function routes(app: FastifyInstance) {
       store.setSection(i, "Plan", plan);
       await store.save(i);
     }
-    // A quick or brief issue's session writes its own brief, so it may start with no plan and no chat.
-    const planning = !store.hasPlan(i) && !had && (chats.exists(chat) || store.runs(i) !== "design");
-    if (!store.hasPlan(i) && !planning)
-      throw new HttpError(422, "Write the plan first: send it as plan, in three parts: Direction, Done when, What you may decide alone. " +
-        "Or send chat, the id of this chat, and the issue's session writes the plan. A quick or brief issue needs neither.");
+    const planning = !store.hasPlan(i) && !had;
     const folder = store.folder(slug);
     try {
       if (planning && chats.exists(chat)) await agents.planFromChat(i, folder, chats.transcript(chat));
