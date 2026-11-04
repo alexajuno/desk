@@ -1,11 +1,9 @@
 // desk's vocabulary, as the server's issues.ts defines it.
 export type State = "triage" | "backlog" | "running" | "waiting" | "review" | "landing" | "done" | "dropped";
 export type Priority = "urgent" | "high" | "medium" | "low" | "none";
-export type Protocol = "quick" | "brief" | "design";
 
 export const STATES: State[] = ["triage", "backlog", "running", "waiting", "review", "landing", "done", "dropped"];
 export const PRIORITIES: Priority[] = ["urgent", "high", "medium", "low", "none"];
-export const PROTOCOLS: Protocol[] = ["quick", "brief", "design"];
 export const CLOSED: State[] = ["done", "dropped"];
 
 export const STATE_NAMES: Record<State, string> = {
@@ -15,17 +13,10 @@ export const STATE_NAMES: Record<State, string> = {
 export const PRIORITY_NAMES: Record<Priority, string> = {
   urgent: "Urgent", high: "High", medium: "Medium", low: "Low", none: "No priority",
 };
-export const PROTOCOL_NAMES: Record<Protocol, string> = { quick: "Quick", brief: "Brief", design: "Design" };
-// What each protocol does, under its name in the picker.
-export const PROTOCOL_HINTS: Record<Protocol, string> = {
-  quick: "A 3-line brief, then the work, no go",
-  brief: "A 3-line brief, then waits for go",
-  design: "Talked through with a sketch, then go",
-};
 
-export type Field = "state" | "priority" | "protocol";
+export type Field = "state" | "priority";
 export const nameOf = (field: Field, value: string): string =>
-  (field === "priority" ? PRIORITY_NAMES : field === "protocol" ? PROTOCOL_NAMES : STATE_NAMES)[value as never] ?? value;
+  (field === "priority" ? PRIORITY_NAMES : STATE_NAMES)[value as never] ?? value;
 
 // Vietnamese titles match without their marks: "viec" finds "việc".
 export const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d").toLowerCase();
@@ -50,7 +41,6 @@ export interface IssueRow {
   milestone: string | null;
   due: string | null; // a day, 2026-11-08
   folder: string | null;
-  protocol: Protocol;
   link: string | null;
   session: string | null;
   waiting_on: string | null;

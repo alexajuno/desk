@@ -7,9 +7,9 @@ import { observer } from "mobx-react-lite";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { post, said } from "../api/http";
 import { go, Go } from "../app/nav";
-import { PRIORITY_NAMES, PROTOCOL_NAMES, STATE_NAMES, type Field, type IssueRow, type Priority, type Protocol, type State, type TreeRow } from "../lib/desk";
+import { PRIORITY_NAMES, STATE_NAMES, type Field, type IssueRow, type Priority, type State, type TreeRow } from "../lib/desk";
 import { keyOf } from "../lib/keys";
-import { fieldIcon, GLYPH, GO_CHEVRON, MORE_ICON, PrioIcon, ProtoIcon, StateIcon, TRIANGLE } from "../ui/icons";
+import { fieldIcon, GLYPH, GO_CHEVRON, MORE_ICON, PrioIcon, StateIcon, TRIANGLE } from "../ui/icons";
 import { toggled } from "../ui/menu";
 import { showFolded } from "../ui/folds";
 import { toast } from "../ui/toast";
@@ -95,7 +95,7 @@ export function useStep(data: IssuePageData, inInbox = false) {
   const steps = data.lands?.steps ?? null;
   const [skip, setSkip] = landSkip(p.slug, steps);
 
-  // A form route of the old pages: Plan, Start, Approve, Trust folder. What its redirect says shows as a toast.
+  // A form route of the old pages: Start, Approve, Trust folder. What its redirect says shows as a toast.
   // From the Inbox, Approve moves on as Linear does: the next notification opens, and a toast says what happened
   // (app.ts, onward).
   async function act(action: string) {
@@ -256,7 +256,7 @@ function Result({ html }: { html: string }) {
   );
 }
 
-// A pick button: opens the status, priority or protocol menu under itself.
+// A pick button: opens the status or priority menu under itself.
 function Pick({ className, slug, field, value, title, children }: { className: string; slug: string; field: Field; value: string; title: string; children: ReactNode }) {
   return (
     <button className={className} type="button" data-slug={slug} data-field={field} {...{ [`data-${field}`]: value }} title={title}
@@ -342,9 +342,6 @@ const Chips = observer(function Chips({ p, team, project, milestone }: { p: Issu
       <Pick className={`field-chip pick${p.priority === "none" ? " unset" : ""}`} slug={p.slug} field="priority" value={p.priority} title="Change priority  P">
         <span className="icon" data-field="priority"><PrioIcon level={p.priority} /></span><span className="field-label" data-field="priority">{p.priority === "none" ? "Priority" : PRIORITY_NAMES[p.priority]}</span>
       </Pick>
-      <Pick className="field-chip pick" slug={p.slug} field="protocol" value={p.protocol} title="Change protocol: how much plan, and whether it waits for go">
-        <span className="icon" data-field="protocol"><ProtoIcon name={p.protocol} /></span><span className="field-label" data-field="protocol">{PROTOCOL_NAMES[p.protocol]}</span>
-      </Pick>
       {p.state === "waiting" && (
         <button className={`field-chip waiting-pick${p.waiting_on ? "" : " unset"}`} type="button" data-slug={p.slug} data-value={p.waiting_on ?? ""} title="Who or what it waits on"
           onClick={(e) => { if (!toggled(e.currentTarget)) waitingMenu(p.slug, p.waiting_on ?? "", { anchor: e.currentTarget }); }}>
@@ -428,11 +425,6 @@ function Properties({ data, p }: { data: IssuePageData; p: IssueRow }) {
           <div className="prop static muted">{`since ${p.waiting_since_short}${p.waited !== "today" ? ` · ${p.waited}` : ""}`}</div>
         </>
       )}
-      {/* How much plan the issue gets, and whether its session waits for go (issues.PROTOCOLS). */}
-      <div className="label">Protocol</div>
-      <Pick className="prop pick" slug={p.slug} field="protocol" value={p.protocol} title="Change protocol: how much plan, and whether it waits for go">
-        <span className="icon" data-field="protocol">{fieldIcon("protocol", p.protocol)}</span><span className="field-label" data-field="protocol">{PROTOCOL_NAMES[p.protocol as Protocol]}</span>
-      </Pick>
       <div className="label">Project</div>
       {p.project ? (
         <Go className="prop project-pick-menu" to={projectPath(p.project)} data-slug={p.slug} data-value={p.project} title={OPEN_PROJECT}>

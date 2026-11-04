@@ -1,5 +1,5 @@
 import { makeAutoObservable, observable } from "mobx";
-import type { Priority, Protocol, State } from "../lib/desk";
+import type { Priority, State } from "../lib/desk";
 
 // The rows desk syncs (the server's sync.ts and db.ts): every issue, team, project, chat and Inbox row, each as its table
 // holds it, less what the app is not sent. The app works out what it shows from these, as a list and its count from the same rows, so the
@@ -17,7 +17,6 @@ export interface Issue {
   milestone: string | null;
   due: string | null;
   folder: string | null;
-  protocol: Protocol | null; // none runs design
   link: string | null;
   landing: string | null;
   landed: string | null; // in done, where its session said the work landed

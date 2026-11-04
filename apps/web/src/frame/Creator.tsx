@@ -1,5 +1,5 @@
 // The new issue panel: Linear's create panel, measured on linear.app on 2026-10-14 (desk.js openCreator). A title, a
-// description, chips that open the same status, priority, protocol, parent, team and project menus as the rest of desk,
+// description, chips that open the same status, priority, parent, team and project menus as the rest of desk,
 // and a Create more switch beside the Create issue button. C, the sidebar's pencil and Add sub-issue open it. Enter in
 // the title moves to the description, Ctrl+Enter creates, Esc closes, and what you typed waits in localStorage as a
 // draft until it is created, as Linear keeps its drafts. Its keys are read on the window in the capture phase, ahead
@@ -16,7 +16,7 @@ import { closeMenu, menus, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { reloadPages, ui, type CreatorPreset } from "../store/ui";
 
-const BLANK = { title: "", body: "", state: "backlog", priority: "none", protocol: "design", parent: "", parentTitle: "", team: "", teamTitle: "", project: "", projectTitle: "" };
+const BLANK = { title: "", body: "", state: "backlog", priority: "none", parent: "", parentTitle: "", team: "", teamTitle: "", project: "", projectTitle: "" };
 type Draft = typeof BLANK;
 
 export const CreatorHost = observer(function CreatorHost() {
@@ -48,7 +48,7 @@ function Creator({ preset }: { preset: CreatorPreset }) {
     if (s.current.sending) return;
     s.current.sending = true;
     const res = await postJson("/api/issues", {
-      title: name, body: d.body, state: d.state, priority: d.priority, protocol: d.protocol, parent: d.parent || null, team: d.team || null, project: d.project || null,
+      title: name, body: d.body, state: d.state, priority: d.priority, parent: d.parent || null, team: d.team || null, project: d.project || null,
     });
     s.current.sending = false;
     if (!res.ok) { toast(await reason(res)); return; }
@@ -125,7 +125,6 @@ function Creator({ preset }: { preset: CreatorPreset }) {
         <div className="create-fields">
           {chip("state", "Change status", <>{fieldIcon("state", draft.state)}<span>{nameOf("state", draft.state)}</span></>)}
           {chip("priority", "Change priority", <>{fieldIcon("priority", draft.priority)}<span>{unset.priority ? "Priority" : nameOf("priority", draft.priority)}</span></>, unset.priority)}
-          {chip("protocol", "Change protocol: how much plan, and whether it waits for go", <>{fieldIcon("protocol", draft.protocol)}<span>{nameOf("protocol", draft.protocol)}</span></>)}
           {chip("parent", "Set parent", <>{GLYPH.parent}<span>{unset.parent ? "Parent" : draft.parentTitle || draft.parent}</span></>, unset.parent)}
           {chip("team", "Set team", <>{GLYPH.team}<span>{unset.team ? "Team" : draft.teamTitle || draft.team}</span></>, unset.team)}
           {chip("project", "Set project", <>{GLYPH.project}<span>{unset.project ? "Project" : draft.projectTitle || draft.project}</span></>, unset.project)}

@@ -7,7 +7,6 @@ import type { Field } from "../lib/desk";
 export interface CreatorPreset {
   state?: string;
   priority?: string;
-  protocol?: string;
   parent?: string;
   parentTitle?: string;
   team?: string;

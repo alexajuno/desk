@@ -1,7 +1,7 @@
 // desk's icons (templates/macros.html and desk.js's GLYPH): Linear's shapes, coloured by desk.css's variables so they
 // follow the theme. Each renders the same SVG the old pages drew.
 import { useId, type ReactNode } from "react";
-import type { Priority, Protocol, State } from "../lib/desk";
+import type { Priority, State } from "../lib/desk";
 
 const FILL: Record<string, number> = { backlog: 0, running: 0.5, review: 0.75, landing: 0.9 };
 
@@ -69,17 +69,6 @@ export function PrioIcon({ level }: { level: Priority }) {
   );
 }
 
-// A protocol: a bolt for quick, a few lines for a brief, a page for a design doc.
-export function ProtoIcon({ name }: { name: Protocol }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text-2)" }}>
-      {name === "quick" ? <path d="M9 1.75L3.75 9h4l-1 5.25L12.25 7h-4z" />
-        : name === "brief" ? <path d="M3 4.5h10M3 8h10M3 11.5h6" />
-        : <><path d="M4 1.75h5l3 3v9.5H4z" /><path d="M9 1.75v3h3M6.25 8.25h3.5M6.25 10.75h3.5" /></>}
-    </svg>
-  );
-}
-
 // An open session that is idle: the status circle with nothing in it.
 export function Ring() {
   return (
@@ -89,10 +78,9 @@ export function Ring() {
   );
 }
 
-export function fieldIcon(field: "state" | "priority" | "protocol", value: string): ReactNode {
+export function fieldIcon(field: "state" | "priority", value: string): ReactNode {
   if (field === "state") return <StateIcon state={value as State} />;
-  if (field === "priority") return <PrioIcon level={value as Priority} />;
-  return <ProtoIcon name={value as Protocol} />;
+  return <PrioIcon level={value as Priority} />;
 }
 
 // One of Linear's icons, drawn filled rather than stroked.

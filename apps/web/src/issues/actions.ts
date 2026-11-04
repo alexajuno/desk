@@ -9,7 +9,7 @@ type Settable = Field | "title" | "body" | "waiting_on" | "team" | "project" | "
 
 // base: for the body, the document the edit started from, so the server keeps what a session wrote meanwhile.
 export async function setField(slug: string, field: Settable, value: string, base?: string) {
-  if (field === "state" || field === "priority" || field === "protocol") ui.paint(slug, field, value);
+  if (field === "state" || field === "priority") ui.paint(slug, field, value);
   const res = await post(`/issue/${slug}/set`, { field, value, ...(base === undefined ? {} : { base }) });
   if (!res.ok) toast(await reason(res));
   else {

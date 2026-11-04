@@ -13,7 +13,7 @@ import * as chats from "./chats.ts";
 import { HOME, TEST } from "./config.ts";
 import * as fields from "./fields.ts";
 import * as store from "./issues.ts";
-import { byRank, CLOSED, runs } from "./issues.ts";
+import { byRank, CLOSED } from "./issues.ts";
 import * as land from "./land.ts";
 import * as live from "./live.ts";
 import * as models from "./models.ts";
@@ -126,8 +126,8 @@ async function mustExist(slug: string, detail = "That issue is gone.") {
 // The value a page asked to set, as desk keeps it, or why it cannot be.
 async function checked(i: store.Issue, name: string, given: string): Promise<string | null> {
   let value: string | null = given;
-  if (name === "priority" || name === "state" || name === "protocol") {
-    const allowed = { priority: store.PRIORITIES, state: store.STATES, protocol: store.PROTOCOLS }[name];
+  if (name === "priority" || name === "state") {
+    const allowed = { priority: store.PRIORITIES, state: store.STATES }[name];
     if (!allowed.includes(value)) throw new HttpError(422, `${name} cannot be ${value}`);
     if (name === "state" && value === "landing" && i.state !== "landing") throw new HttpError(422, "Only Approve lands an issue.");
   } else if (name === "title") {
@@ -690,7 +690,7 @@ export async function create(): Promise<FastifyInstance> {
 
   // --- the issue's one session
 
-  // Plan, or Start for a quick issue: a chat starts on the issue, in its folder, and plans it by its protocol. Pressed on
+  // Start: a chat starts on the issue, in its folder, and judges how much plan it needs (prompts.ts, JUDGE). Pressed on
   // desk's page in a folder Claude Code does not trust yet, desk trusts it and starts again, so one press does it.
   app.post("/issue/:slug/start", async (req: Req, reply) => {
     const slug = req.params.slug, i = await store.load(slug);
@@ -724,7 +724,7 @@ export async function create(): Promise<FastifyInstance> {
     } catch (error) {
       return back(reply, i.slug, (error as Error).message);
     }
-    return back(reply, i.slug, `Trusted ${agents.workdir(i)}. Press ${runs(i) === "quick" ? "Start" : "Plan"} again.`);
+    return back(reply, i.slug, `Trusted ${agents.workdir(i)}. Press Start again.`);
   });
 
   // Go, on a plan in review: the issue's session carries it out, as "go" said in its chat tells it to, and the issue is

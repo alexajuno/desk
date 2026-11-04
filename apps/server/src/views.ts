@@ -21,7 +21,7 @@ export interface Page {
 }
 
 const EMPTY = { empty: "Show empty groups" };
-const ISSUE_FILTERS = { status: "Status", priority: "Priority", team: "Team", project: "Project", folder: "Folder", protocol: "Protocol" };
+const ISSUE_FILTERS = { status: "Status", priority: "Priority", team: "Team", project: "Project", folder: "Folder" };
 const ISSUE_OPTIONS = {
   // Linear's Layout: the list, or a board with a column per group (linear.app/docs/board-layout).
   layout: { list: "List", board: "Board" },
@@ -148,7 +148,7 @@ export function parse(page: string, q: string): View {
 export interface Group {
   value: string;
   label: string;
-  icon: string | null; // an icon's key: state-running, priority-high, protocol-quick, glyph-folder
+  icon: string | null; // an icon's key: state-running, priority-high, glyph-folder
   items: Issue[]; // its top rows
   kids: Map<string, Issue[]>; // the rows nested under each row
   context: Set<string>; // rows shown only as the parent of a match, greyed out
@@ -215,8 +215,7 @@ export function value(i: Issue, name: string): string {
   if (name === "team") return i.team || "none";
   if (name === "project") return i.project || "none";
   if (name === "milestone") return i.milestone || "none";
-  if (name === "folder") return folderName(i.folder);
-  return store.runs(i);
+  return folderName(i.folder);
 }
 
 // The rows a property's slugs name, by property, for their titles: the teams and the projects.
@@ -225,7 +224,6 @@ export type Named = Partial<Record<string, Map<string, { title: string; created:
 export function label(name: string, v: string, named: Named): string {
   if (name === "status") return store.STATE_NAMES[v] ?? v;
   if (name === "priority") return store.PRIORITY_NAMES[v] ?? v;
-  if (name === "protocol") return store.PROTOCOL_NAMES[v] ?? v;
   if (v === "none") return `No ${name}`;
   return named[name]?.get(v)?.title ?? v;
 }
@@ -234,7 +232,6 @@ export function label(name: string, v: string, named: Named): string {
 export function icon(name: string, v: string | null): string {
   if (name === "status") return `state-${v || "backlog"}`;
   if (name === "priority") return `priority-${v || "high"}`;
-  if (name === "protocol") return `protocol-${v || "quick"}`;
   return `glyph-${name}`;
 }
 
@@ -309,7 +306,7 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
     order = [...[...new Set(pageIssues.map((i) => value(i, "folder")))].filter((v) => v !== "none").sort(), "none"];
   } else if (view.group === "none") order = [""];
   // Triage's group shows only when a filter asks for it, as its issues do.
-  else order = ({ status: (holds ?? store.STATES).filter((s) => s !== "triage" || asked.has("triage")), priority: store.PRIORITIES, protocol: store.PROTOCOLS } as Record<string, string[]>)[view.group];
+  else order = ({ status: (holds ?? store.STATES).filter((s) => s !== "triage" || asked.has("triage")), priority: store.PRIORITIES } as Record<string, string[]>)[view.group];
 
   const count = (rows: Issue[]): number => rows.reduce((n, i) => n + 1 + count(kids.get(i.slug) ?? []), 0);
 
@@ -339,7 +336,7 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
     if (name === "team" || name === "project" || name === "folder") // the ones the list has, as Linear's menus list only those
       return ["none", ...[...new Set(base.map((i) => value(i, name)))].filter((v) => v !== "none")
         .sort((a, b) => cmp(fold(label(name, a, named)), fold(label(name, b, named))))];
-    return [...({ status: holds ?? store.STATES, priority: ["none", "urgent", "high", "medium", "low"], protocol: store.PROTOCOLS } as Record<string, string[]>)[name]];
+    return [...({ status: holds ?? store.STATES, priority: ["none", "urgent", "high", "medium", "low"] } as Record<string, string[]>)[name]];
   };
   // Done and Dropped count all of them, since picking one brings them all back.
   const { chips, fields } = filtering(view, base, value, (name, v) => label(name, v, named), icon, valuesOf,

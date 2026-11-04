@@ -11,7 +11,7 @@ import * as chats from "./chats.ts";
 import { ISSUES_DIR, TEAMS_DIR } from "./config.ts";
 import * as fields from "./fields.ts";
 import * as store from "./issues.ts";
-import { byRank, CLOSED, runs, type Issue } from "./issues.ts";
+import { byRank, CLOSED, type Issue } from "./issues.ts";
 import * as inbox from "./inbox.ts";
 import * as logins from "./logins.ts";
 import * as land from "./land.ts";
@@ -376,7 +376,7 @@ function chatsNow(all: Map<string, Issue>) {
 export function issueJson(i: Issue) {
   return {
     slug: i.slug, title: i.title, state: i.state, priority: i.priority, parent: i.parent, team: i.team, project: i.project, milestone: i.milestone, due: i.due, folder: i.folder,
-    protocol: runs(i), link: i.link, session: sessionOf(i), waiting_on: i.waiting_on, waiting_since: i.waiting_since,
+    link: i.link, session: sessionOf(i), waiting_on: i.waiting_on, waiting_since: i.waiting_since,
     waiting_since_short: shortDate(i.waiting_since), waited: i.state === "waiting" ? waited(i.waiting_since) : "",
     review_of: i.state === "review" ? reviewOf(i) : null,
     created: i.created, created_short: shortDate(i.created),
@@ -409,10 +409,10 @@ export function splitResult(text: string): [string, string] | null {
 type Button = { label: string; action?: string; chat?: boolean; disabled?: boolean; title?: string } | null;
 
 // An issue's next step: its one button, in the row over its Properties, and what the step's tooltip says of where it
-// stands. Only Plan and Approve are clicks; everything else is said in the issue's chat, which Open chat brings up.
+// stands. Only Start, Go and Approve are clicks; everything else is said in the issue's chat, which Open chat brings up.
 export function step(i: Issue, asks: Set<string>): { text: string; button: Button } {
   const chat = { label: "Open chat", chat: true };
-  const start = { label: runs(i) === "quick" ? "Start" : "Plan", action: "start" };
+  const start = { label: "Start", action: "start" };
   if (i.state === "backlog") return { text: "Backlog", button: sessionOf(i) ? chat : start };
   if (i.state === "triage") return { text: "Triage", button: chat };
   if (i.state === "landing") {

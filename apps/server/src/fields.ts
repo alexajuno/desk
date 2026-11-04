@@ -29,7 +29,7 @@ export type Row = Record<string, string | number | null>;
 
 // Each kind's fields, by name with their type, in the order the box suggests them; a chat's issue's after its own.
 const ISSUE: Record<string, Type> = { state: "set", review_of: "set", priority: "set", team: "set", project: "set", milestone: "set",
-  parent: "set", folder: "set", protocol: "set", due: "date", created: "date" };
+  parent: "set", folder: "set", due: "date", created: "date" };
 const its = <T>(of: Record<string, T>) => Object.fromEntries(Object.entries(of).map(([name, v]) => [`issue.${name}`, v]));
 export const TYPES: Record<Kind, Record<string, Type>> = {
   chats: { state: "set", agent: "set", folder: "set", automation: "set", created: "date", updated: "date", issue: "set", ...its(ISSUE) },
@@ -46,7 +46,7 @@ const word = (v: string | null | undefined) => v || "none";
 
 export const issueRow = (i: Issue): Row => ({
   state: i.state, review_of: i.state === "review" ? word(i.review_of) : "none", priority: i.priority, team: word(i.team), project: word(i.project),
-  milestone: word(i.milestone), parent: word(i.parent), folder: folderName(i.folder), protocol: store.runs(i), due: i.due, created: i.created,
+  milestone: word(i.milestone), parent: word(i.parent), folder: folderName(i.folder), due: i.due, created: i.created,
 });
 
 // A chat as sessions.rows() lists it, with its issue's fields after its own.
@@ -91,7 +91,6 @@ export async function fields(): Promise<Record<Kind, Field[]>> {
     milestone: set("milestone", (await projects.allMilestones()).map((m) => ({ value: m.id, label: m.title, icon: "glyph-milestone" }))),
     parent: set("parent", used(all.flatMap((i) => (i.parent ? [i.parent] : [])), issueTitle, "glyph-parent")),
     folder: set("folder", used(all.map((i) => folderName(i.folder)), () => undefined, "glyph-folder")),
-    protocol: set("protocol", named(store.PROTOCOLS, store.PROTOCOL_NAMES, (v) => `protocol-${v}`), false),
   };
   const values: Record<Kind, Record<string, Value[]>> = {
     chats: {

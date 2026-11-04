@@ -1,6 +1,6 @@
-// The issue menus (desk.js): status, priority and protocol pickers, who a wait is on, an issue's actions, parent,
+// The issue menus (desk.js): status and priority pickers, who a wait is on, an issue's actions, parent,
 // team, project and folder pickers, and a project's status. Each opens desk's one menu (ui/menu.tsx).
-import { CLOSED, PROTOCOL_HINTS, PROTOCOLS, STATES, fold, nameOf, type Field, type State } from "../lib/desk";
+import { CLOSED, STATES, fold, nameOf, type Field, type State } from "../lib/desk";
 import { GLYPH, ProjectStatusIcon, StateIcon, fieldIcon } from "../ui/icons";
 import { issues } from "../store/issues";
 import { openMenu, type MenuItem, type MenuOptions } from "../ui/menu";
@@ -29,18 +29,17 @@ export function waitingMenu(slug: string, current: string, where: Where) {
   });
 }
 
-// Linear numbers priority 0 for none, then 1 urgent to 4 low; statuses count from 1, and so do protocols, each with
-// what it does under its name. Landing is not offered: only Approve sets it; nor is Triage: only a chat files one.
+// Linear numbers priority 0 for none, then 1 urgent to 4 low; statuses count from 1. Landing is not offered: only
+// Approve sets it; nor is Triage: only a chat files one.
 export function valueMenu(field: Field, current: string, where: Where, choose: (v: string) => unknown) {
   const values: string[] = field === "priority" ? ["none", "urgent", "high", "medium", "low"]
-    : field === "protocol" ? PROTOCOLS : STATES.filter((s) => s !== "landing" && s !== "triage");
+    : STATES.filter((s) => s !== "landing" && s !== "triage");
   const num = (v: string) => values.indexOf(v) + (field === "priority" ? 0 : 1);
   openMenu({
     ...where, filter: "keys", kbd: field === "state" ? "S" : field === "priority" ? "P" : undefined,
-    className: field === "protocol" ? "wide" : "",
     placeholder: `Change ${field === "state" ? "status" : field}…`,
     items: (q) => values.filter((v) => nameOf(field, v).toLowerCase().includes(q.toLowerCase())).map((v) => ({
-      icon: fieldIcon(field, v), label: nameOf(field, v), sub: field === "protocol" ? PROTOCOL_HINTS[v as keyof typeof PROTOCOL_HINTS] : undefined,
+      icon: fieldIcon(field, v), label: nameOf(field, v),
       hint: num(v), num: num(v), current: v === current, run: () => choose(v),
     })),
   });
