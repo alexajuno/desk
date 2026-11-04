@@ -11,7 +11,7 @@ desk copies Linear, so read the `linear-ui` skill first: it says what Linear doe
 - **Where desk leaves Linear on purpose.** Don't "fix" these to match Linear. The user's words stand beside the ones a chat could undo in good faith.
 - **Where Linear's piece lives here**, so you reuse it rather than build a second one.
 
-Where they disagree, `desk-ui` beats `linear-ui`, and `apps/web/src/styles/desk.css`, which holds the numbers as they run, beats both. This file holds no sizes or colours of Linear's: find a token with `grep -n measured apps/web/src/styles/*.css`, or by its value.
+Where they disagree, `desk-ui` beats `linear-ui`, and `apps/web/src/styles/desk.css`, which holds the numbers as they run, beats both. Neither skill holds Linear's exact sizes or colours: read those on linear.app, as `linear-ui` says how, and find desk's token with `grep -n measured apps/web/src/styles/*.css`, or by its value.
 
 `.claude/rules/ui.md` holds what every change must obey, such as the colour variables and the screenshots.
 
@@ -94,4 +94,4 @@ When you finish UI work, on the same branch:
 - Take out what is no longer true.
 - A new line says what to do or what never to do, and why. If a chat can read it from the code in one grep, write only where the code is.
 - Don't date a line, except a pick of the user's a chat could undo in good faith, with the user's words. A bare letter isn't a reason: write "Your pick" and the date.
-- What was true only of Linear goes in `linear-ui`, and its numbers in `desk.css`.
+- What lasts about Linear goes in `linear-ui`, in general words. What one Linear page shows today is read on linear.app, and goes in `desk.css`, or here, only where desk's build leans on it.
