@@ -59,7 +59,7 @@ function typeOf(r: InboxRow): string {
   const why = r.why;
   if (r.source && (why === "now" || why === "later")) return why; // a thread's message, on its own row or its chat's
   if (why === "plan ready") return "plan";
-  if (why === "result ready" || why === "check it") return "result";
+  if (why === "check it") return "result";
   if (why === "asks you" || why === "waiting for you") return "question";
   if (why === "no chat") return "triage";
   if (why === "due soon" || why === "overdue") return "deadline";

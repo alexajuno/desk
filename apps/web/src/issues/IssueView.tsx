@@ -141,20 +141,12 @@ export const IssueView = observer(function IssueView({ data, inInbox = false, pa
           {parents && data.trail.length > 0 && <Parents trail={data.trail} />}
           <Title title={p.title} save={(t) => setField(p.slug, "title", t)} />
           <Chips p={p} team={data.team} project={data.project} milestone={data.milestone} />
-          {/* In review the card comes first, right under the title, beside the Approve that decides on it. A plan to
-              say go to shows as the plan, below. A design issue has no card, since the user saw each step as it went:
-              its Review holds only what Approve runs, above its Steps. */}
-          {p.state === "review" && data.reviewing && (data.card || data.result || steps) && (
+          {/* In review, what Approve runs comes first, right under the title. The last step's report, in the chat, says
+              what the work is; a Result an older chat wrote stays where it is in the document, and is not this work's. */}
+          {p.state === "review" && data.reviewing && steps && (
             <div className="review">
               <div className="section-label" style={{ marginTop: 0 }}>Review</div>
-              {data.card ? (
-                <>
-                  <Html className="body review-card" html={data.card[0]} />
-                  {steps && <Lands steps={steps} skip={skip} setSkip={setSkip} />}
-                  <details className="review-details"><summary>Details</summary><Html className="body" html={data.card[1]} /></details>
-                </>
-              ) : data.result && <Html className="body" html={data.result_html} />}
-              {steps && !data.card && <Lands steps={steps} skip={skip} setSkip={setSkip} />}
+              <Lands steps={steps} skip={skip} setSkip={setSkip} />
             </div>
           )}
           {/* A design issue's steps, the work's map, above the document they come from. */}
@@ -174,7 +166,7 @@ export const IssueView = observer(function IssueView({ data, inInbox = false, pa
               <div className="sec-body"><Html className="body plan" html={data.agent_files["plan.md"]} /></div>
             </section>
           )}
-          {"result.md" in data.agent_files && !(p.state === "review" && data.reviewing) && <Result html={data.agent_files["result.md"]} />}
+          {"result.md" in data.agent_files && <Result html={data.agent_files["result.md"]} />}
           {data.kids.length > 0 && (
             <section className="sec" data-sec="sub-issues">
               <div className="section-label sec-head"><Fold />Sub-issues

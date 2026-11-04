@@ -173,15 +173,14 @@ function readBefore(h: Held, replied: number, marks: ReturnType<typeof inbox.bef
 
 // What a session's unread reply reads as, by where its issue stands. An issue closed while you were away tells you so:
 // on 19 Oct a Triage issue was settled as dropped, and its session's last word reached nowhere.
-function replyWhy(i: Issue, result: boolean): string {
+function replyWhy(i: Issue): string {
   switch (i.state) {
-    case "running": return result || !store.hasPlan(i) ? "chat replied" : runs(i) === "quick" ? "waiting for you" : "plan ready";
     case "review": {
       const of = reviewOf(i);
       if (of === "plan") return "plan ready";
       if (of === "question") return "asks you";
       if (of === "reply") return "chat replied";
-      return result ? "result ready" : "check it";
+      return "check it";
     }
     case "done": return i.landed ? "landed" : "done";
     case "dropped": return "dropped";
@@ -196,14 +195,14 @@ const NOTICES: Record<string, string> = {
   "chat replied": "replied: your turn in its chat", "waiting for you": "is waiting for you", "plan ready": "wrote its plan: read it, then press Go",
   "no chat": "has no chat: set its status on its page",
   "asks you": "asks you something: answer in its chat", "landing stuck": "stopped before the work landed",
-  "result ready": "finished: the result is ready", "check it": "finished, with no result",
+  "check it": "finished: read its report, then press Approve",
   landed: "landed the work: the issue is done", done: "replied: the issue is done", dropped: "replied: the issue was dropped",
   parked: "replied: the issue is in the backlog",
   "agent replied": "replied", "agent wrote": "wrote to you",
 };
 
 // The reasons a row holds something to decide on, Go or Approve, rather than something to answer.
-const REVIEWED = new Set(["plan ready", "result ready", "check it"]);
+const REVIEWED = new Set(["plan ready", "check it"]);
 
 const saysOf = (why: string, i: Issue | null) => (why === "waiting" ? `replied: the issue waits on ${i?.waiting_on || "someone"}` : NOTICES[why] ?? why);
 
@@ -232,7 +231,7 @@ export async function notifications(all: Map<string, Issue>, keep = ""): Promise
       if (landingStuck(i, asks)) why = "landing stuck";
     } else if (asks.has(h.session)) why = "waiting for you";
     else if (replied && !auto.quiet(h.session, h.chat, i)) { // no row while Auto carries on: it reads the steps for you
-      why = i ? replyWhy(i, Boolean(store.result(i))) : turns.prompted(h.session) ? "agent replied" : "agent wrote";
+      why = i ? replyWhy(i) : turns.prompted(h.session) ? "agent replied" : "agent wrote";
       waits = false;
     }
     const follows = h.chat ? chats.follows(h.chat, all) : [];
@@ -411,7 +410,7 @@ type Button = { label: string; action?: string; chat?: boolean; disabled?: boole
 
 // An issue's next step: its one button, in the row over its Properties, and what the step's tooltip says of where it
 // stands. Only Plan and Approve are clicks; everything else is said in the issue's chat, which Open chat brings up.
-export function step(i: Issue, asks: Set<string>, hasPlan: boolean, hasResult: boolean): { text: string; button: Button } {
+export function step(i: Issue, asks: Set<string>): { text: string; button: Button } {
   const chat = { label: "Open chat", chat: true };
   const start = { label: runs(i) === "quick" ? "Start" : "Plan", action: "start" };
   if (i.state === "backlog") return { text: "Backlog", button: sessionOf(i) ? chat : start };
@@ -423,8 +422,7 @@ export function step(i: Issue, asks: Set<string>, hasPlan: boolean, hasResult: b
   if (i.state === "running") {
     if (!sessionOf(i)) return { text: "In progress, outside desk", button: null };
     if (working(i)) return { text: "Working", button: chat };
-    const ready = hasPlan && !hasResult && runs(i) !== "quick";
-    return { text: ready ? "Plan ready: say go" : "Your turn", button: chat };
+    return { text: "Your turn", button: chat };
   }
   if (i.state === "waiting") {
     let since = waited(i.waiting_since);
@@ -434,16 +432,13 @@ export function step(i: Issue, asks: Set<string>, hasPlan: boolean, hasResult: b
     return { text: `Waiting on ${i.waiting_on || "someone"} since ${since}`, button: sessionOf(i) ? chat : start };
   }
   if (i.state === "review") {
-    // Approve lands a result, and only a result: on a plan the button says go, and on a reply, such as a design step
-    // reported, it opens the chat, even when the issue holds a card from before (28 Oct: a step's Approve told the
-    // session to land its work mid-step).
+    // Approve lands a hand-over, and only one: on a plan the button says go, and on a reply, such as a step reported,
+    // it opens the chat (28 Oct: a step's Approve told the session to land its work mid-step).
     const of = reviewOf(i);
     if (of === "plan") return { text: "Plan ready: press Go, or reply in its chat", button: { label: "Go", action: "go" } };
     if (of === "question") return { text: "Asks you something: answer in its chat", button: chat };
     if (of === "reply") return { text: "Replied: your turn in its chat", button: chat };
-    // A design issue has no card: its last step's report hands the work over (prompts.ts, STEPS).
-    const carded = hasResult || runs(i) === "design";
-    return { text: carded ? "In review" : "In review, no card", button: { label: "Approve", action: "approve" } };
+    return { text: "In review", button: { label: "Approve", action: "approve" } };
   }
   if (i.state === "done" && i.landed) {
     // The session's own words on where it landed: the commit, or the pull request.
@@ -475,9 +470,8 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
   const everyTeam = await teams.loadAll(), everyProject = await projects.loadAll();
   const team = i.team ? everyTeam.get(i.team) ?? null : null;
   const project = i.project ? everyProject.get(i.project) ?? null : null;
-  // The review shows a result only while it holds one: a plan or a question is read in the plan and the chat. The
-  // chat shows the card wherever the session sent it, in review or after, and the plan the same way, its text folded
-  // under Details as the card's write-up is.
+  // The chat shows an older chat's card wherever it sent it, in review or after, and the plan the same way, its text
+  // folded under Details as the card's write-up is.
   const of = i.state === "review" ? reviewOf(i) : null;
   const reviewing = of === "result";
   const split = (text: string) => (splitResult(text) ?? [text, ""]).map((part) => toHtml(part, `/issue/${slug}/f/`));
@@ -494,7 +488,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     agent_files: agentFiles, plan, plan_card: plan ? split(plan) : null, result, card, reviewing,
     context_html: toHtml(store.section(i, "Context"), `/issue/${slug}/f/`), // the chat's first message, folded
     session_kind: session.kind ?? null, live: talkOf(i),
-    step: step(i, await asking(), store.hasPlan(i), Boolean(result)), landed: i.landed,
+    step: step(i, await asking()), landed: i.landed,
     lands: reviewing ? land.landsOf(i) : null, // the steps Approve runs, which the review lists to untick
     plan_steps: i.plan_steps ? drawnSteps(JSON.parse(i.plan_steps), `/issue/${slug}/f/`) : null, // a design issue's steps (api.ts, PlanStep)
   };

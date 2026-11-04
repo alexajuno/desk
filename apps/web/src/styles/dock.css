@@ -343,9 +343,7 @@ button.msg-copy:hover { background: var(--btn-ghost-hover); color: var(--text-1)
 .step-sent .step-part.now { border-left-color: var(--accent); }
 .step-parts.beside:has(.now) .step-part[data-part]:not(.now) { opacity: 0.55; }
 .sent-details { margin: 10px 0 0; }
-/* the steps Approve runs, under a card in review, apart from the card's last line as the Details are */
-.sent .review-lands { margin: 14px 0 0; }
-/* and under a design issue's last step's report, which no card holds, alone in its panel */
+/* the steps Approve runs, under the report that handed the work over, alone in their panel */
 .lands-sent .review-lands { margin: 0; }
 
 /* A message the steps above the composer bring into view, with a moment's ring (StepsCard.tsx, bring). */
