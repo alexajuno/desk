@@ -2,11 +2,13 @@
 // the diagram of the part being read, which follows the chat's scroll ("text equals to voice on the left and diagrams
 // equals to video on the right", the user, 3 Nov; "A" on two mockups, over each part's diagram beside its text in a
 // wider chat). On top, the step's name and where in it you read, then its parts as pills, a click on one bringing its
-// text into view in the chat, to skip what you know ("i'll try to skip whichever part i felt like i understood").
+// text into view in the chat, to skip what you know ("i'll try to skip whichever part i felt like i understood"). The
+// name leads back to the list, as a breadcrumb does ("there is no button back", the user, 5 Nov).
 import { observer } from "mobx-react-lite";
 import { useLayoutEffect, useRef, useState } from "react";
 import { dock, type Reading } from "../store/dock";
 import { partTitle, type PlanStep, type StepPart } from "../issues/Steps";
+import { CHEVRON } from "../ui/icons";
 
 // Every step with parts, in the list's order.
 const withParts = (steps: PlanStep[]): PlanStep[] => steps.flatMap((s) => [...(s.parts?.length ? [s] : []), ...withParts(s.kids ?? [])]);
@@ -22,6 +24,8 @@ export const StepHalf = observer(function StepHalf({ session, steps }: { session
   return (
     <div className="step-half">
       <div className="step-half-head">
+        <button type="button" className="step-half-back" title="Back to the steps" onClick={() => dock.setHalf(session, "steps", true)}>Steps</button>
+        {CHEVRON}
         <span className="step-half-name">{step.title}</span>
         <span className="step-half-at">part {now + 1} of {step.parts.length}</span>
       </div>

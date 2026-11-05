@@ -3,10 +3,11 @@
 // needs a line of its own ("this gonna expand the plan card a lot, so the card can't be above the composer anymore", the
 // user, 5 Nov, taking back "i want the steps to be displayed right within the chat tab while it's doing, above the
 // composer", 31 Oct). A row is a step's title with its note under it; its own steps sit under it, the part being worked
-// on open and the step being worked on filled, and a part done or still to do folds to its row. A step drawn in the chat
-// brings its message into view there, ringed, its diagram into the half when it is written as parts; one whose send the
-// chat doesn't hold opens under its row. A commit opens the Changes. The line only says, since what opens the half is in the chat's head ("having these icons in composer
-// doesn't sound valid", 1 Nov).
+// on open and the step being worked on filled, and a part done or still to do folds to its row. A click never takes the
+// list away ("click into a step shows the diagram, but there is no button back. and i don't think it's a good choice
+// either", the user, 5 Nov): a step drawn in the chat brings its message into view there, ringed, and one whose send the
+// chat doesn't hold opens under its row. A commit opens the Changes. The line only says, since what opens the half is in
+// the chat's head ("having these icons in composer doesn't sound valid", 1 Nov).
 import { useState } from "react";
 import { dock } from "../store/dock";
 import { CHEVRON, GLYPH, StateIcon } from "../ui/icons";
@@ -35,16 +36,12 @@ export function bring(at: string, img?: number) {
   target.classList.add("brought");
 }
 
-// A step drawn in the chat, picked in the list: the list stays beside its message, unless the step is written as parts,
-// whose diagram takes the half, or on a phone, where the half gives the chat its place back first.
-function bringStep(session: string, s: PlanStep, at?: string) {
+// A step drawn in the chat, picked in the list: the list stays beside its message, whose diagrams draw under their text
+// while the half isn't on them. On a phone the half gives the chat its place back first.
+function bringStep(session: string, at: string) {
   if (phone.matches) dock.setHalf(session, null);
-  else if (s.parts?.length) {
-    dock.read(session, { title: s.title, part: 0 }, true);
-    dock.setHalf(session, "step", true);
-  }
   // A frame later than the chat's own keeping to its end, which a phone's chat, shown again, does in the first.
-  if (at) requestAnimationFrame(() => requestAnimationFrame(() => bring(at)));
+  requestAnimationFrame(() => requestAnimationFrame(() => bring(at)));
 }
 
 // What is being worked on, or else what comes next, above the composer. Nothing once every step is done.
@@ -76,7 +73,6 @@ function StepsRow({ session, s, sent }: { session: string; s: PlanStep; sent: Se
   const [open, fold] = useFold(s.state === "running");
   const [held, setHeld] = useState(false); // what it holds, under its row, when the chat has no send of it to bring
   const drawn = isDrawn(s), at = drawn ? sent.get(s.title) : undefined;
-  const inHalf = Boolean(s.parts?.length) && !phone.matches;
   const words = (
     <>
       <span className="steps-row-icon"><StateIcon state={s.state} /></span>
@@ -85,7 +81,7 @@ function StepsRow({ session, s, sent }: { session: string; s: PlanStep; sent: Se
     </>
   );
   const foldTitle = open ? "Fold its steps" : "Show its steps";
-  const pick = at || inHalf ? { title: at ? "Show it in the chat" : "Show its diagram", run: () => bringStep(session, s, at) }
+  const pick = at ? { title: "Show it in the chat", run: () => bringStep(session, at) }
     : drawn ? { title: held ? "Hide what it holds" : "Show what it holds", run: () => setHeld(!held) }
     : kids.length ? { title: foldTitle, run: fold } : null;
   return (

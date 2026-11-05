@@ -146,11 +146,11 @@ class Dock {
   }
 
   // A step written as parts, sent in the chat (at, its place there): the half opens on its diagram, once for each send,
-  // as Claude's browser opens it on a tab, unless it shows something other than the steps now. Hidden again, it stays
-  // hidden until the next.
+  // as Claude's browser opens it on a tab, unless it shows something now, as the steps you opened to follow. Hidden
+  // again, it stays hidden until the next.
   showStep(session: string, at: string) {
     const now = this.halves[session];
-    if (this.once(`${session} ${at}`) && (!now || now === "steps")) this.setHalf(session, "step");
+    if (this.once(`${session} ${at}`) && !now) this.setHalf(session, "step");
   }
 
   // A step ticked with its commit: the half opens on Changes, once for each commit, so that the step's diff is

@@ -579,7 +579,7 @@ function stepNamed(steps: PlanStep[], r: { place: string; title: string | null }
 }
 
 // A step's diagram and its decisions under it, where its session sent them, as the step stands now: the latest send of
-// each step drawn, an earlier one a line, since desk keeps only the step's latest. The steps above the composer bring
+// each step drawn, an earlier one a line, since desk keeps only the step's latest. The list of steps brings
 // it here, the one place a step is read in its chat. A step written as parts shows them, read from the basics down, each
 // part's diagram in the right half while it shows them, which follows the part being read (StepHalf.tsx).
 const StepSent = observer(function StepSent({ at, session, step, top, latest }: { at: string; session: string; step: PlanStep | null; top: string | null; latest: boolean }) {
