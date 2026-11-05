@@ -925,8 +925,10 @@ export async function create(): Promise<FastifyInstance> {
   });
   app.post("/api/live/:id/model", async (req: Req) => {
     mustBePage(req);
-    const { model, effort } = (req.body ?? {}) as unknown as models.Pick;
+    const { model, effort, picking } = (req.body ?? {}) as unknown as models.Pick & { picking?: boolean };
     try {
+      // Auto model in an empty chat's menu takes the user's pick back.
+      if (picking) return { ok: await chats.backToPick(sessionOf(req)) };
       await models.change(sessionOf(req), { ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
     } catch (error) {
       throw new HttpError(422, (error as Error).message);

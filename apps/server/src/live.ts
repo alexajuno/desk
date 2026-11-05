@@ -70,7 +70,7 @@ interface Meta {
   bare: boolean; // a chat with no agent and no desk prompt (chats.ts)
   auto: boolean; // Auto in its composer, rather than Manual (chats.ts, setAuto)
   picked: boolean; // a new chat's folder, picked in its composer (chats.ts, startIn)
-  runs: models.Shown; // the model and effort, for the composer's chip
+  runs: models.Shown & { fresh: boolean; picking: boolean }; // the model and effort, for the composer's chip; fresh: the first message can still pick them (chats.ts, canPick); picking: it will (picksFirst)
   usage: ReturnType<typeof models.outright>; // the context, the 5 hours and the week, shown outright in the composer
 }
 
@@ -93,7 +93,7 @@ export async function meta(id: string): Promise<Meta> {
     // the user's own title.
     title: issue?.title || chat?.named || (chat?.bare ? chatTitleOf(id) : "") || (chat && chat.title !== "New chat" ? chat.title : "") || titleOf(id) || "New session",
     issue: issue ? { slug: issue.slug, title: issue.title, state: issue.state } : null,
-    runs: models.shown(id, Boolean(chat)),
+    runs: { ...models.shown(id, Boolean(chat)), fresh: Boolean(chat && chats.canPick(chat)), picking: Boolean(chat && chats.picksFirst(chat)) },
     usage: models.outright(id),
   };
 }

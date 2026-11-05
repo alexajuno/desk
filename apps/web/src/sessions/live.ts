@@ -81,7 +81,7 @@ export interface Meta {
   bare: boolean; // a chat with no agent and no desk prompt
   picked: boolean; // a new chat's folder, picked in its composer
   auto: boolean; // Auto in its composer: desk says next for the user as a turn ends
-  runs: { model: string; name: string; effort: string }; // for the composer's chip
+  runs: { model: string; name: string; effort: string; fresh?: boolean; picking?: boolean }; // for the composer's chip
   usage?: { context: Context | null }; // shown outright in the composer; none from a desk before 31 Oct
 }
 
@@ -355,7 +355,7 @@ export class LiveSession {
   }
 
   // Pick the model or effort: the chip shows it at once, and the server's next meta confirms it. True once it is set.
-  async pick(set: { model?: string; effort?: string }, shown: Partial<Meta["runs"]> = {}) {
+  async pick(set: { model?: string; effort?: string; picking?: boolean }, shown: Partial<Meta["runs"]> = {}) {
     const was = this.meta;
     if (was) this.shows({ ...was, runs: { ...was.runs, ...set, ...shown } });
     const res = await postJson(`/api/live/${this.id}/model`, set);

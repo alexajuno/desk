@@ -46,25 +46,29 @@ export interface Runs {
   model: string;
   name: string;
   effort: string;
+  fresh?: boolean; // an empty chat, with the switch on: its menu offers Auto model
+  picking?: boolean; // the chip says Auto model: Haiku picks them from the first message (the server's chats.ts, picksFirst)
 }
 
 // The menu under the chip: the models, the efforts the current one takes, and the usage: the live profile by name, as
 // seat says, its own numbers, a plan's 5-hour and Week or api's credits, as the window's bar shows them, and how full
 // the session's context is. A phone has no bar, so this is where it reads them.
-export function runsMenu(anchor: Element, session: string, runs: Runs, pick: (set: { model?: string; effort?: string }, shown?: Partial<Runs>) => void) {
+export function runsMenu(anchor: Element, session: string, runs: Runs, pick: (set: { model?: string; effort?: string; picking?: boolean }, shown?: Partial<Runs>) => void) {
   openMenu({
     anchor, className: "runs-menu",
     items: async () => {
       const [list, , context] = await Promise.all([loadModels().catch((e) => (toast((e as Error).message), [] as Model[])), seats.load(),
         loadContext(session).catch(() => null)]);
       const now = list.find((m) => m.value === runs.model || m.name === runs.name);
+      const fresh = runs.fresh; // nothing sent yet, so nothing is cached, and Haiku can still pick
       // Each model has its own prompt cache, so changing model reads the whole talk again uncached, where changing effort
       // costs nothing (https://code.claude.com/docs/en/prompt-caching.md): the number on the other models' rows.
-      const rereads = context?.tokens ? `Re-reads ${tokens(context.tokens)}` : undefined;
-      const items: MenuItem[] = list.map((m) => ({ label: m.name, hint: m === now ? undefined : rereads, group: 1, heading: "Model", current: m === now, run: () => pick({ model: m.value }, { name: m.name, ...(m.efforts.length ? {} : { effort: "" }) }) }));
+      const rereads = context?.tokens && !fresh ? `Re-reads ${tokens(context.tokens)}` : undefined;
+      const items: MenuItem[] = list.map((m) => ({ label: m.name, hint: m === now ? undefined : rereads, group: 1, heading: "Model", current: m === now && !runs.picking, run: () => pick({ model: m.value }, { name: m.name, picking: false, ...(m.efforts.length ? {} : { effort: "" }) }) }));
+      if (fresh) items.unshift({ label: "Auto model", hint: "Haiku picks", group: 1, heading: "Model", current: runs.picking, run: () => pick({ picking: true }) });
       const efforts = now ? now.efforts : EFFORTS.map(([value]) => value);
       for (const [value, label] of EFFORTS)
-        if (efforts.includes(value)) items.push({ label, group: 2, heading: "Effort", current: value === runs.effort, run: () => pick({ effort: value }) });
+        if (efforts.includes(value)) items.push({ label, group: 2, heading: "Effort", current: value === runs.effort && !runs.picking, run: () => pick({ effort: value }, { picking: false }) });
       const seat = seats.seat, live = seat?.profiles.find((p) => p.active);
       if (live) {
         items.push({ label: `Profile · ${live.name}`, hint: seat?.auto ? "Auto switch on" : undefined, group: 3, heading: "Usage", info: true });

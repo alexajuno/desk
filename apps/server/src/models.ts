@@ -97,6 +97,13 @@ export function shown(session: string, chat: boolean): Shown {
   return { model, name: nameOf(model), effort: list && !takes?.length ? "" : effort };
 }
 
+// Take the session's pick back, so that it stands on Preferences again: a new chat waiting on Haiku's (chats.ts, pickFirst).
+export async function forget(session: string) {
+  const { [session]: _, ...rest } = picks;
+  picks = rest;
+  await db.write((tx) => tx.query("delete from session_models where session = $1", [session]));
+}
+
 // Pick the session's model or effort. A session the host holds takes it from its next request, the turn running now
 // included; one it does not takes it when the host starts it again.
 export async function change(session: string, pick: Pick): Promise<void> {

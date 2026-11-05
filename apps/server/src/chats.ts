@@ -364,7 +364,9 @@ export async function newChat(base: string, start?: { issue: Issue; message: str
   const row = await hosted.start({ cwd: DATA_DIR, title: `desk chat ${stamp()}`, ...OPTIONS, ...runs, append: await agentPrompt(chat, base),
     ...(start ? { message: start.message } : {}) });
   chat.session = row.id;
-  await models.keep(row.id, runs); // the chat keeps what it started on when Preferences change later
+  // The chat keeps what it started on when Preferences change later. One waiting for its first message keeps nothing yet
+  // while Haiku picks: no pick is what the chip shows as Auto model, and one the user makes stands (pickFirst).
+  if (start || !s.chat_pick) await models.keep(row.id, runs);
   await save(chat);
   return chat;
 }
@@ -376,6 +378,7 @@ export async function renew(chat: Chat): Promise<Chat> {
   const s = settings.load(), pick = models.pickOf(chat.session);
   if (pick.model !== s.chat_model || pick.effort !== s.chat_effort)
     await models.change(chat.session, { model: s.chat_model, effort: s.chat_effort }).catch((error) => console.error("desk: renewing a chat's model", error));
+  if (s.chat_pick) await models.forget(chat.session);
   return chat;
 }
 
@@ -388,16 +391,35 @@ async function startsOn(session: string, text: string): Promise<models.Pick> {
 }
 
 // A new chat's first message, typed in its panel, picks what it runs on before its first request, when nothing can be
-// lost in the cache. A chip the user moved first stands: a chat off Preferences is their pick. A message sent while the
-// pick runs waits on the same one, so that it can't reach the chat first. An agent's chat keeps the agent's own.
+// lost in the cache. A chip the user moved first stands: a chat with a pick of its own is theirs. A message sent while
+// the pick runs waits on the same one, so that it can't reach the chat first. An agent's chat keeps the agent's own.
+// What Haiku has nothing to read in, such as a /command, starts on Preferences, and keeps them from then on.
 const picking = new Map<string, Promise<void>>();
+
+// Whether the chip says Auto model: an empty chat that the first message will pick for, the user having moved nothing.
+export const picksFirst = (chat: Chat) => {
+  const own = models.pickOf(chat.session);
+  return canPick(chat) && !own.model && !own.effort;
+};
+
+// Whether the first message can still pick: the switch is on, and the chat empty, so its menu offers Auto model.
+export const canPick = (chat: Chat) => settings.load().chat_pick && empty(chat);
+
+// Auto model, in the chip's menu of a chat with nothing sent yet: the user's pick goes, and Haiku picks after all.
+export async function backToPick(session: string): Promise<boolean> {
+  const chat = agentChatOf(session);
+  if (!chat || !canPick(chat)) return false;
+  await models.forget(session);
+  return true;
+}
 
 export function pickFirst(chat: Chat, text: string): Promise<void> {
   const s = settings.load(), own = models.pickOf(chat.session);
   const running = picking.get(chat.session);
   if (running) return running;
-  if (!s.chat_pick || !text.trim() || text.trim().startsWith("/") || own.model !== s.chat_model || own.effort !== s.chat_effort) return Promise.resolve();
-  const done = startsOn(chat.session, text).then((runs) => models.change(chat.session, runs))
+  if (own.model || own.effort) return Promise.resolve();
+  const reads = text.trim() && !text.trim().startsWith("/");
+  const done = (reads ? startsOn(chat.session, text) : Promise.resolve({ model: s.chat_model, effort: s.chat_effort })).then((runs) => models.change(chat.session, runs))
     .catch((error) => console.error("desk: picking a chat's model", error));
   picking.set(chat.session, done);
   return done;
