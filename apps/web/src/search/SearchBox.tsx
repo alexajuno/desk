@@ -42,6 +42,7 @@ const KINDS: { kind: Kind; name: string }[] = [
 // The letter that, then Tab, picks a kind: its name's first, and a for All.
 const letterOf = (name: string) => name[0].toLowerCase();
 const BEST = 5; // each group's rows in All
+const CHATS_WAIT = 300, WAIT = 100; // ms the keys must stop for before the server is asked
 
 // One row of the answer, as pages.ts's searchPage and settings.ts make them: its title and the line that matched are
 // HTML, the words found marked.
@@ -236,9 +237,8 @@ const SearchView = observer(function SearchView() {
   const [caret, setCaret] = useState(-1); // where the caret is, -1 while text is selected
   const [lit, setLit] = useState({ at: "", i: 0 }); // the menu's offer in focus, for the word it offers for
   const [shut, setShut] = useState(""); // the word whose menu Esc closed
-  const el = useRef<HTMLDivElement>(null), input = useRef<HTMLInputElement>(null), asked = useRef(0), caretTo = useRef<number | null>(null);
+  const el = useRef<HTMLDivElement>(null), input = useRef<HTMLInputElement>(null), caretTo = useRef<number | null>(null);
   const menuEl = useRef<HTMLDivElement>(null), ghost = useRef<HTMLSpanElement>(null);
-  const seq = issues.seq; // a change anywhere asks again, keeping the row in focus
   // The search: the chips, then what is typed, filters typed but not yet chips among it.
   const q = [...chips.map(textOf), query.trim()].filter(Boolean).join(" ");
   // A key:value whose key some kind has is a filter; any other, as a link's http:, is a word.
@@ -252,18 +252,25 @@ const SearchView = observer(function SearchView() {
 
   useEffect(() => { void catalog.load(); }, []);
 
-  useEffect(() => {
-    const mine = ++asked.current;
-    fetch(`/api/page/search?${new URLSearchParams({ q, kind: tab })}`)
-      .then((res) => res.json()).then(({ kinds }: { kinds: Group[] }) => {
-        if (mine === asked.current) setAnswer({ q, tab, kinds });
-      });
-  }, [q, tab, seq]);
-
-  // Chats, in Chats and All with no filter, since the browser holds no chat's fields: its titles found here, then what
-  // the server found that they lack, once it answers this search. All holds the best 5 of a kind with words, as the server does.
-  const answered = answer?.q === q && answer.tab === tab;
+  // Chats, in Chats and All with no filter, since the browser holds no chat's fields.
   const local = !filtered && (tab === "chats" || !tab);
+
+  // The server is asked once the keys stop, and an older question is called off: each one it takes while typing queued
+  // behind the last, on one thread, so the last key's answer took 0.3 to 2.4 s in a real browser (5 Nov). Chats wait
+  // longest, since their titles are already listed.
+  useEffect(() => {
+    const off = new AbortController();
+    const timer = setTimeout(() => {
+      fetch(`/api/page/search?${new URLSearchParams({ q, kind: tab })}`, { signal: off.signal })
+        .then((res) => res.json()).then(({ kinds }: { kinds: Group[] }) => setAnswer({ q, tab, kinds }))
+        .catch((error) => { if (error.name !== "AbortError") throw error; });
+    }, local ? CHATS_WAIT : /\S/.test(q) ? WAIT : 0);
+    return () => { clearTimeout(timer); off.abort(); };
+  }, [q, tab, local]);
+
+  // Chats' titles found here, then what the server found that they lack, once it answers this search. All holds the best
+  // 5 of a kind with words, as the server does.
+  const answered = answer?.q === q && answer.tab === tab;
   const limit = !tab && words ? BEST : 100;
   const titled = useMemo(() => (local ? findChats(catalog.rows, words, limit) : null), [local, catalog.rows, words, limit]);
   const groups = useMemo(() => {
@@ -443,7 +450,7 @@ const SearchView = observer(function SearchView() {
       );
     }
   }
-  if (groups && !rows.length && (answered || !local)) list.push(<li key="empty" className="empty">{filtered ? "No results with these filters" : "No results"}</li>);
+  if (groups && !rows.length) list.push(<li key="empty" className="empty">{!answered ? "Searching…" : filtered ? "No results with these filters" : "No results"}</li>);
 
   // A chip is red in a kind that has no such field, which searches it as words (step 1.3): Issues have no status.
   const kindName = KINDS.find((k) => k.kind === tab)?.name;
