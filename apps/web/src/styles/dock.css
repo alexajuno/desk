@@ -429,8 +429,8 @@ button.cmd-more:hover { background: none; color: var(--text-2); }
 /* what is being worked on, one quiet line above the composer while the steps are closed (StepsHalf.tsx). It only says,
    so it has no frame: what opens the steps is in the chat's head. */
 .steps-line { flex: none; display: flex; align-items: center; gap: 8px; box-sizing: border-box; width: min(760px, calc(100% - 48px)); height: 24px; margin: 0 auto 6px; padding: 0 12px; font: 450 12px var(--font); }
-.steps-line-now { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
-.steps-line-at { flex: 0 2 auto; min-width: 0; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-4); }
+.steps-line-now { flex: none; max-width: calc(100% - 22px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.steps-line-at { flex: 1 1 0; min-width: 0; overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; color: var(--text-4); }
 
 /* what waits on the user, in the foot above the composer: a permission, or Claude's questions as buttons */
 .ask { flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); max-height: 45vh; overflow: auto; margin: 0 auto 8px; padding: 12px;
@@ -473,6 +473,10 @@ button.cmd-more:hover { background: none; color: var(--text-2); }
 .skill { color: var(--skill-text); }
 .skill-slash { opacity: 0.5; }
 .composer-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+/* Beside the right half the composer is too narrow for the model's whole name, which pushed Send past its edge: the
+   effort goes, and stays in the model's menu. */
+.composer { container-type: inline-size; }
+@container (max-width: 480px) { .composer-foot .runs .effort { display: none; } }
 /* No line of key hints: each button names its keys in its tooltip, as Linear's do ("i'm familiar with it already",
    the user, 19 Oct). */
 .composer-foot .spacer { flex: 1; }
@@ -554,7 +558,7 @@ button.cmd-more:hover { background: none; color: var(--text-2); }
 .steps-row { display: flex; align-items: flex-start; gap: 9px; padding: 0 8px 0 0; border-radius: 6px; }
 .steps-row.can:hover { background: var(--bg-hover); }
 .steps-row.here { background: var(--bg-hover); }
-.steps-row-main { flex: 1; min-width: 0; display: grid; grid-template-columns: 14px minmax(0, 1fr); column-gap: 9px; justify-content: start; align-items: start;
+.steps-row-main { flex: 1; min-width: 0; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 0 9px; justify-content: start; align-items: start;
                   height: auto; padding: 3px 0 3px 8px; border: 0; border-radius: 6px; background: none; font: inherit; text-align: left; white-space: normal; }
 button.steps-row-main:hover { background: none; }
 .steps-row-icon { display: inline-flex; flex: none; align-items: center; height: 20px; }

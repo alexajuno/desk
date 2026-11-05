@@ -65,6 +65,17 @@ export function stepNow(steps: PlanStep[]): { place: string; step: PlanStep; par
   return all.find(({ step }) => isHere(step)) ?? all.find(({ step }) => step.state === "todo" && !step.kids?.length) ?? null;
 }
 
+// What a step holds, opened under its row: its parts, or its diagram and its decisions.
+export function StepOpen({ s }: { s: PlanStep }) {
+  if (s.parts?.length) return <div className="plan-step-open plan-step-parts"><StepParts parts={s.parts} said={s.said_html} /></div>;
+  return (
+    <div className="plan-step-open">
+      {s.diagram_html && <div className="body" dangerouslySetInnerHTML={{ __html: s.diagram_html }} />}
+      {s.said_html && <div className="body plan-step-said" dangerouslySetInnerHTML={{ __html: s.said_html }} />}
+    </div>
+  );
+}
+
 function StepRow({ s }: { s: PlanStep }) {
   const kids = s.kids ?? [];
   const end = kids.length ? `${kids.filter((k) => k.state === "done").length} of ${kids.length}` : s.note;
@@ -85,14 +96,7 @@ function StepRow({ s }: { s: PlanStep }) {
         <button type="button" className={`plan-step drawn${here ? " here" : ""}${open ? " open" : ""}`} data-state={s.state}
           title={open ? "Hide its diagram" : "Show its diagram"} aria-expanded={open} onClick={() => setOpen(!open)}>{row}</button>
       ) : <div className={`plan-step${here ? " here" : ""}`} data-state={s.state}>{row}</div>}
-      {drawn && open && s.parts?.length ? (
-        <div className="plan-step-open plan-step-parts"><StepParts parts={s.parts} said={s.said_html} /></div>
-      ) : drawn && open && (
-        <div className="plan-step-open">
-          {s.diagram_html && <div className="body" dangerouslySetInnerHTML={{ __html: s.diagram_html }} />}
-          {s.said_html && <div className="body plan-step-said" dangerouslySetInnerHTML={{ __html: s.said_html }} />}
-        </div>
-      )}
+      {drawn && open && <StepOpen s={s} />}
       {kids.length > 0 && <Steps steps={kids} />}
     </li>
   );
