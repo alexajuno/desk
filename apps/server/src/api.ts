@@ -217,7 +217,7 @@ async function applyLands(i: Issue, body: unknown) {
 // An issue's steps, which its session sends whole each time one changes, and desk draws as a tree with the
 // issues' own status circles: "ai has to gimme the plan, do each step", "i think we need database and new column here
 // rather than text rendering level only" (the user, 27 Oct). null takes them back.
-// A build step also carries its commit, the one that ends it, from which desk draws the step's diff: "we have diff show
+// A step that changes code also carries its commit, the one that ends it, from which desk draws the step's diff: "we have diff show
 // while coding, allowing user to catches the problem early" (the user, 28 Oct).
 export type PlanStep = { title: string; state: "todo" | "running" | "done"; note?: string; kids?: PlanStep[]; pictures?: StepPicture[]; said?: string;
   parts?: StepPart[]; // a design step written as parts from 3 Nov, each with its own diagram, in place of pictures (render.ts, takeParts)
@@ -227,7 +227,7 @@ export type PlanStep = { title: string; state: "todo" | "running" | "done"; note
 };
 const STEP_STATES = ["todo", "running", "done"];
 const SHA = /^[0-9a-f]{4,40}$/i;
-const STEP_SHAPE = 'plan_steps is a list of {"title": "<a few words>", "state": "todo", "running" or "done", "note": "<optional, a few words>", "commit": "<optional: for a build step, the commit that ends it>", "kids": [<its own steps, optional>]}, or null';
+const STEP_SHAPE = 'plan_steps is a list of {"title": "<a few words>", "state": "todo", "running" or "done", "note": "<optional, a few words>", "commit": "<optional: for a step that changes code, the commit that ends it>", "kids": [<its own steps, optional>]}, or null';
 
 function planSteps(list: unknown, depth = 0): PlanStep[] {
   if (!Array.isArray(list) || depth > 3) throw new HttpError(422, STEP_SHAPE);
@@ -313,7 +313,7 @@ function briefSteps(steps: PlanStep[]): unknown[] {
     ...(pictures || parts || diagram || said ? { drawn: true } : {}), ...(kids ? { kids: briefSteps(kids) } : {}) }));
 }
 
-// A step by its place, as 1.2 names Design's second: its number among its siblings, from 1, down from the top.
+// A step by its place, as 1.2 names the first step's second: its number among its siblings, from 1, down from the top.
 const PLACE = /^[1-9]\d*(\.[1-9]\d*)*$/;
 function stepAt(i: Issue, place: string): { steps: PlanStep[]; step: PlanStep } {
   if (!PLACE.test(place)) throw new HttpError(422, `${place} is no step's place: number it from 1 down the list, as 1.2 for the first step's second.`);
