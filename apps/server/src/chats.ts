@@ -428,7 +428,21 @@ export function pickFirst(chat: Chat, text: string): Promise<void> {
 // A new chat on the issue, in its folder and bound to it from the start, which works on the message at once: Plan's,
 // Start's, or another chat's handing work on. A chat works its one issue ("each guy handles one thing and communicate
 // and tell the others to handle the rest", the user, 29 Oct).
-export async function onIssue(i: Issue, message: string, more: Partial<Chat> = {}): Promise<Chat> {
+//
+// The chat is kept only once its session runs, seconds after the call, for Haiku's pick and the host. Until then the
+// issue shows no chat, so a second call in that time joins the first rather than start another: on 5 Nov a second press
+// of Start, 5.6 s after the first, gave an issue two chats, which wrote over each other's steps.
+const starting = new Map<string, Promise<Chat>>();
+
+export function onIssue(i: Issue, message: string, more: Partial<Chat> = {}): Promise<Chat> {
+  const going = starting.get(i.slug);
+  if (going) return going;
+  const start = startOnIssue(i, message, more).finally(() => starting.delete(i.slug));
+  starting.set(i.slug, start);
+  return start;
+}
+
+async function startOnIssue(i: Issue, message: string, more: Partial<Chat>): Promise<Chat> {
   const folder = resolve(agents.workdir(i));
   const chat: Chat = { id: newId(), kind: "panel", title: i.title, created: now(), session: randomUUID(), issue: i.slug, folder, cwd: folder, ...more };
   await models.keep(chat.session, await startsOn(chat.session, [store.section(i, "Context"), message].filter(Boolean).join("\n\n")));
@@ -452,6 +466,7 @@ export async function handOn(i: Issue, note: string, sender: Chat | null): Promi
   const who = (sender ? `the chat on “${of}”` : "another session").replace(/["<>\n]/g, " ");
   const path = sender ? transcripts.pathOf(sender.session) : null;
   const where = path ? fill(HANDED_WHERE, { path }) : "", Who = who[0].toUpperCase() + who.slice(1);
+  await starting.get(i.slug)?.catch(() => {}); // the note is for the chat being started, and would be lost in joining it
   const chat = ofIssue(i.slug);
   if (chat) {
     await agents.tell(chat.session, fill(HANDED_ON, { who, Who, note: note.trim(), where }));

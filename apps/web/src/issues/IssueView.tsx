@@ -74,6 +74,9 @@ const stepTip = (head: string, text: string, state: State) => (text === STATE_NA
 
 // The step of an issue landing (pages.ts, step), drawn at once on Approve.
 const LANDING: IssuePageData["step"] = { text: "Landing", button: { label: "Landing…", disabled: true } };
+// The same on Start, whose chat takes seconds to start, for Haiku's pick and the host: pressed with nothing to show, it was
+// pressed again.
+const STARTING: IssuePageData["step"] = { text: "Starting", button: { label: "Starting…", disabled: true } };
 
 // The landing steps you unticked, by their place, which Approve skips: by the issue and the steps it was given, so
 // that the ticks at its chat's end and the Approve in its chat's head skip the same ones, and a new set starts all ticked.
@@ -92,7 +95,8 @@ export function useStep(data: IssuePageData, inInbox = false) {
   const [trustFor, setTrustFor] = useState<string | null>(null);
   // Approve shows Landing while the server is still handing the work to the session, which takes a second or more.
   const landing = p.state === "landing" && data.issue.state !== "landing";
-  const step = landing ? LANDING : data.step;
+  const starting = p.state === "running" && data.step.button?.action === "start";
+  const step = landing ? LANDING : starting ? STARTING : data.step;
   const steps = data.lands?.steps ?? null;
   const [skip, setSkip] = landSkip(p.slug, steps);
 
@@ -105,6 +109,7 @@ export function useStep(data: IssuePageData, inInbox = false) {
       ui.paint(slug, "state", action === "go" ? "running" : "landing");
       setTrustFor(null);
     }
+    if (action === "start") ui.paint(slug, "state", "running");
     try {
       const res = await post(`/issue/${slug}/${action}`, {
         ...(inInbox && { src: "inbox" }), ...(action === "approve" && skip.length && { skip: skip.join(",") }),
