@@ -37,6 +37,8 @@ function look(name: string): string {
 
 const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+const widthOf = (svg: string) => Number(/viewBox="[-\d.]+ [-\d.]+ ([\d.]+) [\d.]+"/.exec(svg)?.[1]) || 0;
+
 // Cached by the diagram's source: a page draws its diagrams again on every change.
 const drawn = new Map<string, string>();
 function draw(source: string): string {
@@ -53,7 +55,8 @@ function draw(source: string): string {
     }
     renders.push(`<div class="for-${name}">${run.stdout.toString()}</div>`);
   }
-  const html = `<div class="d2">${renders.join("")}</div>`;
+  // --w, the width d2 drew it at: desk.css draws it no larger, however wide the room.
+  const html = `<div class="d2" style="--w: ${Math.round(widthOf(renders[0]))}">${renders.join("")}</div>`;
   if (drawn.size > 256) drawn.delete(drawn.keys().next().value!);
   drawn.set(source, html);
   return html;

@@ -671,8 +671,8 @@ button.primary:disabled, button.primary:disabled:hover { background: var(--btn-p
 }
 
 /* diagrams */
-.d2 { margin: 0 0 1.2em; cursor: zoom-in; border: 1px solid var(--border-2); border-radius: 8px; overflow: hidden; background: var(--bg-raised); }
-.d2 svg { display: block; width: 100%; height: auto; max-height: 70vh; }
+.d2 { max-width: calc(var(--w, 99999) * 1px + 2px); margin: 0 0 1.2em; cursor: zoom-in; border: 1px solid var(--border-2); border-radius: 8px; overflow: hidden; background: var(--bg-raised); }
+.d2 svg { display: block; width: 100%; height: auto; }
 /* A run of d2 blocks, such as Today and After, is a row of pictures (render.ts): each starts at the width where its text
    reads 12px, 0.75 of its own (d2 draws text at 16px), and grows with the room left up to its own width, so two sit side
    by side while both still read 12px and break onto two lines when they would not (tested at 1440x900, 29 Oct). --w is

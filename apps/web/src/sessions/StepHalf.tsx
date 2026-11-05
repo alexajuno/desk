@@ -43,25 +43,23 @@ export function StepHeld({ s }: { s: PlanStep }) {
   );
 }
 
-// A part's pictures, fitted whole into the half's width and at most TALL of the window's height, side by side or one under
-// the other, whichever draws them larger, and never past the size d2 drew them: a picture larger than the room ran off the
-// half, and each came at its own scale ("the diagram was immediately hard to be seen. the sizes are varied", the user, 3
-// Nov). The parts of a step share one scale, the smallest any of them needs, so that their words keep one size from part
-// to part as you read on, down to SHARED; a part that needs less than that shrinks alone. A click opens a picture full
-// size, as any picture does (ui/viewer.ts).
-const GAP = 16, CAPTION = 20, EDGE = 2, SHARED = 0.75, TALL = 0.6;
-type Size = { w: number; h: number };
+// A part's pictures, fitted to the half's width, side by side while their words still read, else one under the other, and
+// never past the size d2 drew them: a picture larger than the room ran off the half, and each came at its own scale ("the
+// diagram was immediately hard to be seen. the sizes are varied", the user, 3 Nov). Only the width fits, as a tall picture
+// scrolls with the list: a cap on its height took the words of 878 real pictures from 12px to 9px ("it's genuinely small",
+// the user, 5 Nov). The parts of a step share one scale, the smallest any of them needs, so that their words keep one size
+// from part to part as you read on, down to SHARED; a part that needs less than that shrinks alone. A click opens a picture
+// full size, as any picture does (ui/viewer.ts).
+const GAP = 16, EDGE = 2, SHARED = 0.75, READS = 13 / 16;
+type Size = { w: number };
 type Fit = { scale: number; dir: "row" | "column" };
 
 const Pictures = function Pictures({ all, now }: { all: (string | undefined)[]; now: number }) {
   const box = useRef<HTMLDivElement>(null);
-  const [room, setRoom] = useState<Size | null>(null);
+  const [room, setRoom] = useState<number | null>(null);
   useLayoutEffect(() => {
     const el = box.current!;
-    const look = () => {
-      const h = Math.round(innerHeight * TALL);
-      setRoom((r) => (r?.w === el.clientWidth && r.h === h ? r : { w: el.clientWidth, h }));
-    };
+    const look = () => setRoom(el.clientWidth);
     look();
     const watch = new ResizeObserver(look);
     watch.observe(el);
@@ -82,32 +80,31 @@ const Pictures = function Pictures({ all, now }: { all: (string | undefined)[]; 
   return <div ref={box} className="step-half-pic body" data-dir={own?.dir ?? "column"} dangerouslySetInnerHTML={{ __html: html }} />;
 };
 
-// The size d2 drew each picture of a part at, from its outer svg's viewBox, and whether they carry captions (Today,
-// After).
-const measured = new Map<string, { pics: Size[]; captions: boolean }>();
+// The size d2 drew each picture of a part at, from its outer svg's viewBox.
+const measured = new Map<string, { pics: Size[] }>();
 function measure(html: string) {
   let known = measured.get(html);
   if (!known) {
     const doc = new DOMParser().parseFromString(html, "text/html");
     const pics = [...doc.querySelectorAll(".d2")].map((d) => {
-      const [, , w, h] = (d.querySelector("svg")?.getAttribute("viewBox") ?? "").split(/[\s,]+/).map(Number);
-      return { w: w || 1, h: h || 1 };
+      const [, , w] = (d.querySelector("svg")?.getAttribute("viewBox") ?? "").split(/[\s,]+/).map(Number);
+      return { w: w || 1 };
     });
-    known = { pics, captions: Boolean(doc.querySelector("figcaption")) };
+    known = { pics };
     if (measured.size > 200) measured.clear();
     measured.set(html, known);
   }
   return known;
 }
 
-// The largest scale at which a part's pictures fit the room, up to the size d2 drew them, and whether side by side.
-function fit({ pics, captions }: { pics: Size[]; captions: boolean }, room: Size): Fit {
+// The scale at which a part's pictures fit the room's width, up to the size d2 drew them: side by side while that reads
+// at 13px, or draws them no smaller than one under the other, as one picture does, else one under the other.
+function fit({ pics }: { pics: Size[] }, room: number): Fit {
   if (!pics.length) return { scale: 1, dir: "column" };
-  const n = pics.length, cap = captions ? CAPTION : 0;
-  const sum = (k: keyof Size) => pics.reduce((a, p) => a + p[k], 0), most = (k: keyof Size) => Math.max(...pics.map((p) => p[k]));
-  const row = Math.min((room.w - GAP * (n - 1) - EDGE * n) / sum("w"), (room.h - cap - EDGE) / most("h"));
-  const column = Math.min((room.w - EDGE) / most("w"), (room.h - (cap + EDGE) * n - GAP * (n - 1)) / sum("h"));
-  const best = row >= column ? { scale: row, dir: "row" as const } : { scale: column, dir: "column" as const };
+  const n = pics.length;
+  const row = (room - GAP * (n - 1) - EDGE * n) / pics.reduce((a, p) => a + p.w, 0);
+  const column = (room - EDGE) / Math.max(...pics.map((p) => p.w));
+  const best = row >= Math.min(READS, column) ? { scale: row, dir: "row" as const } : { scale: column, dir: "column" as const };
   return { ...best, scale: Math.max(0.05, Math.min(1, best.scale)) };
 }
 
