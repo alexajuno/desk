@@ -49,7 +49,6 @@ import * as auto from "./auto.ts";
 import * as automations from "./automations.ts";
 import type { Automation } from "./automations.ts";
 import * as chats from "./chats.ts";
-import * as compact from "./compact.ts";
 import { HOME, TEST } from "./config.ts";
 import * as store from "./issues.ts";
 import { byRank, type Issue } from "./issues.ts";
@@ -500,14 +499,12 @@ export function routes(app: FastifyInstance) {
 
   // closed: the issues Settings > Workflow's automations closed with it, when there are any.
   app.patch("/api/issues/:slug", async (req: Req) => {
-    const i = await loadIssue(req.params.slug), fields = given(req.body, FIELDS), before = i.plan_steps;
+    const i = await loadIssue(req.params.slug), fields = given(req.body, FIELDS);
     await apply(i, fields);
     mustList(i, fields, req.body);
     await applyLands(i, req.body);
     await applyPlanSteps(i, req.body);
     const closed = await store.save(i);
-    // A step ticked done with another to go: a break, for its chat to compact.
-    compact.noted(i, before, fields.review_of);
     return { ...asJson(i, true), ...(closed.length ? { closed } : {}) };
   });
 
