@@ -145,11 +145,12 @@ class Dock {
     if (was?.title !== reading.title || was.part !== reading.part) this.reading = { ...this.reading, [session]: reading };
   }
 
-  // The row open in the chat's list: the step being worked on (now), until you open or close one, which holds until the
-  // work moves on to another step ("click into a step shows the diagram, but there is no button back", the user, 5 Nov).
+  // The row open in the chat's list: the step being worked on (now), until you open or close one, or a step is sent, which
+  // holds until the work moves on to another step that holds something, so that a step ticked as the turn ends stays open
+  // to read ("click into a step shows the diagram, but there is no button back", the user, 5 Nov).
   rowOpen(session: string, now: string | null): string | null {
     const picked = this.picked[session];
-    return picked && picked.on === now ? picked.title : now;
+    return picked && (picked.on === now || !now) ? picked.title : now;
   }
 
   pickRow(session: string, title: string | null, now: string | null) {
