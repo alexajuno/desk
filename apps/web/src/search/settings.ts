@@ -16,7 +16,7 @@ export interface SettingHit {
 
 const W = "[\\p{L}\\p{N}_]";
 const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const escape = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&#34;").replace(/'/g, "&#39;");
+export const escape = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&#34;").replace(/'/g, "&#39;");
 const has = (p: RegExp, text: string) => {
   p.lastIndex = 0;
   return p.test(text);

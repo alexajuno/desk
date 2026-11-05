@@ -11,10 +11,11 @@
 // 1.2). As a filter is typed, a menu under it offers the fields its letters start, then the field's values, the one in
 // focus greyed after the caret; Tab takes it, Enter takes a value, the arrows move in it, Esc closes it (mockup C). The
 // chips and the words go to the server as one search, which reads the filters itself. / and the sidebar's Search open
-// it on Chats with nothing typed, the kind searched most (step 1.2).
+// it on Chats with nothing typed, the kind searched most (step 1.2). A chat's title is found here, on each key, and what
+// the server finds besides joins below it, never moving the row in focus (chats.ts).
 import { action, makeObservable, observable } from "mobx";
 import { observer } from "mobx-react-lite";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { go } from "../app/nav";
 import { teamPath } from "../frame/open";
@@ -26,6 +27,7 @@ import { issues } from "../store/issues";
 import { GLYPH, MilestoneIcon, ProjectStatusIcon, Ring, StateIcon } from "../ui/icons";
 import { closeMenu } from "../ui/menu";
 import { catchKeys, takeCaught } from "./catcher";
+import { catalog, findChats } from "./chats";
 import { findSettings } from "./settings";
 
 type Kind = "chats" | "issues" | "projects" | "teams" | "milestones" | "settings";
@@ -51,7 +53,7 @@ interface Hit {
   session?: string; // a chat's
   folder?: string;
   age?: string;
-  issue?: IssueRow | null; // an issue's, or a chat's issue
+  issue?: IssueRow | Pick<IssueRow, "slug" | "state"> | null; // an issue's, or a chat's issue: only these two from the browser's list
   team?: { slug: string; title: string } | null; // its team, or a team itself
   date?: string;
   project?: { slug: string; title?: string; status?: string; progress?: number }; // a project, or a milestone's project
@@ -196,7 +198,7 @@ function openHit(h: Hit) {
   else go(h.path!);
 }
 
-const stateOf = (i: IssueRow) => issues.bySlug.get(i.slug)?.state ?? i.state;
+const stateOf = (i: Pick<IssueRow, "slug" | "state">) => issues.bySlug.get(i.slug)?.state ?? i.state;
 
 function icon(h: Hit): ReactNode {
   switch (h.kind) {
@@ -229,7 +231,7 @@ const SearchView = observer(function SearchView() {
   const [chips, setChips] = useState<Filter[]>([]);
   const [tab, setTab] = useState<Kind | "">(start.tab);
   const [fields, setFields] = useState(known);
-  const [groups, setGroups] = useState<Group[] | null>(null);
+  const [answer, setAnswer] = useState<{ q: string; tab: Kind | ""; kinds: Group[] } | null>(null); // the server's latest
   const [at, setAt] = useState<string | null>(null); // the row in focus, by its key
   const [caret, setCaret] = useState(-1); // where the caret is, -1 while text is selected
   const [lit, setLit] = useState({ at: "", i: 0 }); // the menu's offer in focus, for the word it offers for
@@ -248,17 +250,34 @@ const SearchView = observer(function SearchView() {
     fetch("/api/page/search/fields").then((res) => res.json()).then((f: Fields) => { known = f; setFields(f); });
   }, []);
 
+  useEffect(() => { void catalog.load(); }, []);
+
   useEffect(() => {
     const mine = ++asked.current;
     fetch(`/api/page/search?${new URLSearchParams({ q, kind: tab })}`)
       .then((res) => res.json()).then(({ kinds }: { kinds: Group[] }) => {
-        if (mine !== asked.current) return;
-        // All lists the chats alone before anything is typed (step 1.4), and its best 5 of each kind after. The settings
-        // have no fields, so a filter leaves them out (step 1.3).
-        const settings = findSettings(words, filtered), listed = tab === "settings" ? settings.hits : !tab && words ? settings.hits.slice(0, BEST) : [];
-        setGroups([...kinds, { ...settings, hits: listed }]);
+        if (mine === asked.current) setAnswer({ q, tab, kinds });
       });
-  }, [q, words, filtered, tab, seq]);
+  }, [q, tab, seq]);
+
+  // Chats, in Chats and All with no filter, since the browser holds no chat's fields: its titles found here, then what
+  // the server found that they lack, once it answers this search. All holds the best 5 of a kind with words, as the server does.
+  const answered = answer?.q === q && answer.tab === tab;
+  const local = !filtered && (tab === "chats" || !tab);
+  const limit = !tab && words ? BEST : 100;
+  const titled = useMemo(() => (local ? findChats(catalog.rows, words, limit) : null), [local, catalog.rows, words, limit]);
+  const groups = useMemo(() => {
+    if (!answer && !titled) return null;
+    // All lists the chats alone before anything is typed (step 1.4), and its best 5 of each kind after. The settings
+    // have no fields, so a filter leaves them out (step 1.3).
+    const settings = findSettings(words, filtered), listed = tab === "settings" ? settings.hits : !tab && words ? settings.hits.slice(0, BEST) : [];
+    const kinds = (answer?.kinds ?? []).filter((g) => !titled || g.kind !== "chats");
+    if (!titled) return [...kinds, { ...settings, hits: listed }];
+    const them = answered ? answer.kinds.find((g) => g.kind === "chats") : undefined;
+    const mine = new Set(titled.hits.map((h) => h.key));
+    const hits: Hit[] = [...titled.hits, ...(them?.hits ?? []).filter((h) => !mine.has(h.key))].slice(0, limit);
+    return [{ kind: "chats" as const, count: Math.max(them?.count ?? 0, titled.count, hits.length), hits }, ...kinds, { ...settings, hits: listed }];
+  }, [titled, answer, answered, words, filtered, tab, limit]);
 
   const shown = (groups ?? []).filter((g) => g.hits.length);
   const rows = shown.flatMap((g) => g.hits);
@@ -424,7 +443,7 @@ const SearchView = observer(function SearchView() {
       );
     }
   }
-  if (groups && !rows.length) list.push(<li key="empty" className="empty">{filtered ? "No results with these filters" : "No results"}</li>);
+  if (groups && !rows.length && (answered || !local)) list.push(<li key="empty" className="empty">{filtered ? "No results with these filters" : "No results"}</li>);
 
   // A chip is red in a kind that has no such field, which searches it as words (step 1.3): Issues have no status.
   const kindName = KINDS.find((k) => k.kind === tab)?.name;
@@ -493,5 +512,6 @@ const SearchView = observer(function SearchView() {
 });
 
 export const SearchHost = observer(function SearchHost() {
+  useEffect(() => { void catalog.load(); }, []); // so that the first / finds its chats at once
   return search.open ? createPortal(<SearchView />, document.body) : null;
 });

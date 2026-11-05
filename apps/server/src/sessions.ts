@@ -312,12 +312,24 @@ export async function newSession(base: string): Promise<chats.Chat> {
 // A chat as rows() finds it.
 export type Found = Awaited<ReturnType<typeof rows>>["found"][number];
 
+const oneForEachIssue = (found: Found[]) => {
+  const issued = new Set<string>();
+  return found.filter((r) => !r.issue || (!issued.has(r.issue.slug) && !!issued.add(r.issue.slug)));
+};
+
+// Every chat search lists, in its order, with no more than a row needs: the browser searches their titles itself as
+// each key is typed (the app's search/chats.ts).
+export async function catalog() {
+  const { found } = await rows();
+  return oneForEachIssue(found).map((r) => ({ id: r.id, title: r.title, folder: r.folder, age: ago(r.moved), issue: r.issue && { slug: r.issue.slug, state: r.issue.state } }));
+}
+
 // Search's chats (pages.ts, searchPage): those rows() finds that `keep` keeps (by its filters, fields.ts), one for each
 // issue, the first in rows' order; those whose title holds every word first, then those found by what was typed in them
 // ("a match in the title or in what you typed ranks first", step 1.3). How many, and the first `limit`, their words marked.
 export async function search(query: string, keep: (r: Found) => boolean, limit: number) {
-  const { found, words } = await rows(query), issued = new Set<string>();
-  let kept = found.filter((r) => keep(r) && (!r.issue || (!issued.has(r.issue.slug) && !!issued.add(r.issue.slug))));
+  const { found, words } = await rows(query);
+  let kept = oneForEachIssue(found.filter(keep));
   if (words) {
     const titled = await sessiontext.inTitle(words, kept.map((r) => [r.id, r.title]));
     kept = [...kept.filter((r) => titled.has(r.id)), ...kept.filter((r) => !titled.has(r.id))];
