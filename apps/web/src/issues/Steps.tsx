@@ -1,6 +1,6 @@
 // An issue's steps, which its session sets and ticks (api.ts, PlanStep), drawn as Linear draws an issue's
-// sub-issues: a row each with the issues' own status circle, its own steps under it on a thin line, a parent's count
-// and a step's note in the quiet grey at its end, and the one being worked on filled ("similar statuses for issues i
+// sub-issues: a row each with the issues' own status circle, its own steps under it on a thin line, a step's note
+// and a parent's count in the quiet grey at its end, and the one being worked on filled ("similar statuses for issues i
 // suppose?", the user, 27 Oct). The issue's page shows it, and its chat a view of its right half
 // (sessions/StepsHalf.tsx). A step its session drew opens under its row, a click away, with its diagram and its
 // decisions, or its parts: the chat shows them where they were sent ("we had all diagrams on sidebar and it can easily be viewed
@@ -90,7 +90,6 @@ export function StepOpen({ s }: { s: PlanStep }) {
 
 function StepRow({ s }: { s: PlanStep }) {
   const kids = s.kids ?? [];
-  const end = kids.length ? `${kids.filter((k) => k.state === "done").length} of ${kids.length}` : s.note;
   const here = isHere(s);
   const drawn = isDrawn(s);
   const [open, setOpen] = useState(here);
@@ -98,7 +97,8 @@ function StepRow({ s }: { s: PlanStep }) {
     <>
       <span className="plan-step-icon"><StateIcon state={s.state} /></span>
       <span className="plan-step-title">{s.title}</span>
-      {end && <span className="plan-step-note">{end}</span>}
+      {s.note && <span className="plan-step-note">{s.note}</span>}
+      {kids.length > 0 && <span className="plan-step-count">{kids.filter((k) => k.state === "done").length} of {kids.length}</span>}
       {drawn && <span className="plan-step-drawn">{GLYPH.diagram}</span>}
     </>
   );

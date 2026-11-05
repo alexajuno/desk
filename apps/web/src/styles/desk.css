@@ -436,6 +436,7 @@ button.nav-fold:hover { background: none; color: var(--text-1); }
 .plan-step-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plan-step[data-state="todo"] .plan-step-title { color: var(--text-2); }
 .plan-step-note { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-3); }
+.plan-step-count { flex: none; font-size: 12px; color: var(--text-3); }
 /* A step its session drew: the whole row opens its diagram and decisions under it. */
 button.plan-step { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; transition: background-color .1s; }
 button.plan-step:hover, button.plan-step.open { background: var(--bg-hover); }
