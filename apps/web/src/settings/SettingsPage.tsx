@@ -23,6 +23,7 @@ interface Settings {
   parent_auto_close: boolean;
   chat_model: string;
   chat_effort: string;
+  chat_pick: boolean;
   stash_back_on_send: boolean;
   test_slots: number;
 }
@@ -39,6 +40,8 @@ export const SETTINGS = [
   { page: "preferences", section: "Interface and theme", id: "theme", title: "Interface theme", about: "Follow the system, or keep desk light or dark" },
   { page: "preferences", section: "Composer", id: "stash_back_on_send", title: "Bring the stash back on send",
     about: "What Ctrl S put away comes back into the box as soon as you send the next message, as in Claude Code. Off, it waits for Ctrl S" },
+  { page: "preferences", section: "Sessions", id: "chat_pick", title: "Haiku picks the model",
+    about: "Haiku reads a new chat's first message and picks its model and effort, unless you moved its chip first. Model and Effort below are what it falls back on" },
   { page: "preferences", section: "Sessions", id: "chat_model", title: "Model", about: "The model a new chat or issue session starts with" },
   { page: "preferences", section: "Sessions", id: "chat_effort", title: "Effort", about: "How hard a new chat or issue session thinks before it answers" },
   { page: "preferences", section: "Sessions", id: "test_slots", title: "Test desks at once",
@@ -174,6 +177,9 @@ function Sessions() {
   const efforts = model ? EFFORTS.filter(([value]) => model.efforts.includes(value)) : EFFORTS;
   return (
     <Section title="Sessions">
+      <Row id="chat_pick">
+        <Switch id="chat_pick" on={shown.chat_pick} change={(on) => change({ chat_pick: on })} />
+      </Row>
       <Row id="chat_model">
         <button id="chat_model" type="button" className="set-pick" onClick={(e) => {
           if (toggled(e.currentTarget)) return;

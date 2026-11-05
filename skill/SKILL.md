@@ -82,7 +82,7 @@ curl -s "http://127.0.0.1:8790/api/settings"
 curl -s "http://127.0.0.1:8790/api/settings" -X PATCH --json '{"parent_auto_close": true}'
 ```
 
-The same settings hold `chat_model` and `chat_effort`, the model (an alias such as `opus` or `sonnet`) and the effort (`low`, `medium`, `high`, `xhigh` or `max`) a new desk chat starts on, from Settings › Preferences.
+The same settings hold `chat_model` and `chat_effort`, the model (an alias such as `opus` or `sonnet`) and the effort (`low`, `medium`, `high`, `xhigh` or `max`) a new desk chat starts on, from Settings › Preferences. `chat_pick`, on unless the user turned it off, has Haiku pick them instead from a chat's first message, with those two as its fallback; an agent's chat keeps the agent's own. `GET /api/picks` (`?days=30` by default) lists each pick with the model and effort the chat stands on now and its dollars at list price, and sums them by rule, for when the user asks what the picks save.
 
 Teams have a `title`, a `body` (their description) and a `state`, active or archived, never done. Their `slug` is their identifier, as Linear's: changing it, as `"slug": "site"`, moves the team to a new address, with its issues and projects, and its old slugs, listed as `aliases`, still name it everywhere a team is named. List the active ones (`?state=archived` or `?state=all` for others), read one with its issues, create one, archive one, or change its identifier; put an issue in one with `"team": "<slug>"` as above, and list a team's issues with `/api/issues?team=<slug>&state=all`. Its page is `http://127.0.0.1:8790/team/<slug>`:
 

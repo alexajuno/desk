@@ -21,6 +21,7 @@ import * as hosted from "./hosted.ts";
 import * as store from "./issues.ts";
 import type { Issue } from "./issues.ts";
 import * as models from "./models.ts";
+import * as pick from "./pick.ts";
 import { run, sleep } from "./proc.ts";
 import { fill, HANDED, HANDED_ON, HANDED_TODO, HANDED_TOLD, HANDED_WHERE, JUDGE, MOVED, NOT_MOVED, ON_ISSUE, PLAN_RULES, PROMPT, WINDOW_RULES, WORK } from "./prompts.ts";
 import type { Agent } from "./roster.ts";
@@ -380,14 +381,35 @@ export async function renew(chat: Chat): Promise<Chat> {
 
 const newId = () => `chat-${randomBytes(4).toString("hex")}`;
 
+// What a chat starting on this message runs on: Haiku's pick (pick.ts), or Preferences with it turned off.
+async function startsOn(session: string, text: string): Promise<models.Pick> {
+  const s = settings.load(), base = { model: s.chat_model, effort: s.chat_effort };
+  return s.chat_pick ? pick.judge(session, text, base) : base;
+}
+
+// A new chat's first message, typed in its panel, picks what it runs on before its first request, when nothing can be
+// lost in the cache. A chip the user moved first stands: a chat off Preferences is their pick. A message sent while the
+// pick runs waits on the same one, so that it can't reach the chat first. An agent's chat keeps the agent's own.
+const picking = new Map<string, Promise<void>>();
+
+export function pickFirst(chat: Chat, text: string): Promise<void> {
+  const s = settings.load(), own = models.pickOf(chat.session);
+  const running = picking.get(chat.session);
+  if (running) return running;
+  if (!s.chat_pick || !text.trim() || text.trim().startsWith("/") || own.model !== s.chat_model || own.effort !== s.chat_effort) return Promise.resolve();
+  const done = startsOn(chat.session, text).then((runs) => models.change(chat.session, runs))
+    .catch((error) => console.error("desk: picking a chat's model", error));
+  picking.set(chat.session, done);
+  return done;
+}
+
 // A new chat on the issue, in its folder and bound to it from the start, which works on the message at once: Plan's,
 // Start's, or another chat's handing work on. A chat works its one issue ("each guy handles one thing and communicate
 // and tell the others to handle the rest", the user, 29 Oct).
 export async function onIssue(i: Issue, message: string, more: Partial<Chat> = {}): Promise<Chat> {
   const folder = resolve(agents.workdir(i));
   const chat: Chat = { id: newId(), kind: "panel", title: i.title, created: now(), session: randomUUID(), issue: i.slug, folder, cwd: folder, ...more };
-  const s = settings.load();
-  await models.keep(chat.session, { model: s.chat_model, effort: s.chat_effort });
+  await models.keep(chat.session, await startsOn(chat.session, [store.section(i, "Context"), message].filter(Boolean).join("\n\n")));
   await hosted.start({ ...(await hostOptions(chat)), title: `desk chat ${stamp()}`, message });
   await save(chat);
   return chat;
@@ -498,8 +520,7 @@ export function push(agent: Agent, text: string, from: string): Promise<Chat> {
 // with no agent started a bare Chat, which did real work with no issue to show for it.
 async function cameIn(message: string, more: Partial<Chat>): Promise<Chat> {
   const chat: Chat = { id: newId(), kind: "panel", title: "New chat", created: now(), session: randomUUID(), ...more };
-  const s = settings.load();
-  await models.keep(chat.session, { model: s.chat_model, effort: s.chat_effort });
+  await models.keep(chat.session, await startsOn(chat.session, message));
   await hosted.start({ ...(await hostOptions(chat)), title: `desk chat ${stamp()}`, message });
   await save(chat, (tx) => takeFrom(tx, chat));
   return chat;

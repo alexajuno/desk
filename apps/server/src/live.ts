@@ -315,6 +315,7 @@ export async function send(id: string, sent: Sent): Promise<{ queued: boolean }>
     moved([id]);
     return { queued: false };
   }
+  if (fresh) await chats.pickFirst(chat!, m.text);
   if (fresh && m.as === "chat") {
     await chats.becomeBare(chat!, content(m));
     moved([id]);

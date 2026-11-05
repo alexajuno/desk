@@ -17,6 +17,7 @@ import { byRank, CLOSED } from "./issues.ts";
 import * as land from "./land.ts";
 import * as live from "./live.ts";
 import * as models from "./models.ts";
+import * as pick from "./pick.ts";
 import * as pages from "./pages.ts";
 import * as periods from "./periods.ts";
 import * as pins from "./pins.ts";
@@ -499,6 +500,11 @@ export async function create(): Promise<FastifyInstance> {
     const days = Number((req.query as { days?: string }).days ?? 7);
     if (!Number.isFinite(days) || days <= 0) throw new HttpError(400, "days is a number of days back, such as 7.");
     return wakes.report(Math.min(days, wakes.DAYS));
+  });
+  app.get("/api/picks", async (req: Req) => {
+    const days = Number((req.query as { days?: string }).days ?? 30);
+    if (!Number.isFinite(days) || days <= 0) throw new HttpError(400, "days is a number of days back, such as 30.");
+    return pick.report(days);
   });
   // A made-up notice, on a test desk alone, which connects to neither Slack nor Gmail (config.ts, CONNECT): a test of
   // the Inbox's rows and pop-ups writes its own. 8790's come only from its connectors.

@@ -232,6 +232,16 @@ create table if not exists notices ( -- each Slack message and mail that came in
   why text not null default '' -- the firewall's line, the chat's, or a mail's topic
 );
 create index if not exists notices_thread on notices (thread, at);
+create table if not exists chat_picks ( -- what Haiku picked as each chat started (pick.ts)
+  session text primary key,
+  at double precision not null, -- in seconds
+  rule text, -- A to D, null when it failed or timed out and the chat started on Preferences
+  model text not null, -- what the chat started on
+  effort text not null,
+  why text not null default '', -- Haiku's few words
+  ms integer not null, -- how long the first message waited on it
+  cost double precision -- its dollars, at list price
+);
 create table if not exists wakes ( -- each time a thread's new messages woke the chat following it (wakes.ts)
   id text primary key, -- wake-<random>
   chat text not null, -- the chat it woke, by id
