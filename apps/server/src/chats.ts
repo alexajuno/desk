@@ -511,7 +511,7 @@ export const onThread = (thread: string, title: string, message: string) => came
 // A chat follows the threads attached to it, with no end: "attach slack threads to a chat, and it'll follow that thread
 // forever" (the user, 3 Nov), the attachment living on the chat, not on desk's copy of the messages, which goes after 14
 // days (notices.ts). desk attaches the one a chat starts on (onThread); the chat's model attaches any other and lets one
-// go, on the user's word (follow, letGo). A thread is one chat's, since its messages go somewhere: attaching it moves it.
+// go, on the user's word, as the user's Unfollow on its card does (follow, letGo). A thread is one chat's, since its messages go somewhere: attaching it moves it.
 // A deleted chat follows none, and a DM is followed only while the chat's issue is open, since a DM has no end and would
 // bring every later message from that person here.
 

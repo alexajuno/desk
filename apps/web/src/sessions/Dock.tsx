@@ -496,6 +496,7 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
   // The steps Approve runs show under the last step's report, which handed the work over (prompts.ts, STEPS): that is
   // the last turn while the issue waits on Approve, since your reply moves it on.
   const lands = page?.reviewing ? page.lands?.steps ?? null : null;
+  const following = [...issues.chats.values()].find((c) => c.session === s.id); // whose threads show Unfollow on their cards
   const you = (p: (typeof s.pending)[number]) => (
     <You key={p.key} text={p.text} images={p.attached.filter((a) => a.url).length} files={p.attached.filter((a) => !a.url).map((a) => a.name)} queued={s.working && p.mid && !p.lost} lost={p.lost} onSend={() => void s.resend(p)}
       onSendNow={p === lastQueued ? () => void s.sendNow("", []) : undefined} />
@@ -506,7 +507,8 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
         // One typed mid-turn is in the transcript once Claude takes it in, at its next step: by then it's sent, not queued.
         if (r.kind === "you") return <You key={r.item.key} text={r.item.text ?? ""} images={r.item.images} files={r.item.files} when={r.item.at} />;
         if (r.kind === "text") return <Reply key={r.item.key} at={r.item.key} text={r.item.text ?? ""} when={r.item.at} />;
-        if (r.kind === "came") return r.item.came ? <CameCard key={r.item.key} came={r.item.came} at={r.item.at} reply={(thread) => replyTo(s.id, thread)} /> : null;
+        if (r.kind === "came") return r.item.came ? <CameCard key={r.item.key} came={r.item.came} at={r.item.at} reply={(thread) => replyTo(s.id, thread)}
+          chat={following?.threads?.includes(r.item.came.thread ?? "") ? following.id : undefined} /> : null;
         if (r.kind === "replied") return <RepliedLine key={r.key} reply={r.reply} />;
         if (r.kind === "sent") return <Sent key={r.key} at={r.key} page={page} section={r.section} latest={n === latest[r.section]} />;
         if (r.kind === "step") {
