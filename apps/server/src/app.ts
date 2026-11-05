@@ -23,6 +23,7 @@ import * as pins from "./pins.ts";
 import * as seat from "./seat.ts";
 import * as projects from "./projects.ts";
 import { HttpError } from "./pages.ts";
+import * as searchlog from "./searchlog.ts";
 import * as sessions from "./sessions.ts";
 import * as logins from "./logins.ts";
 import * as notices from "./notices.ts";
@@ -335,6 +336,8 @@ export async function create(): Promise<FastifyInstance> {
   app.get("/api/page/automations", async () => pages.automationsPage());
   app.get("/api/page/automation/:slug", async (req: Req) => pages.automationPage(req.params.slug));
   app.get("/api/page/search/fields", async () => fields.fields());
+  app.post("/api/page/search/log", async (req: Req) => { await searchlog.add(req.body ?? {}); return { ok: true }; });
+  app.get("/api/page/search/log", async (req: Req) => ({ searches: await searchlog.recent(Number(req.query.days) || 7) }));
   app.get("/api/page/search/chats", async () => ({ chats: await sessions.catalog() }));
   app.get("/api/page/search", async (req: Req) => pages.searchPage(req.query.q ?? "", req.query.kind ?? ""));
   app.get("/api/page/file/:slug/:name", async (req: Req) => pages.filePage(req.params.slug, req.params.name));

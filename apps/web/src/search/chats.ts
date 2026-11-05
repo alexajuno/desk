@@ -59,7 +59,7 @@ export function findChats(rows: Row[], words: string, limit: number) {
   return {
     count: found.length,
     hits: found.slice(0, limit).map((c) => ({
-      kind: "chat" as const, key: `chat/${c.id}`, session: c.id, title: marked(c.title, c.folded!, patterns), snippet: "",
+      kind: "chat" as const, found: "browser" as const, key: `chat/${c.id}`, session: c.id, title: marked(c.title, c.folded!, patterns), snippet: "",
       folder: c.folder, age: c.age, issue: c.issue,
     })),
   };

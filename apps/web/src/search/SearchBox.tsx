@@ -47,6 +47,7 @@ const CHATS_WAIT = 300, WAIT = 100; // ms the keys must stop for before the serv
 // One row of the answer, as pages.ts's searchPage and settings.ts make them: its title and the line that matched are
 // HTML, the words found marked.
 interface Hit {
+  found?: "browser"; // a chat's title found here, on the key
   kind: "chat" | "issue" | "project" | "team" | "milestone" | "setting";
   key: string;
   title: string;
@@ -188,8 +189,22 @@ export const search = new Search();
 export const openSearch = (query?: string) => search.show(query);
 export const closeSearch = () => search.hide();
 
+// This opening of the box, told to the server's search log as it closes (searchlog.ts).
+interface Visit { opened: number; keys: number; serverMs: number | null; query: string; tab: string; picked: Record<string, unknown> }
+let visit: Visit | null = null;
+
+function tellVisit() {
+  if (!visit) return;
+  const { opened, keys, serverMs, query, tab, picked } = visit;
+  visit = null;
+  void fetch("/api/page/search/log", { method: "POST", keepalive: true, headers: { "content-type": "application/json" },
+    body: JSON.stringify({ tab, query, ...picked, took_ms: picked.took_ms ?? performance.now() - opened, keys, server_ms: serverMs }) }).catch(() => {});
+}
+
 // Where a hit opens: a chat in its issue's place, or its own; a milestone on its project's Issues, at its group.
-function openHit(h: Hit) {
+function openHit(h: Hit, rank: number) {
+  if (visit) visit.picked = { picked_kind: h.kind, picked: h.key, picked_title: h.title.replace(/<\/?mark>/g, ""),
+    picked_from: h.found ?? (h.kind === "setting" ? "browser" : "server"), rank, took_ms: performance.now() - visit.opened };
   closeSearch();
   if (h.kind === "chat") openSession(h.session!, h.issue?.slug);
   else if (h.kind === "issue") go(`/issue/${h.issue!.slug}`);
@@ -250,7 +265,18 @@ const SearchView = observer(function SearchView() {
     fetch("/api/page/search/fields").then((res) => res.json()).then((f: Fields) => { known = f; setFields(f); });
   }, []);
 
-  useEffect(() => { void catalog.load(); }, []);
+  useEffect(() => {
+    void catalog.load();
+    visit = { opened: performance.now(), keys: 0, serverMs: null, query: "", tab: "", picked: {} };
+    return tellVisit;
+  }, []);
+  // What it ends on, and each change to what is typed.
+  const typedAt = useRef(q);
+  if (visit) {
+    if (typedAt.current !== q) visit.keys++;
+    typedAt.current = q;
+    Object.assign(visit, { query: q, tab });
+  }
 
   // Chats, in Chats and All with no filter, since the browser holds no chat's fields.
   const local = !filtered && (tab === "chats" || !tab);
@@ -261,8 +287,12 @@ const SearchView = observer(function SearchView() {
   useEffect(() => {
     const off = new AbortController();
     const timer = setTimeout(() => {
+      const asked = performance.now();
       fetch(`/api/page/search?${new URLSearchParams({ q, kind: tab })}`, { signal: off.signal })
-        .then((res) => res.json()).then(({ kinds }: { kinds: Group[] }) => setAnswer({ q, tab, kinds }))
+        .then((res) => res.json()).then(({ kinds }: { kinds: Group[] }) => {
+          if (visit) visit.serverMs = performance.now() - asked;
+          setAnswer({ q, tab, kinds });
+        })
         .catch((error) => { if (error.name !== "AbortError") throw error; });
     }, local ? CHATS_WAIT : /\S/.test(q) ? WAIT : 0);
     return () => { clearTimeout(timer); off.abort(); };
@@ -373,7 +403,7 @@ const SearchView = observer(function SearchView() {
       else if (down) move(1);
       else if (up) move(-1);
       // Enter takes a value; letters that start a field may be words searched for, so there it opens the hit.
-      else if (k === "Enter") { if (s.menu?.offers[s.litAt].value) s.takeOffer(s.litAt); else if (!(inBox && s.chipAt()) && s.focused) openHit(s.focused); }
+      else if (k === "Enter") { if (s.menu?.offers[s.litAt].value) s.takeOffer(s.litAt); else if (!(inBox && s.chipAt()) && s.focused) openHit(s.focused, s.rows.indexOf(s.focused)); }
       else if (k === "Tab" && !e.shiftKey && s.menu) s.takeOffer(s.litAt);
       else if (k === "Tab") {
         // i then Tab goes to Issues, and the i goes: it named the kind, not a thing to find. One letter never has a menu,
@@ -441,7 +471,7 @@ const SearchView = observer(function SearchView() {
     for (const h of g.hits) {
       list.push(
         <li key={h.key} className={h === focused ? "on" : undefined} onMouseMove={() => { if (h !== focused) setAt(h.key); }}
-          onMouseDown={(e) => { if (e.button === 0) openHit(h); }}>
+          onMouseDown={(e) => { if (e.button === 0) openHit(h, rows.indexOf(h)); }}>
           <span className="ic">{icon(h)}</span>
           <span className="t" dangerouslySetInnerHTML={{ __html: h.title }} />
           {h.snippet && <span className="m" dangerouslySetInnerHTML={{ __html: h.snippet }} />}
@@ -497,7 +527,7 @@ const SearchView = observer(function SearchView() {
       </nav>
       <ul>{list}</ul>
       <div className="menu-foot">
-        <button type="button" onClick={() => { if (focused) openHit(focused); }}><kbd>↵</kbd>Open</button>
+        <button type="button" onClick={() => { if (focused) openHit(focused, rows.indexOf(focused)); }}><kbd>↵</kbd>Open</button>
         <span className="keyhint"><kbd>Tab</kbd>Complete, or next kind</span>
       </div>
       {menu && createPortal(

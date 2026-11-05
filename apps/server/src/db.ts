@@ -203,6 +203,19 @@ create table if not exists session_text ( -- what a search finds a session by: w
   words tsvector generated always as (to_tsvector('desk_words', title || ' ' || prompts)) stored
 );
 create index if not exists session_text_words on session_text using gin (words);
+create table if not exists search_log ( -- each time the search's box opened: what was typed and what it opened (searchlog.ts)
+  at timestamptz not null default now(),
+  tab text not null default '', -- the kind it ended on, '' for All
+  query text not null default '',
+  picked_kind text, -- chat, issue, ...: null when it closed with nothing opened
+  picked text, -- its key
+  picked_title text,
+  picked_from text, -- browser, a title found on the key, or server, found later
+  rank int, -- its place in the list, from 0
+  took_ms int not null, -- from the box opening to that
+  keys int not null default 0, -- changes to what was typed
+  server_ms int -- how long the server took on the last search it answered
+);
 create table if not exists session_words (word text primary key); -- each word of session_text once, for a typo's near words
 create index if not exists session_words_near on session_words using gin (word gin_trgm_ops);
 create table if not exists notices ( -- each Slack message and mail that came in, and the firewall's verdict (notices.ts)
