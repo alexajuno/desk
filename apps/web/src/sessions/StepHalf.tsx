@@ -1,36 +1,25 @@
-// A step written as parts, in the chat's right half (Half.tsx): its text is read in the chat, and the half shows
-// the diagram of the part being read, which follows the chat's scroll ("text equals to voice on the left and diagrams
-// equals to video on the right", the user, 3 Nov; "A" on two mockups, over each part's diagram beside its text in a
-// wider chat). On top, the step's name and where in it you read, then its parts as pills, a click on one bringing its
-// text into view in the chat, to skip what you know ("i'll try to skip whichever part i felt like i understood"). The
-// name leads back to the list, as a breadcrumb does ("there is no button back", the user, 5 Nov).
+// What a step holds, under its row in the list of the chat's right half (StepsHalf.tsx): its diagram and its decisions.
+// A step written as parts has its text read in the chat, and shows here the diagram of the part being read, which follows
+// the chat's scroll ("text equals to voice on the left and diagrams equals to video on the right", the user, 3 Nov; "A" on
+// two mockups, over each part's diagram beside its text in a wider chat), with its parts as pills, a click on one bringing
+// its text into view in the chat, to skip what you know ("i'll try to skip whichever part i felt like i understood").
+// Until 5 Nov it was a view of its own that took the list's place ("click into a step shows the diagram, but there is no
+// button back. and i don't think it's a good choice either", the user).
 import { observer } from "mobx-react-lite";
 import { useLayoutEffect, useRef, useState } from "react";
 import { dock, type Reading } from "../store/dock";
 import { partTitle, type PlanStep, type StepPart } from "../issues/Steps";
-import { CHEVRON } from "../ui/icons";
-
-// Every step with parts, in the list's order.
-const withParts = (steps: PlanStep[]): PlanStep[] => steps.flatMap((s) => [...(s.parts?.length ? [s] : []), ...withParts(s.kids ?? [])]);
 
 // A pill's name: a part's title up to its colon, as "The basics" of "The basics: what a step holds", else all of it.
 const short = (p: StepPart) => partTitle(p).split(/:\s/)[0];
 
-export const StepHalf = observer(function StepHalf({ session, steps }: { session: string; steps: PlanStep[] }) {
-  const all = withParts(steps), reading = dock.reading[session];
-  const step = all.find((s) => s.title === reading?.title) ?? all.at(-1);
-  if (!step?.parts) return <p className="step-half-none">No step here is written as parts.</p>;
-  const now = step.title === reading?.title ? Math.min(reading.part, step.parts.length - 1) : 0, part = step.parts[now];
+export const StepBeside = observer(function StepBeside({ session, step }: { session: string; step: PlanStep }) {
+  const parts = step.parts ?? [], reading = dock.reading[session];
+  const now = step.title === reading?.title ? Math.min(reading.part, parts.length - 1) : 0, part = parts[now];
   return (
     <div className="step-half">
-      <div className="step-half-head">
-        <button type="button" className="step-half-back" title="Back to the steps" onClick={() => dock.setHalf(session, "steps", true)}>Steps</button>
-        {CHEVRON}
-        <span className="step-half-name">{step.title}</span>
-        <span className="step-half-at">part {now + 1} of {step.parts.length}</span>
-      </div>
       <div className="step-half-pills" role="tablist">
-        {step.parts.map((p, n) => (
+        {parts.map((p, n) => (
           <button key={n} type="button" role="tab" aria-selected={n === now} className={`step-half-pill${n === now ? " on" : ""}`} title={partTitle(p)}
             onClick={() => bringPart(session, { title: step.title, part: n })}>
             <span className="step-part-n">{n + 1}</span><span className="step-half-pill-name">{short(p)}</span>
@@ -38,35 +27,48 @@ export const StepHalf = observer(function StepHalf({ session, steps }: { session
         ))}
       </div>
       <h3 className="step-half-title">{partTitle(part)}</h3>
-      {part.diagram_html ? <Pictures parts={step.parts} now={now} />
+      {part.diagram_html ? <Pictures all={parts.map((p) => p.diagram_html)} now={now} />
         : <p className="step-half-none">This part has no diagram.</p>}
     </div>
   );
 });
 
-// A part's pictures, fitted whole into the room the half leaves them, side by side or one under the other, whichever
-// draws them larger, and never past the size d2 drew them: a picture larger than the room ran off the half, and each
-// came at its own scale ("the diagram was immediately hard to be seen. the sizes are varied", the user, 3 Nov). The
-// parts of a step share one scale, the smallest any of them needs, so that their words keep one size from part to part
-// as you read on, down to SHARED; a part that needs less than that shrinks alone. A click opens a picture full size, as
-// any picture does (ui/viewer.ts).
-const GAP = 16, CAPTION = 20, EDGE = 2, SHARED = 0.75;
+// A step with no parts: its diagram, then its decisions.
+export function StepHeld({ s }: { s: PlanStep }) {
+  return (
+    <div className="step-half">
+      {s.diagram_html && <Pictures all={[s.diagram_html]} now={0} />}
+      {s.said_html && <div className="body plan-step-said step-half-said" dangerouslySetInnerHTML={{ __html: s.said_html }} />}
+    </div>
+  );
+}
+
+// A part's pictures, fitted whole into the half's width and at most TALL of the window's height, side by side or one under
+// the other, whichever draws them larger, and never past the size d2 drew them: a picture larger than the room ran off the
+// half, and each came at its own scale ("the diagram was immediately hard to be seen. the sizes are varied", the user, 3
+// Nov). The parts of a step share one scale, the smallest any of them needs, so that their words keep one size from part
+// to part as you read on, down to SHARED; a part that needs less than that shrinks alone. A click opens a picture full
+// size, as any picture does (ui/viewer.ts).
+const GAP = 16, CAPTION = 20, EDGE = 2, SHARED = 0.75, TALL = 0.6;
 type Size = { w: number; h: number };
 type Fit = { scale: number; dir: "row" | "column" };
 
-const Pictures = function Pictures({ parts, now }: { parts: StepPart[]; now: number }) {
+const Pictures = function Pictures({ all, now }: { all: (string | undefined)[]; now: number }) {
   const box = useRef<HTMLDivElement>(null);
   const [room, setRoom] = useState<Size | null>(null);
   useLayoutEffect(() => {
     const el = box.current!;
-    const look = () => setRoom((r) => (r?.w === el.clientWidth && r.h === el.clientHeight ? r : { w: el.clientWidth, h: el.clientHeight }));
+    const look = () => {
+      const h = Math.round(innerHeight * TALL);
+      setRoom((r) => (r?.w === el.clientWidth && r.h === h ? r : { w: el.clientWidth, h }));
+    };
     look();
     const watch = new ResizeObserver(look);
     watch.observe(el);
     return () => watch.disconnect();
   }, []);
-  const html = parts[now].diagram_html!;
-  const fits = room ? parts.map((p) => (p.diagram_html ? fit(measure(p.diagram_html), room) : null)) : [];
+  const html = all[now]!;
+  const fits = room ? all.map((p) => (p ? fit(measure(p), room) : null)) : [];
   const own = fits[now];
   const shared = Math.max(SHARED, Math.min(1, ...fits.flatMap((f) => (f ? [f.scale] : []))));
   const scale = own ? Math.min(own.scale, shared) : 1;
@@ -109,7 +111,7 @@ function fit({ pics, captions }: { pics: Size[]; captions: boolean }, room: Size
   return { ...best, scale: Math.max(0.05, Math.min(1, best.scale)) };
 }
 
-// A part picked in the half: its text at the top of the chat, and its diagram here, held against that scroll.
+// A part picked in the list: its text at the top of the chat, and its diagram here, held against that scroll.
 function bringPart(session: string, reading: Reading) {
   dock.read(session, reading, true);
   document.querySelector(`.dock .step-sent[data-step="${CSS.escape(reading.title)}"] .step-part[data-part="${reading.part}"]`)

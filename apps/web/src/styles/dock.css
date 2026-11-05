@@ -155,7 +155,7 @@
 .diff-added { color: var(--diff-add-text); }
 .diff-deleted { color: var(--diff-del-text); }
 
-/* The half on an issue's Changes (Changes.tsx, ChangesHalf), as on a step's diagram (.step-half): a 44px line level
+/* The half on an issue's Changes (Changes.tsx, ChangesHalf): a 44px line level
    with the chat's head, "Changes" and how much the steps changed at its right, then the cards, scrolling under it. */
 .changes-half { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .changes-half-head { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 20px; font: 500 13px var(--font); color: var(--text-2); }
@@ -578,32 +578,26 @@ button.steps-row-fold:hover { background: var(--btn-ghost-hover); color: var(--t
 .steps-row-fold .chev { transition: transform 0.15s; }
 .steps-row-fold.open .chev { transform: rotate(90deg); }
 
-/* The half on a step's diagram (StepHalf.tsx), mockup A ("A", 3 Nov): the step's name and where in it you read, level
-   with the chat's head; its parts as pills, as the head's view tabs, the one being read filled with its number on the
-   accent; then that part's title and its pictures, fitted whole into the room left under it (StepHalf.tsx, Pictures). */
-.step-half { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 0 20px 20px; overflow: hidden; }
-.step-half-head { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; font: 500 13px var(--font); color: var(--text-2); }
-.step-half-head .chev { flex: none; color: var(--text-4); }
-button.step-half-back { flex: none; height: 28px; margin-left: -8px; padding: 0 8px; border: 0; border-radius: 6px; background: none; font: inherit; color: var(--text-3); }
-button.step-half-back:hover { background: var(--btn-ghost-hover); color: var(--text-1); }
-.step-half-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.step-half-at { flex: none; margin-left: auto; color: var(--text-4); font-weight: 450; }
-.step-half-pills { flex: none; display: flex; flex-wrap: wrap; gap: 4px; margin: -6px 0 0 -6px; }
+/* What a step holds, open under its row in the list (StepHalf.tsx): its parts as pills, as the head's view tabs, the one
+   being read filled with its number on the accent, then that part's title; or its diagram and decisions alone, its
+   pictures fitted to the half (StepHalf.tsx, Pictures). */
+.step-half { display: flex; flex-direction: column; gap: 10px; margin: 6px 8px 10px 23px; }
+.step-half-pills { flex: none; display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 0 -6px; }
 .step-half-pill { display: flex; align-items: center; gap: 6px; height: 28px; max-width: 240px; padding: 0 10px 0 5px; border-radius: 9999px;
                   background: transparent; font: 500 12px var(--font); color: var(--text-3); }
 .step-half-pill:hover { background: var(--btn-ghost-hover); color: var(--text-2); }
 .step-half-pill.on { background: var(--bg-tab-on); color: var(--text-1); box-shadow: 0 0 0 0.5px var(--ring-btn); }
 .step-half-pill.on .step-part-n { background: var(--accent); color: var(--on-accent); }
 .step-half-pill-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.step-half-title { flex: none; margin: 4px 0 0; font: 500 15px/1.4 var(--font); color: var(--text-1); }
-.step-half-pic { flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; justify-content: center; align-items: flex-start; }
+.step-half-title { flex: none; margin: 0; font: 500 13px/1.4 var(--font); color: var(--text-1); }
+.step-half-pic { overflow: hidden; display: flex; justify-content: flex-start; align-items: flex-start; }
+.body.plan-step-said.step-half-said { padding: 0; border-top: 0; }
 .step-half-pic .d2 { flex: none; margin: 0; }
 .step-half-pic .d2 svg { max-height: none; }
 .step-half-pic .d2-row { flex-wrap: nowrap; gap: 16px; }
 .step-half-pic[data-dir="column"] .d2-row { flex-direction: column; align-items: center; }
 .step-half-pic .d2-row > .d2-pic { flex: none; max-width: none; min-width: 0; }
 .step-half-none { margin: 0; font-size: 13px; color: var(--text-4); }
-.half > .step-half-none { margin: 14px 20px; }
 
 /* The chat's Browser (Browser.tsx), mockup A ("okay A", 31 Oct): a strip of its session's tabs, as tall as the chat's
    head beside it, pills as the head's tabs, the open one filled as a current tab is; then a 40px row of back, forward,

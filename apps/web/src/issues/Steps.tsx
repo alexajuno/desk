@@ -22,14 +22,26 @@ export function Steps({ steps }: { steps: PlanStep[] }) {
 // The step being worked on, not its parent: running, with no running step of its own.
 export const isHere = (s: PlanStep) => s.state === "running" && !(s.kids ?? []).some((k) => k.state === "running");
 export const isDrawn = (s: PlanStep) => Boolean(s.diagram_html || s.said_html || s.parts?.length);
+// The step whose diagram the chat's list keeps open by itself: the deepest one running that holds something to read.
+export function stepOpenNow(steps: PlanStep[]): string | null {
+  const s = steps.find((k) => k.state === "running");
+  return s ? stepOpenNow(s.kids ?? []) ?? (isDrawn(s) ? s.title : null) : null;
+}
+export function stepTitled(steps: PlanStep[], title: string): PlanStep | null {
+  for (const s of steps) {
+    const found = s.title === title ? s : stepTitled(s.kids ?? [], title);
+    if (found) return found;
+  }
+  return null;
+}
 
 // A part's title as shown, after its number: any number its session wrote before it goes, as "1. The basics" would read
 // "1 1. The basics".
 export const partTitle = (p: StepPart) => p.title.replace(/^\d+[.):]\s+/, "");
 
 // A step written as parts, read from the top down, as the user reads an explainer: each part its number and title,
-// its text, and its diagram under it, unless the chat's right half shows the diagram of the part being read beside the
-// text (sessions/StepHalf.tsx: "text equals to voice on the left and diagrams equals to video on the right", the user,
+// its text, and its diagram under it, unless the list in the chat's right half shows the diagram of the part being read
+// beside the text (sessions/StepHalf.tsx: "text equals to voice on the left and diagrams equals to video on the right", the user,
 // 3 Nov), the part being read marked (now). Its decisions come last. body: the class its text takes where it is drawn.
 export function StepParts({ parts, said, beside = false, now, body = "body" }: { parts: StepPart[]; said?: string; beside?: boolean; now?: number; body?: string }) {
   return (

@@ -11,20 +11,19 @@
 //
 // Beside it, the chat in the middle may open its right half ("i want terminal on the right half side similar to claude
 // code. i'm imagining later on claude will drive both my chrome instance and terminal in the sidebar", the user, 31
-// Oct): its terminal or its browser, which Claude drives, its issue's steps, a step's diagram, or its issue's Changes,
-// each step's diff, each a view of the half (sessions/Half.tsx). Which chats have it open, on which view, and how wide it
-// is, are remembered in this browser. A step written as parts shows there, the diagram of the part being read
-// beside its text ("text equals to voice on the left and diagrams equals to video on the right", the user, 3 Nov;
-// sessions/StepHalf.tsx), and so do the Changes, beside the chat that explains them ("wanna bring the changes tab to the
+// Oct): its terminal or its browser, which Claude drives, its issue's steps, or its issue's Changes, each step's diff,
+// each a view of the half (sessions/Half.tsx). Which chats have it open, on which view, and how wide it is, are remembered
+// in this browser. A step's diagram shows there, under its row in the list, the diagram of the part being read beside its
+// text when it is written as parts ("text equals to voice on the left and diagrams equals to video on the right", the
+// user, 3 Nov; sessions/StepHalf.tsx), and so do the Changes, beside the chat that explains them ("wanna bring the changes tab to the
 // right sidebar similar to diagrams and browser and all other things", the user, 4 Nov).
 import { action, computed, makeObservable, observable } from "mobx";
 import { APP } from "../lib/desktop";
 
 export type Layout = "page" | "chat";
 // What the right half beside it shows: the chat's terminal, or its browser, the tabs its session has open, its issue's
-// steps (sessions/StepsHalf.tsx), the diagram of the step part being read in it, or its issue's changes, each step's diff
-// (sessions/Changes.tsx).
-export type Half = "terminal" | "browser" | "steps" | "step" | "changes";
+// steps (sessions/StepsHalf.tsx), or its issue's changes, each step's diff (sessions/Changes.tsx).
+export type Half = "terminal" | "browser" | "steps" | "changes";
 // The step part being read in a chat: the step, by its title, and the part's place in it, from 0.
 export type Reading = { title: string; part: number };
 
@@ -46,17 +45,18 @@ class Dock {
   details = false; // its issue's details dropped open under its head; each chat comes with them folded
   pill = saved.pill ?? false; // the chat you left, at the bottom right
   // the chats whose right half is open, and on which view; desk in a web page has no Browser (lib/desktop.ts)
-  halves: Record<string, Half> = Object.fromEntries(Object.entries(saved.halves ?? {}).filter(([, half]) => APP || half !== "browser"));
+  halves: Record<string, Half> = Object.fromEntries(Object.entries(Object.fromEntries(Object.entries(saved.halves ?? {}).map(([id, half]) => [id, (half as string) === "step" ? "steps" : half]))).filter(([, half]) => APP || half !== "browser"));
   chatWidth = saved.chatWidth ?? CHAT.start; // the chat's width in px while its right half is open, which gets the rest
   tab: Record<string, string> = {}; // the tab each chat's Browser shows, by Chrome's id, once you picked one
-  reading: Record<string, Reading> = {}; // the step part being read in each chat, whose diagram its half shows
+  reading: Record<string, Reading> = {}; // the step part being read in each chat, whose diagram its list shows
+  picked: Record<string, { title: string | null; on: string | null }> = {}; // the row you opened or closed in each chat's list, and the step being worked on then
   private stepsShown: string[] = saved.stepsShown ?? []; // the step sends and commits that opened their chat's half
   private held = 0; // until when a part picked in the half holds against the scroll it starts (StepHalf.tsx)
 
   constructor() {
     makeObservable(this, {
       session: observable, center: observable, details: observable, pill: observable, halves: observable, chatWidth: observable,
-      tab: observable, reading: observable, layout: computed, arrange: action, setDetails: action, dismiss: action, setHalf: action,
+      tab: observable, reading: observable, picked: observable, pickRow: action, layout: computed, arrange: action, setDetails: action, dismiss: action, setHalf: action,
       setChatWidth: action, showTab: action, openTab: action, closeBrowser: action, read: action, showStep: action, showChanges: action,
     });
   }
@@ -145,21 +145,33 @@ class Dock {
     if (was?.title !== reading.title || was.part !== reading.part) this.reading = { ...this.reading, [session]: reading };
   }
 
-  // A step written as parts, sent in the chat (at, its place there): the half opens on its diagram, once for each send,
-  // as Claude's browser opens it on a tab, unless it shows something now, as the steps you opened to follow. Hidden
-  // again, it stays hidden until the next.
-  showStep(session: string, at: string) {
-    const now = this.halves[session];
-    if (this.once(`${session} ${at}`) && !now) this.setHalf(session, "step");
+  // The row open in the chat's list: the step being worked on (now), until you open or close one, which holds until the
+  // work moves on to another step ("click into a step shows the diagram, but there is no button back", the user, 5 Nov).
+  rowOpen(session: string, now: string | null): string | null {
+    const picked = this.picked[session];
+    return picked && picked.on === now ? picked.title : now;
+  }
+
+  pickRow(session: string, title: string | null, now: string | null) {
+    this.picked = { ...this.picked, [session]: { title, on: now } };
+  }
+
+  // A step sent in the chat (at, its place there), which its row in the list opens on, once for each send. One written as
+  // parts also opens a half that is hidden, as Claude's browser opens it on a tab; hidden again, it stays hidden until the
+  // next.
+  showStep(session: string, at: string, title: string, now: string | null, parts: boolean) {
+    if (!this.once(`${session} ${at}`)) return;
+    this.pickRow(session, title, now);
+    if (parts && !this.halves[session]) this.setHalf(session, "steps");
   }
 
   // A step ticked with its commit: the half opens on Changes, once for each commit, so that the step's diff is
   // there beside its report ("we have diff show while coding, allowing user to catches the problem early", the user, 28
-  // Oct). It takes the place of the steps or a step's diagram, which the work has moved on from, but never of the
-  // terminal or the browser, where you may be typing.
+  // Oct). It takes the place of the steps, which the work has moved on from, but never of the terminal or the browser,
+  // where you may be typing.
   showChanges(session: string, commit: string) {
     const now = this.halves[session];
-    if (this.once(`${session} commit ${commit}`) && (!now || now === "steps" || now === "step")) this.setHalf(session, "changes");
+    if (this.once(`${session} commit ${commit}`) && (!now || now === "steps")) this.setHalf(session, "changes");
   }
 
   // Whether this is the first time key opens its chat's half: the 50 last are kept.

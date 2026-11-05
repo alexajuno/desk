@@ -110,7 +110,7 @@ export function Counts({ added, deleted }: { added: number; deleted: number }) {
   return <span className="diff-counts"><span className="diff-added">+{added}</span><span className="diff-deleted">−{deleted}</span></span>;
 }
 
-// The half on the Changes: a head line level with the chat's, as the diagram's (StepHalf.tsx), saying how much the
+// The half on the Changes: a head line level with the chat's, saying how much the
 // steps changed, which the Changes tab carried until 4 Nov, then the steps' cards, scrolling under it.
 export const ChangesHalf = observer(function ChangesHalf({ slug }: { slug: string }) {
   const steps = useChanges(slug);

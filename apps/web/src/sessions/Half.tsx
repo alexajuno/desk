@@ -1,7 +1,6 @@
 // The right half beside the chat in the middle (store/dock.ts), each a view of it: what Claude drives, the chat's
-// terminal (Terminal.tsx) or its browser (Browser.tsx), and what you read beside the chat, its issue's steps
-// (StepsHalf.tsx), the diagram of the step part being read in it (StepHalf.tsx) or its issue's Changes, each step's diff
-// (Changes.tsx). It runs the window's full height beside the chat, and
+// terminal (Terminal.tsx) or its browser (Browser.tsx), and what you read beside the chat, its issue's steps, each step's
+// diagram under its row (StepsHalf.tsx), or its issue's Changes, each step's diff (Changes.tsx). It runs the window's full height beside the chat, and
 // takes all the room the chat leaves, the chat a 480px column until its left edge is dragged ("ok. A", 2 Nov), so a
 // wider window widens only the half. It has no head of its own: the buttons in the chat's head, and Ctrl ⇧ S, Ctrl ⇧ G,
 // Ctrl ` and Ctrl ⇧ B, open it on their view, switch it to theirs, and hide it ("we have two duplicated sections: the
@@ -16,19 +15,16 @@ import { toast } from "../ui/toast";
 import { live } from "./live";
 import { BrowserView } from "./Browser";
 import { ChangesHalf } from "./Changes";
-import { StepHalf } from "./StepHalf";
 import { TerminalView } from "./Terminal";
-import type { PlanStep } from "../issues/Steps";
 
-// The chat's issue, for the views that draw from it: its steps for a step's diagram, its slug for its Changes.
-type Issue = { slug: string; steps: PlanStep[] } | null;
+// The chat's issue, for its Changes.
+type Issue = { slug: string } | null;
 
 // Each view the half can show: its name and what draws it.
 const VIEWS: Record<View, { label: string; draw: (session: string, hide: () => void, issue: Issue, list: ReactNode) => ReactNode }> = {
   terminal: { label: "Terminal", draw: (session, hide) => <TerminalView session={session} ended={hide} /> },
   browser: { label: "Browser", draw: (session) => <BrowserView session={session} /> },
   steps: { label: "Steps", draw: (_, __, ___, list) => list },
-  step: { label: "Diagram", draw: (session, _, issue) => <StepHalf session={session} steps={issue?.steps ?? []} /> },
   changes: { label: "Changes", draw: (_, __, issue) => issue && <ChangesHalf slug={issue.slug} /> },
 };
 

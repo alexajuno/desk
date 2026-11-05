@@ -3,15 +3,17 @@
 // needs a line of its own ("this gonna expand the plan card a lot, so the card can't be above the composer anymore", the
 // user, 5 Nov, taking back "i want the steps to be displayed right within the chat tab while it's doing, above the
 // composer", 31 Oct). A row is a step's title with its note under it; its own steps sit under it, the part being worked
-// on open and the step being worked on filled, and a part done or still to do folds to its row. A click never takes the
-// list away ("click into a step shows the diagram, but there is no button back. and i don't think it's a good choice
-// either", the user, 5 Nov): a step drawn in the chat brings its message into view there, ringed, and one whose send the
-// chat doesn't hold opens under its row. A commit opens the Changes. The line only says, since what opens the half is in
+// on open and the step being worked on filled, and a part done or still to do folds to its row. What a step holds opens
+// under its row, the step being worked on by itself and any other by a click, which also brings its message into view in
+// the chat, ringed, so that nothing takes the list's place ("the diagram grows itself", "as before, we used to have that",
+// the user, 5 Nov). A commit opens the Changes. The line only says, since what opens the half is in
 // the chat's head ("having these icons in composer doesn't sound valid", 1 Nov).
-import { useState } from "react";
+import { observer } from "mobx-react-lite";
+import { useEffect, useRef, useState } from "react";
 import { dock } from "../store/dock";
 import { CHEVRON, GLYPH, StateIcon } from "../ui/icons";
-import { isDrawn, isHere, StepOpen, stepNow, type PlanStep } from "../issues/Steps";
+import { isDrawn, isHere, StepOpen, stepNow, stepOpenNow, type PlanStep } from "../issues/Steps";
+import { StepBeside, StepHeld } from "./StepHalf";
 
 const phone = matchMedia("(max-width: 640px)"); // where the half takes the chat's place (phone.css)
 
@@ -36,14 +38,6 @@ export function bring(at: string, img?: number) {
   target.classList.add("brought");
 }
 
-// A step drawn in the chat, picked in the list: the list stays beside its message, whose diagrams draw under their text
-// while the half isn't on them. On a phone the half gives the chat its place back first.
-function bringStep(session: string, at: string) {
-  if (phone.matches) dock.setHalf(session, null);
-  // A frame later than the chat's own keeping to its end, which a phone's chat, shown again, does in the first.
-  requestAnimationFrame(() => requestAnimationFrame(() => bring(at)));
-}
-
 // What is being worked on, or else what comes next, above the composer. Nothing once every step is done.
 export function StepsLine({ steps }: { steps: PlanStep[] }) {
   const now = stepNow(steps);
@@ -60,19 +54,32 @@ export function StepsLine({ steps }: { steps: PlanStep[] }) {
 // sent: where each step's latest send is in the chat (its data-at), by the step's title.
 type Sent = ReadonlyMap<string, string>;
 
-export function StepsHalf({ session, steps, sent }: { session: string; steps: PlanStep[]; sent: Sent }) {
-  return <div className="steps-half"><StepsRows session={session} steps={steps} sent={sent} /></div>;
+export const StepsHalf = observer(function StepsHalf({ session, steps, sent }: { session: string; steps: PlanStep[]; sent: Sent }) {
+  const now = stepOpenNow(steps);
+  return <div className="steps-half"><StepsRows session={session} steps={steps} sent={sent} now={now} open={dock.rowOpen(session, now)} /></div>;
+});
+
+// now: the step being worked on that holds something to read; open: the row open under its title.
+type Rows = { session: string; sent: Sent; now: string | null; open: string | null };
+
+function StepsRows({ steps, ...rows }: Rows & { steps: PlanStep[] }) {
+  return <ul className="steps-rows">{steps.map((s, n) => <StepsRow key={n} s={s} {...rows} />)}</ul>;
 }
 
-function StepsRows({ session, steps, sent }: { session: string; steps: PlanStep[]; sent: Sent }) {
-  return <ul className="steps-rows">{steps.map((s, n) => <StepsRow key={n} session={session} s={s} sent={sent} />)}</ul>;
-}
+const holds = (s: PlanStep, title: string | null): boolean => (s.kids ?? []).some((k) => k.title === title || holds(k, title));
 
-function StepsRow({ session, s, sent }: { session: string; s: PlanStep; sent: Sent }) {
+function StepsRow({ s, ...rows }: Rows & { s: PlanStep }) {
+  const { session, sent, now } = rows;
   const kids = s.kids ?? [];
-  const [open, fold] = useFold(s.state === "running");
-  const [held, setHeld] = useState(false); // what it holds, under its row, when the chat has no send of it to bring
-  const drawn = isDrawn(s), at = drawn ? sent.get(s.title) : undefined;
+  const [open, fold] = useFold(s.state === "running" || holds(s, rows.open));
+  const drawn = isDrawn(s), at = drawn ? sent.get(s.title) : undefined, held = rows.open === s.title;
+  const opened = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (held) opened.current?.scrollIntoView({ block: "nearest" }); }, [held]);
+  const pickRow = () => {
+    dock.pickRow(session, held ? null : s.title, now);
+    // A frame later than the chat redrawing what the row now holds. The half covers a phone's chat.
+    if (!held && at && !phone.matches) requestAnimationFrame(() => requestAnimationFrame(() => bring(at)));
+  };
   const words = (
     <>
       <span className="steps-row-icon"><StateIcon state={s.state} /></span>
@@ -81,8 +88,7 @@ function StepsRow({ session, s, sent }: { session: string; s: PlanStep; sent: Se
     </>
   );
   const foldTitle = open ? "Fold its steps" : "Show its steps";
-  const pick = at ? { title: "Show it in the chat", run: () => bringStep(session, at) }
-    : drawn ? { title: held ? "Hide what it holds" : "Show what it holds", run: () => setHeld(!held) }
+  const pick = drawn ? { title: held ? "Hide what it holds" : "Show what it holds", run: pickRow }
     : kids.length ? { title: foldTitle, run: fold } : null;
   return (
     <li>
@@ -96,8 +102,8 @@ function StepsRow({ session, s, sent }: { session: string; s: PlanStep; sent: Se
           {kids.length > 0 && <button type="button" className={`steps-row-fold${open ? " open" : ""}`} title={foldTitle} aria-expanded={open} onClick={fold}>{CHEVRON}</button>}
         </span>
       </div>
-      {held && <StepOpen s={s} />}
-      {kids.length > 0 && open && <StepsRows session={session} steps={kids} sent={sent} />}
+      {held && <div ref={opened}>{!s.parts?.length ? <StepHeld s={s} /> : phone.matches ? <StepOpen s={s} /> : <StepBeside session={session} step={s} />}</div>}
+      {kids.length > 0 && open && <StepsRows steps={kids} {...rows} />}
     </li>
   );
 }

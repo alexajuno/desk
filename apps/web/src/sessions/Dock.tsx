@@ -23,7 +23,7 @@ import { dock, type Layout } from "../store/dock";
 import { issues, type Reply as SentReply } from "../store/issues";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { CHEVRON, GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
-import { isDrawn, StepParts, type PlanStep } from "../issues/Steps";
+import { isDrawn, StepParts, type PlanStep, stepOpenNow, stepTitled } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { CameCard, RepliedLine } from "./Came";
@@ -154,11 +154,11 @@ function browse(e: React.MouseEvent, session: string) {
   void postJson(`/api/live/${session}/browse`, { url: a.href }).then(async (res) => res.ok || toast(await reason(res)));
 }
 
-// Whether a step written as parts can show its diagrams in the chat's right half, as only the chat in the middle can, and
-// not on a phone, where the half would take the chat's place; and whether the half shows them now (StepHalf.tsx), or
-// each part draws its own under its text.
+// Whether a step can show what it holds in the list in the chat's right half, as only the chat in the middle can, and not
+// on a phone, where the half would take the chat's place; and which step shows there now (StepsHalf.tsx), whose diagram the
+// chat then leaves out, as one fact goes once. Any other draws its own where it was sent.
 const phone = matchMedia("(max-width: 640px)");
-const StepSide = createContext({ can: false, beside: false });
+const StepSide = createContext<{ can: boolean; open: string | null }>({ can: false, open: null });
 
 // Your box to a thread the chat follows sits over its composer, once Reply on its card, or Claude's draft, opened it
 // (YourReply.tsx).
@@ -173,13 +173,15 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   // The chat in the middle, rather than the Inbox's pane showing the same chat.
   const docked = dock.center && dock.session === id;
   const page = chatPage.get(), here = m?.issue && page?.issue.slug === m.issue.slug ? page : null;
-  // The chat in the middle may have its right half open beside it, which a step's diagram needs its issue's steps for,
-  // and its Changes a step's commit.
+  // The chat in the middle may have its right half open beside it, which its steps need its issue's steps for, and its
+  // Changes a step's commit.
   const opened = docked && m?.chat ? dock.halves[id] : undefined;
-  const half = (opened === "step" && (phone.matches || !here)) || (opened === "changes" && !anyCommit(here?.plan_steps)) || (opened === "steps" && !here?.plan_steps?.length) ? undefined : opened;
-  const side = { can: Boolean(docked && m?.chat && !phone.matches), beside: half === "step" };
-  const beside = useRef(false); // the half follows the part being read as the chat scrolls or grows
-  beside.current = side.beside;
+  const half = (opened === "changes" && !anyCommit(here?.plan_steps)) || (opened === "steps" && !here?.plan_steps?.length) ? undefined : opened;
+  const stepsHere = here?.plan_steps ?? [];
+  const inHalf = half === "steps" && !phone.matches ? dock.rowOpen(id, stepOpenNow(stepsHere)) : null;
+  const side = { can: Boolean(docked && m?.chat && !phone.matches), open: inHalf };
+  const beside = useRef(false); // the list follows the part being read as the chat scrolls or grows
+  beside.current = Boolean(inHalf && stepTitled(stepsHere, inHalf)?.parts?.length);
   // A step ticked with its commit opens the half on its Changes, once, while the issue is open (store/dock.ts).
   const commit = here && !["done", "dropped"].includes(here.issue.state) ? lastCommit(here.plan_steps) : null;
   useEffect(() => { if (commit && side.can) dock.showChanges(id, commit); }, [id, commit, side.can]);
@@ -277,7 +279,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
           </div>
         </div>
       </div>
-      {half && <Half session={id} view={half} issue={here && { slug: here.issue.slug, steps: here.plan_steps ?? [] }} list={half === "steps" && here ? <ChatSteps s={s} here={here} /> : null} />}
+      {half && <Half session={id} view={half} issue={here && { slug: here.issue.slug }} list={half === "steps" && here ? <ChatSteps s={s} here={here} /> : null} />}
     </div>
   );
 });
@@ -455,8 +457,8 @@ const ContextFold = observer(function ContextFold({ page }: { page: IssuePageDat
   );
 });
 
-// Where each step's latest send is in the chat (its data-at), by the step's title, for the steps above the composer to
-// bring into view.
+// Where each step's latest send is in the chat (its data-at), by the step's title, for its row in the list to bring into
+// view.
 function stepSends(s: LiveSession, slug: string, steps: PlanStep[]): Map<string, string> {
   const sent = new Map<string, string>();
   for (const r of rowsOf(s.items, s.results, slug)) if (r.kind === "step") sent.set(stepNamed(steps, r)?.title ?? r.title ?? `Step ${r.place}`, r.key);
@@ -474,11 +476,14 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
   const steps = page?.plan_steps ?? [];
   const latestStep = new Map<string, number>();
   rows.forEach((r, n) => { if (r.kind === "step") latestStep.set(stepNamed(steps, r)?.title ?? r.place, n); });
-  // The newest step sent, written as parts, opens the half on its diagrams (store/dock.ts, showStep).
+  // The newest step sent opens its row in the list (store/dock.ts, showStep).
   const side = useContext(StepSide);
   const newest = rows.filter((r) => r.kind === "step").at(-1);
-  const newestParts = newest?.kind === "step" && stepNamed(steps, newest)?.parts?.length ? newest.key : null;
-  useEffect(() => { if (newestParts && side.can) dock.showStep(s.id, newestParts); }, [s.id, newestParts, side.can]);
+  const newestStep = newest?.kind === "step" ? stepNamed(steps, newest) : null;
+  const newestKey = newest && newestStep && isDrawn(newestStep) ? newest.key : null;
+  useEffect(() => {
+    if (newestKey && newestStep && side.can) dock.showStep(s.id, newestKey, newestStep.title, stepOpenNow(steps), Boolean(newestStep.parts?.length));
+  }, [s.id, newestKey, side.can]); // eslint-disable-line react-hooks/exhaustive-deps
   // A reply streaming now: its words show as they come, its tool calls join the last fold.
   const liveSteps = s.partial.filter((b) => b.kind === "tool_use" || b.kind === "thinking");
   const liveText = s.partial.filter((b) => b.kind === "text");
@@ -581,18 +586,19 @@ function stepNamed(steps: PlanStep[], r: { place: string; title: string | null }
 // A step's diagram and its decisions under it, where its session sent them, as the step stands now: the latest send of
 // each step drawn, an earlier one a line, since desk keeps only the step's latest. The list of steps brings
 // it here, the one place a step is read in its chat. A step written as parts shows them, read from the top down, each
-// part's diagram in the right half while it shows them, which follows the part being read (StepHalf.tsx).
+// part's diagram in the list beside it while its row is open, which follows the part being read (StepHalf.tsx).
 const StepSent = observer(function StepSent({ at, session, step, top, latest }: { at: string; session: string; step: PlanStep | null; top: string | null; latest: boolean }) {
   const side = useContext(StepSide), reading = dock.reading[session];
   const name = step?.title ?? "A step";
-  if (!latest || !step || !isDrawn(step)) {
-    return <p className="sent-line" data-at={at}>{GLYPH.file}<span>{name}</span><span className="sent-when">{latest ? "sent" : "an earlier diagram, sent"}</span></p>;
+  const inHalf = Boolean(step && side.open === step.title);
+  if (!latest || !step || !isDrawn(step) || (inHalf && !step.parts?.length)) {
+    return <p className="sent-line" data-at={at}>{GLYPH.file}<span>{name}</span><span className="sent-when">{!latest ? "an earlier diagram, sent" : inHalf ? "beside the chat" : "sent"}</span></p>;
   }
   return (
-    <div className="sent step-sent" data-at={at} data-step={step.parts?.length ? step.title : undefined}>
+    <div className="sent step-sent" data-at={at} data-step={inHalf ? step.title : undefined}>
       <div className="sent-head"><StateIcon state={step.state} /><span>{name}</span>{top && top !== name && <span className="step-sent-where">{top}</span>}</div>
       {step.parts?.length ? (
-        <StepParts parts={step.parts} said={step.said_html} beside={side.beside} now={reading?.title === step.title ? reading.part : undefined} body="reply body" />
+        <StepParts parts={step.parts} said={step.said_html} beside={inHalf} now={reading?.title === step.title ? reading.part : undefined} body="reply body" />
       ) : (
         <>
           {step.diagram_html && <div className="reply body sent-body" dangerouslySetInnerHTML={{ __html: step.diagram_html }} />}
@@ -1476,7 +1482,7 @@ const HALF_BUTTONS = {
 
 const HalfButton = observer(function HalfButton({ id, view }: { id: string; view: keyof typeof HALF_BUTTONS }) {
   const now = dock.halves[id], { icon, label, key } = HALF_BUTTONS[view];
-  const open = now === view || (view === "steps" && now === "step");
+  const open = now === view;
   return (
     <button className={`dock-btn half-btn half-${view}${open ? " on" : ""}`} type="button" title={`${label}${key && `  ${key}`}`}
       aria-pressed={open} onClick={() => dock.setHalf(id, now === view ? null : view, true)}>{icon}</button>
