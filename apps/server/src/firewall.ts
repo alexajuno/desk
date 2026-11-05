@@ -88,7 +88,8 @@ function shown(n: notices.Notice, i: number): string {
     return `### ${i}, ${n.place}, from ${n.who}, received ${local(n.at)}\nSubject: ${subject}\nText: ${rest.join(" ")}`;
   }
   const text = n.text.length > TEXT ? `${n.text.slice(0, TEXT)}…` : n.text;
-  return `### ${i}, Slack, ${n.place === "DM" ? "a DM" : `in ${n.place}`}, from ${n.who}, sent ${local(n.at)}\n${text}`;
+  const note = n.why ? `, ${n.why === "@you" ? "it @mentions the user" : n.why}` : ""; // the door's note on a DM, an @mention or a reply in the user's thread
+  return `### ${i}, Slack, ${n.place === "DM" ? "a DM" : `in ${n.place}`}, from ${n.who}${note}, sent ${local(n.at)}\n${text}`;
 }
 
 // A run's usage, as bin/usage_record.py keeps it, by its job: desk-firewall's here, desk-gate's (gate.ts).

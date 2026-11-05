@@ -11,9 +11,10 @@
 // Each message passes the door (take): an edit, a deletion, a join, a topic change, the user's own message and anything
 // in their sidebar's "non-work" section is dropped there and never written ("i think currently there are a few channels
 // in work category and DMs, that's all matter", 2 Nov), save an @mention of the user, which Slack's tab would have
-// pinged wherever it came. A DM or group DM from a person, an @mention of the user and a reply in a thread they wrote in
-// are written as now, by rule; the rest of a work channel is written unjudged, for the firewall's Claude to judge. A DM
-// from an app (Jira, Calendar, Slackbot) goes to Claude too, not straight to now. A thread attached to a chat comes in
+// pinged wherever it came. Every message is written unjudged, for the firewall's Claude to judge: since 6 Nov a rule
+// pops nothing up by itself ("whatever doesn't need my action or my acknowledge that benefits me, don't let it
+// through"). A DM or group DM from a person, an @mention of the user and a reply in a thread they wrote in carry the
+// rule's name as a note (why), which the judge reads as a hint and then writes over. A thread attached to a chat comes in
 // from a non-work channel too, and goes to that chat rather than to a rule or the firewall (notices.ts, add).
 //
 // What came while no socket was open, a desk that was down, a socket that closed or one Slack refused, desk reads back
@@ -308,7 +309,7 @@ export async function take(m: Message): Promise<notices.Notice | null> {
     : !app && at.kind === "group" ? "a group DM"
     : mentioned ? "@you"
     : reply && (await wroteIn(m.channel, m.thread_ts!, m.parent_user_id)) ? "a reply in your thread"
-    : null; // a work channel, or an app's DM: the firewall's Claude judges it
+    : null; // a work channel, or an app's DM
   const n: notices.Notice = {
     id: `slack:${m.channel}:${m.ts}`,
     source: "slack",
@@ -318,7 +319,7 @@ export async function take(m: Message): Promise<notices.Notice | null> {
     text: await textOf(m),
     link: linkOf(m),
     at: Number(m.ts),
-    verdict: verdict ? "now" : null,
+    verdict: null, // the firewall's Claude judges every message, the rule's note beside it as a hint (firewall.ts, shown)
     why: verdict ?? "",
   };
   return (await notices.add(n)) ? n : null;
