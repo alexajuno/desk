@@ -722,7 +722,10 @@ export async function remove(session: string, deleted: boolean) {
   const chat = agentChatOf(session);
   if (!chat) throw new NoChat("No such chat");
   const i = chat.issue && (await store.exists(chat.issue)) ? await store.load(chat.issue) : null;
-  if (deleted && i && AT_WORK.has(i.state)) throw new AtWork(`Its issue is ${{ running: "in progress", review: "in review" }[i.state] ?? i.state}: drop the issue instead.`);
+  // An older chat on an issue at work, which its newest replaced, lets the issue go, as bind's does, so that it can leave
+  // the sidebar; the issue's own chat can't be deleted from under it.
+  if (deleted && i && AT_WORK.has(i.state) && sessionOfIssue(i.slug) !== session) delete chat.issue;
+  else if (deleted && i && AT_WORK.has(i.state)) throw new AtWork(`Its issue is ${{ running: "in progress", review: "in review" }[i.state] ?? i.state}: drop the issue instead.`);
   let moves = false;
   if (deleted) {
     chat.deleted = now();
