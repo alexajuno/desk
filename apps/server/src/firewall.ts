@@ -88,7 +88,7 @@ function shown(n: notices.Notice, i: number): string {
     return `### ${i}, ${n.place}, from ${n.who}, received ${local(n.at)}\nSubject: ${subject}\nText: ${rest.join(" ")}`;
   }
   const text = n.text.length > TEXT ? `${n.text.slice(0, TEXT)}…` : n.text;
-  const note = n.why ? `, ${n.why === "@you" ? "it @mentions the user" : n.why}` : ""; // the door's note on a DM, an @mention or a reply in the user's thread
+  const note = n.why ? `, ${n.why === "@you" ? "it @mentions the user" : n.why === "non-work channel" ? "a channel the user filed under non-work" : n.why}` : ""; // the door's note on a DM, an @mention or a reply in the user's thread
   return `### ${i}, Slack, ${n.place === "DM" ? "a DM" : `in ${n.place}`}, from ${n.who}${note}, sent ${local(n.at)}\n${text}`;
 }
 

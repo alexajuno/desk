@@ -8,14 +8,14 @@
 //      calls use; the workspace's front page holds none, its emoji settings page does.
 //   3. It opens Slack's own socket, rtm.connect, with the cookie, and Slack pushes each new message as it comes.
 //
-// Each message passes the door (take): an edit, a deletion, a join, a topic change, the user's own message and anything
-// in their sidebar's "non-work" section is dropped there and never written ("i think currently there are a few channels
-// in work category and DMs, that's all matter", 2 Nov), save an @mention of the user, which Slack's tab would have
-// pinged wherever it came. Every message is written unjudged, for the firewall's Claude to judge: since 6 Nov a rule
+// Each message passes the door (take): an edit, a deletion, a join, a topic change and the user's own message are dropped
+// there and never written. Everything else is, the channels in their sidebar's "non-work" section too since 6 Nov ("just
+// take literally all messages", the user), which until then desk never wrote ("i think currently there are a few
+// channels in work category and DMs, that's all matter", 2 Nov): such a message carries a note saying so. Every message is written unjudged, for the firewall's Claude to judge: since 6 Nov a rule
 // pops nothing up by itself ("whatever doesn't need my action or my acknowledge that benefits me, don't let it
 // through"). A DM or group DM from a person, an @mention of the user and a reply in a thread they wrote in carry the
 // rule's name as a note (why), which the judge reads as a hint and then writes over. A thread attached to a chat comes in
-// from a non-work channel too, and goes to that chat rather than to a rule or the firewall (notices.ts, add).
+// from any channel, and goes to that chat rather than to a rule or the firewall (notices.ts, add).
 //
 // What came while no socket was open, a desk that was down, a socket that closed or one Slack refused, desk reads back
 // (readBack): once a socket opens, and each minute while none does. A login that ended (SignedOut) the Inbox says once
@@ -40,7 +40,8 @@ import * as notices from "./notices.ts";
 const WORKSPACE = "https://ownego.slack.com";
 const profile = () => process.env.DESK_CHROME_PROFILE || join(HOME, ".config/google-chrome/Profile 2"); // as the app's
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
-const NON_WORK = "non-work"; // the sidebar section whose channels desk never shows
+const NON_WORK = "non-work"; // the sidebar section the user keeps their non-work channels in
+const NON_WORK_NOTE = "non-work channel"; // the note beside such a message for the firewall's judge, which reads it as a hint (firewall.ts, shown)
 const REFRESH = 10 * 60_000; // how often the channels and the sidebar are read again
 const QUIET = 90_000; // a socket that says nothing this long, pings unanswered, is taken as dead
 
@@ -303,7 +304,6 @@ export async function take(m: Message): Promise<notices.Notice | null> {
   const at = await place(m.channel);
   const thread = at.kind === "channel" ? `slack:${m.channel}:${m.thread_ts ?? m.ts}` : `slack:${m.channel}`;
   const app = fromApp(m), raw = rawOf(m), mentioned = raw.includes(`<@${login.me}>`);
-  if (at.nonWork && !mentioned && !chats.attached().has(thread)) return null; // an @you comes in from anywhere, as Slack's tab would ping it
   const verdict =
     !app && at.kind === "dm" ? "a DM"
     : !app && at.kind === "group" ? "a group DM"
@@ -320,7 +320,7 @@ export async function take(m: Message): Promise<notices.Notice | null> {
     link: linkOf(m),
     at: Number(m.ts),
     verdict: null, // the firewall's Claude judges every message, the rule's note beside it as a hint (firewall.ts, shown)
-    why: verdict ?? "",
+    why: verdict ?? (at.nonWork ? NON_WORK_NOTE : ""),
   };
   return (await notices.add(n)) ? n : null;
 }
@@ -538,7 +538,7 @@ function readBack(): Promise<number> {
       let written = 0;
       const counts = await call("client.counts", {});
       for (const c of [...(counts.channels ?? []), ...(counts.mpims ?? []), ...(counts.ims ?? [])] as { id: string; latest?: string; mention_count?: number }[]) {
-        if (!(Number(c.latest) > Number(from)) || (places.get(c.id)?.nonWork && !c.mention_count)) continue; // a non-work one only for an @you
+        if (!(Number(c.latest) > Number(from))) continue;
         const got: Message[] = [];
         let cursor = "";
         do {
@@ -606,8 +606,8 @@ async function session() {
       if (m.type === "hello") {
         live = true;
         polled = false;
-        const work = [...places.values()].filter((p) => p.kind === "channel" && !p.nonWork).length;
-        console.log(`slack: connected as ${login?.handle}, ${work} work channels`);
+        const channels = [...places.values()].filter((p) => p.kind === "channel");
+        console.log(`slack: connected as ${login?.handle}, ${channels.filter((p) => !p.nonWork).length} work channels and ${channels.filter((p) => p.nonWork).length} non-work`);
         void readBack().then((n) => { if (n) console.log(`slack: read back ${n} that came while desk was not listening`); },
           (e) => console.error(`slack: reading back, ${e.message}`));
       }
