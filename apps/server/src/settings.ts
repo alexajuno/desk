@@ -5,7 +5,6 @@
 //     parent_auto_close      the last open sub-issue closed closes its parent
 //     chat_model             the model a new desk chat or issue session starts with, a Claude Code alias or model id such as opus
 //     chat_effort            the effort it starts with: low, medium, high, xhigh or max
-//     steps_card             how an issue's steps above its chat's composer start: collapsed, one line, or expanded
 //     stash_back_on_send     what Ctrl S put away comes back into the composer as the next message is entered, as
 //                            Claude Code's stash does; off, it waits in its chip for Ctrl S
 //     test_slots             how many test desks run at once (pool.ts), from 1 to 4
@@ -17,14 +16,12 @@ import { sql } from "./db.ts";
 
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type Effort = (typeof EFFORTS)[number];
-export const STEPS_CARD = ["collapsed", "expanded"] as const;
 
 export interface Settings {
   sub_issue_auto_close: boolean;
   parent_auto_close: boolean;
   chat_model: string;
   chat_effort: Effort;
-  steps_card: (typeof STEPS_CARD)[number];
   stash_back_on_send: boolean;
   test_slots: number;
 }
@@ -35,7 +32,7 @@ export interface Settings {
 // asked ("my machine's resource likely won't be able to handle that... likely just start at one", 2 Nov). The stash comes
 // back on the next message, as Claude Code's does ("mirror claude's stash msg", 4 Nov).
 export const DEFAULTS: Settings = {
-  sub_issue_auto_close: true, parent_auto_close: false, chat_model: "opus", chat_effort: "xhigh", steps_card: "collapsed",
+  sub_issue_auto_close: true, parent_auto_close: false, chat_model: "opus", chat_effort: "xhigh",
   stash_back_on_send: true, test_slots: 1,
 };
 export const MAX_SLOTS = 4;
@@ -47,7 +44,6 @@ function wrong(name: keyof Settings, value: unknown): string {
   if (typeof DEFAULTS[name] === "boolean") return typeof value === "boolean" ? "" : `${name} must be true or false.`;
   if (name === "chat_effort") return EFFORTS.includes(value as Effort) ? "" : `chat_effort must be one of ${EFFORTS.join(", ")}.`;
   if (name === "test_slots") return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= MAX_SLOTS ? "" : `test_slots must be a whole number from 1 to ${MAX_SLOTS}.`;
-  if (name === "steps_card") return STEPS_CARD.includes(value as Settings["steps_card"]) ? "" : `steps_card must be one of ${STEPS_CARD.join(", ")}.`;
   return typeof value === "string" && MODEL.test(value) ? "" : `${name} must be a model's alias or id, such as opus or sonnet.`;
 }
 

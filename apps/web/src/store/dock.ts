@@ -1,7 +1,7 @@
 // Where a session's chat stands (the plan of "Chat in the center, the issue on the side"): whatever you work on takes
-// the middle of the screen. An issue with a chat opens as that chat, alone in the middle, its steps above the composer
+// the middle of the screen. An issue with a chat opens as that chat, alone in the middle
 // ("all could be on a single screen", the user, 28 Oct: the plan of "Chat, plan and issue on one screen", which took
-// the sheet over the chat away; the Plan tab went on 31 Oct, for the steps above the composer, the Issue tab on 1 Nov,
+// the sheet over the chat away; the Plan tab went on 31 Oct, for the steps, a view of the right half since 5 Nov, the Issue tab on 1 Nov,
 // for the step's button in the head and the details under it, and the Changes tab on 4 Nov, for the right half). Any
 // other page takes the middle, and the chat you left waits as a pill at the bottom right.
 //
@@ -11,9 +11,9 @@
 //
 // Beside it, the chat in the middle may open its right half ("i want terminal on the right half side similar to claude
 // code. i'm imagining later on claude will drive both my chrome instance and terminal in the sidebar", the user, 31
-// Oct): its terminal or its browser, which Claude drives, a design step's diagram, or its issue's Changes, each build
-// step's diff, each a view of the half (sessions/Half.tsx). Which chats have it open, on which view, and how wide it
-// is, are remembered in this browser. A design step written as parts shows there, the diagram of the part being read
+// Oct): its terminal or its browser, which Claude drives, its issue's steps, a step's diagram, or its issue's Changes,
+// each step's diff, each a view of the half (sessions/Half.tsx). Which chats have it open, on which view, and how wide it
+// is, are remembered in this browser. A step written as parts shows there, the diagram of the part being read
 // beside its text ("text equals to voice on the left and diagrams equals to video on the right", the user, 3 Nov;
 // sessions/StepHalf.tsx), and so do the Changes, beside the chat that explains them ("wanna bring the changes tab to the
 // right sidebar similar to diagrams and browser and all other things", the user, 4 Nov).
@@ -21,9 +21,10 @@ import { action, computed, makeObservable, observable } from "mobx";
 import { APP } from "../lib/desktop";
 
 export type Layout = "page" | "chat";
-// What the right half beside it shows: the chat's terminal, or its browser, the tabs its session has open, the diagram
-// of the step part being read in it, or its issue's changes, each build step's diff (sessions/Changes.tsx).
-export type Half = "terminal" | "browser" | "step" | "changes";
+// What the right half beside it shows: the chat's terminal, or its browser, the tabs its session has open, its issue's
+// steps (sessions/StepsHalf.tsx), the diagram of the step part being read in it, or its issue's changes, each step's diff
+// (sessions/Changes.tsx).
+export type Half = "terminal" | "browser" | "steps" | "step" | "changes";
 // The step part being read in a chat: the step, by its title, and the part's place in it, from 0.
 export type Reading = { title: string; part: number };
 
@@ -145,18 +146,20 @@ class Dock {
   }
 
   // A step written as parts, sent in the chat (at, its place there): the half opens on its diagram, once for each send,
-  // as Claude's browser opens it on a tab, unless it shows something now. Hidden again, it stays hidden until the next.
+  // as Claude's browser opens it on a tab, unless it shows something other than the steps now. Hidden again, it stays
+  // hidden until the next.
   showStep(session: string, at: string) {
-    if (this.once(`${session} ${at}`) && !this.halves[session]) this.setHalf(session, "step");
+    const now = this.halves[session];
+    if (this.once(`${session} ${at}`) && (!now || now === "steps")) this.setHalf(session, "step");
   }
 
-  // A build step ticked with its commit: the half opens on Changes, once for each commit, so that the step's diff is
+  // A step ticked with its commit: the half opens on Changes, once for each commit, so that the step's diff is
   // there beside its report ("we have diff show while coding, allowing user to catches the problem early", the user, 28
-  // Oct). It takes the place of a step's diagram, which the build has moved on from, but never of the terminal or the
-  // browser, where you may be typing.
+  // Oct). It takes the place of the steps or a step's diagram, which the work has moved on from, but never of the
+  // terminal or the browser, where you may be typing.
   showChanges(session: string, commit: string) {
     const now = this.halves[session];
-    if (this.once(`${session} commit ${commit}`) && (!now || now === "step")) this.setHalf(session, "changes");
+    if (this.once(`${session} commit ${commit}`) && (!now || now === "steps" || now === "step")) this.setHalf(session, "changes");
   }
 
   // Whether this is the first time key opens its chat's half: the 50 last are kept.

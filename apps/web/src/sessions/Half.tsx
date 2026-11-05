@@ -1,8 +1,9 @@
 // The right half beside the chat in the middle (store/dock.ts), each a view of it: what Claude drives, the chat's
-// terminal (Terminal.tsx) or its browser (Browser.tsx), and what you read beside the chat, the diagram of the design step
-// part being read in it (StepHalf.tsx) or its issue's Changes, each build step's diff (Changes.tsx). It runs the window's full height beside the chat, and
+// terminal (Terminal.tsx) or its browser (Browser.tsx), and what you read beside the chat, its issue's steps
+// (StepsHalf.tsx), the diagram of the step part being read in it (StepHalf.tsx) or its issue's Changes, each step's diff
+// (Changes.tsx). It runs the window's full height beside the chat, and
 // takes all the room the chat leaves, the chat a 480px column until its left edge is dragged ("ok. A", 2 Nov), so a
-// wider window widens only the half. It has no head of its own: the buttons in the chat's head, and Ctrl ⇧ D, Ctrl ⇧ G,
+// wider window widens only the half. It has no head of its own: the buttons in the chat's head, and Ctrl ⇧ S, Ctrl ⇧ G,
 // Ctrl ` and Ctrl ⇧ B, open it on their view, switch it to theirs, and hide it ("we have two duplicated sections: the
 // terminal and browser icons and then, on right sidebar, we have terminal and browser chips", the user, 1 Nov, then
 // "yeah A" on two mockups, over the half's tabs with one button in the head). Hiding leaves the terminal's session
@@ -23,19 +24,21 @@ import type { PlanStep } from "../issues/Steps";
 type Issue = { slug: string; steps: PlanStep[] } | null;
 
 // Each view the half can show: its name and what draws it.
-const VIEWS: Record<View, { label: string; draw: (session: string, hide: () => void, issue: Issue) => ReactNode }> = {
+const VIEWS: Record<View, { label: string; draw: (session: string, hide: () => void, issue: Issue, list: ReactNode) => ReactNode }> = {
   terminal: { label: "Terminal", draw: (session, hide) => <TerminalView session={session} ended={hide} /> },
   browser: { label: "Browser", draw: (session) => <BrowserView session={session} /> },
+  steps: { label: "Steps", draw: (_, __, ___, list) => list },
   step: { label: "Diagram", draw: (session, _, issue) => <StepHalf session={session} steps={issue?.steps ?? []} /> },
   changes: { label: "Changes", draw: (_, __, issue) => issue && <ChangesHalf slug={issue.slug} /> },
 };
 
-export const Half = observer(function Half({ session, view, issue = null }: { session: string; view: View; issue?: Issue }) {
+// list: the issue's steps as Dock.tsx draws them, which alone knows where each was sent in the chat.
+export const Half = observer(function Half({ session, view, issue = null, list = null }: { session: string; view: View; issue?: Issue; list?: ReactNode }) {
   const hide = useCallback(() => dock.setHalf(session, null), [session]);
   return (
     <section className="half" aria-label={VIEWS[view].label}>
       <div className="half-grip" onPointerDown={drag} title="Drag to resize" />
-      {VIEWS[view].draw(session, hide, issue)}
+      {VIEWS[view].draw(session, hide, issue, list)}
     </section>
   );
 });
@@ -56,14 +59,14 @@ function drag(e: PointerEvent<HTMLDivElement>) {
   e.preventDefault();
 }
 
-// Ctrl `, as VS Code's, Ctrl ⇧ B, Ctrl ⇧ D and Ctrl ⇧ G, VS Code's for its changes: the half of the chat in the middle
-// open on its terminal, its browser, its step's diagrams or its Changes, or hidden when it shows that one, the reply box
+// Ctrl `, as VS Code's, Ctrl ⇧ B, Ctrl ⇧ S and Ctrl ⇧ G, VS Code's for its changes: the half of the chat in the middle
+// open on its terminal, its browser, its issue's steps or its Changes, or hidden when it shows that one, the reply box
 // taking the cursor back. False when no chat is there, for the browser in a web page, which has none (lib/desktop.ts),
-// and for the diagram and the Changes where their button is not in the chat's head (Dock.tsx), so that the key goes on
+// and for the steps and the Changes where their button is not in the chat's head (Dock.tsx), so that the key goes on
 // to your browser.
 export function toggleHalf(view: View): boolean {
   if (!dock.center || !dock.session || (view === "browser" && !APP)) return false;
-  if ((view === "step" || view === "changes") && !document.querySelector(`.dock .half-btn.half-${view}`)) return false;
+  if ((view === "steps" || view === "changes") && !document.querySelector(`.dock .half-btn.half-${view}`)) return false;
   if (!live(dock.session).meta?.chat) return (toast(`Only a desk chat has a ${view}.`), true);
   const open = dock.halves[dock.session] === view;
   const inside = document.activeElement?.closest(".half");

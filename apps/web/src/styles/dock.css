@@ -346,7 +346,7 @@ button.msg-copy:hover { background: var(--btn-ghost-hover); color: var(--text-1)
 /* the steps Approve runs, under the report that handed the work over, alone in their panel */
 .lands-sent .review-lands { margin: 0; }
 
-/* A message the steps above the composer bring into view, with a moment's ring (StepsCard.tsx, bring). */
+/* A message the steps bring into view, with a moment's ring (StepsHalf.tsx, bring). */
 .brought { animation: brought 1.2s ease; border-radius: 8px; }
 .sent.brought { border-radius: 10px; }
 /* A message brought into view stops under the chat's head, not against it. */
@@ -426,31 +426,11 @@ button.cmd-more:hover { background: none; color: var(--text-2); }
 .reply.body.agent-text { margin: 2px 0 6px; padding: 0 6px; font-size: 13px; line-height: 20px; color: var(--text-2); }
 .reply.agent-text p, .reply.agent-text ul, .reply.agent-text ol, .reply.agent-text pre { margin-bottom: 6px; }
 
-/* an issue's steps, in the foot above the composer (StepsCard.tsx): a card as the question card is, in the running
-   lines' type, the part being worked on open and the step being worked on filled ("go with A", the user, 31 Oct, on
-   its mockups). Not measured on linear.app: Claude's desktop app shows its todo list there. Only the list scrolls, so
-   the head that folds it stays on top ("that collapse/expand bar is not sticked on top", the user, 4 Nov). */
-.foot-steps { display: flex; flex: none; flex-direction: column; box-sizing: border-box; width: min(760px, calc(100% - 48px)); max-height: 40vh; overflow: hidden; margin: 0 auto 8px;
-              padding: 6px; border: 1px solid var(--border-2); border-radius: 12px; background: var(--bg-raised); animation: dock-rise 0.18s ease; }
-.foot-steps-head { display: flex; flex: none; align-items: center; gap: 8px; width: 100%; height: 26px; padding: 0 8px; border: 0; border-radius: 6px;
-                   background: none; font: 450 12px var(--font); color: var(--text-3); }
-.foot-steps-head:hover { background: var(--bg-hover); }
-.foot-steps-name { flex: none; font-weight: 500; color: var(--text-2); }
-.foot-steps-at { flex: none; }
-.foot-steps-now { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-2); }
-.foot-steps-fold { display: inline-flex; flex: none; margin-left: auto; transform: rotate(-90deg); transition: transform .15s; }
-.foot-steps.open .foot-steps-fold { transform: rotate(90deg); }
-.foot-steps-list { list-style: none; margin: 0; padding: 0; }
-.foot-steps > .foot-steps-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-.foot-steps-list .foot-steps-list { margin-left: 15px; padding-left: 8px; border-left: 1px solid var(--border-3); }
-.foot-step { display: flex; box-sizing: border-box; align-items: center; gap: 9px; width: 100%; height: 26px; padding: 0 8px; border: 0; border-radius: 6px;
-             background: none; font: 450 12px var(--font); text-align: left; color: var(--text-3); white-space: nowrap; }
-.foot-step-icon { display: inline-flex; flex: none; }
-.foot-step-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.foot-step-end { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; color: var(--text-4); }
-.foot-step.part { font-weight: 500; color: var(--text-2); }
-.foot-step.here { font-weight: 500; color: var(--text-1); background: var(--bg-hover); }
-button.foot-step:hover { background: var(--bg-hover); }
+/* what is being worked on, one quiet line above the composer while the steps are closed (StepsHalf.tsx). It only says,
+   so it has no frame: what opens the steps is in the chat's head. */
+.steps-line { flex: none; display: flex; align-items: center; gap: 8px; box-sizing: border-box; width: min(760px, calc(100% - 48px)); height: 24px; margin: 0 auto 6px; padding: 0 12px; font: 450 12px var(--font); }
+.steps-line-now { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.steps-line-at { flex: 0 2 auto; min-width: 0; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-4); }
 
 /* what waits on the user, in the foot above the composer: a permission, or Claude's questions as buttons */
 .ask { flex: none; box-sizing: border-box; width: min(760px, calc(100% - 48px)); max-height: 45vh; overflow: auto; margin: 0 auto 8px; padding: 12px;
@@ -546,7 +526,7 @@ button.foot-step:hover { background: var(--bg-hover); }
 .dock-pill:hover .dock-pill-x { opacity: 1; }
 
 /* The chat's right half (sessions/Half.tsx), beside it at the window's full height: what Claude drives, its terminal
-   or its browser, or what you read beside the chat, a step's diagram or the issue's Changes. It takes all the room the chat leaves, the chat a column of --chat-w, 480px until its edge is
+   or its browser, or what you read beside the chat, the issue's steps, a step's diagram or its Changes. It takes all the room the chat leaves, the chat a column of --chat-w, 480px until its edge is
    dragged ("ok. A", 2 Nov), so a wider window widens only the half. Its left edge is a hairline, which drags. It has
    no head: the chat's head picks and hides its view ("yeah A", 1 Nov), and the browser's tabs stand level with that
    head. */
@@ -559,11 +539,40 @@ button.foot-step:hover { background: var(--bg-hover); }
 .half-grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: var(--border-3); opacity: 0; transition: opacity 0.1s; }
 .half-grip:hover::after, .half-dragging .half-grip::after { opacity: 1; }
 .half-dragging, .half-dragging * { cursor: col-resize; user-select: none; }
-/* The diagram, Changes, terminal and globe buttons at the chat head's right (Dock.tsx, ChatHead), before the step's
+/* The steps, Changes, terminal and globe buttons at the chat head's right (Dock.tsx, ChatHead), before the step's
    buttons, each lit while the half shows its view, as a current control is: the only place the half is opened,
    switched or hidden. */
 .head-halves { flex: none; display: flex; gap: 2px; }
 .half-btn.on { background: var(--bg-active); color: var(--text-1); }
+
+/* The half on an issue's steps (StepsHalf.tsx): one list that follows the problem, a row its title with its note under it
+   on a line of its own, wrapped rather than cut, its count, marks and commit at the row's end. Not measured on linear.app,
+   whose sub-issues have no note: the circles and the thin line under a part are theirs, as on an issue's page. */
+.steps-half { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 12px 20px; }
+.steps-rows { list-style: none; margin: 0; padding: 0; }
+.steps-rows .steps-rows { margin-left: 15px; padding-left: 8px; border-left: 1px solid var(--border-3); }
+.steps-row { display: flex; align-items: flex-start; gap: 9px; padding: 0 8px 0 0; border-radius: 6px; }
+.steps-row.can:hover { background: var(--bg-hover); }
+.steps-row.here { background: var(--bg-hover); }
+.steps-row-main { flex: 1; min-width: 0; display: grid; grid-template-columns: 14px minmax(0, 1fr); column-gap: 9px; justify-content: start; align-items: start;
+                  height: auto; padding: 3px 0 3px 8px; border: 0; border-radius: 6px; background: none; font: inherit; text-align: left; white-space: normal; }
+button.steps-row-main:hover { background: none; }
+.steps-row-icon { display: inline-flex; flex: none; align-items: center; height: 20px; }
+.steps-row-title { font: 450 13px/20px var(--font); color: var(--text-2); }
+.steps-row.part .steps-row-title { font-weight: 500; }
+.steps-row[data-state=todo] .steps-row-title { color: var(--text-3); }
+.steps-row-note { grid-column: 2; font: 450 12px/18px var(--font); color: var(--text-3); }
+.steps-row[data-state=todo] .steps-row-note { color: var(--text-4); }
+.steps-row.here .steps-row-title { font-weight: 500; color: var(--text-1); }
+.steps-row-end { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 20px; margin-top: 3px; font: 450 12px var(--font); color: var(--text-4); white-space: nowrap; }
+.steps-row-drawn { display: inline-flex; color: var(--text-3); }
+.steps-row-drawn .glyph { width: 14px; height: 14px; }
+button.steps-row-commit { height: 20px; padding: 0 4px; border: 0; border-radius: 4px; background: none; font: 450 12px var(--mono); color: var(--text-3); }
+button.steps-row-commit:hover { background: var(--btn-ghost-hover); color: var(--text-1); }
+button.steps-row-fold { display: inline-flex; width: 20px; height: 20px; padding: 0; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: none; color: var(--text-4); }
+button.steps-row-fold:hover { background: var(--btn-ghost-hover); color: var(--text-2); }
+.steps-row-fold .chev { transition: transform 0.15s; }
+.steps-row-fold.open .chev { transform: rotate(90deg); }
 
 /* The half on a step's diagram (StepHalf.tsx), mockup A ("A", 3 Nov): the step's name and where in it you read, level
    with the chat's head; its parts as pills, as the head's view tabs, the one being read filled with its number on the

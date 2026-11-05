@@ -1,7 +1,7 @@
 // A session's chat, in the middle of the screen, drawn as claude.ai draws a chat: replies stream in as Markdown, tool
 // steps fold under one line, questions come as buttons, and the composer queues a message while Claude works (Enter)
 // or stops it (Ctrl C). A chat opens to read, with desk's keys, unless nothing is said in it yet; I or Enter goes into
-// the composer and Esc leaves it, as vim's modes. An issue's chat shows its steps above the composer (StepsCard.tsx)
+// the composer and Esc leaves it, as vim's modes. An issue's chat shows its steps in its right half, and one line of them above the composer (StepsHalf.tsx)
 // (store/dock.ts says where each stands). Its right half, beside it, holds what Claude drives, its terminal and its
 // browser, and what you read beside the chat, a step's diagram and the issue's Changes (Half.tsx). A chat that follows a Slack or mail thread has
 // your box to it above the composer, which Reply on the thread's card opens (YourReply.tsx).
@@ -32,7 +32,7 @@ import { rising } from "./glide";
 import { clock, sent, whole } from "./time";
 import { Half } from "./Half";
 import { followParts } from "./StepHalf";
-import { StepsCard } from "./StepsCard";
+import { StepsHalf, StepsLine } from "./StepsHalf";
 import { replyTo, YourReply } from "./YourReply";
 import { live, renameChat, useLive, type Ask, type Attachment, type Block, type Item, type LiveSession, type Status, type Task } from "./live";
 import { EFFORTS, effortName, loadModels, runsMenu, tokens, warm, type Runs as RunsShown } from "./models";
@@ -176,11 +176,11 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   // The chat in the middle may have its right half open beside it, which a step's diagram needs its issue's steps for,
   // and its Changes a step's commit.
   const opened = docked && m?.chat ? dock.halves[id] : undefined;
-  const half = (opened === "step" && (phone.matches || !here)) || (opened === "changes" && !anyCommit(here?.plan_steps)) ? undefined : opened;
+  const half = (opened === "step" && (phone.matches || !here)) || (opened === "changes" && !anyCommit(here?.plan_steps)) || (opened === "steps" && !here?.plan_steps?.length) ? undefined : opened;
   const side = { can: Boolean(docked && m?.chat && !phone.matches), beside: half === "step" };
   const beside = useRef(false); // the half follows the part being read as the chat scrolls or grows
   beside.current = side.beside;
-  // A build step ticked with its commit opens the half on its Changes, once, while the issue is open (store/dock.ts).
+  // A step ticked with its commit opens the half on its Changes, once, while the issue is open (store/dock.ts).
   const commit = here && !["done", "dropped"].includes(here.issue.state) ? lastCommit(here.plan_steps) : null;
   useEffect(() => { if (commit && side.can) dock.showChanges(id, commit); }, [id, commit, side.can]);
 
@@ -198,7 +198,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
     if (beside.current) followParts(el, id);
   };
   // The pill takes the chat back to its end, which it follows again. It jumps there, as a step's jump to its message
-  // does (StepsCard.tsx), and leaves the keys on the conversation as the pill goes.
+  // does (StepsHalf.tsx), and leaves the keys on the conversation as the pill goes.
   const toEnd = () => {
     const el = scroller.current!;
     stuck.current = true;
@@ -269,7 +269,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
                 {away === "fresh" && <span className="view-dot" />}
               </button>
             )}
-            {here && <ChatSteps s={s} here={here} />}
+            {here && half !== "steps" && <StepsLine steps={here.plan_steps ?? []} />}
             <Running s={s} />
             {s.asks.map((a) => <AskCard key={a.id} s={s} ask={a} />)}
             <YourReply session={id} />
@@ -277,25 +277,25 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
           </div>
         </div>
       </div>
-      {half && <Half session={id} view={half} issue={here && { slug: here.issue.slug, steps: here.plan_steps ?? [] }} />}
+      {half && <Half session={id} view={half} issue={here && { slug: here.issue.slug, steps: here.plan_steps ?? [] }} list={half === "steps" && here ? <ChatSteps s={s} here={here} /> : null} />}
     </div>
   );
 });
 
-// The issue's steps above the composer (StepsCard.tsx), each drawn one bringing its latest send in the chat.
+// The issue's steps in the right half (StepsHalf.tsx), each drawn one bringing its latest send in the chat.
 const ChatSteps = observer(function ChatSteps({ s, here }: { s: LiveSession; here: IssuePageData }) {
   const sends = s.results.size, steps = here.plan_steps ?? [];
   const sent = useMemo(() => stepSends(s, here.issue.slug, steps), [s.items, sends, here.issue.slug, here.plan_steps]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <StepsCard steps={steps} sent={sent} />;
+  return <StepsHalf session={s.id} steps={steps} sent={sent} />;
 });
 
 // The chat's head: the sidebar's toggle while it is hidden, as a page's top bar has, then its issue's status and
 // title, with a ⌄ that drops the issue's details open under the head (IssueDetails), and at its right the buttons that
-// open the half beside it, a step's diagram, the issue's Changes, the terminal and, in desk's app, the globe (1 Nov: "since terminal and
+// open the half beside it, the issue's steps, its Changes, the terminal and, in desk's app, the globe (1 Nov: "since terminal and
 // browser are opened in right sidebar, so having these icons in composer doesn't sound valid"), then the issue's next step, Go
 // or Approve (1 Nov: "the approve button is not there, but i have to tab to issue"); the Inbox, which shows a
-// chat without its head, has its own. Where its work stands is in the steps
-// above the composer. A chat with no issue is renamed in its title, and shows its folder, which only an issue's Properties would
+// chat without its head, has its own. Where its work stands is in its steps
+// (StepsHalf.tsx). A chat with no issue is renamed in its title, and shows its folder, which only an issue's Properties would
 // show otherwise. Whether the chat works shows in the chat itself, its Working… line and its stop button (28 Oct: "the
 // header in chat interface looks kinda tight").
 const ChatHead = observer(function ChatHead({ s, docked }: { s: LiveSession; docked: boolean }) {
@@ -316,7 +316,7 @@ const ChatHead = observer(function ChatHead({ s, docked }: { s: LiveSession; doc
       </div>
       {m?.chat && docked && (
         <span className="head-halves">
-          {here && !phone.matches && hasParts(here.plan_steps ?? []) && <HalfButton id={s.id} view="step" />}
+          {here && Boolean(here.plan_steps?.length) && <HalfButton id={s.id} view="steps" />}
           {here && anyCommit(here.plan_steps) && <HalfButton id={s.id} view="changes" />}
           <HalfButton id={s.id} view="terminal" />{APP && <HalfButton id={s.id} view="browser" />}
         </span>
@@ -1462,24 +1462,24 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
 // The terminal and the globe in the chat's head: the chat's right half, on its terminal or its browser, open, switched
 // to the other or hidden (Half.tsx), each lit while the half shows its view. They are the only place it is, as the half
 // has no head of its own ("yeah A", 1 Nov). The globe is only in desk's app, which alone has the Browser (lib/desktop.ts).
-// Before them, in an issue's chat with a step written as parts, the diagram, for the part being read (StepHalf.tsx),
-// then, once a build step has sent its commit, its Changes: the two you read, then the two Claude drives.
+// Before them, in an issue's chat with steps, its steps (StepsHalf.tsx), lit too on a step's diagram, which it leaves for
+// the list, then, once a step has sent its commit, its Changes: the two you read, then the two Claude drives. The diagram
+// has no button: the head is full ("the header in chat interface looks kinda tight", 28 Oct), and it opens from its step.
 // Each tooltip names its view and key, open or not, the lit button saying it shows ("just 'diagram' is enough when
 // it's showed", the user, 4 Nov).
 const HALF_BUTTONS = {
-  step: { icon: GLYPH.diagram, label: "Diagram", key: "Ctrl ⇧ D" },
+  steps: { icon: GLYPH.steps, label: "Steps", key: "Ctrl ⇧ S" },
   changes: { icon: GLYPH.changes, label: "Changes", key: "Ctrl ⇧ G" },
   terminal: { icon: GLYPH.terminal, label: "Terminal", key: "Ctrl `" },
   browser: { icon: GLYPH.globe, label: "Browser", key: "Ctrl ⇧ B" },
 } as const;
 
-const hasParts = (steps: PlanStep[]): boolean => steps.some((s) => Boolean(s.parts?.length) || hasParts(s.kids ?? []));
-
 const HalfButton = observer(function HalfButton({ id, view }: { id: string; view: keyof typeof HALF_BUTTONS }) {
-  const open = dock.halves[id] === view, { icon, label, key } = HALF_BUTTONS[view];
+  const now = dock.halves[id], { icon, label, key } = HALF_BUTTONS[view];
+  const open = now === view || (view === "steps" && now === "step");
   return (
     <button className={`dock-btn half-btn half-${view}${open ? " on" : ""}`} type="button" title={`${label}${key && `  ${key}`}`}
-      aria-pressed={open} onClick={() => dock.setHalf(id, open ? null : view, true)}>{icon}</button>
+      aria-pressed={open} onClick={() => dock.setHalf(id, now === view ? null : view, true)}>{icon}</button>
   );
 });
 

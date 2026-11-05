@@ -1,8 +1,8 @@
 // An issue's steps, which its session sets and ticks (api.ts, PlanStep), drawn as Linear draws an issue's
 // sub-issues: a row each with the issues' own status circle, its own steps under it on a thin line, a parent's count
 // and a step's note in the quiet grey at its end, and the one being worked on filled ("similar statuses for issues i
-// suppose?", the user, 27 Oct). The issue's page shows it, and its chat a card of it above the composer
-// (sessions/StepsCard.tsx). A step its session drew opens under its row, a click away, with its diagram and its
+// suppose?", the user, 27 Oct). The issue's page shows it, and its chat a view of its right half
+// (sessions/StepsHalf.tsx). A step its session drew opens under its row, a click away, with its diagram and its
 // decisions, or its parts: the chat shows them where they were sent ("we had all diagrams on sidebar and it can easily be viewed
 // through artifact view already", 27 Oct). The step being worked on starts open.
 import { useState } from "react";
@@ -51,16 +51,18 @@ export function StepParts({ parts, said, beside = false, now, body = "body" }: {
   );
 }
 
-// Where the work stands, for the steps above the composer: the step being worked on, else the next one to do, with its
-// place in its part, as Build's second of six. None when every step is done.
+// Where the work stands, for the line above the composer: the step being worked on, even with steps of its own while
+// none of them runs, else the next one to do, with its place in its part, as a question's second of six. None when every
+// step is done.
 export function stepNow(steps: PlanStep[]): { place: string; step: PlanStep; part: string | null; n: number; of: number } | null {
-  const leaves = (list: PlanStep[], at: string, part: string | null): { place: string; step: PlanStep; part: string | null; n: number; of: number }[] =>
+  type At = { place: string; step: PlanStep; part: string | null; n: number; of: number };
+  const walk = (list: PlanStep[], at: string, part: string | null): At[] =>
     list.flatMap((s, i) => {
       const place = at ? `${at}.${i + 1}` : `${i + 1}`;
-      return s.kids?.length ? leaves(s.kids, place, s.title) : [{ place, step: s, part, n: i + 1, of: list.length }];
+      return [{ place, step: s, part, n: i + 1, of: list.length }, ...walk(s.kids ?? [], place, s.title)];
     });
-  const all = leaves(steps, "", null);
-  return all.find(({ step }) => step.state === "running") ?? all.find(({ step }) => step.state === "todo") ?? null;
+  const all = walk(steps, "", null);
+  return all.find(({ step }) => isHere(step)) ?? all.find(({ step }) => step.state === "todo" && !step.kids?.length) ?? null;
 }
 
 function StepRow({ s }: { s: PlanStep }) {

@@ -49,14 +49,14 @@ Where they disagree, `desk-ui` beats `linear-ui`, and `apps/web/src/styles/desk.
 - Whether the chat is working shows in the chat, not in its head.
 - Put an action where it belongs. What opens the right half goes in the head, not the composer: "having these icons in composer doesn't sound valid" (the user, 1 Nov). What holds for the whole account goes in the window's bar, and what holds for this chat in the composer's foot.
 - A number shown outright is a ring and its percent after a grey word, in black and white (`Gauge` in `sessions/Dock.tsx`): "coloring is bad. usually we should use black and white" (the user, 1 Nov).
-- An issue's steps are a card above the composer, not a tab (`sessions/StepsCard.tsx`). Your pick, 31 Oct.
+- An issue's steps are a view of the right half, with one line above the composer saying what is being worked on while they are closed (`sessions/StepsHalf.tsx`): "this gonna expand the plan card a lot, so the card can't be above the composer anymore" (the user, 5 Nov). The line only says and has no frame, since what opens the half goes in the head.
 - A chat lets go of its end only when you scroll up, since a chat opened cold grows as its pictures load. Then it shows Jump to latest (`.jump-latest`). Your pick, 31 Oct.
 - Each message has claude.ai's Copy under it and its time beside it, since Linear has neither (`CopyMessage`, `.msg-time`).
 - Claude's own commands are drawn in the chat as a terminal shows them, not copied into the right half (`Command` in `sessions/Dock.tsx`). Your pick, 31 Oct.
 
 ## The right half
 
-- The right half is beside the chat: a terminal, a step's diagram, the issue's Changes, or the browser (`sessions/Half.tsx`, `store/dock.ts`). Linear has none. The chat is a 480px column while it is open, and a wider window widens only the half. Your pick, 2 Nov, over half each and the page over the whole window.
+- The right half is beside the chat: a terminal, the issue's steps, a step's diagram, the issue's Changes, or the browser (`sessions/Half.tsx`, `store/dock.ts`). Linear has none. The chat is a 480px column while it is open, and a wider window widens only the half. Your pick, 2 Nov, over half each and the page over the whole window.
 - It has no head of its own: the buttons in the chat's head and their keys open it, switch it and hide it. "we have two duplicated sections... which is kinda weird" (the user, 1 Nov). Give an action one control, where it is seen first.
 - The browser is only in desk's app (`lib/desktop.ts`, `apps/desktop`). A web page, the phone's included, has no Browser and leaves Ctrl ⇧ B to the browser it runs in: "likely we’ll just abandon chrome in web app" (the user, 1 Nov).
 - A step's commit opens Changes once, over a step's diagram but never over the terminal or the browser, where the user or Claude may be at work (`showChanges` in `store/dock.ts`).
