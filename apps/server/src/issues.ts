@@ -338,9 +338,16 @@ export async function saveIn(tx: Db, i: Issue): Promise<string[]> {
   await put(tx, i);
   if (moved) await rewriteAll(tx);
   const closed = await autoClose(tx, i, had?.state);
-  if (had && !CLOSED.has(had.state) && CLOSED.has(i.state)) for (const told of closing) told([i.slug, ...closed]);
+  if (had && !CLOSED.has(had.state) && CLOSED.has(i.state)) {
+    for (const told of closing) told([i.slug, ...closed]);
+    for (const told of turning) await told(tx, [i.slug, ...closed], true);
+  } else if (had && CLOSED.has(had.state) && !CLOSED.has(i.state)) for (const told of turning) await told(tx, [i.slug], false);
   return closed;
 }
+
+// What follows an issue closing or reopening, in the same write: the threads its chats follow (chats.ts, subscribeAll).
+const turning: ((tx: Db, slugs: string[], closed: boolean) => Promise<void>)[] = [];
+export const onTurn = (told: (tx: Db, slugs: string[], closed: boolean) => Promise<void>) => turning.push(told);
 
 // What ends with an open issue as it comes to Done or Dropped, by any path, told the issues that closed: a chat's
 // terminal (terminal.ts). Told in the write, before it commits.

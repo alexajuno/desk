@@ -41,6 +41,7 @@ await store.readLanded();
 await chats.readIn();
 const adopted = await chats.adoptSessions(); // once: the sessions no chat held become chats on their issues
 if (adopted) console.log(`desk made ${adopted} sessions with no chat into chats on their issues`);
+await chats.unsubscribeClosed(); // once: the threads of the issues already closed stop waking their chats
 const left = await chats.adoptLeft(); // once: an open issue whose chat went on to another gets a chat of its own
 if (left) console.log(`desk gave ${left} open issues whose chat had moved on a chat of their own`);
 const renamed = await store.renameAll(); // once: after the chats, which follow their issues

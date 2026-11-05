@@ -52,7 +52,7 @@ Where they disagree, `desk-ui` beats `linear-ui`, and `apps/web/src/styles/desk.
 - An issue's steps are a view of the right half, with one line above the composer saying what is being worked on while they are closed (`sessions/StepsHalf.tsx`): "this gonna expand the plan card a lot, so the card can't be above the composer anymore" (the user, 5 Nov). The line only says and has no frame, since what opens the half goes in the head.
 - A chat lets go of its end only when you scroll up, since a chat opened cold grows as its pictures load. Then it shows Jump to latest (`.jump-latest`). Your pick, 31 Oct.
 - Each message has claude.ai's Copy under it and its time beside it, since Linear has neither (`CopyMessage`, `.msg-time`).
-- The threads a chat follows are listed in its issue's details, each with a switch that stops it waking the chat (`issues/Threads.tsx`), not on the thread's card: "it's likely would be in the session's title dropdown" (the user, 5 Nov).
+- The threads a chat follows are listed in its issue's details, each with a switch that stops it waking the chat (`issues/Threads.tsx`), not on the thread's card: "it's likely would be in the session's title dropdown" (the user, 5 Nov). Closing the issue switches them off.
 - Claude's own commands are drawn in the chat as a terminal shows them, not copied into the right half (`Command` in `sessions/Dock.tsx`). Your pick, 31 Oct.
 
 ## The right half

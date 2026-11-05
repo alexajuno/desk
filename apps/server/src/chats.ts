@@ -596,6 +596,31 @@ export async function setSubscribed(id: string, thread: string, on: boolean): Pr
   return chat;
 }
 
+// An issue coming to Done or Dropped switches off every thread its chats follow, since one still expecting messages
+// belongs in Waiting ("at done status, the issue also toggle all chat", "if we intended to take more msg, it should have
+// been in wait status", the user, 5 Nov); reopening it switches them on, which gives its chat what waited. Switching one
+// back on while the issue stays closed holds, since only the issue's move changes them.
+function subscribeAll(tx: Db, slugs: string[], closed: boolean) {
+  const mine = [...all().values()].filter((c) => c.issue && slugs.includes(c.issue) && c.threads?.length).map((c) => structuredClone(c));
+  return Promise.all(mine.map(async (chat) => {
+    chat.unsubscribed = closed ? [...chat.threads!] : [];
+    chat.updated = now();
+    await put(tx, chat);
+    keep(all(), chat);
+  }));
+}
+store.onTurn(async (tx, slugs, closed) => { await subscribeAll(tx, slugs, closed); });
+
+// Once: the issues closed before 5 Nov, so that their threads stop waking their chats too.
+export async function unsubscribeClosed(): Promise<void> {
+  await db.write(async (tx) => {
+    if ((await tx.query("select 1 from meta where name = 'closed issues unsubscribed'")).rows.length) return;
+    const closed = (await tx.query<{ slug: string }>("select slug from issues where state in ('done', 'dropped')")).rows.map((r) => r.slug);
+    await subscribeAll(tx, closed, true);
+    await tx.query("insert into meta values ('closed issues unsubscribed', now()::text)");
+  });
+}
+
 // An automation's run (automations.ts), named after it, which starts on the message and waits in the Inbox with its
 // reply: a chat with its agent, or, with none, desk's agent chat, which files its issue from the run.
 export const automationRun = (agent: Agent | null, title: string, slug: string, message: string) =>
