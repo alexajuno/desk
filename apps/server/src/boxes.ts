@@ -6,70 +6,10 @@
 // of them or more one line, is a table's cells: of the 788 diagrams desk held on 3 Nov, it found 24 tables so, and
 // every one in two or more rows and columns, and none else. A layout passes, its boxes saying more, holding boxes or
 // joined: "Admin permissions" laid its six kinds of action out in two columns, each of three or four lines.
+import { ARROW, isEdge, isKeyword, parse, type Statement } from "./d2read.ts";
 import { D2_BLOCK } from "./render.ts";
 
-// One d2 statement: its key (a shape's id, a keyword such as style.fill, or an edge such as a -> b), its label, and
-// the map after it in braces.
-type Statement = { key: string; label?: string; block?: boolean; map?: Statement[] };
-
-const KEYWORDS = new Set(["label", "shape", "icon", "width", "height", "style", "near", "tooltip", "link", "direction",
-  "constraint", "class", "classes", "vars", "top", "left", "grid-rows", "grid-columns", "grid-gap", "vertical-gap",
-  "horizontal-gap", "source-arrowhead", "target-arrowhead", "layers", "scenarios", "steps"]);
-const ARROW = /<->|->|<-|--/;
 const MIN_BOXES = 6;
-
-// The statements of one diagram, nested by their braces. Quoted strings, |md block strings and # comments are read as
-// d2 reads them, so a brace, a semicolon or an arrow inside one is no statement of its own.
-function parse(src: string): Statement[] {
-  let i = 0;
-  const quoted = () => {
-    const q = src[i++];
-    let out = "";
-    while (i < src.length && src[i] !== q && src[i] !== "\n") out += src[i] === "\\" ? src[i++] + (src[i++] ?? "") : src[i++];
-    i++;
-    return out;
-  };
-  // |md ... |, |||md ... |||, |`md ... `|: it ends at its opening pipes and backticks reversed.
-  const block = () => {
-    const open = /^[|`]+/.exec(src.slice(i))![0];
-    const close = [...open].reverse().join("");
-    const start = i + open.length;
-    const end = src.indexOf(close, start);
-    i = end === -1 ? src.length : end + close.length;
-    return src.slice(start, end === -1 ? undefined : end);
-  };
-  const map = (): Statement[] => {
-    const out: Statement[] = [];
-    while (i < src.length) {
-      const c = src[i];
-      if (c === "}") return i++, out;
-      if (" \t\r\n;".includes(c)) { i++; continue; }
-      if (c === "#") { i = src.indexOf("\n", i) === -1 ? src.length : src.indexOf("\n", i); continue; }
-      let key = "";
-      while (i < src.length && !":{;\n}#".includes(src[i])) key += src[i] === '"' || src[i] === "'" ? quoted() : src[i++];
-      const st: Statement = { key: key.trim() };
-      if (src[i] === ":") {
-        i++;
-        while (src[i] === " " || src[i] === "\t") i++;
-        if (src[i] === '"' || src[i] === "'") st.label = quoted();
-        else if (src[i] === "|") (st.label = block()), (st.block = true);
-        else if (src[i] !== "{") {
-          let label = "";
-          while (i < src.length && !"{;\n}#".includes(src[i])) label += src[i++];
-          st.label = label.trim();
-        }
-        while (src[i] === " " || src[i] === "\t") i++;
-      }
-      if (src[i] === "{") (i++), (st.map = map());
-      if (st.key) out.push(st);
-    }
-    return out;
-  };
-  return map();
-}
-
-const isEdge = (key: string) => ARROW.test(key);
-const isKeyword = (key: string) => KEYWORDS.has(key.split(".")[0]) || /^(\*|&|!&|\.\.\.|\()/.test(key);
 
 // Every id an edge names, at any depth, as each part of its path: a box any arrow reaches is no table cell.
 function joined(stmts: Statement[], into = new Set<string>()): Set<string> {

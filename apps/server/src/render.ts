@@ -3,6 +3,7 @@
 // toc extensions; this follows that dialect where it differs from CommonMark, as the documents desk holds use it.
 import MarkdownIt, { type Token } from "markdown-it";
 import { spawnSync } from "node:child_process";
+import { turnDown, wrapLabels } from "./narrow.ts";
 
 // A ```d2 block, and its caption: what follows "d2" on its fence line, such as ```d2 Today.
 export const D2_BLOCK = /^```d2(?:[ \t]+([^\n]*?))?[ \t]*\n([\s\S]*?)^```/gm;
@@ -29,7 +30,8 @@ function look(name: string): string {
   return [
     `vars: {d2-config: {theme-overrides: {${Object.entries(colours).map(([code, hex]) => `${code}: "${hex}"`).join("; ")}}}}`,
     `style.fill: "${p.ground}"`,
-    "**.style: {border-radius: 4; font: mono; stroke-width: 1; bold: false}",
+    // font-size: a group's title takes the size of the words in it, in place of d2's 28px, which shrinking used to hide.
+    "**.style: {border-radius: 4; font: mono; stroke-width: 1; bold: false; font-size: 16}",
     ...["->", "<-", "<->", "--"].map((arrow) => `(** ${arrow} **)[*].style: {stroke-width: 1; italic: false; font: mono}`),
     `**: {&shape: sql_table; style: {fill: "${b6}"; font-color: "${p.text}"; stroke: "${b5}"}}`,
   ].join("; ") + "\n";
@@ -39,24 +41,56 @@ const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "
 
 const widthOf = (svg: string) => Number(/viewBox="[-\d.]+ [-\d.]+ ([\d.]+) [\d.]+"/.exec(svg)?.[1]) || 0;
 
+// A picture drawn wider than this is made narrower (narrow.ts): in a half of 633px its words then read at 13px.
+const WIDE = 800;
+const TIGHT = ["--dagre-nodesep=24", "--dagre-edgesep=10"];
+type Form = { source: string; flags: string[] };
+
+const runD2 = (name: string, theme: number, { source, flags }: Form) =>
+  spawnSync("d2", ["--pad=16", ...flags, `--theme=${theme}`, "-", "-"], { input: look(name) + source });
+
+// The narrowest form of a picture too wide, with its drawing: its long labels on more lines, and, when that is not
+// enough, what flows left to right flowing down. A form d2 refuses, or no narrower, stays out, so that this never turns
+// a diagram that draws into an error.
+function narrower(name: string, theme: number, form: Form, svg: string): { form: Form; svg: string } {
+  let best = { form, svg };
+  const attempt = (source: string) => {
+    const next = { source, flags: TIGHT };
+    const run = runD2(name, theme, next);
+    const narrow = run.stdout.toString();
+    if (run.status === 0 && widthOf(narrow) < widthOf(best.svg)) best = { form: next, svg: narrow };
+  };
+  const wrapped = wrapLabels(form.source);
+  attempt(wrapped);
+  if (widthOf(best.svg) > WIDE) attempt(turnDown(wrapped));
+  return best;
+}
+
 // Cached by the diagram's source: a page draws its diagrams again on every change.
 const drawn = new Map<string, string>();
-function draw(source: string): string {
+export function draw(source: string): string {
   const hit = drawn.get(source);
   if (hit !== undefined) return hit;
+  let form: Form = { source, flags: [] };
   const renders: string[] = [];
+  let width = 0;
   for (const [name, theme] of D2_THEMES) {
-    const run = spawnSync("d2", ["--pad=16", `--theme=${theme}`, "-", "-"], { input: look(name) + source });
+    const run = runD2(name, theme, form);
     if (run.status !== 0) {
       const stderr = run.stderr.toString().replace(/-:(\d+):(\d+)/g, (_, line, col) => `-:${Number(line) - 1}:${col}`);
       const err = `<pre class="err">${escapeHtml(stderr)}</pre>`;
       drawn.set(source, err);
       return err;
     }
-    renders.push(`<div class="for-${name}">${run.stdout.toString()}</div>`);
+    let svg = run.stdout.toString();
+    if (!renders.length) {
+      if (widthOf(svg) > WIDE) ({ form, svg } = narrower(name, theme, form, svg));
+      width = widthOf(svg);
+    }
+    renders.push(`<div class="for-${name}">${svg}</div>`);
   }
   // --w, the width d2 drew it at: desk.css draws it no larger, however wide the room.
-  const html = `<div class="d2" style="--w: ${Math.round(widthOf(renders[0]))}">${renders.join("")}</div>`;
+  const html = `<div class="d2" style="--w: ${Math.round(width)}">${renders.join("")}</div>`;
   if (drawn.size > 256) drawn.delete(drawn.keys().next().value!);
   drawn.set(source, html);
   return html;
