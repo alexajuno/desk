@@ -244,7 +244,11 @@ function planSteps(list: unknown, depth = 0): PlanStep[] {
     if (typeof commit === "string") step.commit = commit.trim();
     if (kids !== undefined && kids !== null) {
       const inner = planSteps(kids, depth + 1);
-      if (inner.length) step.kids = inner;
+      if (inner.length) {
+        step.kids = inner;
+        // A parent is done only when every sub-step is: one that is not done, or one started under a todo parent, makes it running.
+        if (step.state === "done" ? inner.some((k) => k.state !== "done") : step.state === "todo" && inner.some((k) => k.state !== "todo")) step.state = "running";
+      }
     }
     return step;
   });
