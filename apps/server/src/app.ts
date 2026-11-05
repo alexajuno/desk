@@ -390,6 +390,17 @@ export async function create(): Promise<FastifyInstance> {
       throw error;
     }
   });
+  // The toggle on a thread's card, from desk's page alone (chats.ts, setSubscribed).
+  app.put("/api/chats/:id/threads/subscribed", async (req: Req) => {
+    const thread = await threadOf(req, false);
+    try {
+      const chat = await chats.setSubscribed(req.params.id, thread, (req.body as { on?: unknown }).on !== false);
+      return { thread, unsubscribed: chat.unsubscribed ?? [] };
+    } catch (error) {
+      if (error instanceof chats.NotFollowed) throw new HttpError(404, error.message);
+      throw error;
+    }
+  });
   // A reply to the thread, as the user, only on their word (replies.ts): the Claude of the chat following it, asked by the
   // user, puts its draft in their box above the composer, the text as the request's body, as a section's; the user's
   // Enter or Send there, from desk's page alone, posts it, the text as they left it. Claude has no call that sends. A

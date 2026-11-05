@@ -126,6 +126,7 @@ create table if not exists chats ( -- desk's chats (chats.ts): each a session, a
   "from" text,
   automation text,
   threads text[], -- the Slack threads, DMs and mail threads it follows (chats.ts, follow)
+  unsubscribed text[], -- those whose new messages wait rather than wake it (chats.ts, setSubscribed)
   seen double precision,
   deleted text, -- when the user deleted it: out of sight, its row and transcript kept
   extra jsonb not null default '{}' -- what else its file held, such as the messages of a chat from before the panel
@@ -339,6 +340,7 @@ export async function open(): Promise<PGlite> {
   // What each session has spent so far, as its host hears it (turns.ts), from 3 Nov
   await opened.exec(["cost", "tokens"].map((c) => `alter table sessions add column if not exists ${c} double precision;`).join(" "));
   await opened.exec("alter table chats add column if not exists threads text[];"); // the threads it follows (chats.ts, follow), from 3 Nov
+  await opened.exec("alter table chats add column if not exists unsubscribed text[];"); // those that wake nothing (chats.ts, setSubscribed), from 5 Nov
   // The chat a notice went to rather than the firewall, and the wake that carried it to the chat (wakes.ts), from 3 Nov
   await opened.exec(["chat", "wake"].map((c) => `alter table notices add column if not exists ${c} text;`).join(" "));
   await opened.exec("alter table teams add column if not exists aliases text not null default '';"); // a team's rename (teams.ts), from 25 Oct

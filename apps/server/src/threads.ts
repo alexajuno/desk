@@ -165,9 +165,8 @@ export async function react(message: string, name: string, on: boolean) {
 }
 
 // ---- A thread a chat attaches or lets go of (chats.ts, follow), by the chat's own call to desk's API on the user's
-// word, such as "minhnt opened another thread about it, follow that too" ("the model will handle call to api endpoint",
-// the user, 3 Nov). The user also lets one go by hand, with Unfollow on its card in the chat, which makes the same call
-// ("i need manual mechanism", the user, 5 Nov).
+// word, such as "minhnt opened another thread about it, follow that too": one way, with no button ("maybe just need a
+// single way through the chat is enough. the model will handle call to api endpoint", the user, 3 Nov).
 
 const SLACK_LINK = /^https:\/\/[\w-]+\.slack\.com\/archives\/([A-Z0-9]+)\/p(\d{10})(\d{6})(?:\?(\S*))?$/;
 const GMAIL_LINK = /^https:\/\/mail\.google\.com\/mail\/u\/\d+\/#[\w-]+\/([0-9a-f]{16})$/; // as desk writes one (mail.ts, notice)

@@ -204,7 +204,8 @@ async function round() {
     const follows = new Set(chat ? chats.follows(chat, issues) : []);
     const gone = mine.filter((n) => !follows.has(n.thread));
     if (gone.length) await notices.toFirewall(gone.map((n) => n.id));
-    const kept = mine.filter((n) => follows.has(n.thread));
+    // An unsubscribed thread's wait, unwoken, until the user subscribes again (chats.ts, setSubscribed)
+    const kept = mine.filter((n) => follows.has(n.thread) && !chat?.unsubscribed?.includes(n.thread));
     if (!chat || !kept.length || turns.working(chat.session) || asks.has(chat.session)) continue;
     const open = latest.get(chat.session);
     if (open && !open.verdict && !open.error) continue; // its turn has yet to start

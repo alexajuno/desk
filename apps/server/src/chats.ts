@@ -49,6 +49,7 @@ export interface Chat {
   from?: string; // the script whose message started it (push)
   automation?: string; // the automation whose run it is, by slug (automations.ts)
   threads?: string[]; // the Slack threads, DMs and mail threads it follows (follow): the one it started on, and any attached since
+  unsubscribed?: string[]; // those of its threads whose new messages wait rather than wake it (setSubscribed)
   seen?: number; // when the user last looked at it, in seconds, until 19 Oct: the inbox table keeps it since (inbox.ts)
   deleted?: string; // when the user deleted it (remove)
   [key: string]: unknown; // what else its file held, such as the messages of a chat from before the panel
@@ -128,7 +129,7 @@ const now = () => store.now();
 
 // --- the table -------------------------------------------------------------------------------------------------------
 
-const COLUMNS = ["id", "kind", "title", "created", "updated", "session", "issue", "folder", "cwd", "agent", "bare", "auto", "named", "from", "automation", "threads", "seen", "deleted"];
+const COLUMNS = ["id", "kind", "title", "created", "updated", "session", "issue", "folder", "cwd", "agent", "bare", "auto", "named", "from", "automation", "threads", "unsubscribed", "seen", "deleted"];
 
 const UPSERT = `insert into chats (${[...COLUMNS, "extra"].map((c) => `"${c}"`).join(", ")})
   values (${[...COLUMNS, "extra"].map((_, n) => `$${n + 1}`).join(", ")})
@@ -136,7 +137,7 @@ const UPSERT = `insert into chats (${[...COLUMNS, "extra"].map((c) => `"${c}"`).
 
 async function put(tx: Db, chat: Chat) {
   const extra = Object.fromEntries(Object.entries(chat).filter(([k]) => !COLUMNS.includes(k)));
-  const value = (c: string) => (c === "bare" || c === "auto" ? Boolean(chat[c]) : c === "threads" ? (chat.threads?.length ? chat.threads : null) : (chat[c] ?? null));
+  const value = (c: string) => (c === "bare" || c === "auto" ? Boolean(chat[c]) : c === "threads" || c === "unsubscribed" ? (chat[c]?.length ? chat[c] : null) : (chat[c] ?? null));
   await tx.query(UPSERT, [...COLUMNS.map(value), extra]);
 }
 
@@ -284,8 +285,10 @@ export async function bind(chat: Chat, i: Issue, base: string, previous: string 
     delete old.issue;
     old.updated = now();
   }
-  const before = [...all().values()].filter((c) => c.id !== chat.id && c.issue === i.slug).flatMap((c) => c.threads ?? []);
+  const earlier = [...all().values()].filter((c) => c.id !== chat.id && c.issue === i.slug);
+  const before = earlier.flatMap((c) => c.threads ?? []), off = earlier.flatMap((c) => c.unsubscribed ?? []);
   if (before.length) chat.threads = [...new Set([...(chat.threads ?? []), ...before])];
+  if (off.length) chat.unsubscribed = [...new Set([...(chat.unsubscribed ?? []), ...off])];
   await save(chat, async (tx) => {
     await store.saveIn(tx, i);
     if (old) {
@@ -511,7 +514,7 @@ export const onThread = (thread: string, title: string, message: string) => came
 // A chat follows the threads attached to it, with no end: "attach slack threads to a chat, and it'll follow that thread
 // forever" (the user, 3 Nov), the attachment living on the chat, not on desk's copy of the messages, which goes after 14
 // days (notices.ts). desk attaches the one a chat starts on (onThread); the chat's model attaches any other and lets one
-// go, on the user's word, as the user's Unfollow on its card does (follow, letGo). A thread is one chat's, since its messages go somewhere: attaching it moves it.
+// go, on the user's word (follow, letGo). A thread is one chat's, since its messages go somewhere: attaching it moves it.
 // A deleted chat follows none, and a DM is followed only while the chat's issue is open, since a DM has no end and would
 // bring every later message from that person here.
 
@@ -550,6 +553,7 @@ async function takeFrom(tx: Db, chat: Chat): Promise<Chat[]> {
   const others = [...all().values()].filter((c) => c.id !== chat.id && c.threads?.some((t) => mine.has(t))).map((c) => structuredClone(c));
   for (const other of others) {
     other.threads = other.threads!.filter((t) => !mine.has(t));
+    other.unsubscribed = other.unsubscribed?.filter((t) => !mine.has(t));
     other.updated = now();
     await put(tx, other);
     keep(all(), other);
@@ -574,6 +578,20 @@ export async function letGo(id: string, thread: string): Promise<Chat> {
   const chat = load(id);
   if (!chat.threads?.includes(thread)) throw new NotFollowed(`This chat does not follow ${thread}. It follows ${chat.threads?.join(", ") || "none"}.`);
   chat.threads = chat.threads.filter((t) => t !== thread);
+  chat.unsubscribed = chat.unsubscribed?.filter((t) => t !== thread);
+  await save(chat);
+  return chat;
+}
+
+// The toggle on a thread's card in the chat, the user's alone (Came.tsx): an unsubscribed thread stays attached, as it is
+// still that chat's thread, and its new messages wait, waking nothing (wakes.ts, round), until the user subscribes again,
+// when they wake the chat at once as one ("it's more like, toggle to unsubscribe", "if there are new messages that need
+// to be see later on, i can toggle back", the user, 5 Nov).
+export async function setSubscribed(id: string, thread: string, on: boolean): Promise<Chat> {
+  const chat = load(id);
+  if (!chat.threads?.includes(thread)) throw new NotFollowed(`This chat does not follow ${thread}. It follows ${chat.threads?.join(", ") || "none"}.`);
+  const rest = (chat.unsubscribed ?? []).filter((t) => t !== thread);
+  chat.unsubscribed = on ? rest : [...rest, thread];
   await save(chat);
   return chat;
 }
