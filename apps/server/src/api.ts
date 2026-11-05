@@ -231,7 +231,8 @@ const SHA = /^[0-9a-f]{4,40}$/i;
 const STEP_SHAPE = 'plan_steps is a list of {"title": "<a few words>", "state": "todo", "running" or "done", "note": "<optional, a few words>", "commit": "<optional: for a step that changes code, the commit that ends it>", "kids": [<its own steps, optional>]}, or null';
 
 function planSteps(list: unknown, depth = 0): PlanStep[] {
-  if (!Array.isArray(list) || depth > 3) throw new HttpError(422, STEP_SHAPE);
+  if (!Array.isArray(list)) throw new HttpError(422, STEP_SHAPE);
+  if (depth > 3 && list.length) throw new HttpError(422, `Steps nest four levels at most, and ${JSON.stringify((list[0] as { title?: unknown } | null)?.title)} would be a fifth: put it beside its parent, or under a step higher up.`);
   return list.map((s) => {
     const { title, state, note, kids, commit } = (s ?? {}) as Record<string, unknown>;
     if (typeof title !== "string" || !title.trim() || typeof state !== "string" || !STEP_STATES.includes(state) ||
