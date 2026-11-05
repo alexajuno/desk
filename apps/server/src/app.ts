@@ -390,7 +390,12 @@ export async function create(): Promise<FastifyInstance> {
       throw error;
     }
   });
-  // The toggle on a thread's card, from desk's page alone (chats.ts, setSubscribed).
+  // The threads in an issue's details, and the switch on each, from desk's page alone (chats.ts, setSubscribed).
+  app.get("/api/page/issue-threads", async (req: Req) => {
+    const { slug } = req.query as { slug?: string };
+    if (!slug || !(await store.exists(slug))) throw new HttpError(404, "No such issue");
+    return pages.issueThreads(slug);
+  });
   app.put("/api/chats/:id/threads/subscribed", async (req: Req) => {
     const thread = await threadOf(req, false);
     try {

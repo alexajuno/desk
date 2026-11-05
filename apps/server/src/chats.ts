@@ -583,7 +583,7 @@ export async function letGo(id: string, thread: string): Promise<Chat> {
   return chat;
 }
 
-// The toggle on a thread's card in the chat, the user's alone (Came.tsx): an unsubscribed thread stays attached, as it is
+// The switch on a thread in its issue's details, the user's alone (issues/Threads.tsx): an unsubscribed thread stays attached, as it is
 // still that chat's thread, and its new messages wait, waking nothing (wakes.ts, round), until the user subscribes again,
 // when they wake the chat at once as one ("it's more like, toggle to unsubscribe", "if there are new messages that need
 // to be see later on, i can toggle back", the user, 5 Nov).

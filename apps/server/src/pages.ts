@@ -326,6 +326,18 @@ export const inboxRows = async () => (await notifications(await store.loadAll())
   ...(r.issue ? {} : { who: r.id.startsWith("login:") ? "desk" : r.source && !r.session ? `${r.who} on ${r.source === "mail" ? "mail" : "Slack"}` : r.agent ?? "Chat" }),
 }));
 
+// The threads an issue's chats follow, as its details list them, each with its switch (issues/Threads.tsx): its name, what
+// kind it is, whether it wakes its chat, and how many of its messages wait for that.
+export async function issueThreads(slug: string) {
+  const all = await store.loadAll();
+  return { threads: await Promise.all(chats.allOfIssue(slug).flatMap((chat) => chats.follows(chat, all).map(async (id) => {
+    const said = await notices.ofThread(id), first = said[0];
+    const kind = !first ? "" : first.source === "mail" ? "mail" : first.place === "DM" ? "DM" : first.place.startsWith("group DM") ? "group DM" : `${first.who}’s thread`;
+    return { id, chat: chat.id, source: id.startsWith("mail:") ? "mail" : "slack", name: first ? threads.titleOf(first) : "A thread", kind,
+      on: !chat.unsubscribed?.includes(id), waiting: said.filter((n) => n.chat === chat.id && !n.wake && !n.verdict).length };
+  }))) };
+}
+
 // A Slack thread's, DM's or mail thread's messages, oldest first, as its Inbox row opens them; the dropped ones left out.
 export async function threadPage(thread: string) {
   if (thread.startsWith("login:")) { // a login that ended, as its row opens it

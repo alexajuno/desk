@@ -103,6 +103,13 @@
 .issue-details .tree .item { height: 32px; margin-left: -8px; padding-left: 8px; }
 .issue-details .tree .tree .item { padding-left: 10px; }
 .issue-details .tree .item .select-box { display: none; }
+.details-thread { display: flex; align-items: center; gap: 8px; height: 32px; }
+.details-thread-icon { flex: none; display: grid; place-items: center; width: 14px; color: var(--text-3); }
+.details-thread-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); }
+.details-thread-kind, .details-thread-off { flex: none; font-size: 12px; white-space: nowrap; color: var(--text-3); }
+.details-thread-off { margin-left: auto; }
+.details-thread .switch { flex: none; margin-left: auto; }
+.details-thread-off + .switch { margin-left: 0; }
 .details-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font: 450 12px var(--font); color: var(--text-3); }
 .details-meta code, .details-meta a { color: var(--text-2); }
 /* its session's word on the session's line, not the chat's Working… line, which a bare .working is */

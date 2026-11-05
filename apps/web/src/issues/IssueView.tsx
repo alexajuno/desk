@@ -7,6 +7,7 @@ import { observer } from "mobx-react-lite";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { post, said } from "../api/http";
 import { go, Go } from "../app/nav";
+import { Threads } from "./Threads";
 import { PRIORITY_NAMES, STATE_NAMES, type Field, type IssueRow, type Priority, type State, type TreeRow } from "../lib/desk";
 import { keyOf } from "../lib/keys";
 import { fieldIcon, GLYPH, GO_CHEVRON, MORE_ICON, PrioIcon, StateIcon, TRIANGLE } from "../ui/icons";
@@ -304,6 +305,7 @@ export const IssueDetails = observer(function IssueDetails({ data }: { data: Iss
           <Tree items={data.kids} />
         </div>
       )}
+      <Threads slug={p.slug} />
       <div className="details-meta">
         {p.session && <span>Session <code>{p.session.slice(0, 8)}</code> <span className={`live ${data.live}`}>{liveWord(data, p)}</span></span>}
         <span>Opened {p.created_short}</span>
