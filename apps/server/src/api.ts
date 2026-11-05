@@ -56,6 +56,7 @@ import * as periods from "./periods.ts";
 import * as pool from "./pool.ts";
 import { HttpError } from "./pages.ts";
 import * as updates from "./updates.ts";
+import * as listed from "./listed.ts";
 import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
 import * as roster from "./roster.ts";
@@ -253,7 +254,11 @@ function planSteps(list: unknown, depth = 0): PlanStep[] {
 async function applyPlanSteps(i: Issue, body: unknown) {
   if (!body || typeof body !== "object" || !("plan_steps" in body)) return;
   const list = (body as { plan_steps: unknown }).plan_steps;
-  if (list === null) return void (i.plan_steps = null);
+  const was = i.plan_steps;
+  if (list === null) {
+    if (was) listed.changed(i.slug);
+    return void (i.plan_steps = null);
+  }
   const kept = new Map<string, PlanStep>();
   const keep = (steps: PlanStep[]) => steps.forEach((s) => { if (s.pictures || s.parts || s.diagram || s.said || s.commit) kept.set(s.title, s); keep(s.kids ?? []); });
   keep(i.plan_steps ? JSON.parse(i.plan_steps) : []);
@@ -271,6 +276,7 @@ async function applyPlanSteps(i: Issue, body: unknown) {
   await fullCommits(i, steps);
   await firstBase(i, steps, kept);
   i.plan_steps = JSON.stringify(steps);
+  if (i.plan_steps !== was) listed.changed(i.slug);
 }
 
 // The first step with a commit starts its diff where its branch left main, which desk finds as the commit comes, and
@@ -567,12 +573,17 @@ export function routes(app: FastifyInstance) {
       if (pictures.length) step.pictures = pictures;
       if (said) step.said = said;
       i.plan_steps = JSON.stringify(steps);
+      listed.changed(i.slug);
       await store.save(i);
       const drawn = written ? written.parts.reduce((n, p) => n + (p.pictures?.length ?? 0), 0) : pictures.length;
       return { ...asJson(i), step: req.params.place, step_title: step.title, diagram: drawn > 0, pictures: drawn,
         parts: written?.parts.length ?? 0, said: Boolean(said) };
     });
   });
+
+  // Whether the list of the issue the session's chat works is behind the talk, which the session host asks as a turn on
+  // the user's message ends (host.ts, listBehind).
+  app.get("/api/sessions/:slug/behind", async (req: Req) => ({ behind: await listed.behind(req.params.slug, Number(req.query.since) || 0) }));
 
   app.get("/api/agents", async () => roster.list().map(({ name, description }) => ({ name, description })));
 

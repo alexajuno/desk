@@ -316,6 +316,10 @@ const resultText = (content: unknown): string =>
 
 // What the user typed, or nothing for what Claude Code itself put in a user message: a slash command's own lines, a
 // reminder. A slash command reads as itself.
+// A chat's closing words when desk held its turn's end and it had nothing to add to its list (host.ts, LIST_BEHIND): it
+// has to say something, as it repeats its reply when told to end with no words, and the user has no use for them.
+const NOTHING_ADDED = "List unchanged.";
+
 function typed(text: string): string {
   const t = text.replace(THREAD, "").trim();
   const command = /^<command-name>(\/?[^<]*)<\/command-name>/.exec(t) ?? /<command-name>(\/?[^<]*)<\/command-name>/.exec(t);
@@ -428,7 +432,7 @@ function entryItems(e: Entry): Item[] {
   const msg = String(e.message?.id ?? "");
   return (content as Entry[] ?? []).flatMap((b, n): Item[] => {
     const key = `${uuid}:${n}`;
-    if (b.type === "text" && b.text?.trim()) return [{ t: "text", key, msg, text: b.text, at }];
+    if (b.type === "text" && b.text?.trim() && b.text.trim() !== NOTHING_ADDED) return [{ t: "text", key, msg, text: b.text, at }];
     if (b.type === "thinking" && b.thinking?.trim()) return [{ t: "thinking", key, msg, text: b.thinking }];
     if (b.type === "tool_use") {
       const input = (b.input ?? {}) as Record<string, unknown>;

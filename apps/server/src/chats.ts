@@ -774,6 +774,7 @@ function filingNow(title: string): Chat | null {
 // moves it there, between two turns (chats.py, in git history, said what was checked, 15 Oct).
 
 const MOVING = new Set<string>(); // the chats a move waits on, so a second bind does not start a second move
+export const moving = (id: string) => MOVING.has(id);
 const MOVE_WAIT = 4 * 3600; // seconds a move waits for the chat's turn to end
 
 function same(a: string, b: string): boolean {

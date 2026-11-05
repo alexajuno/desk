@@ -29,7 +29,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { query, type PermissionResult, type Query, type SDKMessage, type SDKResultMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query, type HookInput, type HookJSONOutput, type PermissionResult, type Query, type SDKMessage, type SDKResultMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import { WebSocket } from "ws";
@@ -98,6 +98,7 @@ interface Session {
   working: boolean;
   since: number; // when it last started or finished a turn
   prompted: number | null; // when the user last wrote to it, or desk for them, in ms
+  asked: boolean; // the turn running now answers such a message, not a thread's or a background task's (listBehind)
   replied: number | null; // when its last turn ended with its reply
   finished: number | null; // when its last turn ended, however: its reply, Stop, an error, or its process going
   spent: Spent | null; // what it has spent so far, from its last turn's result (spentOf)
@@ -179,6 +180,7 @@ async function* inbox(s: Session): AsyncGenerator<SDKUserMessage> {
       const content = next.message.content as Content;
       if (said(content)) {
         s.prompted = Date.now();
+        s.asked = true;
         tell(s);
       }
       s.compacting = /^\/compact(\s|$)/.test(textOf(content));
@@ -198,10 +200,29 @@ function userMessage(content: Content, uuid?: string, priority?: SDKUserMessage[
     ...(uuid ? { uuid } : {}), ...(priority ? { priority } : {}) } as SDKUserMessage;
 }
 
+// What keeps a chat's list of steps true, which words in its prompt alone did not: on 5 Nov the list moved on 8 of the
+// user's 15 turns in 5 chats, and the 7 misses were questions or talk before any work ("given a question of mine, i need
+// it to show what were steps it took", the user, 5 Nov). So as a turn on the user's message ends, the host asks desk (listed.ts), and
+// a list behind holds the turn's end once: Claude Code's second stop comes with stop_hook_active, and passes. Its answer
+// costs a model call or two on that turn. It ends on a line of words because a chat told to end with none repeats its
+// reply, as Claude Code asks it for something visible (tried on 5 Nov). When desk doesn't answer, the turn just ends.
+const LIST_BEHIND = "desk: the user wrote, and your issue's list of steps did not change on this turn. What they asked or raised is a step, what you did for it under it, its answer on its note. Send the list whole now, with plan_steps alone, which leaves the issue's state as it is, then end with one short line saying what you added: your reply above stands, so say none of it again. If this turn adds nothing to the list, such as their thanks, send nothing and end with just: List unchanged.";
+
+async function listBehind(s: Session, input: HookInput): Promise<HookJSONOutput> {
+  if (!DESK || !s.asked || input.hook_event_name !== "Stop" || input.stop_hook_active) return {};
+  try {
+    const answer = await fetch(`${DESK}/api/sessions/${s.id}/behind?since=${s.prompted}`, { signal: AbortSignal.timeout(2000) });
+    const { behind } = (await answer.json()) as { behind?: boolean };
+    return behind ? { decision: "block", reason: LIST_BEHIND } : {};
+  } catch {
+    return {};
+  }
+}
+
 function start(o: StartOptions): Session {
   const id = o.id ?? randomUUID();
   const s: Session = { id, cwd: o.cwd, title: o.title ?? "", q: null as unknown as Query, inbox: [], wake: null, compacting: false, working: false, since: Date.now(),
-    prompted: null, replied: null, finished: null, spent: null, asks: new Map(), tasks: new Map(), status: null, partial: new Map(), watchers: new Set(), closed: false, ended: Promise.resolve(), streaming: "" };
+    prompted: null, asked: false, replied: null, finished: null, spent: null, asks: new Map(), tasks: new Map(), status: null, partial: new Map(), watchers: new Set(), closed: false, ended: Promise.resolve(), streaming: "" };
   // The first message waits in the inbox before the SDK first reads it, which it does as query() starts.
   if (o.message) s.inbox.push(userMessage(o.message));
   s.q = query({
@@ -221,6 +242,7 @@ function start(o: StartOptions): Session {
       ...(o.agent ? { agent: o.agent } : {}),
       ...(o.settings ? { settings: o.settings } : {}),
       includePartialMessages: true,
+      hooks: { Stop: [{ hooks: [(input) => listBehind(s, input)] }] },
       pathToClaudeCodeExecutable: CLAUDE,
       env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "desk", BASH_MAX_TIMEOUT_MS: LONGEST_COMMAND },
       // desk-browser: the session's own logged-out browser, its tabs in desk's app and shown in its chat's Browser, which
@@ -356,6 +378,7 @@ function take(s: Session, m: SDKMessage) {
     send(s, { type: "message", entry: m });
   } else if (m.type === "result") {
     s.finished = Date.now();
+    s.asked = false;
     if (m.subtype === "success") s.replied = s.finished;
     s.spent = spentOf(m) ?? s.spent;
     tell(s);
