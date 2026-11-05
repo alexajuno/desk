@@ -1,5 +1,5 @@
 // The firewall: what the connectors wrote unjudged, a work channel's message, an app's DM or a mail, judged by Claude
-// once a minute as now (it pops up), later (it waits) or dropped (an ordinary mail, never shown). "a layer in desk handles
+// once a minute as now (it pops up), later (it waits) or dropped (an ordinary mail, or a Slack message with nothing for the user: kept, never shown). "a layer in desk handles
 // noti filtering, that only when sth worth notified about that it pops up and carry it on with me" (the user, 2 Nov; the
 // desk issue "desk as my notification center"). What a rule settles at the door, a DM or group DM from a person, an
 // @mention and a reply in the user's thread, comes in as now already (slack.ts) and never reaches here.
@@ -7,7 +7,7 @@
 // Mail is judged as muse's bin/mail-daily judges it, with the same ordinary topics, the secretary's
 // (~/projects/muse/claude/agents/secretary.md, "## Ordinary topics"), read again on each call so that a topic the
 // secretary adds holds at once: an ordinary mail is dropped, with its topic as why, and bin/mail-daily reads these
-// verdicts at 08:00 (GET /api/mail/verdicts) rather than judging again. A Slack message is never dropped: it pops up or waits.
+// verdicts at 08:00 (GET /api/mail/verdicts) rather than judging again. A Slack message may be dropped too, since 6 Nov, when it needs nothing from the user (see JUDGE).
 //
 // One `claude -p` call judges all that came in the last minute, BATCH at most, on Sonnet with no tools, no settings and
 // no session file, as bin/mail-daily's call. Its usage goes to muse's runs file as bin/usage_record.py writes it, since a
@@ -51,8 +51,8 @@ waits until they next look: someone asks the user something or waits on them, a 
 production failing in a way someone must act on now with nobody on it yet, a deadline today, and in their job search an \
 interview, a test, an offer or a step with a date.
 - "later": it waits, unread, in desk's Inbox until the user looks, with no pop-up. Whatever is worth seeing but can wait.
-- "dropped": for mail only: it fits one of the user's ordinary topics, below, and says nothing the topic's "Report it \
-when" names. A Slack message is never dropped.
+- "dropped": it is kept but never shown. For mail: it fits one of the user's ordinary topics, below, and says nothing the \
+topic's "Report it when" names. For a Slack message: it needs no action from the user and no acknowledgement that benefits them.
 
 When torn between now and later, pick later: a pop-up costs the user's focus. When torn between later and dropped, pick \
 later: a wrong line costs a glance, a missing one can cost a chance.
@@ -116,8 +116,7 @@ async function ask(batch: notices.Notice[]): Promise<Map<string, { verdict: noti
   for (const v of result.structured_output?.notices ?? []) {
     const n = batch[v.n - 1];
     if (!n || !["now", "later", "dropped"].includes(v.verdict)) continue;
-    // A Slack message pops up or waits; a dropped one would be a message the user never sees
-    out.set(n.id, { verdict: n.source === "slack" && v.verdict === "dropped" ? "later" : v.verdict, why: String(v.why ?? "").trim() });
+    out.set(n.id, { verdict: v.verdict, why: String(v.why ?? "").trim() });
   }
   return out;
 }
