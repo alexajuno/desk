@@ -1031,6 +1031,11 @@ export async function create(): Promise<FastifyInstance> {
     if (!found) throw new HttpError(404, "No icon for that tab");
     return reply.type(found.type).header("cache-control", "max-age=86400").send(found.body);
   });
+  app.post("/api/tabs/:target/close", async (req: Req) => {
+    mustBePage(req);
+    if (!(await tabs.close(req.params.target).catch(() => { throw new HttpError(503, "desk's app is not running."); }))) throw new HttpError(404, "That tab is not open.");
+    return {};
+  });
   // What Chrome draws outside the tab's page, for the chat's Browser in desk's app, which shows the tab itself (cast.ts).
   app.get("/api/tabs/:target/screen", {
     websocket: true,

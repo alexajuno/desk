@@ -57,6 +57,14 @@ export async function closed(target: string) {
   for (const fn of closers) fn(last);
 }
 
+// Close a tab for the × on its pill in the chat's Browser ("i'll manually close that tab", the user, 5 Nov). Only one of
+// the sessions' tabs: desk's own window is a page of the same Chrome. The relay hears it go and says so (closed, above).
+export async function close(target: string) {
+  if (!(await db.sql().query("select 1 from tabs where target = $1", [target])).rows.length) return false;
+  const res = await fetch(`http://127.0.0.1:${process.env.DESK_CHROME_PORT || 9337}/json/close/${target}`, { signal: AbortSignal.timeout(5000) });
+  return res.ok;
+}
+
 // A host's hello: relay, whether its relay runs, and tabs, the ones it noted; another, whether the relay of another host,
 // one draining beside it (hosted.ts), runs and keeps the tabs.
 export async function hello(ws: WebSocket, relay: boolean | undefined, tabs: Tab[], another = false) {

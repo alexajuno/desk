@@ -1,15 +1,20 @@
 // A chat's Browser, a view of its right half (Half.tsx), in desk's app alone (lib/desktop.ts): the tabs its session has
 // open in desk's app, which the session host's relay notes and desk keeps (the server's tabs.ts), as a strip, then back,
 // forward, reload and the open tab's address, then the page ("okay A", the user's pick from three mockups, 31 Oct). The
-// strip has no new tab or ×: the tabs are the session's, opened and closed by Claude.
+// strip has no new tab, as the session opens its tabs; each has a × that closes it for real, which is yours alone, since
+// a model cannot be counted on to close them ("models are unreliable", "i'll manually close that tab", the user, 5 Nov).
 import { observer } from "mobx-react-lite";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { postJson, reason } from "../api/http";
 import { APP } from "../lib/desktop";
 import { dock } from "../store/dock";
 import { issues, type Tab } from "../store/issues";
 import { ui } from "../store/ui";
 import { GLYPH } from "../ui/icons";
 import { toasts } from "../ui/toast";
+
+// The tab leaves the strip when the relay hears it closed, and the Browser with its session's last (the server's tabs.ts).
+const close = (t: Tab) => void postJson(`/api/tabs/${t.target}/close`, {}).then(async (res) => res.ok || toasts.show(await reason(res)));
 
 export const BrowserView = observer(function BrowserView({ session }: { session: string }) {
   const tabs = issues.tabsOf(session);
@@ -20,11 +25,15 @@ export const BrowserView = observer(function BrowserView({ session }: { session:
     <div className="browser">
       <div className="browser-tabs" role="tablist" aria-label="Tabs">
         {tabs.map((t) => (
-          <button key={t.target} className={`browser-tab${t === shown ? " here" : ""}`} type="button" role="tab" aria-selected={t === shown}
-            title={`${t.title || t.url}\n${t.url}`} onClick={() => dock.showTab(session, t.target)}>
-            <Favicon tab={t} />
-            <span>{t.title || where(t.url).host || t.url}</span>
-          </button>
+          <div key={t.target} className={`browser-tab${t === shown ? " here" : ""}`} role="presentation">
+            <button className="browser-tab-pick" type="button" role="tab" aria-selected={t === shown}
+              title={`${t.title || t.url}\n${t.url}`} onClick={() => dock.showTab(session, t.target)}>
+              <Favicon tab={t} />
+              <span>{t.title || where(t.url).host || t.url}</span>
+            </button>
+            <button className="browser-tab-close" type="button" title="Close tab" aria-label="Close tab"
+              onMouseDown={(e) => e.preventDefault()} onClick={() => close(t)}>{GLYPH.close}</button>
+          </div>
         ))}
       </div>
       <Page key={shown.target} tab={shown} />
