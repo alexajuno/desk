@@ -49,6 +49,7 @@ Where they disagree, `desk-ui` beats `linear-ui`, and `apps/web/src/styles/desk.
 - Whether the chat is working shows in the chat, not in its head.
 - Put an action where it belongs. What opens the right half goes in the head, not the composer: "having these icons in composer doesn't sound valid" (the user, 1 Nov). What holds for the whole account goes in the window's bar, and what holds for this chat in the composer's foot.
 - A number shown outright is a ring and its percent after a grey word, in black and white (`Gauge` in `sessions/Dock.tsx`): "coloring is bad. usually we should use black and white" (the user, 1 Nov).
+- The chip's menu says what changing model costs as a number on each other model, never as a warning or a confirm (`runsMenu` in `sessions/models.ts`): "i kinda hate the warning stuff. just gimme the number" (the user, 17 Oct).
 - An issue's steps are a view of the right half, with one line above the composer saying what is being worked on while they are closed (`sessions/StepsHalf.tsx`): "this gonna expand the plan card a lot, so the card can't be above the composer anymore" (the user, 5 Nov). The line only says and has no frame, since what opens the half goes in the head.
 - A chat lets go of its end only when you scroll up, since a chat opened cold grows as its pictures load. Then it shows Jump to latest (`.jump-latest`). Your pick, 31 Oct.
 - Each message has claude.ai's Copy under it and its time beside it, since Linear has neither (`CopyMessage`, `.msg-time`).

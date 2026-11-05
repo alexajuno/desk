@@ -58,7 +58,10 @@ export function runsMenu(anchor: Element, session: string, runs: Runs, pick: (se
       const [list, , context] = await Promise.all([loadModels().catch((e) => (toast((e as Error).message), [] as Model[])), seats.load(),
         loadContext(session).catch(() => null)]);
       const now = list.find((m) => m.value === runs.model || m.name === runs.name);
-      const items: MenuItem[] = list.map((m) => ({ label: m.name, group: 1, heading: "Model", current: m === now, run: () => pick({ model: m.value }, { name: m.name, ...(m.efforts.length ? {} : { effort: "" }) }) }));
+      // Each model has its own prompt cache, so changing model reads the whole talk again uncached, where changing effort
+      // costs nothing (https://code.claude.com/docs/en/prompt-caching.md): the number on the other models' rows.
+      const rereads = context?.tokens ? `Re-reads ${tokens(context.tokens)}` : undefined;
+      const items: MenuItem[] = list.map((m) => ({ label: m.name, hint: m === now ? undefined : rereads, group: 1, heading: "Model", current: m === now, run: () => pick({ model: m.value }, { name: m.name, ...(m.efforts.length ? {} : { effort: "" }) }) }));
       const efforts = now ? now.efforts : EFFORTS.map(([value]) => value);
       for (const [value, label] of EFFORTS)
         if (efforts.includes(value)) items.push({ label, group: 2, heading: "Effort", current: value === runs.effort, run: () => pick({ effort: value }) });
