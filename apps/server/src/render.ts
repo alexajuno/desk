@@ -85,7 +85,7 @@ export function takePictures(text: string): { pictures: StepPicture[]; rest: str
 export const picturesText = (pictures: StepPicture[]) =>
   pictures.map((p) => `\`\`\`d2${p.caption ? ` ${p.caption}` : ""}\n${p.d2}\n\`\`\``).join("\n\n");
 
-// A design step written as parts, from the basics up, each its own text and diagram, which the chat shows as the text on
+// A step written as parts, each its own text and diagram, which the chat shows as the text on
 // the left and the diagram of the part being read on the right: "text equals to voice on the left and diagrams equals to
 // video on the right" (the user, 3 Nov). Each ### heading outside a code block starts a part, and a ### Decisions heading
 // the decisions, read last. null when the text has no ### heading, a step written as one diagram and its decisions.

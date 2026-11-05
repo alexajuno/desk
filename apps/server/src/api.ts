@@ -554,7 +554,7 @@ export function routes(app: FastifyInstance) {
       const { steps, step } = stepAt(i, req.params.place);
       const sent = typeof req.body === "string" ? req.body : str(((req.body ?? {}) as Record<string, unknown>).text);
       const written = takeParts(sent);
-      if (written?.before) throw new HttpError(422, `A step written as parts starts with its first ### heading, its basics: put the lines above it in a part, or under ### ${DECISIONS} after the last part.`);
+      if (written?.before) throw new HttpError(422, `A step written as parts starts with its first ### heading: put the lines above it in a part, or under ### ${DECISIONS} after the last part.`);
       const boxes = tableOfBoxes(sent);
       if (boxes) throw new HttpError(422, boxes);
       const { pictures, rest: said } = written ? { pictures: [], rest: written.said } : takePictures(sent);

@@ -27,7 +27,7 @@ export const isDrawn = (s: PlanStep) => Boolean(s.diagram_html || s.said_html ||
 // "1 1. The basics".
 export const partTitle = (p: StepPart) => p.title.replace(/^\d+[.):]\s+/, "");
 
-// A step written as parts, read from its basics down, as the user reads an explainer: each part its number and title,
+// A step written as parts, read from the top down, as the user reads an explainer: each part its number and title,
 // its text, and its diagram under it, unless the chat's right half shows the diagram of the part being read beside the
 // text (sessions/StepHalf.tsx: "text equals to voice on the left and diagrams equals to video on the right", the user,
 // 3 Nov), the part being read marked (now). Its decisions come last. body: the class its text takes where it is drawn.

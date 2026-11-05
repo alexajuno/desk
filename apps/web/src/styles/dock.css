@@ -327,7 +327,7 @@ button.msg-copy:hover { background: var(--btn-ghost-hover); color: var(--text-1)
 .step-sent .step-sent-where { margin-left: auto; color: var(--text-4); font-weight: 450; }
 .step-sent .sent-body + .step-sent-said { margin-top: 12px; }
 .sent .reply.body { font-size: 14px; line-height: 22px; }
-/* A design step written as parts (issues/Steps.tsx, StepParts), read from the basics down, as mockup A drew it ("A", 3
+/* A step written as parts (issues/Steps.tsx, StepParts), read from the top down, as mockup A drew it ("A", 3
    Nov): each part its number in a small circle and its title, its text, and its diagram under it. While the chat's right
    half shows the diagrams (StepHalf.tsx), the part being read has an accent edge and the others dim, the edge set
    in the card's padding so the text stays where it was. */

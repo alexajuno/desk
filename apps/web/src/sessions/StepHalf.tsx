@@ -1,4 +1,4 @@
-// A design step written as parts, in the chat's right half (Half.tsx): its text is read in the chat, and the half shows
+// A step written as parts, in the chat's right half (Half.tsx): its text is read in the chat, and the half shows
 // the diagram of the part being read, which follows the chat's scroll ("text equals to voice on the left and diagrams
 // equals to video on the right", the user, 3 Nov; "A" on two mockups, over each part's diagram beside its text in a
 // wider chat). On top, the step's name and where in it you read, then its parts as pills, a click on one bringing its
