@@ -427,14 +427,17 @@ function skillsIn(dir: string): Command[] {
   });
 }
 
-// The two commands the composer runs itself, in any chat (Dock.tsx, runsIn), worded as Claude Code lists them.
+// The commands the composer lists in any chat, held by the host or not: /model and /effort it runs itself (Dock.tsx,
+// runsIn), and /compact it sends on, so that the name is marked before a first turn starts the host. Worded as Claude
+// Code lists them.
 const COMPOSERS: Command[] = [
+  { name: "compact", description: "Clear conversation history but keep a summary in context. Optional: /compact [instructions for summarizing]" },
   { name: "model", description: "Set the AI model for Claude Code" },
   { name: "effort", description: "Set effort level for model usage" },
 ];
 
 // The slash commands and skills the session takes: the host's own list while it holds the session, else the skills on
-// disk, the user's and the folder's, with the composer's own /model and /effort.
+// disk, the user's and the folder's, with the composer's own /model and /effort and /compact.
 export async function commands(id: string): Promise<Command[]> {
   if (await hosted.holds(id)) {
     try {
