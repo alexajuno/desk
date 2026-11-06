@@ -81,12 +81,6 @@
   /* The picture viewer's × is a thumb's size. */
   .viewer-close { width: 40px; height: 40px; top: calc(8px + env(safe-area-inset-top)); right: 8px; }
 
-  /* The chat's right half takes the chat's place under its head (Half.tsx), whose terminal button hides it. */
-  .session-split:has(> .half) { flex-direction: column; }
-  .session-split:has(> .half) > .session-view { flex: none; height: auto; min-width: 0; }
-  .session-split:has(> .half) > .session-view > :not(.dock-head) { display: none; }
-  .session-split > .half { flex: 1; min-width: 0; border-left: 0; }
-  .half-grip { display: none; }
   /* A step's answer takes its own line under its title, as in the chat's list: beside it, the two left the title a few words. */
   .plan-step { flex-wrap: wrap; height: auto; min-height: 32px; padding-top: 6px; padding-bottom: 6px; }
   .plan-step-note { order: 1; flex: 0 0 100%; max-width: none; padding-left: 23px; white-space: normal; }

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router/dom";
 import { setNavigate } from "./app/nav";
 import { router } from "./app/routes";
+import { watchOneScreen } from "./frame/oneScreen";
 import { watchTheme } from "./frame/theme";
 import { startFrame } from "./store/frame";
 import { startInbox } from "./store/inbox";
@@ -18,6 +19,7 @@ import "./styles/phone.css";
 import "./index.css";
 
 watchTheme();
+watchOneScreen();
 installTooltips();
 connect(issues);
 startFrame();

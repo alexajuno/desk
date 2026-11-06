@@ -318,6 +318,7 @@ const ChatHead = observer(function ChatHead({ s, docked }: { s: LiveSession; doc
       </div>
       {m?.chat && docked && (
         <span className="head-halves">
+          <ChatButton id={s.id} />
           {here && Boolean(here.plan_steps?.length) && <HalfButton id={s.id} view="steps" />}
           {here && anyCommit(here.plan_steps) && <HalfButton id={s.id} view="changes" />}
           <HalfButton id={s.id} view="terminal" />{APP && <HalfButton id={s.id} view="browser" />}
@@ -1479,6 +1480,16 @@ const HALF_BUTTONS = {
   terminal: { icon: GLYPH.terminal, label: "Terminal", key: "Ctrl `" },
   browser: { icon: GLYPH.globe, label: "Browser", key: "Ctrl ⇧ B" },
 } as const;
+
+// Chat, first of the half's buttons while the half takes the chat's place (frame/oneScreen.ts): lit while the chat is
+// shown, and pressed it hides the half, as the lit button of the half's own view does.
+const ChatButton = observer(function ChatButton({ id }: { id: string }) {
+  const on = !dock.halves[id];
+  return (
+    <button className={`dock-btn half-btn half-chat${on ? " on" : ""}`} type="button" title="Chat" aria-pressed={on}
+      onClick={() => dock.setHalf(id, null, true)}>{GLYPH.chat}</button>
+  );
+});
 
 const HalfButton = observer(function HalfButton({ id, view }: { id: string; view: keyof typeof HALF_BUTTONS }) {
   const now = dock.halves[id], { icon, label, key } = HALF_BUTTONS[view];

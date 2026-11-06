@@ -546,6 +546,15 @@ button.cmd-more:hover { background: none; color: var(--text-2); }
 .session-split:has(> .half) > .session-view { flex: 0 1 var(--chat-w, 480px); min-width: 360px; } /* the chat gives way to 360 on a narrow window */
 .half { position: relative; flex: 1 1 0; min-width: 320px; min-height: 0; display: flex; flex-direction: column;
         border-left: 0.5px solid var(--border-2); background: var(--bg-panel); }
+/* One screen at a time (frame/oneScreen.ts puts html.one-screen on where the dock can't give the chat 480px and the half
+   780px, and a phone is always so): the half takes the chat's place under the chat's head, and the head's Chat button,
+   lit while no half is open, brings the chat back. */
+html.one-screen .session-split:has(> .half) { flex-direction: column; }
+html.one-screen .session-split:has(> .half) > .session-view { flex: none; height: auto; min-width: 0; }
+html.one-screen .session-split:has(> .half) > .session-view > :not(.dock-head) { display: none; }
+html.one-screen .session-split > .half { flex: 1; min-width: 0; border-left: 0; }
+html.one-screen .half-grip { display: none; }
+html:not(.one-screen) .half-chat { display: none; }
 .half-grip { position: absolute; z-index: 2; top: 0; bottom: 0; left: -4px; width: 8px; cursor: col-resize; touch-action: none; }
 .half-grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: var(--border-3); opacity: 0; transition: opacity 0.1s; }
 .half-grip:hover::after, .half-dragging .half-grip::after { opacity: 1; }

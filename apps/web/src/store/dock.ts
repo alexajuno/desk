@@ -18,6 +18,7 @@
 // user, 3 Nov; sessions/StepHalf.tsx), and so do the Changes, beside the chat that explains them ("wanna bring the changes tab to the
 // right sidebar similar to diagrams and browser and all other things", the user, 4 Nov).
 import { action, computed, makeObservable, observable } from "mobx";
+import { oneScreen } from "../frame/oneScreen";
 import { APP } from "../lib/desktop";
 
 export type Layout = "page" | "chat";
@@ -159,20 +160,20 @@ class Dock {
 
   // A step sent in the chat (at, its place there), which its row in the list opens on, once for each send. One written as
   // parts also opens a half that is hidden, as Claude's browser opens it on a tab; hidden again, it stays hidden until the
-  // next.
+  // next. Where the half would take the chat's place (frame/oneScreen.ts), it opens only when you press its button.
   showStep(session: string, at: string, title: string, now: string | null, parts: boolean) {
     if (!this.once(`${session} ${at}`)) return;
     this.pickRow(session, title, now);
-    if (parts && !this.halves[session]) this.setHalf(session, "steps");
+    if (parts && !this.halves[session] && !oneScreen()) this.setHalf(session, "steps");
   }
 
   // A step ticked with its commit: the half opens on Changes, once for each commit, so that the step's diff is
   // there beside its report ("we have diff show while coding, allowing user to catches the problem early", the user, 28
   // Oct). It takes the place of the steps, which the work has moved on from, but never of the terminal or the browser,
-  // where you may be typing.
+  // where you may be typing, nor, where the half would take the chat's place (frame/oneScreen.ts), the chat.
   showChanges(session: string, commit: string) {
     const now = this.halves[session];
-    if (this.once(`${session} commit ${commit}`) && (!now || now === "steps")) this.setHalf(session, "changes");
+    if (this.once(`${session} commit ${commit}`) && (!now || now === "steps") && !oneScreen()) this.setHalf(session, "changes");
   }
 
   // Whether this is the first time key opens its chat's half: the 50 last are kept.
