@@ -26,6 +26,7 @@ interface Settings {
   chat_pick: boolean;
   stash_back_on_send: boolean;
   test_slots: number;
+  compact_over: number;
 }
 
 const PAGES: { group: string; pages: { slug: string; title: string; icon: ReactNode }[] }[] = [
@@ -46,6 +47,8 @@ export const SETTINGS = [
   { page: "preferences", section: "Sessions", id: "chat_effort", title: "Effort", about: "How hard a new chat or issue session thinks before it answers" },
   { page: "preferences", section: "Sessions", id: "test_slots", title: "Test desks at once",
     about: "How many sessions may test a branch at once, each on its own copy of your data, while more than 4 GB of memory is free" },
+  { page: "preferences", section: "Sessions", id: "compact_over", title: "Compact a chat over",
+    about: "A chat this long compacts as a turn ends on a step done, or when it marks a break itself" },
   { page: "workflow", section: "Auto-close automations", id: "parent_auto_close", title: "Auto-close parent issues",
     about: "Automatically close an open parent issue when its last sub-issue is closed" },
   { page: "workflow", section: "Auto-close automations", id: "sub_issue_auto_close", title: "Auto-close sub-issues",
@@ -147,6 +150,8 @@ export function TextField({ id, value, save, clean = (typed) => typed }: {
 
 const THEMES: [string, string][] = [["system", "System preference"], ["light", "Light"], ["dark", "Dark"]];
 const SLOTS = [1, 2, 3, 4]; // settings.ts, MAX_SLOTS
+const COMPACTS = [100_000, 150_000, 200_000, 300_000, 400_000, 500_000];
+const thousands = (tokens: number) => `${Math.round(tokens / 1000)}k`;
 
 const CHEVRON_DOWN = <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>;
 
@@ -204,6 +209,15 @@ function Sessions() {
           openMenu({ anchor: e.currentTarget, items: () => SLOTS.map((n) => ({ label: String(n), current: n === shown.test_slots, run: () => change({ test_slots: n }) })) });
         }}>
           {shown.test_slots}
+          {CHEVRON_DOWN}
+        </button>
+      </Row>
+      <Row id="compact_over">
+        <button id="compact_over" type="button" className="set-pick" onClick={(e) => {
+          if (toggled(e.currentTarget)) return;
+          openMenu({ anchor: e.currentTarget, items: () => COMPACTS.map((n) => ({ label: thousands(n), current: n === shown.compact_over, run: () => change({ compact_over: n }) })) });
+        }}>
+          {thousands(shown.compact_over)}
           {CHEVRON_DOWN}
         </button>
       </Row>
