@@ -6,7 +6,8 @@
 // Ctrl ` and Ctrl ⇧ B, open it on their view, switch it to theirs, and hide it ("we have two duplicated sections: the
 // terminal and browser icons and then, on right sidebar, we have terminal and browser chips", the user, 1 Nov, then
 // "yeah A" on two mockups, over the half's tabs with one button in the head). Hiding leaves the terminal's session
-// running. On a phone it takes the chat's place, under the chat's head. Only desk's app has the browser (lib/desktop.ts).
+// running. Where the dock can't give the chat 480px and the half 780px, and on a phone, it takes the chat's place, under
+// the chat's head, and the head's Chat button brings the chat back (frame/oneScreen.ts). Only desk's app has the browser (lib/desktop.ts).
 import { observer } from "mobx-react-lite";
 import { useCallback, type PointerEvent, type ReactNode } from "react";
 import { APP } from "../lib/desktop";
