@@ -555,6 +555,11 @@ html.one-screen .session-split:has(> .half) > .session-view > :not(.dock-head) {
 html.one-screen .session-split > .half { flex: 1; min-width: 0; border-left: 0; }
 html.one-screen .half-grip { display: none; }
 html:not(.one-screen) .half-chat { display: none; }
+/* The Browser's tab strip and its address row share one 40px line, the tabs at their own width up to 45%, so the page
+   gets back the 44px that a head, a strip and a row cost under the chat's head. */
+html.one-screen .browser { display: grid; grid-template-columns: fit-content(45%) minmax(0, 1fr); grid-template-rows: 40px minmax(0, 1fr); }
+html.one-screen .browser-tabs { height: 40px; }
+html.one-screen .browser-page { grid-column: 1 / -1; }
 /* The slide between them: the half comes in from the right, and the chat from the left (Dock.tsx, back, set as the half
    closes). A half switching to another view stays mounted and does not slide again. */
 html.one-screen .session-split > .half { animation: half-in 0.2s var(--dock-ease) both; }
