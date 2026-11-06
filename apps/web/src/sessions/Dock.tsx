@@ -21,6 +21,7 @@ import { folderMenu } from "../issues/menus";
 import { toClipboard } from "../issues/actions";
 import { dock, type Layout } from "../store/dock";
 import { issues, type Reply as SentReply } from "../store/issues";
+import { oneScreen } from "../frame/oneScreen";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { CHEVRON, GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
 import { isDrawn, StepParts, type PlanStep, stepOpenNow, stepTitled } from "../issues/Steps";
@@ -242,12 +243,20 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
     runInAction(() => wantsFocus.set(null));
   }, [take]);
 
+  // Where the half takes the chat's place (frame/oneScreen.ts), the half slides in from the right as it opens and the
+  // chat from the left as it closes: the chat's own slide is told by the half having just closed, and ends with it.
+  const [back, setBack] = useState(false), had = useRef(Boolean(half));
+  useLayoutEffect(() => {
+    if (had.current && !half && oneScreen()) setBack(true);
+    had.current = Boolean(half);
+  }, [half]);
+
   // The composer lies over the conversation's end, as claude.ai's does: the foot sticks to the bottom of the view, and
   // the conversation runs on behind it (dock.css). The chat in the middle may have its right half open beside it, the
   // chat then as wide as you dragged it (--chat-w), the half all the rest.
   return (
-    <div className="session-split" style={half ? ({ "--chat-w": `${dock.chatWidth}px` } as CSSProperties) : undefined}>
-      <div className="session-view">
+    <div className="session-split" data-back={back || undefined} style={half ? ({ "--chat-w": `${dock.chatWidth}px` } as CSSProperties) : undefined}>
+      <div className="session-view" onAnimationEnd={(e) => e.animationName === "chat-back" && setBack(false)}>
         <ChatHead s={s} docked={docked} />
         {here && docked && dock.details && <IssueDetails data={here} />}
         <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>

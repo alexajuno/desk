@@ -555,6 +555,12 @@ html.one-screen .session-split:has(> .half) > .session-view > :not(.dock-head) {
 html.one-screen .session-split > .half { flex: 1; min-width: 0; border-left: 0; }
 html.one-screen .half-grip { display: none; }
 html:not(.one-screen) .half-chat { display: none; }
+/* The slide between them: the half comes in from the right, and the chat from the left (Dock.tsx, back, set as the half
+   closes). A half switching to another view stays mounted and does not slide again. */
+html.one-screen .session-split > .half { animation: half-in 0.2s var(--dock-ease) both; }
+html.one-screen .session-split[data-back] > .session-view > :not(.dock-head) { animation: chat-back 0.2s var(--dock-ease) both; }
+@keyframes half-in { from { opacity: 0; transform: translateX(28px); } }
+@keyframes chat-back { from { opacity: 0; transform: translateX(-28px); } }
 .half-grip { position: absolute; z-index: 2; top: 0; bottom: 0; left: -4px; width: 8px; cursor: col-resize; touch-action: none; }
 .half-grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: var(--border-3); opacity: 0; transition: opacity 0.1s; }
 .half-grip:hover::after, .half-dragging .half-grip::after { opacity: 1; }
@@ -668,4 +674,5 @@ button.steps-row-fold:hover { background: var(--btn-ghost-hover); color: var(--t
 @media (prefers-reduced-motion: reduce) {
   .dock, .panel { transition: none; }
   .session-view, .convo > *, .ask, .running, .running-dot, .live-dot.working, .spark { animation: none; }
+  html.one-screen .session-split > .half, html.one-screen .session-split[data-back] > .session-view > :not(.dock-head) { animation: none; }
 }
