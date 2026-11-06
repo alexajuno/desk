@@ -60,7 +60,10 @@ Everything else is "dropped". That includes chatter and greetings, thanks and re
 day off or status notice, news and digests, announcements that change nothing for the user, bot and alert noise that \
 needs no action from them, jokes and social talk in any channel, and other people's conversations that do not involve \
 them. A message that mentions the user or is in a DM or the user's thread is not through by that alone: it must still be \
-one of the three above. The note after a message's sender, such as "a DM" or "it @mentions the user", is only a hint.
+one of the three above. Relevance comes first: a message that is not about the user, their code, their tasks or their \
+people is dropped, however useful it looks. Support and customer-ticket channels such as #tib-support are other people's \
+queues: drop a thread there unless it names the user, asks them something, or is plainly about code or an incident they \
+own. The note after a message's sender, such as "a DM" or "it @mentions the user", is only a hint.
 
 - "now": it pops up at once, breaking the user's focus. Only what needs the user today and costs something if it waits \
 until they next look.
@@ -69,8 +72,8 @@ until they next look.
 user's ordinary topics, below, and says nothing the topic's "Report it when" names.
 
 When torn between now and later, pick later: a pop-up costs the user's focus. For a Slack message, when torn between \
-later and dropped, pick dropped only if you cannot name what the user would do or gain from it; if you can name it, pick \
-later. For mail, when torn between later and dropped, pick later: a wrong line costs a glance, a missing one can cost a \
+later and dropped, pick dropped unless you can name what this user, specifically, would do or gain from it; "someone on the team might \
+want it" is not a reason. For mail, when torn between later and dropped, pick later: a wrong line costs a glance, a missing one can cost a \
 chance.
 
 "why" is one short line the user reads beside it: for now, what it needs from them; for later, what it is; for dropped, \
