@@ -286,9 +286,8 @@ function content(m: Sent): hosted.Content {
 // back after an hour or it passes 300k"). After an hour away the prompt cache, which desk's sessions keep for an hour,
 // has expired, and the whole context would be written to it again anyway. Until 30 Oct any message to a chat over 300k
 // compacted it too, which put a compaction of about 76 s in front of a message just typed, and asked again on the next
-// one when you cancelled it: "300k is kinda a hard cap without caring what's going on" (the user, 30 Oct). A tick with a
-// step to go compacted it too, until 5 Nov, in the middle of a talk that needed its context: "stop the compacting logic"
-// (the user, 5 Nov). This one stays, as the budget plan leans on it.
+// one when you cancelled it: "300k is kinda a hard cap without caring what's going on" (the user, 30 Oct). This one stays, as
+// the budget plan leans on it; a break in the work compacts a chat as its turn ends instead (compact.ts).
 const AWAY = 3600; // seconds since the chat's last turn ended
 const OVER = 100_000; // tokens a chat holds for coming back to compact it
 
