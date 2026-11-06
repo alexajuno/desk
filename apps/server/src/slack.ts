@@ -11,7 +11,9 @@
 // Each message passes the door (take): an edit, a deletion, a join, a topic change and the user's own message are dropped
 // there and never written. Everything else is, the channels in their sidebar's "non-work" section too since 6 Nov ("just
 // take literally all messages", the user), which until then desk never wrote ("i think currently there are a few
-// channels in work category and DMs, that's all matter", 2 Nov): such a message carries a note saying so. Every message is written unjudged, for the firewall's Claude to judge: since 6 Nov a rule
+// channels in work category and DMs, that's all matter", 2 Nov): such a message carries a note saying so. Every message is written, and one in a channel that does not name the user (no @mention, no @here, no
+// handle or first name, not a reply in their thread) is dropped here by code (take, namesUser): other people's talk, which the firewall's
+// Claude read as the user's. The rest is written unjudged, for the firewall's Claude to judge: since 6 Nov a rule
 // pops nothing up by itself ("whatever doesn't need my action or my acknowledge that benefits me, don't let it
 // through"). A DM or group DM from a person, an @mention of the user and a reply in a thread they wrote in carry the
 // rule's name as a note (why), which the judge reads as a hint and then writes over. A thread attached to a chat comes in
@@ -292,6 +294,17 @@ async function textOf(m: Message) {
 // subtype is an edit, a deletion, a join or leave, a topic, purpose or name change, a pin: dropped at the door.
 const KEPT = new Set([undefined, "bot_message", "file_share", "thread_broadcast", "me_message"]);
 
+const UNADDRESSED = "not addressed to you"; // the why of a channel message that does not name the user
+
+// Whether a channel message names the user: @here, @channel, @everyone or a user group (Slack's <!here>, <!subteam^…>), the
+// user's handle, or their first name. "giao" is also a Vietnamese word (to hand over), so some messages pass that need not:
+// the judge drops them, as before.
+function namesUser(raw: string): boolean {
+  if (/<!(here|channel|everyone|subteam)/i.test(raw)) return true;
+  const handle = login?.handle?.replace(/[^\w]/g, "") ?? "";
+  return new RegExp(`${handle ? `${handle}|` : ""}\\bgiao\\b`, "iu").test(raw);
+}
+
 // A message from the socket, or from a channel's history, through the door: the notice it makes, written, or null when
 // the door dropped it, or it was written already.
 export async function take(m: Message): Promise<notices.Notice | null> {
@@ -310,6 +323,11 @@ export async function take(m: Message): Promise<notices.Notice | null> {
     : mentioned ? "@you"
     : reply && (await wroteIn(m.channel, m.thread_ts!, m.parent_user_id)) ? "a reply in your thread"
     : null; // a work channel, or an app's DM
+  // A channel message that does not name the user is other people's talk: dropped here by code, kept and hidden, with no
+  // call to the firewall's Claude, which read a bare "c check thử nhá" or "a cho e ké pr này" as the user's (6 Nov, #tib-devs).
+  // What still goes to the judge: a DM, an @mention, a reply in the user's thread, @here / @channel / a user group, and
+  // their name or handle in the text. A thread a chat follows skips this too (notices.ts, add).
+  const unaddressed = at.kind === "channel" && verdict === null && !namesUser(raw);
   const n: notices.Notice = {
     id: `slack:${m.channel}:${m.ts}`,
     source: "slack",
@@ -319,8 +337,8 @@ export async function take(m: Message): Promise<notices.Notice | null> {
     text: await textOf(m),
     link: linkOf(m),
     at: Number(m.ts),
-    verdict: null, // the firewall's Claude judges every message, the rule's note beside it as a hint (firewall.ts, shown)
-    why: verdict ?? (at.nonWork ? NON_WORK_NOTE : ""),
+    verdict: unaddressed ? "dropped" : null, // otherwise the firewall's Claude judges it, the rule's note beside it as a hint (firewall.ts, shown)
+    why: unaddressed ? UNADDRESSED : verdict ?? (at.nonWork ? NON_WORK_NOTE : ""),
   };
   return (await notices.add(n)) ? n : null;
 }

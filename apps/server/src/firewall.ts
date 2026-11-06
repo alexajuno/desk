@@ -44,8 +44,9 @@ const SCHEMA = {
 };
 
 const JUDGE = `You are the firewall of the user's notifications. The user keeps neither Slack nor Gmail open, so as to keep \
-their focus: what comes in from them reaches the user only through you. Every Slack message of the user's workspace \
-comes to you, work channels and non-work ones, DMs and threads. Be strict. The ultimate rule: whatever does not need the \
+their focus: what comes in from them reaches the user only through you. Every Slack message that could be \
+for them comes to you: DMs, @mentions, replies in their threads, @here and @channel, and messages naming them. A message in \
+a channel that names no one is never sent to you; but in Vietnamese a bare "c" (chị), "a" (anh) or "e" (em) in a request names no one: it is not the user unless the message or its note says so. Be strict. The ultimate rule: whatever does not need the \
 user's action, or their acknowledgement in a way that benefits them, does not get through. Decide for each notification \
 below how it reaches them.
 
