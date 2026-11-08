@@ -277,7 +277,7 @@ impl Desk {
             .h(px(28.))
             .child(theme::glyph("more", muted))
             .dropdown_menu_with_anchor(Anchor::TopLeft, move |menu, _, _| {
-                let (read, all, read_only) = (this.clone(), this.clone(), this.clone());
+                let (read, all, read_only, settings) = (this.clone(), this.clone(), this.clone(), this.clone());
                 menu.item(PopupMenuItem::new("Mark all as read").on_click(move |_, _, cx| {
                     let _ = read.update(cx, |d, cx| d.inbox_call("/api/inbox/read", json!({}), cx));
                 }))
@@ -287,6 +287,10 @@ impl Desk {
                 }))
                 .item(PopupMenuItem::new("Delete all read").on_click(move |_, window, cx| {
                     let _ = read_only.update(cx, |d, cx| d.delete_all(true, window, cx));
+                }))
+                .separator()
+                .item(PopupMenuItem::new("Go to settings").on_click(move |_, _, cx| {
+                    let _ = settings.update(cx, |d, cx| d.open_settings(crate::settings::Section::Preferences, cx));
                 }))
             });
         let open = self.open_row.as_ref().and_then(|s| self.inbox.values().find(|r| &r.slug == s));

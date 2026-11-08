@@ -11,6 +11,7 @@ mod emoji;
 mod filters;
 mod listing;
 mod picker;
+mod settings;
 mod thread;
 mod live;
 mod net;
@@ -39,11 +40,12 @@ const CHAT: f32 = 480.;
 const HALF: f32 = 780.;
 const SIDE: f32 = 248.;
 
-// What the page shows: an issue's chat, or the Inbox.
+// What the page shows: an issue's chat, the Inbox, or Settings.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Page {
     Issue,
     Inbox,
+    Settings,
 }
 
 // What the right half shows.
@@ -90,6 +92,8 @@ struct Desk {
     _terminal_events: Option<Subscription>,
     commits: Option<Vec<String>>, // the picked issue's steps' commits, once its page came
     shows: smol::channel::Sender<String>,
+    settings: Option<Entity<settings::SettingsPage>>, // while Settings shows
+    back_to: Page, // the page Back to app returns to
     _appearance: Subscription,
 }
 
@@ -141,7 +145,7 @@ impl Desk {
             notice: None,
             inbox_focus: cx.focus_handle(),
             inbox_scroll: UniformListScrollHandle::new(),
-            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, commits: None, shows, _appearance: appearance }
+            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, commits: None, shows, settings: None, back_to: Page::Issue, _appearance: appearance }
     }
 
     fn apply(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
@@ -404,6 +408,7 @@ impl Render for Desk {
         self.steps.update(cx, |steps, _| steps.width = half_width);
         let page = match &self.chat {
             _ if self.page == Page::Inbox => self.inbox_page(page_width, cx),
+            _ if self.page == Page::Settings => div().size_full().children(self.settings.clone()),
             Some(chat) => div()
                 .v_flex()
                 .size_full()
@@ -425,14 +430,19 @@ impl Render for Desk {
         div()
             .h_flex()
             .size_full()
-            // the half's keys, as the web app's: Ctrl ` its terminal, Ctrl Shift S its steps, Ctrl Shift G its Changes
+            // Ctrl , Settings, as the web app's; and the half's: Ctrl ` its terminal, Ctrl Shift S its steps, Ctrl Shift G
+            // its Changes
             .on_key_down(cx.listener(|desk, e: &KeyDownEvent, window, cx| {
                 let k = &e.keystroke;
+                if k.modifiers.control && !k.modifiers.shift && !k.modifiers.alt && k.key == "," {
+                    desk.open_settings(settings::Section::Preferences, cx);
+                    return cx.stop_propagation();
+                }
                 if k.modifiers.control && !k.modifiers.shift && !k.modifiers.alt && k.key == "`" && desk.chat.is_some() && desk.page == Page::Issue {
                     desk.flip_terminal(window, cx);
                     return cx.stop_propagation();
                 }
-                if !(k.modifiers.control && k.modifiers.shift) || k.modifiers.alt || desk.chat.is_none() { return }
+                if !(k.modifiers.control && k.modifiers.shift) || k.modifiers.alt || desk.chat.is_none() || desk.page != Page::Issue { return }
                 match k.key.to_lowercase().as_str() {
                     "s" => desk.flip(Half::Steps, cx),
                     "g" if desk.commits.as_ref().is_some_and(|c| !c.is_empty()) => desk.flip(Half::Changes, cx),
@@ -444,7 +454,7 @@ impl Render for Desk {
             .text_size(px(13.))
             .bg(window_bg)
             .text_color(fg)
-            .child(self.sidebar(cx))
+            .child(if self.page == Page::Settings { self.settings_nav(cx) } else { self.sidebar(cx) })
             .child(
                 div()
                     .flex_1()

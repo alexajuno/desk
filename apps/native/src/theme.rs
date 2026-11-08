@@ -27,13 +27,44 @@ pub fn init(window: &mut Window, cx: &mut App) {
     sync(window, cx);
 }
 
-// The system's light or dark, as the web app follows it, unless DESK_THEME says which.
+// The system's light or dark, as the web app follows it, unless Settings keeps the window light or dark, or DESK_THEME
+// says which for this run.
 pub fn sync(window: &mut Window, cx: &mut App) {
-    match std::env::var("DESK_THEME").as_deref() {
-        Ok("light") => Theme::change(gpui_kit::component::theme::ThemeMode::Light, Some(window), cx),
-        Ok("dark") => Theme::change(gpui_kit::component::theme::ThemeMode::Dark, Some(window), cx),
+    let pinned = std::env::var("DESK_THEME").ok().filter(|t| t == "light" || t == "dark");
+    match pinned.as_deref().unwrap_or(chosen()) {
+        "light" => Theme::change(gpui_kit::component::theme::ThemeMode::Light, Some(window), cx),
+        "dark" => Theme::change(gpui_kit::component::theme::ThemeMode::Dark, Some(window), cx),
         _ => Theme::sync_system_appearance(Some(window), cx),
     }
+}
+
+// Settings' Interface theme, which the web keeps in each browser (localStorage.theme) and the window in
+// ~/.local/state/desk/native-theme: "light", "dark", or "system" with no file.
+fn theme_file() -> Option<std::path::PathBuf> {
+    let state = std::env::var_os("XDG_STATE_HOME").map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".local/state")))?;
+    Some(state.join("desk").join("native-theme"))
+}
+
+pub fn chosen() -> &'static str {
+    match theme_file().and_then(|f| std::fs::read_to_string(f).ok()).as_deref().map(str::trim) {
+        Some("light") => "light",
+        Some("dark") => "dark",
+        _ => "system",
+    }
+}
+
+pub fn choose(choice: &str, window: &mut Window, cx: &mut App) {
+    if let Some(file) = theme_file() {
+        if choice == "light" || choice == "dark" {
+            if let Some(dir) = file.parent() { let _ = std::fs::create_dir_all(dir); }
+            let _ = std::fs::write(file, choice);
+        } else {
+            let _ = std::fs::remove_file(file);
+        }
+    }
+    sync(window, cx);
+    window.refresh();
 }
 
 // What desk.css names that the theme has no names for: the greys of the text by how much it matters (names and titles
@@ -187,6 +218,11 @@ fn glyph_path(name: &str) -> &'static str {
         "chevron-right" => r##"<path d="M6 4l4 4-4 4" stroke-width="1.4"/>"##,
         "chevron-left" => r##"<path d="M10 4L6 8l4 4" stroke-width="1.4"/>"##,
         "select-chevron" => r##"<path fill="#000" stroke="none" transform="translate(0 3.556) scale(1.777778)" d="M1.915.557a.667.667 0 0 0-.943.943l2.862 2.862a.942.942 0 0 0 1.333 0L8.028 1.5a.667.667 0 0 0-.943-.943L4.5 3.14 1.915.557Z"/>"##,
+        "sliders" => r##"<path d="M2.5 4.5h3M9.5 4.5h4M2.5 11.5h6M12.5 11.5h1M7.5 3v3M10.5 10v3"/>"##,
+        "parent" => r##"<path d="M4.5 2.5v6a2 2 0 0 0 2 2h6M10 8l2.5 2.5L10 13"/>"##,
+        "system" => r##"<rect x="2" y="3" width="12" height="8.5" rx="1.5"/><path d="M6 14h4M8 11.5V14"/>"##,
+        "light" => r##"<circle cx="8" cy="8" r="2.75"/><path d="M8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1.05 1.05M11.35 11.35l1.05 1.05M3.6 12.4l1.05-1.05M11.35 4.65l1.05-1.05"/>"##,
+        "dark" => r##"<path d="M13 9.6A5.5 5.5 0 0 1 6.4 3a5.5 5.5 0 1 0 6.6 6.6z"/>"##,
         "changes" => r##"<path d="M9 1.75H4.75a1.25 1.25 0 0 0-1.25 1.25v10c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V5.25zM9 1.75v3.5h3.5M8 5.25v3M6.5 6.75h3M6.5 10.75h3"/>"##,
         _ => "",
     }

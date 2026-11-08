@@ -53,6 +53,22 @@ pub fn post(path: &str, body: Value) -> Result<Value, String> {
         })
 }
 
+pub fn patch(path: &str, body: Value) -> Result<Value, String> {
+    let host = host();
+    ureq::patch(&format!("http://{host}{path}"))
+        .header("Origin", &format!("http://{host}"))
+        .config()
+        .http_status_as_error(false)
+        .build()
+        .send_json(body)
+        .map_err(|e| e.to_string())
+        .and_then(|mut r| {
+            let ok = r.status().is_success();
+            let value = r.body_mut().read_json::<Value>().unwrap_or(Value::Null);
+            if ok { Ok(value) } else { Err(value["detail"].as_str().unwrap_or("desk refused it").to_string()) }
+        })
+}
+
 // A form route of the old pages, as the page's Start, Go and Approve post it (app.ts): desk answers with a redirect,
 // whose address says what happened (msg, note) and, from the Inbox, the row to open next (i). The redirect is not
 // followed: its address is the answer.
