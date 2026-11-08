@@ -1,7 +1,7 @@
 // desk's live sync (apps/server/src/sync.ts), read on a thread of its own: the snapshot of every issue, then each
 // change as it is written, and the page of the issue the window shows, again each time it changes. When desk restarts,
 // it connects again with no log, gets a fresh snapshot, and names the issue it shows again.
-use std::{thread, time::Duration};
+use std::{collections::HashMap, thread, time::Duration};
 
 use serde_json::{json, Value};
 use smol::channel::{Receiver, Sender};
@@ -51,21 +51,22 @@ pub struct Tab {
     pub opened: String, // when desk first heard of it, which orders the strip
 }
 
-// A team's or a project's name, by its table and slug, which the Inbox's filters show.
-pub struct Name {
-    pub table: String,
-    pub key: String,
-    pub title: Option<String>,
-}
+// The rows of the other tables desk holds (the server's db.ts, HELD), as desk sends them, by their key: teams, projects,
+// milestones, a project's activity and the chats.
+pub type Rows = HashMap<String, HashMap<String, Value>>;
+pub const OTHERS: [&str; 5] = ["teams", "projects", "milestones", "activity", "chats"];
 
 pub enum Event {
-    Snapshot(Vec<Issue>, Vec<InboxRow>, Vec<Name>, Vec<Tab>),
+    Snapshot(Vec<Issue>, Vec<InboxRow>, Rows, Vec<Tab>),
     Tab { target: String, row: Option<Tab> },
     // Claude opened a tab, or works in one: the chat's Browser shows it (the server's tabs.ts, used)
     Browser { session: String, target: String },
     // the session closed its last tab: its Browser closes
     BrowserClosed(String),
-    Named(Name),
+    // a row of another table changed, or went (None)
+    Row { table: String, key: String, row: Option<Value> },
+    // the sidebar's sessions and where each open issue's stands (pages.ts, framePage), on connect and when it changed
+    Frame(Value),
     Issue { slug: String, row: Option<Issue> },
     Inbox { id: String, row: Option<InboxRow> },
     // the issue shown, as its page draws it (pages.ts, issuePageJson)
@@ -81,15 +82,14 @@ fn issue(row: &Value) -> Option<Issue> {
         team: some("team"), project: some("project"), folder: some("folder") })
 }
 
+// A key as text, a number's too (milestones and activity are keyed by their id).
+fn text_of(v: &Value) -> String {
+    v.as_str().map(str::to_string).unwrap_or_else(|| v.to_string())
+}
+
 fn tab(row: &Value) -> Option<Tab> {
     let text = |k: &str| row.get(k).and_then(Value::as_str).unwrap_or("").to_string();
     row.is_object().then(|| Tab { target: text("target"), session: text("session"), url: text("url"), title: text("title"), opened: text("opened") })
-}
-
-const NAMED: [&str; 2] = ["teams", "projects"];
-
-fn name(table: &str, key: &str, row: &Value) -> Name {
-    Name { table: table.into(), key: key.into(), title: row.get("title").and_then(Value::as_str).map(str::to_string) }
 }
 
 fn inbox_row(row: &Value) -> Option<InboxRow> {
@@ -152,27 +152,30 @@ fn follow(events: &Sender<Event>, shows: &Receiver<String>, shown: &mut Option<S
             Some("snapshot") => {
                 let rows = message["rows"]["issues"].as_array().cloned().unwrap_or_default();
                 let inbox = message["rows"]["inbox"].as_array().cloned().unwrap_or_default();
-                let names = NAMED.iter().flat_map(|table| {
-                    let rows = message["rows"][*table].as_array().cloned().unwrap_or_default();
-                    rows.into_iter().map(move |row| name(table, row["slug"].as_str().unwrap_or(""), &row))
-                });
+                let others: Rows = OTHERS.iter().map(|table| {
+                    let key = if matches!(*table, "teams" | "projects") { "slug" } else { "id" };
+                    let rows = message["rows"][*table].as_array().into_iter().flatten();
+                    (table.to_string(), rows.map(|row| (text_of(&row[key]), row.clone())).collect())
+                }).collect();
                 let tabs = message["rows"]["tabs"].as_array().into_iter().flatten().filter_map(tab).collect();
-                events.send_blocking(Event::Snapshot(rows.iter().filter_map(issue).collect(), inbox.iter().filter_map(inbox_row).collect(), names.collect(), tabs))?;
+                events.send_blocking(Event::Snapshot(rows.iter().filter_map(issue).collect(), inbox.iter().filter_map(inbox_row).collect(), others, tabs))?;
             }
             Some("changes") => {
                 for change in message["changes"].as_array().into_iter().flatten() {
-                    let key = change["key"].as_str().unwrap_or("").to_string();
+                    let key = text_of(&change["key"]);
                     if change["kind"] == "issues" {
                         events.send_blocking(Event::Issue { slug: key, row: issue(&change["row"]) })?;
                     } else if change["kind"] == "tabs" {
                         events.send_blocking(Event::Tab { target: key, row: tab(&change["row"]) })?;
                     } else if change["kind"] == "inbox" {
                         events.send_blocking(Event::Inbox { id: key, row: inbox_row(&change["row"]) })?;
-                    } else if let Some(table) = NAMED.iter().find(|t| change["kind"] == **t) {
-                        events.send_blocking(Event::Named(name(table, &key, &change["row"])))?;
+                    } else if let Some(table) = OTHERS.iter().find(|t| change["kind"] == **t) {
+                        let row = Some(change["row"].clone()).filter(Value::is_object);
+                        events.send_blocking(Event::Row { table: table.to_string(), key, row })?;
                     }
                 }
             }
+            Some("frame") => events.send_blocking(Event::Frame(message["frame"].clone()))?,
             Some("terminal") => {
                 events.send_blocking(Event::Terminal(message["session"].as_str().unwrap_or("").to_string()))?;
             }

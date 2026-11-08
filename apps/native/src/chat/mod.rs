@@ -84,6 +84,8 @@ pub struct Chat {
     queueing: bool, // the composer says a message queues, while Claude works
     scroller: Entity<MessageScrollerState>,
     composer: Entity<TextareaState>,
+    // where the composer was last drawn, which the window's toast rises above
+    pub composer_at: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     _subscriptions: Vec<Subscription>,
     // Following its session: dropped with the chat, which closes the session's socket. Detached, it outlived the chat
     // and kept its thread, its socket and desk's note that the chat is shown, until the session said something more.
@@ -188,6 +190,7 @@ impl Chat {
             queueing: false,
             scroller,
             composer,
+            composer_at: Default::default(),
             _subscriptions: subscriptions,
             _follow: None,
         }

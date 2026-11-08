@@ -13,6 +13,8 @@ mod filters;
 mod listing;
 mod picker;
 mod settings;
+mod sidebar;
+mod toast;
 mod thread;
 mod live;
 mod net;
@@ -36,17 +38,19 @@ const OPEN: [&str; 5] = ["triage", "running", "review", "waiting", "backlog"];
 
 // The chat is a column this wide beside its right half, and the half takes the rest; where the page can't give the half
 // HALF beside it, the half takes the chat's place under the chat's head, one screen at a time (the web app's
-// frame/oneScreen.ts). SIDE is the sidebar and the page's margin.
+// frame/oneScreen.ts). SIDE is the sidebar and the page's margin, or the page's margins alone while it is hidden.
 const CHAT: f32 = 480.;
 const HALF: f32 = 780.;
-const SIDE: f32 = 248.;
+const SIDE: f32 = 252.;
 
-// What the page shows: an issue's chat, the Inbox, or Settings.
+// What the page shows: an issue's chat, a chat before its issue, the Inbox, Settings, or a page a later step builds.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Page {
     Issue,
+    Session,
     Inbox,
     Settings,
+    Soon,
 }
 
 // What the right half shows.
@@ -70,6 +74,14 @@ struct Desk {
     inbox_thread: Option<Entity<thread::ThreadPage>>, // a thread's row open: its messages
     started: HashMap<String, String>, // the chat you started on a thread, by the thread, until its row says so itself
     _inbox_issue_events: Option<Subscription>,
+    rows: sync::Rows,                  // teams, projects, milestones, activity and chats, as desk sends them
+    frame: sidebar::Frame,             // the sidebar's sessions
+    side: sidebar::Side,
+    hovered_chat: Option<String>,      // the sidebar's chat under the mouse, which P, R and Delete act on
+    renaming: Option<(Entity<picker::Picker>, Point<Pixels>, Subscription)>,
+    session_shown: Option<String>,     // the chat shown before its issue
+    soon: String,                      // which page a later step builds
+    focus: FocusHandle,                // the window's own, which holds the keys while nothing types
     teams: HashMap<String, String>,    // a team's name by its slug, for the Inbox's filters
     projects: HashMap<String, String>, // a project's name by its slug
     inbox_view: listing::View,         // Filter, Display options and Show unreads only
@@ -137,6 +149,14 @@ impl Desk {
             inbox_thread: None,
             started: HashMap::new(),
             _inbox_issue_events: None,
+            rows: sync::Rows::new(),
+            frame: sidebar::Frame::default(),
+            side: sidebar::Side::load(),
+            hovered_chat: None,
+            renaming: None,
+            session_shown: None,
+            soon: String::new(),
+            focus: cx.focus_handle(),
             teams: HashMap::new(),
             projects: HashMap::new(),
             inbox_view: listing::View::load(),
@@ -174,8 +194,13 @@ impl Desk {
                 }
                 return;
             }
-            Event::Named(name) => {
-                self.name(name);
+            Event::Row { table, key, row } => {
+                self.row(&table, key, row);
+                return;
+            }
+            Event::Frame(frame) => {
+                self.frame = sidebar::Frame::read(&frame);
+                self.frame_changed(window, cx);
                 return;
             }
             // Claude opened the chat's terminal (tt, or desk's call): it opens beside the chat, where you watch it type
@@ -203,12 +228,14 @@ impl Desk {
                 if self.half == Some(Half::Browser) && self.session(cx).as_deref() == Some(session.as_str()) { self.set_half(None, cx) }
                 return;
             }
-            Event::Snapshot(issues, inbox, names, tabs) => {
+            Event::Snapshot(issues, inbox, rows, tabs) => {
                 self.tabs = tabs;
                 self.tabs_changed(cx);
-                self.teams.clear();
-                self.projects.clear();
-                for name in names { self.name(name) }
+                self.rows = rows;
+                let names = |table: &str| -> HashMap<String, String> {
+                    self.rows.get(table).into_iter().flatten().map(|(k, r)| (k.clone(), r["title"].as_str().unwrap_or(k).to_string())).collect()
+                };
+                (self.teams, self.projects) = (names("teams"), names("projects"));
                 self.all = issues.iter().map(|i| (i.slug.clone(), i.clone())).collect();
                 self.issues = issues;
                 self.inbox = inbox.into_iter().map(|r| (r.id.clone(), r)).collect();
@@ -241,12 +268,25 @@ impl Desk {
         self.issues.sort_by(|a, b| rank(&a.state).cmp(&rank(&b.state)).then_with(|| a.title.cmp(&b.title)));
     }
 
-    fn name(&mut self, name: sync::Name) {
-        let names = if name.table == "teams" { &mut self.teams } else { &mut self.projects };
-        match name.title {
-            Some(title) => { names.insert(name.key, title); }
-            None => { names.remove(&name.key); }
+    fn row(&mut self, table: &str, key: String, row: Option<serde_json::Value>) {
+        let names = match table { "teams" => Some(&mut self.teams), "projects" => Some(&mut self.projects), _ => None };
+        if let Some(names) = names {
+            match row.as_ref().and_then(|r| r["title"].as_str()) {
+                Some(title) => { names.insert(key.clone(), title.to_string()); }
+                None => { names.remove(&key); }
+            }
         }
+        let rows = self.rows.entry(table.to_string()).or_default();
+        match row {
+            Some(row) => { rows.insert(key, row); }
+            None => { rows.remove(&key); }
+        }
+    }
+
+    // Whether something other than the window or the Inbox's list holds the keys: a box typed in, the terminal, the
+    // Browser's page; the window's own keys then leave them alone, as the web's do while typing.
+    fn typing(&self, window: &Window, cx: &App) -> bool {
+        window.focused(cx).is_some_and(|f| f != self.focus && f != self.inbox_focus)
     }
 
     // The issue whose page desk pushes over the sync socket: the one whose page the Inbox shows, else the one picked.
@@ -262,6 +302,7 @@ impl Desk {
     pub(crate) fn open(&mut self, issue: &Issue, window: &mut Window, cx: &mut Context<Self>) {
         let was = self.page;
         self.page = Page::Issue;
+        self.session_shown = None;
         if self.picked.as_deref() == Some(&issue.slug) {
             if was != Page::Issue { self.tell_shown(cx) }
             return cx.notify();
@@ -361,56 +402,13 @@ impl Desk {
         self.set_half(next, cx);
     }
 
-    // Whether the page can't give the chat its column and the half its room beside it.
-    fn one_screen(&self, window: &Window) -> bool {
-        window.viewport_size().width.as_f32() - SIDE < CHAT + HALF
+    fn side_width(&self) -> f32 {
+        if self.side.hidden && self.page != Page::Settings { 16. } else { SIDE }
     }
 
-    fn sidebar(&self, cx: &mut Context<Self>) -> Div {
-        let issues = self.issues.clone();
-        let picked = self.picked.clone().filter(|_| self.page == Page::Issue);
-        let this = cx.entity().downgrade();
-        let theme = cx.theme();
-        let (hover, active, muted) = (theme.list_hover, theme.list_active, theme.muted_foreground);
-        let strong = theme::text(cx).strong;
-        let rows = uniform_list("issues", issues.len(), move |range, _, cx| {
-            range
-                .map(|i| {
-                    let issue = issues[i].clone();
-                    let this = this.clone();
-                    let on = picked.as_deref() == Some(&issue.slug);
-                    div()
-                        .id(("issue", i))
-                        .h(px(30.))
-                        .px_2()
-                        .child(
-                            div()
-                                .h_flex()
-                                .size_full()
-                                .gap_2()
-                                .px_2()
-                                .rounded_md()
-                                .when(on, |row| row.bg(active).text_color(strong))
-                                .when(!on, |row| row.hover(|s| s.bg(hover)))
-                                .child(theme::state_icon(&issue.state, cx))
-                                .child(div().flex_1().min_w_0().truncate().child(issue.title.clone())),
-                        )
-                        .on_click(move |_, window, cx| {
-                            let _ = this.update(cx, |desk, cx| desk.open(&issue, window, cx));
-                        })
-                })
-                .collect()
-        })
-        .flex_1();
-        div()
-            .v_flex()
-            .flex_none()
-            .w(px(240.))
-            .h_full()
-            .pt_3()
-            .child(div().pb_3().child(self.inbox_item(cx)))
-            .child(div().px_4().pb_1().text_xs().font_medium().text_color(muted).child(format!("Issues · {}", self.issues.len())))
-            .child(rows)
+    // Whether the page can't give the chat its column and the half its room beside it.
+    fn one_screen(&self, window: &Window) -> bool {
+        window.viewport_size().width.as_f32() - self.side_width() < CHAT + HALF
     }
 
     // A button of the chat's head that opens a view of the right half: its glyph alone, a circle with no fill until
@@ -455,7 +453,9 @@ impl Desk {
                 head.child(self.half_button("terminal", self.half == Some(Half::Terminal), cx).on_click(cx.listener(|desk, _, window, cx| desk.flip_terminal(window, cx))))
                     .child(self.half_button("globe", self.half == Some(Half::Browser), cx).on_click(cx.listener(|desk, _, _, cx| desk.flip_browser(cx))))
             })
-            .child(self.half_button("steps", self.half == Some(Half::Steps), cx).on_click(cx.listener(|desk, _, _, cx| desk.flip(Half::Steps, cx))))
+            .when(self.page == Page::Issue, |head| {
+                head.child(self.half_button("steps", self.half == Some(Half::Steps), cx).on_click(cx.listener(|desk, _, _, cx| desk.flip(Half::Steps, cx))))
+            })
             .when(self.commits.as_ref().is_some_and(|c| !c.is_empty()), |head| {
                 head.child(self.half_button("changes", self.half == Some(Half::Changes), cx).on_click(cx.listener(|desk, _, _, cx| desk.flip(Half::Changes, cx))))
             })
@@ -470,7 +470,7 @@ impl Render for Desk {
         let divider = theme::text(cx).divider;
         let border = theme.border;
         let one_screen = self.one_screen(window);
-        let page_width = window.viewport_size().width.as_f32() - SIDE;
+        let page_width = window.viewport_size().width.as_f32() - self.side_width();
         let half: Option<AnyView> = match self.half {
             Some(Half::Steps) => Some(self.steps.clone().into()),
             Some(Half::Changes) => self.changes.clone().map(Into::into),
@@ -483,6 +483,7 @@ impl Render for Desk {
         let page = match &self.chat {
             _ if self.page == Page::Inbox => self.inbox_page(page_width, cx),
             _ if self.page == Page::Settings => div().size_full().children(self.settings.clone()),
+            _ if self.page == Page::Soon => div().size_full().flex().items_center().justify_center().text_color(muted).child(format!("{}: a later step of this issue builds it", self.soon)),
             Some(chat) => div()
                 .v_flex()
                 .size_full()
@@ -501,24 +502,35 @@ impl Render for Desk {
                 ),
             None => div().size_full().flex().items_center().justify_center().text_color(muted).child("Pick an issue"),
         };
+        let chat_page = self.page == Page::Issue || self.page == Page::Session;
         div()
             .h_flex()
             .size_full()
+            .track_focus(&self.focus)
             // Ctrl , Settings, as the web app's; and the half's: Ctrl ` its terminal, Ctrl Shift S its steps, Ctrl Shift G
-            // its Changes, Ctrl Shift B its Browser
-            .on_key_down(cx.listener(|desk, e: &KeyDownEvent, window, cx| {
+            // its Changes, Ctrl Shift B its Browser. While nothing types: [ hides or shows the sidebar, and P, R and
+            // Delete act on the sidebar's chat under the mouse.
+            .on_key_down(cx.listener(move |desk, e: &KeyDownEvent, window, cx| {
                 let k = &e.keystroke;
+                if !desk.typing(window, cx) {
+                    let bare = !(k.modifiers.control || k.modifiers.alt || k.modifiers.platform);
+                    if bare && k.key == "[" {
+                        desk.toggle_side(cx);
+                        return cx.stop_propagation();
+                    }
+                    if desk.chat_key(e, window, cx) { return cx.stop_propagation() }
+                }
                 if k.modifiers.control && !k.modifiers.shift && !k.modifiers.alt && k.key == "," {
                     desk.open_settings(settings::Section::Preferences, cx);
                     return cx.stop_propagation();
                 }
-                if k.modifiers.control && !k.modifiers.shift && !k.modifiers.alt && k.key == "`" && desk.chat.is_some() && desk.page == Page::Issue {
+                if k.modifiers.control && !k.modifiers.shift && !k.modifiers.alt && k.key == "`" && desk.chat.is_some() && chat_page {
                     desk.flip_terminal(window, cx);
                     return cx.stop_propagation();
                 }
-                if !(k.modifiers.control && k.modifiers.shift) || k.modifiers.alt || desk.chat.is_none() || desk.page != Page::Issue { return }
+                if !(k.modifiers.control && k.modifiers.shift) || k.modifiers.alt || desk.chat.is_none() || !chat_page { return }
                 match k.key.to_lowercase().as_str() {
-                    "s" => desk.flip(Half::Steps, cx),
+                    "s" if desk.page == Page::Issue => desk.flip(Half::Steps, cx),
                     "b" if desk.session(cx).is_some() => desk.flip_browser(cx),
                     "g" if desk.commits.as_ref().is_some_and(|c| !c.is_empty()) => desk.flip(Half::Changes, cx),
                     _ => return,
@@ -529,7 +541,8 @@ impl Render for Desk {
             .text_size(px(13.))
             .bg(window_bg)
             .text_color(fg)
-            .child(if self.page == Page::Settings { self.settings_nav(cx) } else { self.sidebar(cx) })
+            .when(self.page == Page::Settings, |w| w.child(self.settings_nav(cx)))
+            .when(self.page != Page::Settings && !self.side.hidden, |w| w.child(self.sidebar(cx)))
             .child(
                 div()
                     .flex_1()
@@ -537,8 +550,13 @@ impl Render for Desk {
                     .h_full()
                     .py_2()
                     .pr_2()
+                    .when(self.side.hidden && self.page != Page::Settings, |p| p.pl_2())
                     .child(div().size_full().rounded(px(8.)).border_1().border_color(border).bg(page_bg).overflow_hidden().child(page)),
             )
+            .children({
+                let composer = self.chat.as_ref().filter(|_| chat_page).and_then(|c| c.read(cx).composer_at.get());
+                toast::render(composer, window, cx)
+            })
     }
 }
 
@@ -546,6 +564,13 @@ impl Render for Desk {
 // with GPUI's workers and a thread per socket, the window held 20 MB freed at start and more with each chat opened
 // (step 5.10). Two arenas keep what is freed where any thread takes it again, and a trim a moment after a big change
 // gives the rest back to the system.
+// Where the window keeps what it keeps between runs, as the web keeps it in localStorage: ~/.local/state/desk.
+pub(crate) fn state_dir() -> Option<std::path::PathBuf> {
+    let state = std::env::var_os("XDG_STATE_HOME").map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".local/state")))?;
+    Some(state.join("desk"))
+}
+
 fn arenas() {
     unsafe { libc::mallopt(libc::M_ARENA_MAX, 2) };
 }

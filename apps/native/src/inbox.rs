@@ -494,7 +494,6 @@ impl Desk {
             .id("nav-inbox")
             .h_flex()
             .h(px(28.))
-            .mx_2()
             .pl(px(6.))
             .pr(px(9.))
             .gap(px(8.))

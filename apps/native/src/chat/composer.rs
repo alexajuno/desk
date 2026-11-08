@@ -279,5 +279,9 @@ impl Chat {
             .children(attached)
             .child(Textarea::new(&self.composer).appearance(false).text_size(px(14.)))
             .child(foot)
+            .child({
+                let at = self.composer_at.clone();
+                canvas(move |bounds, _, _| at.set(Some(bounds)), |_, _, _, _| {}).absolute().size_full()
+            })
     }
 }
