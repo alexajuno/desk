@@ -104,7 +104,7 @@ export const InboxPage = observer(function InboxPage() {
   const here = i ? [...issues.inbox.values()].find((r) => r.slug === i) : undefined;
   const thread = here?.source && !here.session ? here : undefined;
   const kept = useRef(new Map<string, string>()).current; // the chat each row's pane showed, by the row's slug
-  const talk = thread ? undefined : (here?.session ?? null) ?? kept.get(i) ?? startedOn(i);
+  const talk = thread ? undefined : here?.session ?? kept.get(i) ?? startedOn(i);
   if (talk) kept.set(i, talk);
   const chat = talk ? [...issues.inbox.values()].find((r) => r.session === talk) : undefined;
   useEffect(() => {
