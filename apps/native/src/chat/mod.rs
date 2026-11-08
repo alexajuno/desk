@@ -23,6 +23,7 @@ use serde_json::Value;
 
 use crate::live::{self, Ask, Attachment, Block, Event, Item, Model, Running};
 use crate::net;
+use crate::picker::Picker;
 use crate::theme;
 
 // The web app's chat column and text (desk.css).
@@ -86,6 +87,16 @@ pub struct Chat {
     composer: Entity<TextareaState>,
     // where the composer was last drawn, which the window's toast rises above
     pub composer_at: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
+    loaded: bool, // the session's socket said hello
+    // A new desk chat's chip, Issue or Chat: what its first message makes it, as last picked (composer.rs).
+    start_as_chat: bool,
+    // Opened by you, from New chat or a chat's row: the composer takes the cursor once the chat shows nothing said yet,
+    // and a chat with words opens to read, as the web's openSession ("unless i open an empty chat, don't focus on
+    // composer", the user, 21 Oct).
+    pub wants_focus: bool,
+    focus_now: bool,
+    folder_menu: Option<(Entity<Picker>, Subscription)>, // the folder chip's menu, open
+    folder_chip: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     _subscriptions: Vec<Subscription>,
     // Following its session: dropped with the chat, which closes the session's socket. Detached, it outlived the chat
     // and kept its thread, its socket and desk's note that the chat is shown, until the session said something more.
@@ -156,7 +167,6 @@ impl Chat {
             InputEvent::Change => cx.notify(), // Send lights up once there is something to send
             _ => {}
         })];
-        composer.update(cx, |c, cx| c.focus(window, cx));
         // Claude Code's models change only with Claude Code: asked once, for the model chip's menu.
         cx.spawn(async move |this, cx| {
             if let Ok(models) = cx.background_spawn(async { live::models() }).await {
@@ -191,6 +201,12 @@ impl Chat {
             scroller,
             composer,
             composer_at: Default::default(),
+            loaded: false,
+            start_as_chat: composer::started_as_chat(),
+            wants_focus: false,
+            focus_now: false,
+            folder_menu: None,
+            folder_chip: Default::default(),
             _subscriptions: subscriptions,
             _follow: None,
         }
@@ -210,6 +226,8 @@ impl Chat {
                 self.meta = meta;
                 self.rows.clear();
                 self.scroller.update(cx, |s, cx| s.reset(0, cx));
+                self.loaded = true;
+                if std::mem::take(&mut self.wants_focus) && self.quiet() { self.focus_now = true }
             }
             Event::Items(items) => self.take(items),
             Event::Stream(piece) => match self.partial.iter_mut().find(|b| b.msg == piece.msg && b.index == piece.index) {
@@ -400,6 +418,50 @@ impl Chat {
         self.say(text, attached, cx);
     }
 
+    // Nothing said in it yet, by you or Claude.
+    fn quiet(&self) -> bool {
+        self.items.is_empty() && self.pending.is_empty() && !self.working
+    }
+
+    // A new desk chat that nobody has written in yet, whose chips still pick what it becomes and where it runs.
+    fn fresh(&self) -> bool {
+        let m = &self.meta;
+        m["chat"].as_bool().unwrap_or(false) && m["agent"].is_null() && !m["bare"].as_bool().unwrap_or(false) && m["issue"].is_null() && self.quiet()
+    }
+
+    // The chat's title as desk names it: its issue's, the one you gave it, or its first words.
+    pub fn title(&self) -> Option<String> {
+        self.meta["title"].as_str().filter(|t| !t.is_empty()).map(str::to_string)
+    }
+
+    // The folder the chat runs in, which its head shows while it has no issue: a new Chat's is the home folder until
+    // one is picked.
+    pub fn starts_in(&self) -> String {
+        if self.fresh() && !self.meta["picked"].as_bool().unwrap_or(false) && self.start_as_chat { return "~".into() }
+        self.meta["folder"].as_str().unwrap_or("").to_string()
+    }
+
+    // What an empty chat says, as the web's .convo-empty: who you talk to, and how.
+    fn empty_line(&self) -> Option<String> {
+        if !self.loaded { return Some("Connecting…".into()) }
+        if !self.quiet() { return None }
+        let m = &self.meta;
+        let chat = m["chat"].as_bool().unwrap_or(false);
+        Some(if let Some(agent) = m["agent"].as_str() {
+            format!("Talk to {agent}.")
+        } else if chat && !m["issue"].is_null() {
+            "This issue's chat. Write to carry the issue on: it starts from the issue's document.".into()
+        } else if m["bare"].as_bool().unwrap_or(false) || (chat && self.start_as_chat) {
+            let at = self.starts_in();
+            let at = if at == "~" { "from your home folder".to_string() } else { format!("in {at}") };
+            format!("Just Claude, as claude runs in a terminal {at}: no issue and no desk instructions.")
+        } else if chat {
+            "Ask desk's agent anything: it files the work and does it here. Start with @ and a name to talk to one of your agents.".into()
+        } else {
+            "Nothing said yet.".into()
+        })
+    }
+
     pub fn focus_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.composer.update(cx, |c, cx| c.focus(window, cx));
     }
@@ -408,6 +470,7 @@ impl Chat {
     // dropped again with what went wrong if desk refuses it.
     pub fn say(&mut self, text: String, attached: Vec<live::Attachment>, cx: &mut Context<Self>) {
         let Some(session) = self.session.clone() else { return };
+        let as_chat = self.start_as_chat && self.fresh(); // a new chat's first message, its chip on Chat
         self.pending.push(Pending { text: text.clone(), files: attached.len(), mid: self.working });
         if !self.working { self.set_working(true, None) } // drawn at once; the server's word follows
         self.tick(cx);
@@ -415,7 +478,7 @@ impl Chat {
         cx.notify();
         let uuid = uuid::Uuid::new_v4().to_string();
         cx.spawn(async move |this, cx| {
-            let sent = cx.background_spawn(async move { live::send(&session, &uuid, &text, &attached) }).await;
+            let sent = cx.background_spawn(async move { live::send(&session, &uuid, &text, &attached, as_chat) }).await;
             let _ = this.update(cx, |chat, cx| {
                 if let Err(error) = sent {
                     chat.pending.pop();
@@ -519,21 +582,30 @@ impl Render for Chat {
         let column = |child: Div| div().w_full().flex().justify_center().px_6().child(child.w_full().max_w(px(COLUMN)));
         let error = self.error.clone();
         let muted = theme.muted_foreground;
+        if std::mem::take(&mut self.focus_now) {
+            cx.defer_in(window, |chat, window, cx| chat.focus_composer(window, cx));
+        }
+        let empty = self.empty_line().map(|line| {
+            div().absolute().top(px(48.)).left_0().right_0().px(px(36.)).flex().justify_center()
+                .child(div().max_w(px(COLUMN)).text_center().text_size(px(13.)).text_color(muted).child(line))
+        });
         div()
             .v_flex()
             .size_full()
             .child(
-                div().flex_1().min_h_0().child(
+                div().relative().flex_1().min_h_0().child(
                     MessageScroller::new("chat", self.scroller.clone(), move |i, _, cx| {
                         let Some(chat) = rows.upgrade() else { return div().into_any_element() };
                         chat.read(cx).row(i, &rows, cx)
                     })
                     .size_full(),
-                ),
+                )
+                .children(empty),
             )
             .when_some(error, |page, error| page.child(column(div().pb_2().text_xs().text_color(muted).child(error))))
             .child(self.running(cx))
             .children(self.ask_cards(window, cx))
             .child(column(self.composer_box(window, cx)).pb_4())
+            .children(self.folder_menu_shown())
     }
 }

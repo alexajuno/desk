@@ -312,7 +312,11 @@ impl Desk {
         let slug = issue.slug.clone();
         self.tell_shown(cx);
         self.steps = cx.new(|_| Steps::new());
-        let chat = cx.new(|cx| Chat::new(slug.clone(), window, cx));
+        let chat = cx.new(|cx| {
+            let mut chat = Chat::new(slug.clone(), window, cx);
+            chat.wants_focus = true;
+            chat
+        });
         let weak = chat.downgrade();
         self.changes = Some(cx.new(|cx| Changes::new(slug, weak, window, cx)));
         self.chat = Some(chat);
@@ -436,6 +440,12 @@ impl Desk {
         let issue = self.current.clone();
         let strong = theme::text(cx).strong;
         let divider = theme::text(cx).divider;
+        let muted = cx.theme().muted_foreground;
+        // A chat with no issue goes by the title desk gives it, with no status, and shows the folder it runs in, as the
+        // web's head does.
+        let session_chat = self.chat.as_ref().filter(|_| self.page == Page::Session).map(|c| c.read(cx));
+        let title = session_chat.and_then(|c| c.title()).unwrap_or(issue.title.clone());
+        let folder = session_chat.map(|c| c.starts_in()).filter(|f| !f.is_empty());
         div()
             .h_flex()
             .flex_none()
@@ -444,8 +454,18 @@ impl Desk {
             .gap_2()
             .border_b_1()
             .border_color(divider)
-            .child(theme::state_icon(&issue.state, cx))
-            .child(div().flex_1().min_w_0().truncate().font_medium().text_color(strong).child(issue.title.clone()))
+            .when(self.page != Page::Session, |head| head.child(theme::state_icon(&issue.state, cx)))
+            .child(
+                div().h_flex().flex_1().min_w_0().gap_2()
+                    .child(
+                        div().id("head-title").min_w_0().truncate().font_medium().text_color(strong).child(title)
+                            // a chat with no issue is renamed in its title, as the web's
+                            .when_some(self.session_shown.clone().filter(|_| self.page == Page::Session), |t, session| {
+                                t.cursor(CursorStyle::IBeam).on_click(cx.listener(move |desk, _, window, cx| desk.rename_chat(&session, window, cx)))
+                            }),
+                    )
+                    .when_some(folder, |row, folder| row.child(div().flex_none().max_w(relative(0.4)).truncate().text_xs().text_color(muted).child(folder))),
+            )
             .when(self.one_screen(window), |head| {
                 head.child(self.half_button("chat", self.half.is_none(), cx).on_click(cx.listener(|desk, _, _, cx| desk.set_half(None, cx))))
             })
@@ -503,15 +523,25 @@ impl Render for Desk {
             None => div().size_full().flex().items_center().justify_center().text_color(muted).child("Pick an issue"),
         };
         let chat_page = self.page == Page::Issue || self.page == Page::Session;
+        // With nothing focused, keys go to the window's root and pass this view by: the window holds them itself, as a
+        // chat opens to read and Esc leaves a composer.
+        if window.focused(cx).is_none() {
+            cx.defer_in(window, |desk, window, cx| if window.focused(cx).is_none() { window.focus(&desk.focus, cx) });
+        }
         div()
             .h_flex()
             .size_full()
             .track_focus(&self.focus)
-            // Ctrl , Settings, as the web app's; and the half's: Ctrl ` its terminal, Ctrl Shift S its steps, Ctrl Shift G
-            // its Changes, Ctrl Shift B its Browser. While nothing types: [ hides or shows the sidebar, and P, R and
-            // Delete act on the sidebar's chat under the mouse.
+            // Ctrl Shift O a new chat; Ctrl , Settings, as the web app's; and the half's: Ctrl ` its terminal, Ctrl Shift S
+            // its steps, Ctrl Shift G its Changes, Ctrl Shift B its Browser. While nothing types: [ hides or shows the
+            // sidebar, P, R and Delete act on the sidebar's chat under the mouse, and Enter or I goes into the composer.
             .on_key_down(cx.listener(move |desk, e: &KeyDownEvent, window, cx| {
                 let k = &e.keystroke;
+                // Ctrl Shift O, a new chat, from anywhere, a box typed in too
+                if k.modifiers.control && k.modifiers.shift && !k.modifiers.alt && k.key.eq_ignore_ascii_case("o") {
+                    desk.new_chat(window, cx);
+                    return cx.stop_propagation();
+                }
                 if !desk.typing(window, cx) {
                     let bare = !(k.modifiers.control || k.modifiers.alt || k.modifiers.platform);
                     if bare && k.key == "[" {
@@ -519,6 +549,11 @@ impl Render for Desk {
                         return cx.stop_propagation();
                     }
                     if desk.chat_key(e, window, cx) { return cx.stop_propagation() }
+                    // Enter, or I as vim's insert, in a chat opened to read: into its composer
+                    if bare && chat_page && !k.modifiers.shift && (k.key == "enter" || k.key == "i") {
+                        if let Some(chat) = &desk.chat { chat.update(cx, |c, cx| c.focus_composer(window, cx)) }
+                        return cx.stop_propagation();
+                    }
                 }
                 if k.modifiers.control && !k.modifiers.shift && !k.modifiers.alt && k.key == "," {
                     desk.open_settings(settings::Section::Preferences, cx);

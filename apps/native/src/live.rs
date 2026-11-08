@@ -183,12 +183,21 @@ pub struct Attachment {
     pub data: String,                      // base64
 }
 
-pub fn send(session: &str, uuid: &str, text: &str, attached: &[Attachment]) -> Result<Value, String> {
+// A message; a new chat's first, its chip on Chat, makes it a bare Claude (`as`, the server's live.ts).
+pub fn send(session: &str, uuid: &str, text: &str, attached: &[Attachment], as_chat: bool) -> Result<Value, String> {
     let images: Vec<Value> = attached.iter().filter_map(|a| a.media_type.map(|m| json!({"media_type": m, "data": a.data}))).collect();
     let files: Vec<Value> = attached.iter().filter(|a| a.media_type.is_none()).map(|a| json!({"name": a.name, "data": a.data})).collect();
     let mut body = json!({"text": text, "images": images, "uuid": uuid});
     if !files.is_empty() { body["files"] = json!(files) }
+    if as_chat { body["as"] = json!("chat") }
     net::post(&format!("/api/live/{session}/send"), body)
+}
+
+// A new chat's folder, before its first message: its session starts again there. desk answers with its meta.
+pub fn start_in(session: &str, folder: &str, as_chat: bool) -> Result<Value, String> {
+    let mut body = json!({"folder": folder});
+    if as_chat { body["as"] = json!("chat") }
+    net::post(&format!("/api/live/{session}/folder"), body)
 }
 
 pub fn interrupt(session: &str) -> Result<Value, String> {

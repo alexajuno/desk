@@ -372,8 +372,9 @@ impl Desk {
 
     // Rename…: a box over the row, holding its title; Enter saves what it holds, and an empty one gives back Claude
     // Code's own title.
-    fn rename_chat(&mut self, session: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let title = self.frame.pinned.iter().chain(&self.frame.chats).find(|c| c.session == session).map(|c| c.title.clone()).unwrap_or_default();
+    pub(crate) fn rename_chat(&mut self, session: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let shown = self.chat.as_ref().filter(|c| c.read(cx).session() == Some(session)).and_then(|c| c.read(cx).title());
+        let title = self.frame.pinned.iter().chain(&self.frame.chats).find(|c| c.session == session).map(|c| c.title.clone()).or(shown).unwrap_or_default();
         let menu = Menu { source: Source::Fixed(Vec::new()), placeholder: "Rename chat…", empty: "Enter saves it; empty gives back its own title", width: 300., takes_typed: true, start: title };
         let at = window.mouse_position();
         let picker = cx.new(|cx| Picker::new(menu, Bounds::new(at, size(px(1.), px(1.))), window, cx));
@@ -443,13 +444,31 @@ impl Desk {
         self.session_shown = Some(session.to_string());
         self.picked = None;
         self.current = crate::Issue { title: row.map(|c| c.title).unwrap_or_default(), state: "chat".into(), ..Default::default() };
-        self.chat = Some(cx.new(|cx| Chat::of_session(session.to_string(), window, cx)));
+        self.chat = Some(cx.new(|cx| {
+            let mut chat = Chat::of_session(session.to_string(), window, cx);
+            chat.wants_focus = true;
+            chat
+        }));
         self.changes = None;
         self.commits = None;
         let half = self.half.filter(|h| *h != Half::Terminal && *h != Half::Browser && *h != Half::Steps && *h != Half::Changes);
         self.set_half(half, cx);
         crate::give_back(cx);
         cx.notify();
+    }
+
+    // New chat, Ctrl Shift O: desk makes an agent chat, or hands back a new one nobody wrote in yet, and it opens here,
+    // its composer taking the cursor (the web's newSession). It files its issue once you say what about.
+    pub(crate) fn new_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        cx.spawn_in(window, async move |this, cx| {
+            let made = cx.background_spawn(async { net::post("/sessions/new", json!({})) }).await;
+            let _ = this.update_in(cx, |desk, window, cx| match made.map(|v| v["id"].as_str().map(str::to_string)) {
+                Ok(Some(id)) => desk.open_session(&id, window, cx),
+                Ok(None) => toast::say("desk made no chat", cx),
+                Err(reason) => toast::say(reason, cx),
+            });
+        })
+        .detach();
     }
 
     // The frame changed: a chat shown before its issue moves to the issue's page once the agent files one, as the web's
