@@ -7,6 +7,8 @@ mod changes;
 mod chat;
 mod inbox;
 mod issue;
+mod emoji;
+mod thread;
 mod live;
 mod net;
 mod steps;
@@ -56,6 +58,8 @@ struct Desk {
     pending_row: Option<String>,     // the row to open once the rows came (`desk inbox <row>`)
     inbox_chat: Option<Entity<Chat>>,
     inbox_issue: Option<Entity<issue::IssuePage>>, // an issue's row open: its page
+    inbox_thread: Option<Entity<thread::ThreadPage>>, // a thread's row open: its messages
+    started: HashMap<String, String>, // the chat you started on a thread, by the thread, until its row says so itself
     _inbox_issue_events: Option<Subscription>,
     unreads_only: bool,
     stay: inbox::Stay,
@@ -106,6 +110,8 @@ impl Desk {
             pending_row: None,
             inbox_chat: None,
             inbox_issue: None,
+            inbox_thread: None,
+            started: HashMap::new(),
             _inbox_issue_events: None,
             unreads_only: false,
             stay: inbox::Stay::new(),

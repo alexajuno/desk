@@ -20,6 +20,7 @@ use serde_json::json;
 
 use crate::chat::Chat;
 use crate::issue::{IssueEvent, IssuePage};
+use crate::thread::{ThreadEvent, ThreadPage};
 use crate::sync::InboxRow;
 use crate::{net, theme, Desk};
 
@@ -68,6 +69,21 @@ impl Desk {
     pub(crate) fn inbox_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(row) = self.pending_row.take() {
             if self.inbox.values().any(|r| r.slug == row) { self.open_row(Some(row), window, cx) } else { self.pending_row = Some(row) }
+        }
+        // the open thread's row moved: something new came in it
+        if let Some(page) = self.inbox_thread.clone() {
+            let slug = page.read(cx).row.slug.clone();
+            if let Some(row) = self.inbox.values().find(|r| r.slug == slug).cloned() {
+                page.update(cx, |p, cx| p.moved(row, window, cx));
+            }
+        }
+        // The open chat's row left, as a thread you asked Claude about leaves for its chat's row, and that row for the
+        // issue the chat files: the pane, on that chat, goes with it, to whichever row holds its session now.
+        if let Some(open) = self.open_row.clone().filter(|o| !self.inbox.values().any(|r| &r.slug == o)) {
+            let session = self.inbox_chat.as_ref().and_then(|c| c.read(cx).session().map(str::to_string)).or_else(|| self.started.get(&open).cloned());
+            if let Some(row) = session.and_then(|s| self.inbox.values().find(|r| r.session.as_deref() == Some(s.as_str())).cloned()) {
+                self.open_row = Some(row.slug);
+            }
         }
         if self.unreads_only {
             let unread: Vec<String> = self.inbox.values().filter(|r| !r.read).map(|r| r.id.clone()).collect();
@@ -119,10 +135,28 @@ impl Desk {
         self.open_row = slug.clone();
         self.inbox_chat = None;
         self.inbox_issue = None;
+        self.inbox_thread = None;
         self._inbox_issue_events = None;
         if let Some(row) = slug.as_ref().and_then(|s| self.inbox.values().find(|r| &r.slug == s)).cloned() {
             match (&row.session, row.issue && row.source.is_none()) {
-                _ if is_thread(&row) => {}
+                // a thread you asked Claude about from here opens on that chat until its row is the chat's
+                _ if is_thread(&row) && self.started.contains_key(&row.slug) => {
+                    let session = self.started[&row.slug].clone();
+                    self.inbox_chat = Some(cx.new(|cx| Chat::of_session(session, window, cx)));
+                }
+                _ if is_thread(&row) => {
+                    let page = cx.new(|cx| ThreadPage::new(row.clone(), window, cx));
+                    let thread = row.slug.clone();
+                    self._inbox_issue_events = Some(cx.subscribe_in(&page, window, move |desk, _, event, window, cx| match event {
+                        ThreadEvent::Chat(session) => {
+                            desk.started.insert(thread.clone(), session.clone());
+                            desk.inbox_thread = None;
+                            desk.inbox_chat = Some(cx.new(|cx| Chat::of_session(session.clone(), window, cx)));
+                            cx.notify();
+                        }
+                    }));
+                    self.inbox_thread = Some(page);
+                }
                 (_, true) => {
                     let page = cx.new(|cx| IssuePage::new(row.slug.clone(), cx));
                     self._inbox_issue_events = Some(cx.subscribe_in(&page, window, |desk, _, event, window, cx| match event {
@@ -410,18 +444,10 @@ impl Desk {
         let muted = cx.theme().muted_foreground;
         let open = self.open_row.as_ref().and_then(|s| rows.iter().find(|r| &r.slug == s)).cloned();
         if let Some(page) = &self.inbox_issue { page.update(cx, |p, _| p.width = page_width - list - 1.) }
-        let theme = cx.theme();
         let pane: AnyElement = match (&open, &self.inbox_chat) {
             (Some(_), _) if self.inbox_issue.is_some() => self.inbox_issue.clone().unwrap().into_any_element(),
+            (Some(_), _) if self.inbox_thread.is_some() => self.inbox_thread.clone().unwrap().into_any_element(),
             (Some(_), Some(chat)) => chat.clone().into_any_element(),
-            (Some(row), None) if is_thread(row) => div()
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_color(theme.muted_foreground)
-                .child(format!("{}: its messages open here in a later step.", row.title))
-                .into_any_element(),
             _ => self.empty_pane(&rows, cx).into_any_element(),
         };
         let this = cx.entity().downgrade();

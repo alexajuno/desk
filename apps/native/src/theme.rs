@@ -177,6 +177,9 @@ fn glyph_path(name: &str) -> &'static str {
         "prio-high" => r##"<g fill="#000" stroke="none"><rect x="1.5" y="8" width="3" height="6" rx="1"/><rect x="6.5" y="5" width="3" height="9" rx="1"/><rect x="11.5" y="2" width="3" height="12" rx="1"/></g>"##,
         "prio-medium" => r##"<g fill="#000" stroke="none"><rect x="1.5" y="8" width="3" height="6" rx="1"/><rect x="6.5" y="5" width="3" height="9" rx="1"/><rect x="11.5" y="2" width="3" height="12" rx="1" fill-opacity=".4"/></g>"##,
         "prio-low" => r##"<g fill="#000" stroke="none"><rect x="1.5" y="8" width="3" height="6" rx="1"/><rect x="6.5" y="5" width="3" height="9" rx="1" fill-opacity=".4"/><rect x="11.5" y="2" width="3" height="12" rx="1" fill-opacity=".4"/></g>"##,
+        "out" => r##"<path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3"/>"##,
+        "smile" => r##"<circle cx="8" cy="8" r="5.75"/><path d="M5.75 9.5c.5.8 1.3 1.25 2.25 1.25s1.75-.45 2.25-1.25"/><path d="M6 6.5h.01M10 6.5h.01" stroke-width="1.8"/>"##,
+        "smile-plus" => r##"<path d="M13.6 7.2A5.75 5.75 0 1 1 8.8 2.3"/><path d="M5.75 9.5c.5.8 1.3 1.25 2.25 1.25s1.75-.45 2.25-1.25"/><path d="M6 6.5h.01M10 6.5h.01" stroke-width="1.8"/><path d="M12.5 1.5v4M10.5 3.5h4"/>"##,
         "changes" => r##"<path d="M9 1.75H4.75a1.25 1.25 0 0 0-1.25 1.25v10c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V5.25zM9 1.75v3.5h3.5M8 5.25v3M6.5 6.75h3M6.5 10.75h3"/>"##,
         _ => "",
     }

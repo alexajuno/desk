@@ -124,6 +124,11 @@ impl Chat {
         Self::empty(window, cx)
     }
 
+    // Its session, once desk named it: the Inbox follows it to whichever row holds it now.
+    pub fn session(&self) -> Option<&str> {
+        self.session.as_deref()
+    }
+
     // A chat by its session, as an Inbox row names one with no issue.
     pub fn of_session(session: String, window: &mut Window, cx: &mut Context<Self>) -> Self {
         cx.spawn(async move |this, cx| Self::follow(this, session, cx).await).detach();
