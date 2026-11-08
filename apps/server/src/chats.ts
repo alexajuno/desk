@@ -229,7 +229,7 @@ export async function bind(chat: Chat, i: Issue, base: string, previous: string 
 export async function agentPrompt(chat: Chat, base: string): Promise<string> {
   const reference = readFileSync(SKILL, "utf8").replace(/^---\n[\s\S]*?\n---\n/, "").replaceAll(SKILL_BASE, base);
   const slug = chat.issue;
-  const folder = slug && (await store.exists(slug)) ? store.folder(slug) : "<the issue's folder>";
+  const folder = slug && (await store.exists(slug)) ? store.folder(slug) : "~/.local/share/desk/issues/<slug>"; // a Triage chat has no issue when its prompt is written
   const work = fill(WORK, { dir: folder, drafts: store.drafts(slug || "<slug>"), base, slug: slug || "<slug>" });
   const rules = Object.fromEntries(Object.entries(WINDOW_RULES).map(([k, v]) => [k, fill(v, { base })]));
   // A chat may run for days, and Claude Code gives it the date.
