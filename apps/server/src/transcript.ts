@@ -95,7 +95,7 @@ const listed = (session: string) => (index.get(session) ?? []).filter((p) => exi
 // The session's transcript, the newest when it ran in several folders (a chat desk moved resumes in the next). On a test
 // desk, its fork's once the fork has run.
 export function pathOf(session: string): string | null {
-  return TEST ? (find(forkOf(session)) ?? find(session)) : find(session);
+  return TEST ? (find(forkOf(session), false) ?? find(session)) : find(session);
 }
 
 // On a test desk a session runs as a fork of its own, so that the user's transcript stays as it was ("a message forks
@@ -110,14 +110,16 @@ export function forkOf(session: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${((parseInt(h[16], 16) & 3) | 8).toString(16)}${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
-// The session's own transcript, wherever desk runs.
-export function find(session: string): string | null {
+// The session's own transcript, wherever desk runs. One the list lacks is looked for again at once, as one Claude Code
+// began a moment ago; not a test desk's fork, which few chats have, since looking again lists every folder: on 8 Nov a
+// test desk's start looked again for each of its 1,053 chats, 4.7 s of its 9.
+export function find(session: string, again = true): string | null {
   let paths: string[];
   try {
     const stale = Date.now() - indexed > 1000;
     if (stale) reindex();
     paths = listed(session);
-    if (!paths.length && !stale) { // one Claude Code began a moment ago
+    if (!paths.length && !stale && again) {
       reindex();
       paths = listed(session);
     }
