@@ -6,6 +6,7 @@
 mod changes;
 mod chat;
 mod inbox;
+mod issue;
 mod live;
 mod net;
 mod steps;
@@ -54,11 +55,13 @@ struct Desk {
     open_row: Option<String>,        // the Inbox's row open, by what it opens
     pending_row: Option<String>,     // the row to open once the rows came (`desk inbox <row>`)
     inbox_chat: Option<Entity<Chat>>,
+    inbox_issue: Option<Entity<issue::IssuePage>>, // an issue's row open: its page
+    _inbox_issue_events: Option<Subscription>,
     unreads_only: bool,
     stay: inbox::Stay,
     hovered_row: Option<String>,
     reading: std::collections::HashSet<String>,
-    notice: Option<String>,
+    notice: Option<(String, bool)>, // what the Inbox says over its list, and whether something went wrong
     inbox_focus: FocusHandle,
     inbox_scroll: UniformListScrollHandle,
     picked: Option<String>,
@@ -102,6 +105,8 @@ impl Desk {
             open_row: None,
             pending_row: None,
             inbox_chat: None,
+            inbox_issue: None,
+            _inbox_issue_events: None,
             unreads_only: false,
             stay: inbox::Stay::new(),
             hovered_row: None,
@@ -115,6 +120,10 @@ impl Desk {
     fn apply(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
         match event {
             Event::Page { slug, page } => {
+                if let Some(open) = self.inbox_issue.clone().filter(|p| p.read(cx).slug == slug) {
+                    let page = page.clone();
+                    open.update(cx, |open, cx| open.set(page, cx));
+                }
                 if self.picked.as_deref() == Some(&slug) {
                     self.steps.update(cx, |steps, cx| steps.set(&page, cx));
                     // A step's new commit opens Changes once, over the steps but never in the chat's place.
@@ -160,13 +169,27 @@ impl Desk {
         self.issues.sort_by(|a, b| rank(&a.state).cmp(&rank(&b.state)).then_with(|| a.title.cmp(&b.title)));
     }
 
-    fn open(&mut self, issue: &Issue, window: &mut Window, cx: &mut Context<Self>) {
+    // The issue whose page desk pushes over the sync socket: the one whose page the Inbox shows, else the one picked.
+    // desk sends one page per socket, again on each show.
+    pub(crate) fn tell_shown(&self, cx: &App) {
+        let slug = match &self.inbox_issue {
+            Some(page) if self.page == Page::Inbox => Some(page.read(cx).slug.clone()),
+            _ => self.picked.clone(),
+        };
+        if let Some(slug) = slug { let _ = self.shows.try_send(slug); }
+    }
+
+    pub(crate) fn open(&mut self, issue: &Issue, window: &mut Window, cx: &mut Context<Self>) {
+        let was = self.page;
         self.page = Page::Issue;
-        if self.picked.as_deref() == Some(&issue.slug) { return cx.notify() }
+        if self.picked.as_deref() == Some(&issue.slug) {
+            if was != Page::Issue { self.tell_shown(cx) }
+            return cx.notify();
+        }
         self.picked = Some(issue.slug.clone());
         self.current = self.issues.iter().find(|i| i.slug == issue.slug).cloned().unwrap_or_else(|| issue.clone());
         let slug = issue.slug.clone();
-        let _ = self.shows.try_send(slug.clone());
+        self.tell_shown(cx);
         self.steps = cx.new(|_| Steps::new());
         let chat = cx.new(|cx| Chat::new(slug.clone(), window, cx));
         let weak = chat.downgrade();

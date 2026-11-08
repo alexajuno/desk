@@ -52,3 +52,54 @@ pub fn post(path: &str, body: Value) -> Result<Value, String> {
             if ok { Ok(value) } else { Err(value["detail"].as_str().unwrap_or("desk refused it").to_string()) }
         })
 }
+
+// A form route of the old pages, as the page's Start, Go and Approve post it (app.ts): desk answers with a redirect,
+// whose address says what happened (msg, note) and, from the Inbox, the row to open next (i). The redirect is not
+// followed: its address is the answer.
+pub fn act(path: &str, body: Value) -> Result<String, String> {
+    let host = host();
+    let answer = ureq::post(&format!("http://{host}{path}"))
+        .header("Origin", &format!("http://{host}"))
+        .config()
+        .http_status_as_error(false)
+        .max_redirects(0)
+        .build()
+        .send_json(body)
+        .map_err(|e| e.to_string())?;
+    if let Some(to) = answer.headers().get("location").and_then(|l| l.to_str().ok()) {
+        return Ok(to.to_string());
+    }
+    if answer.status().is_success() { return Ok(String::new()) }
+    let mut answer = answer;
+    let value = answer.body_mut().read_json::<Value>().unwrap_or(Value::Null);
+    Err(value["detail"].as_str().unwrap_or("desk refused it").to_string())
+}
+
+// A query's value in an address desk redirected to.
+pub fn query(address: &str, name: &str) -> Option<String> {
+    let query = address.split_once('?')?.1;
+    query.split('&').find_map(|pair| {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        (key == name).then(|| decode(value))
+    })
+}
+
+fn decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'+' => out.push(b' '),
+            b'%' if i + 2 < bytes.len() => {
+                match u8::from_str_radix(&text[i + 1..i + 3], 16) {
+                    Ok(b) => { out.push(b); i += 2 }
+                    Err(_) => out.push(b'%'),
+                }
+            }
+            b => out.push(b),
+        }
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}

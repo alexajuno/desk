@@ -30,6 +30,7 @@ struct Step {
 
 pub struct Steps {
     pub width: f32, // the half's, which the window sets as it lays it out (main.rs)
+    pub inline: bool, // a section of an issue's page (issue.rs), which scrolls with the page rather than on its own
     steps: Vec<Step>,
     toggled: HashSet<String>,
     scroll: ScrollHandle,
@@ -101,7 +102,7 @@ fn steps(list: &Value, prefix: &str) -> Vec<Step> {
 
 impl Steps {
     pub fn new() -> Self {
-        Self { width: 420., steps: Vec::new(), toggled: HashSet::new(), scroll: ScrollHandle::new() }
+        Self { width: 420., inline: false, steps: Vec::new(), toggled: HashSet::new(), scroll: ScrollHandle::new() }
     }
 
     pub fn set(&mut self, page: &Value, cx: &mut Context<Self>) {
@@ -175,6 +176,7 @@ impl Render for Steps {
         let muted = theme.muted_foreground;
         let rows: Vec<AnyElement> = self.steps.iter().map(|s| self.row(s, 0, cx)).collect();
         let empty = rows.is_empty();
+        if self.inline { return div().v_flex().children(rows) }
         div()
             .v_flex()
             .size_full()

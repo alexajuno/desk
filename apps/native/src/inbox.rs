@@ -19,6 +19,7 @@ use gpui_kit::*;
 use serde_json::json;
 
 use crate::chat::Chat;
+use crate::issue::{IssueEvent, IssuePage};
 use crate::sync::InboxRow;
 use crate::{net, theme, Desk};
 
@@ -90,7 +91,7 @@ impl Desk {
         cx.spawn(async move |this, cx| {
             let done = cx.background_spawn(async move { net::post(path, body) }).await;
             let _ = this.update(cx, |desk, cx| {
-                desk.notice = done.err();
+                desk.notice = done.err().map(|e| (e, true));
                 desk.reading.clear();
                 cx.notify();
             });
@@ -105,26 +106,43 @@ impl Desk {
     pub(crate) fn show_inbox(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.page = crate::Page::Inbox;
         self.stay.clear();
+        self.tell_shown(cx);
         window.focus(&self.inbox_focus, cx);
         self.read_open(cx);
         cx.notify();
     }
 
-    // A row opened on the right: its chat for now, an issue's or one with no issue.
-    fn open_row(&mut self, slug: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
-        self.notice = None;
+    // A row opened on the right, as the web's Inbox opens it: an issue's row its page; a chat's row, or an issue's row
+    // carrying a thread's news, its chat; a thread no chat follows yet its messages.
+    pub(crate) fn open_row(&mut self, slug: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         if self.open_row == slug { return }
         self.open_row = slug.clone();
         self.inbox_chat = None;
+        self.inbox_issue = None;
+        self._inbox_issue_events = None;
         if let Some(row) = slug.as_ref().and_then(|s| self.inbox.values().find(|r| &r.slug == s)).cloned() {
-            if !is_thread(&row) {
-                let chat = match (&row.session, row.issue && row.source.is_none()) {
-                    (Some(session), false) => cx.new(|cx| Chat::of_session(session.clone(), window, cx)),
-                    _ => cx.new(|cx| Chat::new(row.slug.clone(), window, cx)),
-                };
-                self.inbox_chat = Some(chat);
+            match (&row.session, row.issue && row.source.is_none()) {
+                _ if is_thread(&row) => {}
+                (_, true) => {
+                    let page = cx.new(|cx| IssuePage::new(row.slug.clone(), cx));
+                    self._inbox_issue_events = Some(cx.subscribe_in(&page, window, |desk, _, event, window, cx| match event {
+                        IssueEvent::Open(slug) => {
+                            let issue = desk.all.get(slug).cloned().unwrap_or_else(|| crate::Issue { slug: slug.clone(), ..Default::default() });
+                            desk.open(&issue, window, cx);
+                        }
+                        IssueEvent::Onward { next, note } => {
+                            desk.open_row(next.clone(), window, cx);
+                            desk.notice = Some((note.clone(), false));
+                        }
+                    }));
+                    self.inbox_issue = Some(page);
+                }
+                (Some(session), false) => self.inbox_chat = Some(cx.new(|cx| Chat::of_session(session.clone(), window, cx))),
+                (None, false) => self.inbox_chat = Some(cx.new(|cx| Chat::new(row.slug.clone(), window, cx))),
             }
         }
+        self.notice = None;
+        self.tell_shown(cx);
         window.focus(&self.inbox_focus, cx); // the list keeps its keys; a click in the chat goes to the chat
         self.read_open(cx);
         cx.notify();
@@ -149,7 +167,7 @@ impl Desk {
     fn delete_row(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(row) = self.row_now() else { return };
         if row.waits {
-            self.notice = Some("It waits on you: answer it, and it leaves the Inbox.".into());
+            self.notice = Some(("It waits on you: answer it, and it leaves the Inbox.".into(), false));
             return cx.notify();
         }
         if self.open_row.as_deref() == Some(&row.slug) {
@@ -184,6 +202,14 @@ impl Desk {
     fn inbox_key(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let k = &e.keystroke;
         let m = &k.modifiers;
+        // an issue's page open: Ctrl Enter presses its step, I opens its chat
+        if let Some(page) = self.inbox_issue.clone() {
+            match (k.key.as_str(), m.control, m.alt || m.shift || m.platform) {
+                ("enter", true, false) => page.update(cx, |p, cx| p.press_step(cx)),
+                ("i", false, false) => page.update(cx, |p, cx| p.open_chat(cx)),
+                _ => {}
+            }
+        }
         if m.control || m.platform { return }
         match (k.key.as_str(), m.alt, m.shift) {
             ("u", true, false) => self.inbox_call("/api/inbox/read", json!({}), cx),
@@ -379,11 +405,14 @@ impl Desk {
     pub(crate) fn inbox_page(&mut self, page_width: f32, cx: &mut Context<Self>) -> Div {
         let list = LIST.min(page_width / 2.);
         let rows = self.inbox_rows();
-        let theme = cx.theme();
         let divider = theme::text(cx).divider;
         let waiting = theme::text(cx).waiting;
+        let muted = cx.theme().muted_foreground;
         let open = self.open_row.as_ref().and_then(|s| rows.iter().find(|r| &r.slug == s)).cloned();
+        if let Some(page) = &self.inbox_issue { page.update(cx, |p, _| p.width = page_width - list - 1.) }
+        let theme = cx.theme();
         let pane: AnyElement = match (&open, &self.inbox_chat) {
+            (Some(_), _) if self.inbox_issue.is_some() => self.inbox_issue.clone().unwrap().into_any_element(),
             (Some(_), Some(chat)) => chat.clone().into_any_element(),
             (Some(row), None) if is_thread(row) => div()
                 .size_full()
@@ -425,7 +454,7 @@ impl Desk {
                             .border_r_1()
                             .border_color(divider)
                             .on_mouse_down(MouseButton::Left, cx.listener(|desk, _, window, cx| window.focus(&desk.inbox_focus, cx)))
-                            .when_some(self.notice.clone(), |l, notice| l.child(div().px(px(18.)).pb(px(8.)).text_xs().text_color(waiting).child(notice)))
+                            .when_some(self.notice.clone(), |l, (notice, wrong)| l.child(div().px(px(18.)).pb(px(8.)).text_xs().text_color(if wrong { waiting } else { muted }).child(notice)))
                             .child(list_rows),
                     )
                     .child(div().flex_1().min_w_0().h_full().child(pane)),
