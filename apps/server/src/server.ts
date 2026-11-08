@@ -1,6 +1,8 @@
 // desk's server, started by main.ts once the packages match the commit checked out. PORT picks the port (default 8790),
 // DESK_DATA the data folder (default ~/.local/share/desk), and DESK_ENV=test leaves the test desks' line and the automations'
 // clock off, as a slot's desk should (config.ts, ENV).
+import v8 from "node:v8";
+import { runInNewContext } from "node:vm";
 import { create } from "./app.ts";
 import * as auto from "./auto.ts";
 import * as automations from "./automations.ts";
@@ -94,5 +96,10 @@ process.on("SIGINT", stop);
 
 await app.listen({ port: PORT, host: process.env.HOST ?? "127.0.0.1" });
 console.log(`desk on http://127.0.0.1:${PORT}`);
+// V8 gives its garbage back only after a full collection, which it runs once its old space fills, and a quiet desk
+// rarely fills it: on 8 Nov desk sat at about 390 MB, 230 of them garbage and room V8 kept, and 160 after one
+// collection. One each minute takes 7 to 9 ms.
+v8.setFlagsFromString("--expose-gc");
+setInterval(runInNewContext("gc") as () => void, 60_000).unref();
 // The Sessions menu's search reads the prompts written while desk was down, or all of them into a new database.
 void sessions.index();
