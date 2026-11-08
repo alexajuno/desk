@@ -225,6 +225,22 @@ export async function loadAll(q: Db = sql()): Promise<Map<string, Issue>> {
   return new Map(rows.map((r) => [r.slug, fromRow(r, lists.get(r.slug) ?? null)]));
 }
 
+// Every issue as loadAll read them, kept for the readers that only look: the frame and the open issue pages after each
+// change, and each open chat's head, read them all about once a second on 8 Nov, 26 ms and 17 MB a time. Read again
+// once a write changed an issue; a change to its steps writes the issue too (saveIn). What it gives is shared: never
+// change it.
+let kept: { at: number; all: Promise<Map<string, Issue>> } | null = null;
+
+export function shown(): Promise<Map<string, Issue>> {
+  const at = db.writesTo("issues");
+  if (kept?.at !== at) {
+    const all = loadAll();
+    kept = { at, all };
+    all.catch(() => { if (kept?.all === all) kept = null; });
+  }
+  return kept.all;
+}
+
 export async function exists(slug: string, q: Db = sql()): Promise<boolean> {
   return validSlug(slug) && (await q.query("select 1 from issues where slug = $1 and deleted_at is null", [slug])).rows.length > 0;
 }

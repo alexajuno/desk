@@ -518,6 +518,7 @@ function transaction<T>(fn: (tx: Db) => Promise<T>, told: boolean): Promise<T> {
       const changed = told && changes(d) !== before;
       const rows = changed ? taken() : [];
       d.exec("commit");
+      for (const kind of new Set(rows.map((r) => r.kind))) written.set(kind, writesTo(kind) + 1);
       if (rows.length) {
         const after = pushed;
         tell(rows.map((c) => ({ ...c, seq: ++pushed })), after);
@@ -533,6 +534,11 @@ function transaction<T>(fn: (tx: Db) => Promise<T>, told: boolean): Promise<T> {
     }
   });
 }
+
+// How many writes have changed rows of each table the app holds: a reader that keeps a copy of a table reads it again
+// once its count moves (issues.ts, shown).
+const written = new Map<string, number>();
+export const writesTo = (table: string) => written.get(table) ?? 0;
 
 // How many rows this connection's statements have changed since it opened.
 const changes = (d: DatabaseSync) => Number((d.prepare("select total_changes() as n").get() as { n: number }).n);

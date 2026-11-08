@@ -118,20 +118,25 @@ export const reviewOf = (i: Issue) => i.review_of ?? "result";
 // tell ("when agent changes sth, it calls api, not edit file and desk fetches from file later", 19 Oct). Whether a
 // process still holds the chat never counts (18 Oct: "we should write code in the way we don't care"): its next
 // message resumes it.
-export async function advance(all: Map<string, Issue>) {
+// Returns the issues as they stand after: those given, which may be the ones desk keeps for every reader (issues.ts,
+// shown) and so are never changed here, or read again when it moved one.
+export async function advance(all: Map<string, Issue>): Promise<Map<string, Issue>> {
+  let moved = false;
+  const move = async (i: Issue, changes: Partial<Issue>) => { moved = (await store.move({ ...i }, changes)) || moved; };
   for (const i of all.values()) {
     const session = sessionOf(i); // its own chat's: another issue's turns move it no more (29 Oct)
     if (i.state === "running" && turnEnded(i)) {
-      await store.move(i, { state: "review", review_of: "reply" });
+      await move(i, { state: "review", review_of: "reply" });
     } else if (i.state === "waiting" && session && i.waiting_since) {
       const wrote = turns.prompted(session);
-      if (wrote && wrote > iso(i.waiting_since)) await store.move(i, { state: "running" });
+      if (wrote && wrote > iso(i.waiting_since)) await move(i, { state: "running" });
     } else if (i.state === "review" && session) {
       // A review from before 19 Oct has no review_since: it moves back once its session works again.
       const wrote = turns.prompted(session);
-      if (i.review_since ? wrote !== null && wrote > iso(i.review_since) : working(i)) await store.move(i, { state: "running" });
+      if (i.review_since ? wrote !== null && wrote > iso(i.review_since) : working(i)) await move(i, { state: "running" });
     }
   }
+  return moved ? store.shown() : all;
 }
 
 // --- the sessions, for the Inbox and the sidebar's Chats ------------------------------------------------------------------
@@ -212,8 +217,8 @@ const chatTitle = (chat: chats.Chat) => sessions.chatTitleOf(chat.session) || (c
 // the session asks to allow a tool, or stopped short of landing, and else says the session's last reply, by where its
 // issue stands now. An issue in Triage with no chat is the one row with no session. What each row says now goes to the
 // table, and the rows the Inbox lists come back, newest first, with the one open now (keep).
-export async function notifications(all: Map<string, Issue>, keep = ""): Promise<inbox.Row[]> {
-  await advance(all);
+export async function notifications(given: Map<string, Issue>, keep = ""): Promise<inbox.Row[]> {
+  const all = await advance(given);
   const asks = await asking();
   const marks = inbox.filling() ? inbox.before() : null, now = Date.now() / 1000;
   const wanted: inbox.Want[] = [];
@@ -521,8 +526,8 @@ function drawnSteps(list: steps.PlanStep[], base: string, drawn: Map<string, ste
 // Inbox's count and its dots from the Inbox's rows (inbox.ts); old, for a tab still on the app from before 19 Oct,
 // adds what that app read here: the count, Triage and the teams, which it calls projects.
 export async function framePage(old = false, all?: Map<string, Issue>) {
-  all ??= await store.loadAll();
-  await notifications(all); // moves the issues on first, and writes what the Inbox's rows say now
+  all = await advance(all ?? (await store.shown())); // moves the issues on first
+  await notifications(all); // and writes what the Inbox's rows say now
   return {
     ...chatsNow(all),
     automations: automations.stamp(), // a page of automations fetches itself again when it moves
@@ -538,9 +543,8 @@ export async function framePage(old = false, all?: Map<string, Issue>) {
 const byCreated = (a: { created: string }, b: { created: string }) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0);
 
 export async function issuePage(slug: string) {
-  const all = await store.loadAll();
+  const all = await advance(await store.shown()); // moves it on first, as the page does
   if (!all.has(slug)) throw new HttpError(404, "That issue is gone.");
-  await advance(all); // moves it on first, as the page does
   return issuePageJson(all, slug);
 }
 

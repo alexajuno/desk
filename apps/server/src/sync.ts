@@ -122,7 +122,7 @@ async function frameNow() {
     return;
   }
   if (!turns.reports()) await agents.live(true); // the frame's own asks of the host reuse this answer
-  const all = await store.loadAll();
+  const all = await store.shown();
   const text = JSON.stringify(await pages.framePage(legacy.size > 0, all));
   wakeAt(pages.nextMove(all));
   const to = text === frameText ? [...unframed] : [...listeners, ...legacy];
@@ -153,7 +153,7 @@ const shown = new Map<WebSocket, { slug: string; text: string }>();
 
 async function pagesNow() {
   if (!shown.size) return;
-  const all = await store.loadAll(), texts = new Map<string, string>(); // one page per issue, however many apps show it
+  const all = await store.shown(), texts = new Map<string, string>(); // one page per issue, however many apps show it
   for (const [ws, s] of shown) {
     if (!texts.has(s.slug)) texts.set(s.slug, JSON.stringify(all.has(s.slug) ? await pages.issuePageJson(all, s.slug) : null));
     const text = texts.get(s.slug)!;

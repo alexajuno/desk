@@ -76,7 +76,7 @@ const tilde = (path: string) => (path.startsWith(HOME) ? `~${path.slice(HOME.len
 
 export async function meta(id: string): Promise<Meta> {
   const chat = chats.agentChatOf(id);
-  const all = await store.loadAll();
+  const all = await store.shown();
   // The chat's own issue: the first issue naming the session took a done issue a chat had left for its next (29 Oct).
   const issue = (chat?.issue && all.get(chat.issue)) || null;
   const row = await agents.shownRow(id);
