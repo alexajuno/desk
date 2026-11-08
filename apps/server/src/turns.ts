@@ -171,12 +171,13 @@ const seconds = (ms: number | null) => (ms === null ? null : ms / 1000);
 // The host's word for a session. Its times only move on: a host that has not yet seen the session's prompt or reply,
 // as one that just resumed it, leaves the table's. What it spent is taken as said, since a /clear starts it again, and
 // left as it was by a host that has seen no turn of it end.
+// The later of the time the table has and the one the host sent, either of which may be missing.
+const later = (c: string) => `case when excluded.${c} is null or sessions.${c} >= excluded.${c} then coalesce(sessions.${c}, excluded.${c}) else excluded.${c} end`;
 async function upsert(tx: db.Db, s: State): Promise<Row> {
   return (await tx.query<Row>(`insert into sessions (id, open, working, asks, prompted, replied, ended, cost, tokens, updated)
     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     on conflict (id) do update set open = excluded.open, working = excluded.working, asks = excluded.asks,
-      prompted = greatest(sessions.prompted, excluded.prompted), replied = greatest(sessions.replied, excluded.replied),
-      ended = greatest(sessions.ended, excluded.ended), cost = coalesce(excluded.cost, sessions.cost),
+      prompted = ${later("prompted")}, replied = ${later("replied")}, ended = ${later("ended")}, cost = coalesce(excluded.cost, sessions.cost),
       tokens = coalesce(excluded.tokens, sessions.tokens), updated = excluded.updated
     returning ${COLUMNS}`, [s.id, s.open, s.open && s.working, s.open ? s.asks : 0, seconds(s.prompted), seconds(s.replied), seconds(s.ended),
     s.cost ?? null, s.tokens ?? null, Date.now() / 1000])).rows[0];

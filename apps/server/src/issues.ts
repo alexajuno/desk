@@ -217,7 +217,7 @@ export function listingOrder(dir: string): Map<string, number> {
 
 // The issues not deleted, as every reader but the trash's sees them.
 export async function loadAll(q: Db = sql()): Promise<Map<string, Issue>> {
-  const rows = (await q.query<Row>('select * from issues where deleted_at is null order by slug collate "C"')).rows;
+  const rows = (await q.query<Row>('select * from issues where deleted_at is null order by slug')).rows;
   // In the order the folder lists them, as the Python's glob read them: issues filed in the same second keep their order.
   const at = listingOrder(ISSUES_DIR);
   rows.sort((a, b) => (at.get(a.slug) ?? Infinity) - (at.get(b.slug) ?? Infinity));
@@ -426,13 +426,13 @@ export function renameAll(): Promise<number> {
   return db.write(async (tx) => {
     if ((await tx.query("select 1 from meta where name = 'slugs cut'")).rows.length) return 0;
     let moved = 0;
-    for (const { slug } of (await tx.query<{ slug: string }>('select slug from issues order by created, slug collate "C"')).rows) {
+    for (const { slug } of (await tx.query<{ slug: string }>('select slug from issues order by created, slug')).rows) {
       const i = await load(slug, tx); // as it is now: an earlier rename may have changed its parent or its links
       if (!(await follow(tx, i))) continue;
       await put(tx, i);
       moved++;
     }
-    await tx.query("insert into meta values ('slugs cut', now()::text)");
+    await tx.query("insert into meta values ('slugs cut', $1)", [new Date().toISOString()]);
     return moved;
   });
 }
@@ -529,7 +529,7 @@ export function leaveFiles(): Promise<number> {
         }
       }
     }
-    await tx.query("insert into meta values ('files in db', now()::text)");
+    await tx.query("insert into meta values ('files in db', $1)", [new Date().toISOString()]);
     return gone;
   });
 }

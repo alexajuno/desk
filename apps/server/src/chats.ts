@@ -209,7 +209,7 @@ export async function adoptSessions(): Promise<number> {
       const file = transcripts.pathOf(session);
       lastMoved.set(chat.id, file ? statSync(file).mtimeMs : Date.parse(r.created));
     }
-    await tx.query("insert into meta values ('sessions adopted', now()::text)");
+    await tx.query("insert into meta values ('sessions adopted', $1)", [new Date().toISOString()]);
     return bySession.size;
   });
 }
@@ -235,7 +235,7 @@ export async function adoptLeft(): Promise<number> {
       lastMoved.set(chat.id, 0);
       made++;
     }
-    await tx.query("insert into meta values ('left issues chatted', now()::text)");
+    await tx.query("insert into meta values ('left issues chatted', $1)", [new Date().toISOString()]);
     return made;
   });
 }
@@ -649,7 +649,7 @@ export async function unsubscribeClosed(): Promise<void> {
     if ((await tx.query("select 1 from meta where name = 'closed issues unsubscribed'")).rows.length) return;
     const closed = (await tx.query<{ slug: string }>("select slug from issues where state in ('done', 'dropped')")).rows.map((r) => r.slug);
     await subscribeAll(tx, closed, true);
-    await tx.query("insert into meta values ('closed issues unsubscribed', now()::text)");
+    await tx.query("insert into meta values ('closed issues unsubscribed', $1)", [new Date().toISOString()]);
   });
 }
 

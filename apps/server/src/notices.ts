@@ -73,8 +73,8 @@ const SHOWN = "verdict in ('now', 'later')";
 
 // Each thread holding a notice the Inbox shows, by its newest such notice: one Inbox row each.
 export async function threads(): Promise<Notice[]> {
-  return (await sql().query<Record<string, unknown>>(`select distinct on (thread) * from notices where ${SHOWN}
-    order by thread, at desc, id desc`)).rows.map(asNotice);
+  return (await sql().query<Record<string, unknown>>(`select * from (select *, row_number() over (partition by thread order by at desc, id desc) as n
+    from notices where ${SHOWN}) t where n = 1 order by thread`)).rows.map(asNotice);
 }
 
 // Which of these ids are written already, as a poll asks before it fetches what it has not seen.

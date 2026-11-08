@@ -38,7 +38,7 @@ type Row = Project & { updates?: string };
 const fromRow = ({ updates: _, ...p }: Row): Project => p;
 
 export async function loadAll(q: Db = sql()): Promise<Map<string, Project>> {
-  const rows = (await q.query<Row>('select * from projects order by slug collate "C"')).rows;
+  const rows = (await q.query<Row>('select * from projects order by slug')).rows;
   return new Map(rows.map((r) => [r.slug, fromRow(r)]));
 }
 

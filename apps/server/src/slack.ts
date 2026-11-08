@@ -541,7 +541,8 @@ async function heard(): Promise<number | null> {
 // Slack heard up to this time, in seconds; a mark never goes back.
 async function hear(at: number) {
   await sql().query(`insert into meta values ($1, $2) on conflict (name) do update
-    set value = greatest(meta.value::double precision, excluded.value::double precision)::text`, [HEARD, String(at)]);
+    set value = case when cast(meta.value as double precision) >= cast(excluded.value as double precision) then meta.value else excluded.value end`,
+    [HEARD, String(at)]);
 }
 
 let reading: Promise<number> | null = null;

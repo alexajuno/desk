@@ -25,7 +25,7 @@ type Row = Team;
 const fromRow = (t: Row): Team => t;
 
 export async function loadAll(): Promise<Map<string, Team>> {
-  const rows = (await sql().query<Row>('select * from teams order by slug collate "C"')).rows;
+  const rows = (await sql().query<Row>('select * from teams order by slug')).rows;
   return new Map(rows.map((r) => [r.slug, fromRow(r)]));
 }
 

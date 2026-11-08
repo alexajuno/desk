@@ -475,7 +475,7 @@ const LOG = randomUUID();
 export async function snapshot(): Promise<{ log: string; seq: number; rows: Record<string, Record<string, unknown>[]> }> {
   const rows: Record<string, Record<string, unknown>[]> = {};
   for (const [table, { key, live }] of Object.entries(HELD))
-    rows[table] = (await sql().query<{ row: Record<string, unknown> }>(`select ${shown(table)} as row from ${table} t${live ? ` where ${live}` : ""} order by ${key} collate "C"`)).rows.map((r) => r.row);
+    rows[table] = (await sql().query<{ row: Record<string, unknown> }>(`select ${shown(table)} as row from ${table} t${live ? ` where ${live}` : ""} order by ${key}`)).rows.map((r) => r.row);
   return { log: LOG, seq: pushed, rows };
 }
 

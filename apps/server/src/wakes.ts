@@ -281,7 +281,8 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let busy = false;
 
 export async function start() {
-  const r = await sql().query<Record<string, unknown>>("select distinct on (session) * from wakes order by session, at desc");
+  const r = await sql().query<Record<string, unknown>>(
+    "select * from (select *, row_number() over (partition by session order by at desc) as n from wakes) t where n = 1 order by session");
   for (const row of r.rows) latest.set(String(row.session), asWake(row));
   notices.routeWith(async (thread) => (await chats.follower(thread))?.id ?? null);
   gate.keepSpare(chats.attached().size > 0); // warm by the first round's wake
