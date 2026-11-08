@@ -97,14 +97,14 @@ export const InboxPage = observer(function InboxPage() {
   }, [drawn]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => listView.clear(), []);
 
-  // The row open on the right: a thread no chat follows yet, a chat, or an issue's page, which desk pushes while it
-  // shows. A chat's row opens its chat, and so does an issue's row carrying a thread's news (the server's pages.ts,
-  // withNews). Once the pane shows a chat it stays on it while the chat's row moves: a thread's row leaves for its
+  // The row open on the right: a thread no chat follows yet, or a chat. desk is chat first (8 Nov: "on selecting noti or
+  // inbox, just open the chat directly instead of issue first"), so an issue's row opens its session's chat too; its page
+  // opens only for a row with no session. Once the pane shows a chat it stays on it while the chat's row moves: a thread's row leaves for its
   // chat's once you write in it, and a chat's row turns into its issue's once the chat files one.
   const here = i ? [...issues.inbox.values()].find((r) => r.slug === i) : undefined;
   const thread = here?.source && !here.session ? here : undefined;
   const kept = useRef(new Map<string, string>()).current; // the chat each row's pane showed, by the row's slug
-  const talk = thread ? undefined : (here?.session && (!here.issue || here.source) ? here.session : null) ?? kept.get(i) ?? startedOn(i);
+  const talk = thread ? undefined : (here?.session ?? null) ?? kept.get(i) ?? startedOn(i);
   if (talk) kept.set(i, talk);
   const chat = talk ? [...issues.inbox.values()].find((r) => r.session === talk) : undefined;
   useEffect(() => {
