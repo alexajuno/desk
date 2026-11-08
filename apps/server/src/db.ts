@@ -44,7 +44,6 @@ const HELD: Record<string, { key: string; hidden: string[]; live?: string }> = {
   activity: { key: "id", hidden: [] },
   chats: { key: "id", hidden: ["folder", "cwd", "seen"] }, // threads: shown since 3 Nov, for Claude's draft on one (YourReply.tsx)
   inbox: { key: "id", hidden: [] },
-  tabs: { key: "target", hidden: [] },
   replies: { key: "id", hidden: [] },
 };
 
@@ -147,13 +146,7 @@ create table if not exists chats ( -- desk's chats (chats.ts): each a session, a
   seen double precision,
   deleted text -- when the user deleted it: out of sight, its row and transcript kept
 );
-create table if not exists tabs ( -- each tab a desk session has open in the agents' Chrome, as the host's relay tells it (tabs.ts)
-  target text primary key, -- Chrome's id for it
-  session text not null, -- the session that opened it, or the tab that opened it
-  url text not null default '',
-  title text not null default '',
-  opened text not null -- when desk first heard of it
-);
+drop table if exists tabs; -- the tabs desk's Chrome held for each session, which left desk on 8 Nov
 create table if not exists automations ( -- what happened to each of automations/*.md, which hold the rest (automations.ts)
   slug text primary key,
   seen text not null,

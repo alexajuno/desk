@@ -8,7 +8,6 @@ import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import * as agents from "./agents.ts";
 import * as api from "./api.ts";
-import * as cast from "./cast.ts";
 import * as chats from "./chats.ts";
 import { HOME, TEST } from "./config.ts";
 import * as fields from "./fields.ts";
@@ -33,7 +32,6 @@ import * as replies from "./replies.ts";
 import * as threads from "./threads.ts";
 import { tailnetName } from "./tailnet.ts";
 import * as teams from "./teams.ts";
-import * as tabs from "./tabs.ts";
 import * as terminal from "./terminal.ts";
 import * as transcript from "./transcript.ts";
 import * as updates from "./updates.ts";
@@ -1047,37 +1045,6 @@ export async function create(): Promise<FastifyInstance> {
       if (error instanceof terminal.NoTerminal) throw new HttpError(404, error.message);
       throw error;
     }
-  });
-  // A link clicked in the chat, opened in its Browser: a tab for its session in the agents' Chrome, which the host's
-  // relay opens (relay.ts), and which then shows like any tab the session opened (tabs.ts).
-  app.post("/api/live/:id/browse", async (req: Req) => {
-    mustBePage(req);
-    const url = String((req.body as { url?: unknown } | undefined)?.url ?? "");
-    if (!/^https?:\/\/\S+$/i.test(url) || url.length > 8192) throw new HttpError(422, "Only an http or https address opens in the Browser.");
-    if (!turns.openTab(sessionOf(req), url)) throw new HttpError(503, "The session host is not running.");
-    return {};
-  });
-  // A tab's site icon, for its pill in the chat's Browser (tabs.ts); ?site= is only for the browser's cache, which a tab
-  // that moves to another site leaves behind.
-  app.get("/api/tabs/:target/icon", async (req: Req, reply) => {
-    const found = await tabs.icon(req.params.target);
-    if (!found) throw new HttpError(404, "No icon for that tab");
-    return reply.type(found.type).header("cache-control", "max-age=86400").send(found.body);
-  });
-  app.post("/api/tabs/:target/close", async (req: Req) => {
-    mustBePage(req);
-    if (!(await tabs.close(req.params.target).catch(() => { throw new HttpError(503, "desk's Chrome is not running."); }))) throw new HttpError(404, "That tab is not open.");
-    return {};
-  });
-  // A tab's picture, live, and your mouse and keys for it, for the chat's Browser in desk's native window (cast.ts).
-  app.get("/api/tabs/:target/screen", {
-    websocket: true,
-    preValidation: async (req, reply) => {
-      if (!fromDesk(req) || !cast.TARGET.test((req.params as { target: string }).target)) await reply.code(403).send();
-    },
-  }, (socket, req) => {
-    const q = req.query as Record<string, string | undefined>;
-    void cast.watch(socket, (req.params as { target: string }).target, { w: Number(q.w), h: Number(q.h), scale: Number(q.scale) });
   });
   app.get("/api/live/:id/terminal/screen", {
     websocket: true,

@@ -15,7 +15,7 @@ import { request as httpRequest } from "node:http";
 import { basename, dirname, join } from "node:path";
 import { spawn } from "node:child_process";
 import { WebSocket } from "ws";
-import { HOME, PORT, RELAY_PORT, REPO, TEST } from "./config.ts";
+import { HOME, PORT, REPO, TEST } from "./config.ts";
 import { sleep, which } from "./proc.ts";
 import { find, forkOf, pathOf } from "./transcript.ts";
 
@@ -26,7 +26,7 @@ const socketOf = (version: string) => join(RUN, `desk-host-${PORT}-${version}.so
 const HOST = join(REPO, "apps", "server", "src", "host.ts");
 // The files a host runs, whose content is its version: the same list as host.ts's VERSION, or desk takes every host for
 // an older one and starts another beside it, on the same socket, each time one says hello.
-const CODE = ["host.ts", "relay.ts", "chrome.ts"].map((f) => join(dirname(HOST), f));
+const CODE = ["host.ts"].map((f) => join(dirname(HOST), f));
 const LOG = join(HOME, ".cache", "desk", `host-${PORT}.log`);
 const UNIT = `desk-host-${PORT}`;
 
@@ -147,8 +147,7 @@ async function launch(version: string): Promise<Host> {
   mkdirSync(dirname(LOG), { recursive: true });
   const out = openSync(LOG, "a");
   const node = process.execPath;
-  const args = ["--socket", socket, "--desk", `http://127.0.0.1:${PORT}`, // the host tells desk what each session does (turns.ts)
-    "--relay", String(RELAY_PORT)];
+  const args = ["--socket", socket, "--desk", `http://127.0.0.1:${PORT}`]; // the host tells desk what each session does (turns.ts)
   const argv = which("systemd-run")
     ? ["systemd-run", "--user", "--scope", "--slice=agents.slice", `--unit=${UNIT}-${Date.now()}`, "--collect", "--quiet", "--", node, HOST, ...args]
     : [node, HOST, ...args];

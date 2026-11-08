@@ -7,10 +7,8 @@
 //
 //     {"type": "hello", "version": "<v>", "sessions": [<state>, ...]}    first, on every connect: each session the host holds
 //     {"type": "session", ...<state>}                  one changed; "open": false once its process ended
-//     {"type": "tab", ...}, "tab-closed" or "tab-used"   a session's tab in desk's Chrome (tabs.ts)
 //
-// Its hello also says the version of its code (none from a host before 2 Nov), whether its browser relay runs and the
-// tabs it noted, which desk answers (tabs.ts).
+// Its hello also says the version of its code (none from a host before 2 Nov).
 //
 // A <state> is {id, open, working, asks, prompted, replied, ended, cost, tokens}, its times in ms, null while the host
 // has seen none; cost and tokens are what the session has spent so far, Claude Code's running totals from its last
@@ -26,12 +24,10 @@
 // few seconds, since nothing tells it (lookWhileOlder). On 19 Oct 8790's host had run since the night before.
 import { statSync } from "node:fs";
 import type { WebSocket } from "ws";
-import type { Tab } from "./relay.ts";
 import * as chats from "./chats.ts";
 import * as db from "./db.ts";
 import * as hosted from "./hosted.ts";
 import * as sessions from "./sessions.ts";
-import * as tabs from "./tabs.ts";
 import * as transcript from "./transcript.ts";
 
 interface Row {
@@ -63,11 +59,10 @@ interface State {
 const rows = new Map<string, Row>();
 // A host of this code tells desk: the table is current. False while an older host runs, until a host says hello.
 let reporting = false;
-// Each host's socket, with what it said: the version of its code (null from a host before 2 Nov), whether its browser
-// relay runs, and the sessions it holds now.
+// Each host's socket, with what it said: the version of its code (null from a host before 2 Nov), and the sessions
+// it holds now.
 interface Link {
   version: string | null;
-  relay: boolean;
   holds: Set<string>;
 }
 const links = new Map<WebSocket, Link>(); // in the order they said hello
@@ -103,14 +98,6 @@ function linkOf(session: string): WebSocket | null {
 
 // Whether a host other than the one on this socket holds the session.
 const elsewhere = (ws: WebSocket, session: string) => [...links].some(([w, l]) => w !== ws && l.holds.has(session));
-
-// A tab for the session at the address, which the relay of the host holding it opens (relay.ts): false with no host to ask.
-export function openTab(session: string, url: string): boolean {
-  const ws = linkOf(session);
-  if (!ws) return false;
-  ws.send(JSON.stringify({ type: "open", session, url }));
-  return true;
-}
 
 // Whether a turn of the session runs now.
 export function working(session: string): boolean {
@@ -238,8 +225,8 @@ const OLDER_LOOK = 5000; // ms
 let older: NodeJS.Timeout | null = null;
 const lookWhileOlder = () => { older ??= setInterval(() => changed(null), OLDER_LOOK); };
 
-async function hello(ws: WebSocket, version: string | undefined, relay: boolean, states: State[]) {
-  links.set(ws, { version: version ?? null, relay, holds: new Set(states.map((s) => s.id)) });
+async function hello(ws: WebSocket, version: string | undefined, states: State[]) {
+  links.set(ws, { version: version ?? null, holds: new Set(states.map((s) => s.id)) });
   // Those no host holds now ended while desk was away. Every host's, not this one's alone: when desk starts, each host
   // says hello on its own, and the others' sessions would show closed for a moment, as a turn's end.
   const held = new Set([...[...links.values()].flatMap((l) => [...l.holds]), ...(await hosted.sessions(true)).map((r) => r.id)]);
@@ -265,7 +252,7 @@ async function word(ws: WebSocket, s: State) {
 // A host's socket: what it says, in order.
 export function connect(ws: WebSocket) {
   ws.on("message", (data) => {
-    let e: { type?: string; version?: string; sessions?: State[]; relay?: boolean; tabs?: Tab[]; target?: string } & Partial<State> & Partial<Tab>;
+    let e: { type?: string; version?: string; sessions?: State[] } & Partial<State>;
     try {
       e = JSON.parse(data.toString());
     } catch {
@@ -273,12 +260,8 @@ export function connect(ws: WebSocket) {
     }
     heard = heard.then(async () => {
       if (e.type === "hello") {
-        await hello(ws, e.version, Boolean(e.relay), e.sessions ?? []);
-        await tabs.hello(ws, e.relay, e.tabs ?? [], [...links].some(([w, l]) => w !== ws && l.relay));
+        await hello(ws, e.version, e.sessions ?? []);
       } else if (e.type === "session" && e.id) await word(ws, e as State);
-      else if (e.type === "tab" && e.target && e.session) await tabs.opened(e as Tab, prompted(e.session));
-      else if (e.type === "tab-closed" && e.target) await tabs.closed(e.target);
-      else if (e.type === "tab-used" && e.target && e.session) tabs.used(e.target, e.session, prompted(e.session));
     }).catch((error) => console.error("desk: the host's word", error));
   });
   // That host is gone, and every process it held, unless desk is the one stopping: its sessions show closed, but for
