@@ -185,6 +185,7 @@ fn glyph_path(name: &str) -> &'static str {
         "none" => r##"<circle cx="8" cy="8" r="5.5"/><path d="M4.2 11.8l7.6-7.6"/>"##,
         "tick" => r##"<path transform="scale(1.142857)" stroke-width="1.3125" d="M3 7.5l2.5 2.5L11 4.5"/>"##,
         "chevron-right" => r##"<path d="M6 4l4 4-4 4" stroke-width="1.4"/>"##,
+        "chevron-left" => r##"<path d="M10 4L6 8l4 4" stroke-width="1.4"/>"##,
         "select-chevron" => r##"<path fill="#000" stroke="none" transform="translate(0 3.556) scale(1.777778)" d="M1.915.557a.667.667 0 0 0-.943.943l2.862 2.862a.942.942 0 0 0 1.333 0L8.028 1.5a.667.667 0 0 0-.943-.943L4.5 3.14 1.915.557Z"/>"##,
         "changes" => r##"<path d="M9 1.75H4.75a1.25 1.25 0 0 0-1.25 1.25v10c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V5.25zM9 1.75v3.5h3.5M8 5.25v3M6.5 6.75h3M6.5 10.75h3"/>"##,
         _ => "",

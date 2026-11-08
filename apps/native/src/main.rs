@@ -10,6 +10,7 @@ mod issue;
 mod emoji;
 mod filters;
 mod listing;
+mod picker;
 mod thread;
 mod live;
 mod net;
@@ -144,7 +145,7 @@ impl Desk {
             Event::Page { slug, page } => {
                 if let Some(open) = self.inbox_issue.clone().filter(|p| p.read(cx).slug == slug) {
                     let page = page.clone();
-                    open.update(cx, |open, cx| open.set(page, cx));
+                    open.update(cx, |open, cx| open.set(page, window, cx));
                 }
                 if self.picked.as_deref() == Some(&slug) {
                     self.steps.update(cx, |steps, cx| steps.set(&page, cx));

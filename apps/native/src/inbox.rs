@@ -151,7 +151,7 @@ impl Desk {
                     self.inbox_thread = Some(page);
                 }
                 (_, true) => {
-                    let page = cx.new(|cx| IssuePage::new(row.slug.clone(), cx));
+                    let page = cx.new(|cx| IssuePage::new(row.slug.clone(), window, cx));
                     self._inbox_issue_events = Some(cx.subscribe_in(&page, window, |desk, _, event, window, cx| match event {
                         IssueEvent::Open(slug) => {
                             let issue = desk.all.get(slug).cloned().unwrap_or_else(|| crate::Issue { slug: slug.clone(), ..Default::default() });
@@ -161,6 +161,13 @@ impl Desk {
                             desk.open_row(next.clone(), window, cx);
                             desk.notice = Some((note.clone(), false));
                         }
+                        // a new title, a new slug: the row and the page the window shows follow it
+                        IssueEvent::Moved(to) => {
+                            desk.open_row = Some(to.clone());
+                            desk.tell_shown(cx);
+                            cx.notify();
+                        }
+                        IssueEvent::Done => window.focus(&desk.inbox_focus, cx),
                     }));
                     self.inbox_issue = Some(page);
                 }

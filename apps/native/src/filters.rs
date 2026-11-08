@@ -31,12 +31,12 @@ impl Anchors {
         self.0.borrow().get(name).copied()
     }
 
-    fn within(&self, name: &str, at: Point<Pixels>) -> bool {
+    pub(crate) fn within(&self, name: &str, at: Point<Pixels>) -> bool {
         self.get(name).is_some_and(|b| b.contains(&at))
     }
 
     // An element over its parent that notes where the parent is drawn.
-    fn probe(&self, name: impl Into<String>) -> impl IntoElement {
+    pub(crate) fn probe(&self, name: impl Into<String>) -> impl IntoElement {
         let (anchors, name) = (self.clone(), name.into());
         canvas(move |bounds, _, _| { anchors.0.borrow_mut().insert(name, bounds); }, |_, _, _, _| {}).absolute().size_full()
     }
@@ -66,16 +66,16 @@ struct Item {
 }
 
 // lists/parts.tsx's colours: desk.css's tokens, its lch() values written in hex.
-struct Colours {
-    pop: Hsla, pop_edge: Hsla, pop_on: Hsla,
-    text_1: Hsla, text_2: Hsla, text_3: Hsla,
-    box_fill: Hsla, box_edge: Hsla, chip: Hsla, ring: Hsla, hover: Hsla, active: Hsla, ghost_hover: Hsla, ghost_on: Hsla,
-    tip: Hsla, tip_edge: Hsla, tip_key: Hsla, tip_text: Hsla, select: Hsla, select_hover: Hsla, select_ring: Hsla, select_ring_strong: Hsla, select_on: Hsla,
-    edge_3: Hsla, accent: Hsla,
-    dark: bool,
+pub(crate) struct Colours {
+    pub pop: Hsla, pub pop_edge: Hsla, pub pop_on: Hsla,
+    pub text_1: Hsla, pub text_2: Hsla, pub text_3: Hsla,
+    pub box_fill: Hsla, pub box_edge: Hsla, pub chip: Hsla, pub ring: Hsla, pub hover: Hsla, pub active: Hsla, pub ghost_hover: Hsla, pub ghost_on: Hsla,
+    pub tip: Hsla, pub tip_edge: Hsla, pub tip_key: Hsla, pub tip_text: Hsla, pub select: Hsla, pub select_hover: Hsla, pub select_ring: Hsla, pub select_ring_strong: Hsla, pub select_on: Hsla,
+    pub edge_3: Hsla, pub accent: Hsla,
+    pub dark: bool,
 }
 
-fn colours(cx: &App) -> Colours {
+pub(crate) fn colours(cx: &App) -> Colours {
     let c = |hex: u32| -> Hsla { rgb(hex).into() };
     let alpha = |hex: u32, a: f32| -> Hsla { let mut h: Hsla = rgb(hex).into(); h.a = a; h };
     let t = theme::text(cx);
@@ -109,15 +109,15 @@ fn shadow(blur: f32, y: f32, a: f32) -> BoxShadow {
 }
 
 // A menu's shadow (--shadow-pop), and the Display panel's (--shadow-keys in dark, --shadow-pop in light).
-fn pop_shadow(dark: bool) -> Vec<BoxShadow> {
+pub(crate) fn pop_shadow(dark: bool) -> Vec<BoxShadow> {
     if dark { vec![shadow(32., 7., 0.4)] } else { vec![shadow(48., 9., 0.08), shadow(24., 6., 0.1), shadow(1., 1., 0.04)] }
 }
 
-fn panel_shadow(dark: bool) -> Vec<BoxShadow> {
+pub(crate) fn panel_shadow(dark: bool) -> Vec<BoxShadow> {
     if dark { vec![shadow(8., 3., 0.125), shadow(5., 2., 0.125), shadow(1., 1., 0.125)] } else { pop_shadow(false) }
 }
 
-fn ring(colour: Hsla, width: f32) -> BoxShadow {
+pub(crate) fn ring(colour: Hsla, width: f32) -> BoxShadow {
     BoxShadow { color: colour, offset: point(px(0.), px(0.)), blur_radius: px(0.), spread_radius: px(width), inset: false }
 }
 

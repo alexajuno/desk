@@ -4,21 +4,27 @@
 // where Linear's Inbox has no room for the Properties column, the properties are chips under the title and the actions
 // a row over it. desk pushes the page again over the sync socket whenever it changes (main.rs, Event::Page).
 //
-// Status and priority change from their menus here; the other properties show what they are, and change on the web's
-// page until their pickers come here too.
+// Each property changes where it is shown, from its menu (picker.rs), and so do the title, a box that saves on Enter
+// or as you leave it, and the document, which a click turns into its Markdown to type in, saved a second after you stop
+// and as you leave it, with the document it started from, so that a section it left as it was keeps what a session
+// wrote there meanwhile (the server's issues.ts, merged).
 use std::collections::HashSet;
+use std::time::Duration;
 
 use gpui_kit::base::StyledExt;
 use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::input::{Escape, InputEvent, Textarea, TextareaState};
 use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 use gpui_kit::component::text::TextView;
-use gpui_kit::component::ActiveTheme;
+use gpui_kit::component::{ActiveTheme, Sizable, Size as InputSize};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use serde_json::{json, Value};
 
+use crate::filters::{colours, Anchors};
+use crate::picker::{DatePick, Menu, Pick, Picker, PickerEvent, Source};
 use crate::steps::Steps;
-use crate::{net, theme};
+use crate::{net, picker, theme};
 
 const WIDE: f32 = 820.; // the pane's width from which Properties get their column, as Linear's
 const SIDE: f32 = 272.;
@@ -81,11 +87,62 @@ fn text(v: &Value) -> String {
     v.as_str().unwrap_or("").to_string()
 }
 
+// A menu's choices, from desk, on a thread of its own: its teams, its open projects with the issue's team's first and
+// the one it is in, or its project's milestones in their order; each with None first (issues/menus.tsx).
+fn choices(field: &'static str, team: Option<String>, project: Option<String>, milestone: Option<String>) -> Result<Menu, String> {
+    let none = |label: &str, current: bool| Pick { icon: "none", label: label.into(), value: String::new(), current };
+    let rows = |v: &Value| v.as_array().cloned().unwrap_or_default();
+    let menu = |picks: Vec<Pick>, placeholder: &'static str, empty: &'static str, width: f32| Menu {
+        source: Source::Fixed(picks), placeholder, empty, width, takes_typed: false, start: String::new(),
+    };
+    match field {
+        "team" => {
+            let mut picks = vec![none("No team", team.is_none())];
+            for t in rows(&net::get("/api/teams")?) {
+                picks.push(Pick { icon: "team", label: text(&t["title"]), current: team.as_deref() == t["slug"].as_str(), value: text(&t["slug"]) });
+            }
+            Ok(menu(picks, "Set team…", "No team matches", 340.))
+        }
+        "project" => {
+            let mut open: Vec<Value> = rows(&net::get("/api/projects")?).into_iter()
+                .filter(|p| !matches!(p["status"].as_str(), Some("completed" | "canceled")) || p["slug"].as_str() == project.as_deref())
+                .collect();
+            open.sort_by_key(|p| (p["team"].as_str() != team.as_deref(), text(&p["created"])));
+            let mut picks = vec![none("No project", project.is_none())];
+            for p in open {
+                picks.push(Pick { icon: "project", label: text(&p["title"]), current: project.as_deref() == p["slug"].as_str(), value: text(&p["slug"]) });
+            }
+            Ok(menu(picks, "Set project…", "No project matches", 340.))
+        }
+        _ => {
+            let Some(project) = project else { return Ok(menu(Vec::new(), "Set milestone…", "Put the issue in a project first", 264.)) };
+            let mine = rows(&net::get(&format!("/api/projects/{project}"))?["milestones"]);
+            if mine.is_empty() { return Ok(menu(Vec::new(), "Set milestone…", "This project has no milestones", 264.)) }
+            let mut picks = vec![none("No milestone", milestone.is_none())];
+            for m in mine {
+                picks.push(Pick { icon: "milestone", label: text(&m["title"]), current: milestone.as_deref() == m["id"].as_str(), value: text(&m["id"]) });
+            }
+            Ok(menu(picks, "Set milestone…", "No milestone matches", 264.))
+        }
+    }
+}
+
 pub enum IssueEvent {
     // its chat, in the middle: Open chat, I, or a parent or sub-issue picked
     Open(String),
     // Go or Approve from the Inbox moves on as Linear does: the next row opens, and the note says what happened
     Onward { next: Option<String>, note: String },
+    // a new title gave it a new slug, which the page follows
+    Moved(String),
+    // a menu closed or a box let go: the keys go back to the list
+    Done,
+}
+
+// A property's menu open, under the row or chip that opened it.
+struct Opened {
+    anchor: String,
+    view: AnyView,
+    _events: Subscription,
 }
 
 pub struct IssuePage {
@@ -97,6 +154,14 @@ pub struct IssuePage {
     lands_of: Vec<String>,    // the landing steps those are for: a new set starts all ticked
     pressed: Option<&'static str>, // the step pressed, "Landing…" or "Starting…", until desk answers
     painted: Option<(&'static str, String)>, // a status or priority picked, shown until desk's page says it
+    anchors: Anchors,
+    opened: Option<Opened>,
+    title: Entity<TextareaState>,
+    title_was: String,                    // the title as desk last gave it, which Esc puts back
+    doc: Option<Entity<TextareaState>>,   // the document while you type in it, as its Markdown
+    saved: String,                        // the document as desk holds it, as far as this page knows: what an edit starts from
+    save_soon: Option<Task<()>>,
+    _boxes: Vec<Subscription>,
     trust: bool,              // starting found the folder untrusted: Trust folder takes the step's place
     notice: Option<(String, bool)>, // what desk said, and whether it went wrong
     folded: HashSet<&'static str>,
@@ -106,12 +171,18 @@ pub struct IssuePage {
 impl EventEmitter<IssueEvent> for IssuePage {}
 
 impl IssuePage {
-    pub fn new(slug: String, cx: &mut Context<Self>) -> Self {
+    pub fn new(slug: String, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let steps = cx.new(|_| {
             let mut steps = Steps::new();
             steps.inline = true;
             steps
         });
+        let title = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, 20).submit_on_enter(true));
+        let boxes = vec![cx.subscribe(&title, |page, _, event: &InputEvent, cx| match event {
+            InputEvent::PressEnter { .. } => { page.save_title(cx); cx.emit(IssueEvent::Done) }
+            InputEvent::Blur => page.save_title(cx),
+            _ => {}
+        })];
         Self {
             slug,
             width: 800.,
@@ -121,6 +192,14 @@ impl IssuePage {
             lands_of: Vec::new(),
             pressed: None,
             painted: None,
+            anchors: Anchors::default(),
+            opened: None,
+            title,
+            title_was: String::new(),
+            doc: None,
+            saved: String::new(),
+            save_soon: None,
+            _boxes: boxes,
             trust: false,
             notice: None,
             folded: HashSet::new(),
@@ -128,8 +207,15 @@ impl IssuePage {
         }
     }
 
-    pub fn set(&mut self, page: Value, cx: &mut Context<Self>) {
+    pub fn set(&mut self, page: Value, window: &mut Window, cx: &mut Context<Self>) {
         self.steps.update(cx, |steps, cx| steps.set(&page, cx));
+        // the title and the document as desk has them, unless you are typing in them
+        let title = text(&page["issue"]["title"]);
+        if title != self.title_was && !self.title.read(cx).focus_handle(cx).is_focused(window) {
+            self.title.update(cx, |t, cx| t.set_value(title.clone(), window, cx));
+            self.title_was = title;
+        }
+        if self.doc.is_none() { self.saved = text(&page["body"]) }
         let lands: Vec<String> = page["lands"]["steps"].as_array().into_iter().flatten().map(text).collect();
         if lands != self.lands_of {
             self.skip.clear();
@@ -149,22 +235,187 @@ impl IssuePage {
         }
     }
 
-    // A status or priority picked from its menu: shown at once, then desk's page confirms it.
-    fn set_field(&mut self, field: &'static str, value: &'static str, cx: &mut Context<Self>) {
-        self.painted = Some((field, value.to_string()));
+    // A field set: a status or priority picked is shown at once, the rest once desk's page says it. A new title
+    // answers with the issue's new slug, which the page follows.
+    fn set_field(&mut self, field: &'static str, value: String, cx: &mut Context<Self>) {
+        self.post_set(json!({"field": field, "value": value.clone()}), cx);
+        if field == "state" || field == "priority" { self.painted = Some((field, value)) }
         cx.notify();
-        let path = format!("/issue/{}/set", self.slug);
+    }
+
+    fn post_set(&mut self, body: Value, cx: &mut Context<Self>) {
+        let (slug, path) = (self.slug.clone(), format!("/issue/{}/set", self.slug));
         cx.spawn(async move |this, cx| {
-            let done = cx.background_spawn(async move { net::post(&path, json!({"field": field, "value": value})) }).await;
+            let done = cx.background_spawn(async move { net::post(&path, body) }).await;
             let _ = this.update(cx, |page, cx| {
-                if let Err(error) = done {
-                    page.painted = None;
-                    page.notice = Some((error, true));
+                match done {
+                    Ok(answer) => {
+                        if let Some(to) = answer["moved"][&slug].as_str() {
+                            page.slug = to.to_string();
+                            cx.emit(IssueEvent::Moved(to.to_string()));
+                        }
+                        if let Some(n) = answer["closed"].as_array().map(Vec::len).filter(|n| *n > 0) {
+                            page.notice = Some((format!("Auto-closed {n} more issue{}", if n > 1 { "s" } else { "" }), false));
+                        }
+                    }
+                    Err(error) => {
+                        page.painted = None;
+                        page.notice = Some((error, true));
+                    }
                 }
                 cx.notify();
             });
         })
         .detach();
+    }
+
+    // The title as typed, on Enter or as you leave it: one line, its spaces as one; an empty one stays as it was.
+    fn save_title(&mut self, cx: &mut Context<Self>) {
+        let typed = self.title.read(cx).value().split_whitespace().collect::<Vec<_>>().join(" ");
+        if typed.is_empty() || typed == self.title_was {
+            if typed != self.title.read(cx).value().as_ref() { self.put_title_back(cx) }
+            return;
+        }
+        self.title_was = typed.clone();
+        self.set_field("title", typed, cx);
+    }
+
+    fn put_title_back(&mut self, cx: &mut Context<Self>) {
+        let was = self.title_was.clone();
+        let title = self.title.clone();
+        cx.defer(move |cx| {
+            if let Some(window) = cx.active_window() {
+                let _ = window.update(cx, |_, window, cx| title.update(cx, |t, cx| t.set_value(was, window, cx)));
+            }
+        });
+    }
+
+    // A click on the document: its Markdown, to type in where it is shown.
+    fn edit_doc(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.doc.is_some() { return }
+        let body = self.page.as_ref().map(|p| text(&p["body"])).unwrap_or_default();
+        self.saved = body.clone();
+        let doc = cx.new(|cx| TextareaState::new(window, cx).auto_grow(3, 100_000).placeholder("Add description…").default_value(body));
+        doc.update(cx, |d, cx| d.focus(window, cx));
+        self._boxes.truncate(1);
+        self._boxes.push(cx.subscribe(&doc, |page, _, event: &InputEvent, cx| match event {
+            InputEvent::Change => {
+                page.save_soon = Some(cx.spawn(async move |this, cx| {
+                    cx.background_executor().timer(Duration::from_millis(1000)).await;
+                    let _ = this.update(cx, |page, cx| page.save_doc(cx));
+                }));
+            }
+            InputEvent::Blur => page.leave_doc(cx),
+            _ => {}
+        }));
+        self.doc = Some(doc);
+        cx.notify();
+    }
+
+    // The document as typed, when it changed, with the one it was edited from.
+    fn save_doc(&mut self, cx: &mut Context<Self>) {
+        self.save_soon = None;
+        let Some(doc) = &self.doc else { return };
+        let typed = doc.read(cx).value().replace("\r\n", "\n");
+        if typed == self.saved { return }
+        let base = std::mem::replace(&mut self.saved, typed.clone());
+        if let Some(page) = &mut self.page { page["body"] = json!(typed) }
+        self.post_set(json!({"field": "body", "value": typed, "base": base}), cx);
+    }
+
+    // Leaving the document, by Esc or a click elsewhere: saved, and drawn again.
+    fn leave_doc(&mut self, cx: &mut Context<Self>) {
+        self.save_doc(cx);
+        self.doc = None;
+        self._boxes.truncate(1);
+        cx.notify();
+    }
+
+    // A property's menu, under the row or chip named; the same one again closes it.
+    fn open_menu(&mut self, field: &'static str, anchor: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.opened.as_ref().is_some_and(|o| o.anchor == anchor) {
+            return self.close_menu(cx);
+        }
+        let Some(page) = self.page.clone() else { return };
+        let bounds = self.anchors.get(anchor).unwrap_or_default();
+        let issue = &page["issue"];
+        let anchor = anchor.to_string();
+        let now = |name: &str| issue[name].as_str().filter(|v| !v.is_empty()).map(str::to_string);
+        match field {
+            "due" => {
+                let date = cx.new(|cx| DatePick::new(issue["due"].as_str(), bounds, window, cx));
+                let events = cx.subscribe(&date, move |page, _, event: &PickerEvent, cx| page.picked("due", event, cx));
+                self.opened = Some(Opened { anchor, view: date.into(), _events: events });
+            }
+            "waiting_on" | "folder" => {
+                let menu = if field == "folder" {
+                    Menu { source: Source::Folders(now("folder").unwrap_or_default()), placeholder: "Search repos, or type ~/path…", empty: "No folder matches", width: 360., takes_typed: true, start: String::new() }
+                } else {
+                    Menu { source: Source::Fixed(Vec::new()), placeholder: "Waiting on whom, for what…", empty: "Enter saves it, such as QA on #570", width: 360., takes_typed: true, start: now("waiting_on").unwrap_or_default() }
+                };
+                self.show_menu(field, anchor, menu, bounds, window, cx);
+            }
+            _ => {
+                // the choices come from desk: its teams, its open projects (the issue's team's first), or the project's milestones
+                let (team, project, milestone) = (now("team"), now("project"), now("milestone"));
+                cx.spawn_in(window, async move |this, cx| {
+                    let picks = cx.background_spawn(async move { choices(field, team, project, milestone) }).await;
+                    let _ = this.update_in(cx, |page, window, cx| match picks {
+                        Ok(menu) => page.show_menu(field, anchor, menu, bounds, window, cx),
+                        Err(error) => { page.notice = Some((error, true)); cx.notify() }
+                    });
+                })
+                .detach();
+            }
+        }
+        cx.notify();
+    }
+
+    fn show_menu(&mut self, field: &'static str, anchor: String, menu: Menu, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+        let picker = cx.new(|cx| Picker::new(menu, bounds, window, cx));
+        let events = cx.subscribe(&picker, move |page, _, event: &PickerEvent, cx| page.picked(field, event, cx));
+        self.opened = Some(Opened { anchor, view: picker.into(), _events: events });
+        cx.notify();
+    }
+
+    fn picked(&mut self, field: &'static str, event: &PickerEvent, cx: &mut Context<Self>) {
+        let value = match event {
+            PickerEvent::Picked(value) | PickerEvent::Typed(value) => value.clone(),
+            PickerEvent::Closed => return self.close_menu(cx),
+        };
+        self.close_menu(cx);
+        if field == "folder" {
+            if value.is_empty() { return }
+            let path = format!("/issue/{}/folder", self.slug);
+            cx.spawn(async move |this, cx| {
+                let done = cx.background_spawn(async move { net::act(&path, json!({"folder": value})) }).await;
+                if let Err(error) = done {
+                    let _ = this.update(cx, |page, cx| { page.notice = Some((error, true)); cx.notify() });
+                }
+            })
+            .detach();
+        } else {
+            self.set_field(field, value, cx);
+        }
+    }
+
+    fn close_menu(&mut self, cx: &mut Context<Self>) {
+        if self.opened.take().is_some() { cx.emit(IssueEvent::Done) }
+        cx.notify();
+    }
+
+    // A row of Properties, or a chip, that opens its menu: ghost until the mouse is on it.
+    fn opener(&self, id: &'static str, field: &'static str, cx: &mut Context<Self>) -> Stateful<Div> {
+        let hover = colours(cx).ghost_hover;
+        let on = self.opened.as_ref().is_some_and(|o| o.anchor == id);
+        div()
+            .id(id)
+            .relative()
+            .cursor_pointer()
+            .hover(move |s| s.bg(hover))
+            .when(on, |d| d.bg(hover))
+            .child(self.anchors.probe(id))
+            .on_click(cx.listener(move |page, _, window, cx| page.open_menu(field, id, window, cx)))
     }
 
     // Start, Go, Approve or Trust folder, as the web's page posts them (useStep's act).
@@ -329,7 +580,7 @@ impl IssuePage {
                 })
                 .checked(value == current)
                 .on_click(move |_, _, cx| {
-                    let _ = this.update(cx, |p, cx| p.set_field(field, value, cx));
+                    let _ = this.update(cx, |p, cx| p.set_field(field, value.to_string(), cx));
                 });
                 menu = menu.item(item);
             }
@@ -353,14 +604,22 @@ impl IssuePage {
         let fixed = |icon: AnyElement, words: String, set: bool| {
             Self::prop(icon, div().text_color(if set { strong } else { muted }).child(words))
         };
+        let row = |page: &Self, id: &'static str, field: &'static str, icon: AnyElement, words: String, set: bool, cx: &mut Context<Self>| {
+            page.opener(id, field, cx).h(px(32.)).px(px(8.)).ml(px(-8.)).rounded(px(6.)).child(fixed(icon, words, set))
+        };
         let pick = |id: &'static str| Button::new(id).ghost().w_full().h(px(32.)).px(px(8.)).ml(px(-8.)).text_size(px(13.)).font_normal().text_color(strong);
         let status = pick("prop-state").child(Self::prop(theme::state_icon(&state, cx), state_name(&state)));
         let prio = pick("prop-priority").child(Self::prop(priority_icon(&priority, cx).size(px(14.)), priority_name(&priority)));
         let team = page["team"]["title"].as_str().map(str::to_string);
         let project = page["project"]["title"].as_str().map(str::to_string).or_else(|| issue["project"].as_str().map(str::to_string));
         let milestone = page["milestone"].as_str().map(str::to_string);
-        let due = issue["due"].as_str().map(str::to_string);
+        let due = issue["due"].as_str().filter(|d| !d.is_empty()).map(str::to_string);
         let folder = issue["folder"].as_str().filter(|f| !f.is_empty()).unwrap_or("~").to_string();
+        let late: Hsla = if cx.theme().mode.is_dark() { rgb(0xff6364).into() } else { rgb(0xe2253b).into() }; // --late
+        let closed = state == "done" || state == "dropped";
+        let left = due.as_deref().and_then(picker::days_left);
+        let due_colour = match left { Some(d) if !closed && d <= 0 => late, Some(d) if !closed && d <= 7 => t.waiting, _ => muted };
+        let due_words = due.as_deref().and_then(picker::day_label);
         let link = issue["link"].as_str().map(str::to_string);
         let landed = page["landed"].as_str().map(|l| l.replace('`', "")).filter(|l| !link.as_ref().is_some_and(|k| l.contains(k.as_str())));
         let session = issue["session"].as_str().map(|s| s.chars().take(8).collect::<String>());
@@ -370,23 +629,24 @@ impl IssuePage {
             .text_size(px(13.))
             .child(div().mb(px(8.)).font_medium().text_color(muted).child("Properties"))
             .child(self.menu(status, "state", state.clone(), cx))
-            .child(fixed(glyph("team"), team.clone().unwrap_or_else(|| "Add to team".into()), team.is_some()))
+            .child(row(self, "prop-team", "team", glyph("team"), team.clone().unwrap_or_else(|| "Add to team".into()), team.is_some(), cx))
             .child(self.menu(prio, "priority", priority.clone(), cx))
             .when(state == "waiting", |p| {
                 let on = text(&issue["waiting_on"]);
                 let waited = text(&issue["waited"]);
                 let since = format!("since {}{}", text(&issue["waiting_since_short"]), if waited != "today" && !waited.is_empty() { format!(" · {waited}") } else { String::new() });
                 p.child(label("Waiting on"))
-                    .child(fixed(glyph("clock"), if on.is_empty() { "Who or what?".into() } else { on.clone() }, !on.is_empty()))
+                    .child(row(self, "prop-waiting", "waiting_on", glyph("clock"), if on.is_empty() { "Who or what?".into() } else { on.clone() }, !on.is_empty(), cx))
                     .child(div().h(px(32.)).flex().items_center().text_color(muted).child(since))
             })
             .child(label("Project"))
-            .child(fixed(glyph("project"), project.clone().unwrap_or_else(|| "Add to project".into()), project.is_some()))
-            .when(project.is_some(), |p| p.child(fixed(glyph("milestone"), milestone.clone().unwrap_or_else(|| "Add to milestone".into()), milestone.is_some())))
+            .child(row(self, "prop-project", "project", glyph("project"), project.clone().unwrap_or_else(|| "Add to project".into()), project.is_some(), cx))
+            .when(project.is_some(), |p| p.child(row(self, "prop-milestone", "milestone", glyph("milestone"), milestone.clone().unwrap_or_else(|| "Add to milestone".into()), milestone.is_some(), cx)))
             .child(label("Due date"))
-            .child(fixed(glyph("calendar"), due.clone().unwrap_or_else(|| "Set due date".into()), due.is_some()))
+            .child(row(self, "prop-due", "due", theme::glyph("calendar", due_colour).size(px(14.)).into_any_element(), due_words.clone().unwrap_or_else(|| "Set due date".into()), due.is_some(), cx)
+                .when(left.is_some_and(|d| !closed && d <= 0), |r| r.text_color(late)))
             .child(label("Works in"))
-            .child(fixed(glyph("folder"), folder, true))
+            .child(row(self, "prop-folder", "folder", glyph("folder"), folder, true, cx))
             .when_some(link, |p, link| p.child(label("Link")).child(Self::prop(div(), div().text_color(strong).child(link.rsplit('/').next().unwrap_or("").to_string()))))
             .when_some(landed, |p, landed| p.child(label("Landed")).child(div().py(px(6.)).text_color(strong).child(landed)))
             .when_some(session, |p, session| {
@@ -404,8 +664,8 @@ impl IssuePage {
         let state = self.field(page, "state");
         let priority = self.field(page, "priority");
         let issue = &page["issue"];
-        let chip = |icon: AnyElement, words: String, set: bool| {
-            div()
+        let chip = |page: &Self, id: &'static str, field: &'static str, icon: AnyElement, words: String, set: bool, cx: &mut Context<Self>| {
+            page.opener(id, field, cx)
                 .h_flex()
                 .flex_none()
                 .max_w(px(260.))
@@ -437,16 +697,16 @@ impl IssuePage {
             .gap(px(6.))
             .mb(px(24.))
             .child(self.menu(status, "state", state.clone(), cx))
-            .child(chip(glyph("team"), team.clone().unwrap_or_else(|| "Team".into()), team.is_some()))
+            .child(chip(self, "chip-team", "team", glyph("team"), team.clone().unwrap_or_else(|| "Team".into()), team.is_some(), cx))
             .child(self.menu(prio, "priority", priority.clone(), cx))
             .when(state == "waiting", |c| {
                 let on = text(&issue["waiting_on"]);
-                c.child(chip(glyph("clock"), if on.is_empty() { "Waiting on".into() } else { on.clone() }, !on.is_empty()))
+                c.child(chip(self, "chip-waiting", "waiting_on", glyph("clock"), if on.is_empty() { "Waiting on".into() } else { on.clone() }, !on.is_empty(), cx))
             })
-            .child(chip(glyph("project"), project.clone().unwrap_or_else(|| "Project".into()), project.is_some()))
-            .when(project.is_some(), |c| c.child(chip(glyph("milestone"), milestone.clone().unwrap_or_else(|| "Milestone".into()), milestone.is_some())))
-            .when_some(issue["due"].as_str().map(str::to_string), |c, due| c.child(chip(glyph("calendar"), due, true)))
-            .child(chip(glyph("folder"), folder.clone().unwrap_or_else(|| "Folder".into()), folder.is_some()))
+            .child(chip(self, "chip-project", "project", glyph("project"), project.clone().unwrap_or_else(|| "Project".into()), project.is_some(), cx))
+            .when(project.is_some(), |c| c.child(chip(self, "chip-milestone", "milestone", glyph("milestone"), milestone.clone().unwrap_or_else(|| "Milestone".into()), milestone.is_some(), cx)))
+            .when_some(issue["due"].as_str().filter(|d| !d.is_empty()).and_then(picker::day_label), |c, due| c.child(chip(self, "chip-due", "due", glyph("calendar"), due, true, cx)))
+            .child(chip(self, "chip-folder", "folder", glyph("folder"), folder.clone().unwrap_or_else(|| "Folder".into()), folder.is_some(), cx))
     }
 
     // What Approve runs, as the session said, each ticked: untick one to skip it.
@@ -622,7 +882,16 @@ impl Render for IssuePage {
         let mut main = div().v_flex().flex_1().min_w_0();
         main = main
             .children(self.parents(&page, cx))
-            .child(div().mb(px(16.)).text_size(px(24.)).line_height(px(31.)).font_semibold().text_color(strong).child(text(&page["issue"]["title"])))
+            .child(
+                div().mb(px(16.)).mx(px(-4.)).text_size(px(24.)).line_height(px(31.)).font_semibold().text_color(strong)
+                    // Esc leaves the title as it was
+                    .capture_action(cx.listener(|page, _: &Escape, window, cx| {
+                        let was = page.title_was.clone();
+                        page.title.update(cx, |t, cx| t.set_value(was, window, cx));
+                        cx.emit(IssueEvent::Done);
+                    }))
+                    .child(Textarea::new(&self.title).appearance(false).with_size(InputSize::XSmall).text_size(px(24.)).line_height(px(31.))),
+            )
             .when(!wide, |m| m.child(self.chips(&page, cx)));
         if state == "review" && page["reviewing"].as_bool() == Some(true) && page["lands"].is_object() {
             main = main.child(self.review(cx));
@@ -632,16 +901,21 @@ impl Render for IssuePage {
             main = main.child(self.section("steps", "Steps", None, steps, cx));
         }
         let body = text(&page["body"]);
-        if !body.is_empty() {
-            main = main.child(
-                div()
-                    .mt(px(24.))
-                    .text_size(px(15.))
-                    .line_height(px(24.))
-                    .text_color(fg)
-                    .child(TextView::markdown(SharedString::from(format!("body-{}", self.slug)), body).selectable(true)),
-            );
-        }
+        let document = div().id("document").mt(px(24.)).text_size(px(15.)).line_height(px(24.)).text_color(fg);
+        main = main.child(match &self.doc {
+            // typed in: its Markdown, until you leave it (Esc, or a click elsewhere)
+            Some(doc) => document
+                .capture_action(cx.listener(|page, _: &Escape, _, cx| { page.leave_doc(cx); cx.emit(IssueEvent::Done) }))
+                .mx(px(-4.))
+                .child(Textarea::new(doc).appearance(false).with_size(InputSize::XSmall).text_size(px(15.)).line_height(px(24.)))
+                .into_any_element(),
+            None if body.trim().is_empty() => document.cursor_text().text_color(muted).child("Add description…")
+                .on_click(cx.listener(|page, _, window, cx| page.edit_doc(window, cx))).into_any_element(),
+            None => document.cursor_text()
+                .on_click(cx.listener(|page, _, window, cx| page.edit_doc(window, cx)))
+                .child(TextView::markdown(SharedString::from(format!("body-{}", self.slug)), body).selectable(true))
+                .into_any_element(),
+        });
         for (file, title) in [("plan.md", "Plan"), ("result.md", "Result")] {
             if let Some(html) = page["agent_files"][file].as_str() {
                 let body = div().text_size(px(15.)).line_height(px(24.)).text_color(fg).child(TextView::html(SharedString::from(format!("{file}-{}", self.slug)), html.to_string())).into_any_element();
@@ -678,7 +952,11 @@ impl Render for IssuePage {
         } else {
             div().v_flex().gap(px(16.)).child(div().v_flex().items_end().gap(px(4.)).child(actions).children(notice)).child(main)
         };
-        div().size_full().child(
+        let menu = self.opened.as_ref().map(|o| {
+            let at = self.anchors.get(&o.anchor).map(|b| point(b.left(), b.bottom() + px(4.))).unwrap_or(point(px(400.), px(120.)));
+            deferred(anchored().position(at).snap_to_window_with_margin(px(8.)).child(o.view.clone())).with_priority(2)
+        });
+        div().size_full().children(menu).child(
             div()
                 .id("issue-page")
                 .size_full()
