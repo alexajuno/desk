@@ -1,10 +1,10 @@
 // Sync for the app (ported from desk/sync.py): a WebSocket that gives the app every row it holds, issues, teams,
-// chats and the Inbox's, then each change the moment it is written, numbered as the log numbers it (db.ts), whoever made it: a page, an
-// agent's curl, or desk itself. The app's own changes go through the JSON API and come back this way, like everyone
-// else's. An app that lost desk, as when desk restarts, connects again with the last change it
-// applied, and gets only what it missed.
+// chats and the Inbox's, then each changed row the moment it is written, numbered in this run of desk (db.ts), whoever
+// made it: a page, an agent's curl, or desk itself. The app's own changes go through the JSON API and come back this
+// way, like everyone else's. An app that lost desk, as when desk restarts, connects again with the last change it
+// applied, and gets every row again unless it missed nothing.
 //
-//     /api/sync?log=<log>&since=<seq>     the log and the last change the app applied; a new tab sends both empty
+//     /api/sync?log=<log>&since=<seq>     the run and the last change the app applied; a new tab sends both empty
 //
 //     {"type": "snapshot", "log": "<log>", "seq": 812, "rows": {"issues": [<issue>, ...], "teams": [<team>, ...], "chats": [<chat>, ...], "inbox": [<row>, ...]}}
 //     {"type": "changes", "after": 811, "changes": [{"seq": 812, "kind": "issues", "key": "<slug>", "row": <issue>}, ...]}
@@ -18,7 +18,7 @@
 // Inbox's right pane does: desk answers with its <page>, the issue as its page draws it (pages.ts, issuePageJson), or
 // null once it is gone, and again whenever it changed, until the app shows another or leaves.
 //
-// The first answer is the snapshot, or the changes the app missed, maybe none. Each "changes" goes on from the one
+// The first answer is the snapshot, or no changes when the app missed none. Each "changes" goes on from the one
 // before it, whose last change is its "after": an app that holds another seq missed some, and connects again to get
 // them. A row is the table's, less what the app is not sent (db.ts, HELD): an <issue> is every field of issue.md but
 // its description, a <team> its slug, title, state, created and aliases, a <chat> its id, session, issue, title and who it is

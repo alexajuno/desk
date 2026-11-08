@@ -6,8 +6,8 @@ import { reloadPages } from "../store/ui";
 import { shown } from "./shown";
 
 // The one connection to desk (the server's sync.ts): every row and the frame on connect, then each change as it is
-// written. On a drop, such as desk restarting, try again each second, naming the last change applied: desk sends only
-// what was missed, or every row afresh when its log no longer reaches back that far. The pages fetch themselves again,
+// written. On a drop, such as desk restarting, try again each second, naming the last change applied: desk sends every
+// row afresh, unless nothing was missed, since it keeps no log of its changes (since 8 Nov). The pages fetch themselves again,
 // since what they show besides the rows may have moved meanwhile, and desk is told again which issue the app shows
 // (sync/shown.ts), whose page it pushes. A chat's terminal that Claude started opens beside it, and so does its
 // Browser in desk's app, on a tab its session just opened or works in, until it closes its last tab.
