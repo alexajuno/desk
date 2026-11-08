@@ -1614,7 +1614,7 @@ const Runs = observer(function Runs({ s }: { s: LiveSession }) {
   return (
     <button className="runs" type="button" title={runs.picking ? "Haiku picks the model and effort from your first message" : "Model and effort"} onMouseEnter={warm} onFocus={warm}
       onClick={(e) => { if (!toggled(e.currentTarget)) runsMenu(e.currentTarget, s.id, runs, (set, shown) => void s.pick(set, shown)); }}>
-      {runs.picking ? "Auto model" : <>{runs.name}{runs.effort && <span className="effort"> · {effortName(runs.effort)}</span>}</>}
+      {runs.picking ? "Auto model" : runs.name}
       <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
     </button>
   );

@@ -484,10 +484,6 @@ button.cmd-more:hover { background: none; color: var(--text-2); }
 .skill { color: var(--skill-text); }
 .skill-slash { opacity: 0.5; }
 .composer-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
-/* Beside the right half the composer is too narrow for the model's whole name, which pushed Send past its edge: the
-   effort goes, and stays in the model's menu. */
-.composer { container-type: inline-size; }
-@container (max-width: 480px) { .composer-foot .runs .effort { display: none; } }
 /* No line of key hints: each button names its keys in its tooltip, as Linear's do ("i'm familiar with it already",
    the user, 19 Oct). */
 .composer-foot .spacer { flex: 1; }
