@@ -155,9 +155,6 @@ create table if not exists session_models ( -- the model and effort picked for a
   model text,
   effort text
 );
--- What Claude Code last said of what the model chip's menu shows (models.ts): its models, the plan's usage, and each
--- session's context, as "context:<session>".
-create table if not exists heard (name text primary key, value jsonb not null, at double precision not null);
 create table if not exists settings (name text primary key, value jsonb not null); -- each one set (settings.ts)
 -- The pool of test desks (pool.ts): each issue whose session asked for one, in the order it asked, with the port of
 -- its slot once it has one (null while it waits in line), and when it was told so (null until then).
@@ -178,6 +175,9 @@ create table if not exists sessions ( -- what each session does, as the session 
   ended timestamptz, -- when its last turn ended, however: its reply, Stop, an error, or its process going
   cost double precision, -- the dollars it has spent so far, as Claude Code counts them on each turn's result
   tokens double precision, -- the tokens its model calls read so far, fresh or from the cache
+  context_tokens double precision, -- how full its context is, as Claude Code last counted it (models.ts)
+  context_max double precision, -- out of how many
+  context_at double precision, -- when it counted, in seconds
   updated timestamptz not null default now()
 );
 -- The Sessions menu's search (sessiontext.ts). desk_words reads a text as simple does, its words whole and lowercased,
@@ -344,6 +344,14 @@ export async function open(): Promise<PGlite> {
   // Try's line for desk's own checkout and the copies of the files from before 19 Oct, out since 2 Nov: a branch is
   // tested on a test desk of its own (pool.ts, tests).
   await opened.exec("drop table if exists line; drop table if exists tries; drop table if exists trying; drop table if exists copies;");
+  // How full each session's context is, as Claude Code last counted it (models.ts), from 8 Nov: kept until then, with
+  // Claude Code's list of models, in a table of its own, heard, as JSON by name. The list is meta's 'claude models' since.
+  await opened.exec(["context_tokens", "context_max", "context_at"].map((c) => `alter table sessions add column if not exists ${c} double precision;`).join(" "));
+  if ((await opened.query("select 1 from information_schema.tables where table_name = 'heard'")).rows.length)
+    await opened.exec(`insert into meta select 'claude models', value::text from heard where name = 'models' on conflict do nothing;
+      update sessions s set context_tokens = (h.value->>'tokens')::float8, context_max = (h.value->>'max')::float8, context_at = h.at
+        from heard h where h.name = 'context:' || s.id;
+      drop table heard;`);
   // The log of changes, a copy of each row a write changed, numbered, which an app back from a drop caught up from, out
   // since 8 Nov: such an app takes every row again (3.3 MB on 8 Nov), and the changed rows go out as they stand.
   await opened.exec("drop table if exists changes; drop function if exists logged(); delete from meta where name in ('log', 'pruned');");

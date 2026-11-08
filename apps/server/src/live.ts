@@ -50,9 +50,7 @@ export function moved(sessions: string[] | null) {
 }
 
 // A new count of a session's context moves its panels.
-models.onHeard((name) => {
-  if (name.startsWith("context:")) moved([name.slice("context:".length)]);
-});
+models.onCounted((session) => moved([session]));
 
 // Whether a panel the user looks at shows the session now.
 export function watching(session: string | null | undefined): boolean {

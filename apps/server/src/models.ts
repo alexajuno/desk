@@ -124,23 +124,28 @@ export async function change(session: string, pick: Pick): Promise<void> {
 // --- what Claude Code said -------------------------------------------------------------------------------------------
 // The chip's menu opens at once, with what desk last heard (the user, 20 Oct: "make sure they don't take seconds to
 // press that button", and "the number of usage flipping won't be much, so it needs not to be exact. we prioritize
-// speed here"). The models and each session's context are kept in the heard table, and asked again
-// only in the background, never while the menu waits: on 20 Oct the usage, asked on every open a minute after the last,
-// held the menu up 2 to 4 s while a Claude Code started only for it.
+// speed here"). Claude Code's list of models is kept in meta, as 'claude models', and each session's context on its
+// sessions row, and asked again only in the background, never while the menu waits: on 20 Oct the usage, asked on every
+// open a minute after the last, held the menu up 2 to 4 s while a Claude Code started only for it.
 
-const heard = new Map<string, { value: any; at: number }>(); // at in ms
-const hearers = new Set<(name: string) => void>();
+const counted = new Map<string, { value: Context; at: number }>(); // each session's context, at in ms
+const counters = new Set<(session: string) => void>();
 
-// Told each time desk hears something new, by its name in the heard table, such as "context:<session>".
-export const onHeard = (fn: (name: string) => void) => { hearers.add(fn); };
+// Told each time desk has a new count of a session's context.
+export const onCounted = (fn: (session: string) => void) => { counters.add(fn); };
 
-async function hear(name: string, value: unknown) {
+async function keepCount(session: string, value: Context) {
   const at = Date.now();
-  heard.set(name, { value, at });
-  for (const fn of hearers) fn(name);
-  await db.write((tx) => tx.query("insert into heard values ($1, $2, $3) on conflict (name) do update set value = excluded.value, at = excluded.at",
-    [name, JSON.stringify(value), at / 1000]));
+  counted.set(session, { value, at });
+  for (const fn of counters) fn(session);
+  await db.write((tx) => tx.query(`insert into sessions (id, context_tokens, context_max, context_at) values ($1, $2, $3, $4)
+    on conflict (id) do update set context_tokens = excluded.context_tokens, context_max = excluded.context_max, context_at = excluded.context_at`,
+    [session, value.tokens, value.max, at / 1000]));
 }
+
+const keepList = (version: string, models: ModelInfo[]) =>
+  db.write((tx) => tx.query("insert into meta values ('claude models', $1) on conflict (name) do update set value = excluded.value",
+    [JSON.stringify({ version, models })]));
 
 async function ask<T>(question: (q: Query) => Promise<T>): Promise<T> {
   const claude = which("claude");
@@ -182,7 +187,7 @@ function relist(): Promise<ModelInfo[]> {
     if (list && by === listedBy) return list;
     const found = await ask((q) => q.supportedModels());
     [list, listedBy] = [found, by];
-    await hear("models", { version: by, models: found });
+    await keepList(by, found);
     return found;
   })().finally(() => (listing = null));
   return listing;
@@ -232,7 +237,7 @@ const counting = new Set<string>();
 function recount(session: string) {
   if (counting.has(session)) return;
   counting.add(session);
-  void hosted.context(session).then((c) => hear(`context:${session}`, c))
+  void hosted.context(session).then((c) => keepCount(session, c))
     .catch(() => {}) // no process holds it, so nothing changed since the last count
     .finally(() => counting.delete(session));
 }
@@ -240,7 +245,7 @@ function recount(session: string) {
 // The session's context as last counted, or null before any count; counted again in the background when a turn ran
 // since, or runs now.
 export function context(session: string): Context | null {
-  const kept = heard.get(`context:${session}`), ended = turns.ended(session);
+  const kept = counted.get(session), ended = turns.ended(session);
   if (!kept || turns.working(session) || (ended !== null && ended * 1000 > kept.at)) recount(session);
   return kept?.value ?? null;
 }
@@ -250,17 +255,18 @@ export function context(session: string): Context | null {
 // counts nothing again itself, since the panels ask it again each time desk hears something new (live.ts), and a count
 // asked from there would never end.
 export function outright(session: string): { context: Context | null } {
-  return { context: heard.get(`context:${session}`)?.value ?? null };
+  return { context: counted.get(session)?.value ?? null };
 }
 
 // --- start ----------------------------------------------------------------------------------------------------------
 
 // What desk last heard, as it starts, then the host's word of each turn's end.
 async function listen() {
-  const rows = (await sql().query<{ name: string; value: unknown; at: number }>("select name, value, at from heard")).rows;
-  for (const r of rows) heard.set(r.name, { value: r.value, at: r.at * 1000 });
-  const models = heard.get("models")?.value as { version: string; models: ModelInfo[] } | undefined;
-  if (models) [list, listedBy] = [models.models, models.version];
+  const rows = (await sql().query<{ id: string; tokens: number; max: number; at: number }>(
+    "select id, context_tokens as tokens, context_max as max, context_at as at from sessions where context_at is not null")).rows;
+  for (const r of rows) counted.set(r.id, { value: { tokens: r.tokens, max: r.max, percent: r.max ? Math.round((r.tokens / r.max) * 100) : 0 }, at: r.at * 1000 });
+  const kept = (await sql().query<{ value: string }>("select value from meta where name = 'claude models'")).rows[0]?.value;
+  if (kept) ({ version: listedBy, models: list } = JSON.parse(kept) as { version: string; models: ModelInfo[] });
   void all().catch(() => {}); // looks at Claude Code's version now
   turns.onChange((_sessions, ended) => { for (const session of ended) recount(session); });
 }
