@@ -680,7 +680,7 @@ export async function create(): Promise<FastifyInstance> {
     return setFields(slugs, body.field, typeof body.value === "string" ? body.value : "");
   });
 
-  // Moves the issue and its sub-issues to the trash; POST /trash/<slug>/restore undoes it.
+  // Marks the issue and its sub-issues deleted (issues.ts, trash); POST /trash/<slug>/restore undoes it.
   app.post("/issue/:slug/delete", async (req: Req) => {
     await mustExist(req.params.slug);
     const parent = (await store.load(req.params.slug)).parent;
@@ -692,7 +692,6 @@ export async function create(): Promise<FastifyInstance> {
       return { restored: await store.restore(req.params.slug) };
     } catch (error) {
       if (error instanceof store.Missing) throw new HttpError(404, "Nothing to restore.");
-      if (error instanceof store.Clash) throw new HttpError(409, `Cannot restore: ${error.message} exists again.`);
       throw error;
     }
   });

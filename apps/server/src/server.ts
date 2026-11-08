@@ -35,6 +35,8 @@ await teams.moveFolders(); // before projects.importAll, which reads projects/, 
 const issues = await store.importAll(), teamCount = await teams.importAll(), projectCount = await projects.importAll();
 if (issues || teamCount || projectCount)
   console.log(`desk read ${issues} issue.md, ${teamCount} team.md and ${projectCount} project.md into a new database`);
+const untrashed = await store.untrash(); // once: the trash's folders and rows back in place, marked deleted
+if (untrashed) console.log(`desk moved ${untrashed} deleted issues out of the trash, marked deleted where they were`);
 const rewritten = await store.rewrite();
 if (rewritten) console.log(`desk wrote ${rewritten} issue.md out again, as their rows now hold them`);
 await store.readLanded();

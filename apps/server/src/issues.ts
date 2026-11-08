@@ -5,9 +5,9 @@
 // desk fetches from file later" (the user, 19 Oct). Every write here goes through db.write, which logs it for the apps.
 //
 // Nesting is a `parent` slug, not nested folders, so a sub-issue can have its own sub-issues to any depth. Deleting
-// moves an issue and its sub-issues to TRASH_DIR/<slug>/, one folder each, and their rows to the trashed table, so undo
-// is a move back.
-import { existsSync, mkdirSync, opendirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+// marks an issue and its sub-issues deleted, deleted_at, as Laravel's soft delete ("in laravel there is such thing as
+// deleted_at", the user, 8 Nov): their rows and folders stay where they are, and undo clears the mark.
+import { existsSync, mkdirSync, opendirSync, readdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ISSUES_DIR, TRASH_DIR } from "./config.ts";
@@ -60,12 +60,13 @@ export interface Issue {
   review_of: string | null; // in review, one of REVIEWS; none in a review from before 19 Oct, which held a result
   review_since: string | null;
   created: string;
+  deleted_at: string | null; // when its delete took it out of sight, with its sub-issues (trash); null while it is not
   body: string;
 }
 
 // The fields in issue.md, in the order issues.py's dataclass wrote them.
 const FIELDS = ["title", "priority", "state", "parent", "team", "project", "milestone", "due", "folder", "link", "landing", "landed",
-  "lands", "plan_steps", "waiting_on", "waiting_since", "review_of", "review_since", "created"] as const;
+  "lands", "plan_steps", "waiting_on", "waiting_since", "review_of", "review_since", "created", "deleted_at"] as const;
 
 export const now = (d = new Date()) => {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -75,7 +76,7 @@ export const now = (d = new Date()) => {
 export function blank(slug: string, title: string): Issue {
   return { slug, title, priority: "none", state: "backlog", parent: null, team: null, project: null, milestone: null, due: null, folder: null, link: null,
     landing: null, landed: null, lands: null, plan_steps: null, waiting_on: null, waiting_since: null, review_of: null, review_since: null,
-    created: now(), body: "" };
+    created: now(), deleted_at: null, body: "" };
 }
 
 // Most urgent first, then oldest: the backlog's order.
@@ -251,8 +252,9 @@ export function listingOrder(dir: string): Map<string, number> {
   return at;
 }
 
+// The issues not deleted, as every reader but the trash's sees them.
 export async function loadAll(q: Db = sql()): Promise<Map<string, Issue>> {
-  const rows = (await q.query<Row>('select * from issues order by slug collate "C"')).rows;
+  const rows = (await q.query<Row>('select * from issues where deleted_at is null order by slug collate "C"')).rows;
   // In the order the folder lists them, as the Python's glob read them: issues filed in the same second keep their order.
   const at = listingOrder(ISSUES_DIR);
   rows.sort((a, b) => (at.get(a.slug) ?? Infinity) - (at.get(b.slug) ?? Infinity));
@@ -260,11 +262,15 @@ export async function loadAll(q: Db = sql()): Promise<Map<string, Issue>> {
 }
 
 export async function exists(slug: string, q: Db = sql()): Promise<boolean> {
-  return validSlug(slug) && (await q.query("select 1 from issues where slug = $1", [slug])).rows.length > 0;
+  return validSlug(slug) && (await q.query("select 1 from issues where slug = $1 and deleted_at is null", [slug])).rows.length > 0;
 }
 
+// Whether a row holds the slug, deleted or not: a deleted issue keeps its slug, so that undoing its delete never
+// collides with a new one.
+const taken = async (slug: string, q: Db) => (await q.query("select 1 from issues where slug = $1", [slug])).rows.length > 0;
+
 export async function load(slug: string, q: Db = sql()): Promise<Issue> {
-  const row = (await q.query<Row>("select * from issues where slug = $1", [slug])).rows[0];
+  const row = (await q.query<Row>("select * from issues where slug = $1 and deleted_at is null", [slug])).rows[0];
   if (!row) throw new Error(`No issue ${slug}`);
   return fromRow(row);
 }
@@ -420,9 +426,7 @@ export function result(i: Issue): string {
 export async function newSlug(title: string, q: Db = sql()): Promise<string> {
   const base = slugify(title, "issue");
   let slug = base, n = 2;
-  // A trashed slug stays taken, so restoring a deleted issue never collides with a new one.
-  const trashed = (s: string) => existsSync(TRASH_DIR) && readdirSync(TRASH_DIR).some((d) => existsSync(join(TRASH_DIR, d, s)));
-  while (existsSync(folder(slug)) || (await exists(slug, q)) || trashed(slug)) slug = `${base}-${n++}`;
+  while (existsSync(folder(slug)) || (await taken(slug, q))) slug = `${base}-${n++}`;
   return slug;
 }
 
@@ -457,7 +461,6 @@ async function follow(tx: Db, i: Issue): Promise<boolean> {
   for (const r of (await linking("projects")).rows) await tx.query("update projects set body = $2 where slug = $1", [r.slug, relink(r.body)]);
   for (const told of renamed) await told(tx, from, to);
   await tx.query("update tests set slug = $2 where slug = $1", [from, to]);
-  await tx.query("update trashed set row = jsonb_set(row, '{parent}', to_jsonb($2::text)) where row ->> 'parent' = $1", [from, to]);
   return true;
 }
 
@@ -504,62 +507,76 @@ export function descendants(issues: Map<string, Issue>, slug: string): string[] 
   return found;
 }
 
-// Move the issue and all its sub-issues to TRASH_DIR/<slug>/; returns their slugs, the issue first.
+// Mark the issue and all its sub-issues deleted, as of the same second; returns their slugs, the issue first. Their
+// issue.md say so, for an agent reading the folder.
 export function trash(slug: string): Promise<string[]> {
   return db.write(async (tx) => {
     const names = [slug, ...descendants(await loadAll(tx), slug)];
-    const bin = join(TRASH_DIR, slug);
-    mkdirSync(bin, { recursive: true });
-    for (const name of names) {
-      if (existsSync(folder(name))) renameSync(folder(name), join(bin, name));
-      await tx.query(`insert into trashed select slug, $2, to_jsonb(issues) from issues where slug = $1
-        on conflict (slug) do update set bin = excluded.bin, row = excluded.row`, [name, slug]);
-      await tx.query("delete from issues where slug = $1", [name]);
-    }
+    const at = now();
+    await tx.query("update issues set deleted_at = $2 where slug = any($1)", [names, at]);
+    await rewriteSome(tx, names);
     return names;
   });
 }
 
 export class Missing extends Error {}
-export class Clash extends Error {}
 
-// Move a trashed issue and its sub-issues back, their rows and their folders. If an agent wrote into an old folder
-// meanwhile, that folder has no issue.md and takes the trashed files back in; one with an issue.md is a clash.
+// Undo a delete: the issue and the sub-issues its delete marked with it, as of the same second; returns their slugs, the
+// issue first.
 export async function restore(slug: string): Promise<string[]> {
-  const bin = join(TRASH_DIR, slug);
-  if (!validSlug(slug) || !existsSync(bin)) throw new Missing(slug);
   return db.write(async (tx) => {
-    const trashed = readdirSync(bin, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
-    const clash = trashed.filter((name) => existsSync(join(folder(name), MAIN)));
-    if (clash.length) throw new Clash(clash.join(", "));
-    for (const name of trashed) {
-      if (!existsSync(folder(name))) renameSync(join(bin, name), folder(name));
-      else {
-        for (const item of readdirSync(join(bin, name)))
-          if (!existsSync(join(folder(name), item))) renameSync(join(bin, name, item), join(folder(name), item));
-        rmSync(join(bin, name), { recursive: true, force: true });
-      }
-      await back(tx, name);
-    }
-    rmdirSync(bin);
-    return [slug, ...trashed.filter((name) => name !== slug)];
+    const all = new Map((await tx.query<Row>("select * from issues")).rows.map((r) => [r.slug, fromRow(r)]));
+    const at = all.get(slug)?.deleted_at;
+    if (!validSlug(slug) || !at) throw new Missing(slug);
+    const names = [slug, ...descendants(all, slug).filter((name) => all.get(name)!.deleted_at === at)];
+    await tx.query("update issues set deleted_at = null where slug = any($1)", [names]);
+    await rewriteSome(tx, names);
+    return names;
   });
 }
 
-// The trashed issue's row back into the issues table, and its issue.md written out again from it; an issue trashed
-// before the table kept it (19 Oct) comes back from its issue.md, the one time desk reads one.
-async function back(tx: Db, slug: string) {
-  const path = join(folder(slug), MAIN);
-  const kept = (await tx.query<{ row: Row }>("delete from trashed where slug = $1 returning row", [slug])).rows[0];
-  if (kept) {
-    const text = render(fromRow(kept.row));
-    mkdirSync(folder(slug), { recursive: true });
-    writeFileSync(path, text, "utf8");
-    await upsert(tx, parse(slug, text), text);
-  } else if (existsSync(path)) {
-    const text = readFileSync(path, "utf8");
-    await upsert(tx, parse(slug, text), text);
+// The issue.md of these issues, written out again from their rows.
+async function rewriteSome(tx: Db, slugs: string[]) {
+  for (const row of (await tx.query<Row>("select * from issues where slug = any($1)", [slugs])).rows) {
+    const text = render(fromRow(row));
+    mkdirSync(folder(row.slug), { recursive: true });
+    writeFileSync(join(folder(row.slug), MAIN), text, "utf8");
+    await tx.query("update issues set written = $1 where slug = $2", [text, row.slug]);
   }
+}
+
+// Until 8 Nov a delete moved the issue's folder to TRASH_DIR/<the deleted issue>/ and its row to the trashed table.
+// Once, each comes back where it was, marked deleted: its row from the table, or from its issue.md for one deleted
+// before the table (19 Oct). A folder whose slug a live issue took since stays in the trash.
+export async function untrash(): Promise<number> {
+  if (!existsSync(TRASH_DIR) && !(await db.sql().query("select 1 from information_schema.tables where table_name = 'trashed'")).rows.length) return 0;
+  return db.write(async (tx) => {
+    const kept = (await tx.query("select 1 from information_schema.tables where table_name = 'trashed'")).rows.length
+      ? new Map((await tx.query<{ slug: string; row: Row }>("select slug, row from trashed")).rows.map((r) => [r.slug, r.row]))
+      : new Map<string, Row>();
+    let moved = 0;
+    for (const bin of existsSync(TRASH_DIR) ? readdirSync(TRASH_DIR) : []) {
+      const at = statSync(join(TRASH_DIR, bin)).mtime;
+      for (const name of readdirSync(join(TRASH_DIR, bin))) {
+        const from = join(TRASH_DIR, bin, name);
+        if (!validSlug(name) || !statSync(from).isDirectory() || (await taken(name, tx)) || existsSync(folder(name))) continue;
+        const row = kept.get(name);
+        const path = join(from, MAIN);
+        if (!row && !existsSync(path)) continue;
+        const i = row ? { ...blank(name, name), ...fromRow(row), slug: name } : parse(name, readFileSync(path, "utf8"));
+        i.deleted_at = now(at);
+        renameSync(from, folder(name));
+        const text = render(i);
+        writeFileSync(join(folder(name), MAIN), text, "utf8");
+        await upsert(tx, i, text);
+        moved++;
+      }
+      if (!readdirSync(join(TRASH_DIR, bin)).length) rmdirSync(join(TRASH_DIR, bin));
+    }
+    if (existsSync(TRASH_DIR) && !readdirSync(TRASH_DIR).length) rmdirSync(TRASH_DIR);
+    await tx.query("drop table if exists trashed");
+    return moved;
+  });
 }
 
 // Each issue.md desk wrote before what it holds changed, such as on 20 Oct, when each issue's project became its team,

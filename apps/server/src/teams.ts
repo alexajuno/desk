@@ -98,7 +98,7 @@ export const IDENTIFIER = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 export class Refused extends Error {}
 
 // A new identifier for a team, as Linear's team settings change one ("copy linear", the user, 25 Oct): its slug, and so
-// its address, changes, and its issues, its projects, their changes that name it and its trashed issues follow it, in
+// its address, changes, and its issues, deleted ones among them, its projects and their changes that name it follow it, in
 // one write. The old slug joins its aliases, so a link or an agent that still uses it finds the team; another team's
 // alias that it takes leaves that team.
 export function rename(from: string, to: string): Promise<Team> {
@@ -121,7 +121,6 @@ export function rename(from: string, to: string): Promise<Team> {
     await tx.query("update projects set team = $2 where team = $1", [from, to]);
     await tx.query(`update activity set was = case when was = $1 then $2 else was end, "now" = case when "now" = $1 then $2 else "now" end
        where field = 'team' and $1 in (was, "now")`, [from, to]);
-    await tx.query("update trashed set row = jsonb_set(row, '{team}', to_jsonb($2::text)) where row ->> 'team' = $1", [from, to]);
     await issues.rewriteIn(tx);
     await projects.rewriteIn(tx);
     return moved;

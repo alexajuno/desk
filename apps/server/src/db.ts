@@ -26,10 +26,10 @@ let db: PGlite | null = null;
 // What a query can run on: the database, or a write's transaction, which every query of the write must use.
 export type Db = Pick<Transaction, "query">;
 
-// The tables the app holds, each with its key and the columns it is not sent: a description, and the text desk last
-// wrote, stay on the server.
-const HELD: Record<string, { key: string; hidden: string[] }> = {
-  issues: { key: "slug", hidden: ["body", "written", "session"] }, // session: unread since 29 Oct (chats.issue)
+// The tables the app holds, each with its key, the columns it is not sent (a description, and the text desk last
+// wrote, stay on the server) and which rows it holds, when not all: a deleted issue is not the app's.
+const HELD: Record<string, { key: string; hidden: string[]; live?: string }> = {
+  issues: { key: "slug", hidden: ["body", "written", "session", "deleted_at"], live: "deleted_at is null" }, // session: unread since 29 Oct (chats.issue)
   teams: { key: "slug", hidden: ["body", "written"] },
   projects: { key: "slug", hidden: ["body", "written"] },
   milestones: { key: "id", hidden: [] },
@@ -145,11 +145,6 @@ create table if not exists automations ( -- what happened to each of automations
   chat text,
   ran text,
   note text not null default ''
-);
-create table if not exists trashed ( -- each issue deleted into the trash, as its row was, until a restore puts it back
-  slug text primary key,
-  bin text not null, -- the issue whose delete took it: its folder in TRASH_DIR
-  row jsonb not null
 );
 create table if not exists pins ( -- the sessions pinned to the sidebar's Pinned (pins.ts)
   session text primary key,
@@ -325,8 +320,9 @@ export async function open(): Promise<PGlite> {
   });
   await toTeams(opened);
   await opened.exec(SCHEMA);
-  // Since 20 Oct, an issue's project is Linear's (projects.ts), as its team is what its project was before.
-  await opened.exec(["review_of", "review_since", "landed", "project", "milestone", "due", "lands", "plan_steps"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
+  // Since 20 Oct, an issue's project is Linear's (projects.ts), as its team is what its project was before. An issue's
+  // delete marks it, deleted_at, since 8 Nov (issues.ts, trash).
+  await opened.exec(["review_of", "review_since", "landed", "project", "milestone", "due", "lands", "plan_steps", "deleted_at"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
   // The Inbox's delete and its mark as unread (inbox.ts), from 19 Oct.
   await opened.exec(["gone", "marked"].map((c) => `alter table inbox add column if not exists ${c} double precision;`).join(" "));
   // A Slack thread's or a mail thread's row (notices.ts): where it came from and who wrote last, from 2 Nov.
@@ -370,8 +366,7 @@ async function toTeams(pg: PGlite) {
     await tx.exec(`drop trigger if exists projects_logged on projects;
       drop trigger if exists projects_updated on projects;
       alter table projects rename to teams;
-      alter table issues rename column project to team;
-      update trashed set row = (row - 'project') || jsonb_build_object('team', row -> 'project') where row ? 'project';`);
+      alter table issues rename column project to team;`);
   });
 }
 
@@ -433,11 +428,11 @@ export const onCommit = (fn: () => void) => { wrote = fn; };
 async function taken(tx: Db): Promise<Omit<Change, "seq">[]> {
   const noted = (await tx.query<{ kind: string; key: string }>("delete from changed returning kind, key")).rows;
   const rows: Omit<Change, "seq">[] = [];
-  for (const [table, { key }] of Object.entries(HELD)) {
+  for (const [table, { key, live }] of Object.entries(HELD)) {
     const keys = noted.filter((n) => n.kind === table).map((n) => n.key);
     if (!keys.length) continue;
     const found = await tx.query<{ key: string; row: Record<string, unknown> }>(
-      `select ${key} as key, ${shown(table)} as row from ${table} t where ${key} = any($1)`, [keys]);
+      `select ${key} as key, ${shown(table)} as row from ${table} t where ${key} = any($1)${live ? ` and ${live}` : ""}`, [keys]);
     const by = new Map(found.rows.map((r) => [r.key, r.row]));
     for (const k of keys) rows.push({ kind: table, key: k, row: by.get(k) ?? null });
   }
@@ -454,8 +449,8 @@ const LOG = randomUUID();
 // lands between it and the changes told after it.
 export async function snapshot(): Promise<{ log: string; seq: number; rows: Record<string, Record<string, unknown>[]> }> {
   const rows: Record<string, Record<string, unknown>[]> = {};
-  for (const [table, { key }] of Object.entries(HELD))
-    rows[table] = (await sql().query<{ row: Record<string, unknown> }>(`select ${shown(table)} as row from ${table} t order by ${key} collate "C"`)).rows.map((r) => r.row);
+  for (const [table, { key, live }] of Object.entries(HELD))
+    rows[table] = (await sql().query<{ row: Record<string, unknown> }>(`select ${shown(table)} as row from ${table} t${live ? ` where ${live}` : ""} order by ${key} collate "C"`)).rows.map((r) => r.row);
   return { log: LOG, seq: pushed, rows };
 }
 
