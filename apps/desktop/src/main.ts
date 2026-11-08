@@ -15,7 +15,7 @@
 // and closing the window hides it, as it was left.
 import { app, BrowserWindow, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent, type Rectangle, type WebContents } from "electron";
 import { join } from "node:path";
-import { shortcut } from "./keys.ts";
+import { rightClick, shortcut } from "./keys.ts";
 import * as tabs from "./tabs.ts";
 
 const HOME = new URL(process.env.DESK_URL || "http://localhost:8790/inbox");
@@ -94,6 +94,7 @@ function desks(e: IpcMainEvent | IpcMainInvokeEvent) {
 // A page of desk's own stays in desk, in a window of its own when it asks for one; any other site opens in the user's
 // browser, as a link from Chrome's app window did.
 function keep(page: WebContents) {
+  rightClick(page);
   const ours = (url: string) => site(url) === site(HOME.href);
   page.setWindowOpenHandler(({ url }) => {
     if (ours(url)) return { action: "allow", overrideBrowserWindowOptions: { frame: false, backgroundColor: "#121213", webPreferences: { preload: PRELOAD } } };
