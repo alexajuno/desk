@@ -9,6 +9,7 @@ use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
 use crate::filters::{colours, pop_shadow};
+use crate::statusbar::BAR;
 
 pub type Run = Rc<dyn Fn(&mut Window, &mut App)>;
 
@@ -55,7 +56,7 @@ fn hide(id: u64, cx: &mut App) {
     }
 }
 
-// The toast, 16px in from the window's right and 32px up, 40px tall: its words, then · and its action. In that corner
+// The toast, 16px in from the window's right and 32px over the status bar, 40px tall: its words, then · and its action. In that corner
 // it would cover a chat's composer, the model chip and Send at its right end, so it rises 8px above one there.
 pub fn render(composer: Option<Bounds<Pixels>>, window: &Window, cx: &mut App) -> Option<AnyElement> {
     let toast = cx.try_global::<Toasts>()?.current.as_ref()?;
@@ -88,8 +89,8 @@ pub fn render(composer: Option<Bounds<Pixels>>, window: &Window, cx: &mut App) -
         });
     let view = window.viewport_size();
     let bottom = match composer {
-        Some(b) if b.right() > view.width - px(16. + WIDE) && b.bottom() > view.height - px(32. + 40.) => view.height - b.top() + px(8.),
-        _ => px(32.),
+        Some(b) if b.right() > view.width - px(16. + WIDE) && b.bottom() > view.height - px(BAR + 32. + 40.) => view.height - b.top() + px(8.),
+        _ => px(BAR + 32.),
     };
     Some(deferred(div().absolute().right(px(16.)).bottom(bottom).child(card)).with_priority(4).into_any_element())
 }

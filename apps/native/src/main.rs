@@ -14,6 +14,8 @@ mod listing;
 mod picker;
 mod search;
 mod notify;
+mod statusbar;
+mod tip;
 mod settings;
 mod sidebar;
 mod toast;
@@ -117,6 +119,8 @@ struct Desk {
     search: Option<(Entity<search::Search>, Option<FocusHandle>, Subscription)>, // the search box while open, what had the keys before it
     notes: notify::Notes, // the Inbox's desktop notifications
     titled: String,       // the window's title, as the web's page title: what it shows, then desk
+    seat: Option<serde_json::Value>, // seat's Claude profiles, as the server last read them, for the status bar
+    tips: Entity<gpui_kit::base::TooltipOverlay>, // the one tip shown, over everything (tip.rs)
     _appearance: Subscription,
 }
 
@@ -139,6 +143,7 @@ impl Desk {
         // The system's light or dark, as the web app follows it.
         let appearance = cx.observe_window_appearance(window, |_, window, cx| theme::sync(window, cx));
         search::load(cx); // the chats' titles, so that the first / finds them at once
+        Desk::watch_seat(cx);
         let half = match std::env::var("DESK_HALF").as_deref() {
             Ok("steps") => Some(Half::Steps),
             Ok("changes") => Some(Half::Changes),
@@ -177,7 +182,7 @@ impl Desk {
             notice: None,
             inbox_focus: cx.focus_handle(),
             inbox_scroll: UniformListScrollHandle::new(),
-            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, notes: notify::Notes::start(window, cx), titled: String::new(), _appearance: appearance }
+            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, notes: notify::Notes::start(window, cx), titled: String::new(), seat: None, tips: tip::install(cx), _appearance: appearance }
     }
 
     fn apply(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
@@ -603,7 +608,8 @@ impl Render for Desk {
             cx.defer_in(window, |desk, window, cx| if window.focused(cx).is_none() { window.focus(&desk.focus, cx) });
         }
         div()
-            .h_flex()
+            .flex()
+            .flex_col()
             .size_full()
             .track_focus(&self.focus)
             // Ctrl Shift O a new chat; Ctrl , Settings, as the web app's; and the half's: Ctrl ` its terminal, Ctrl Shift S
@@ -654,18 +660,28 @@ impl Render for Desk {
             .text_size(px(13.))
             .bg(window_bg)
             .text_color(fg)
-            .when(self.page == Page::Settings, |w| w.child(self.settings_nav(cx)))
-            .when(self.page != Page::Settings && !self.side.hidden, |w| w.child(self.sidebar(cx)))
             .child(
                 div()
+                    .h_flex()
                     .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .py_2()
-                    .pr_2()
-                    .when(self.side.hidden && self.page != Page::Settings, |p| p.pl_2())
-                    .child(div().size_full().rounded(px(8.)).border_1().border_color(border).bg(page_bg).overflow_hidden().child(page)),
+                    .min_h_0()
+                    .w_full()
+                    .when(self.page == Page::Settings, |w| w.child(self.settings_nav(cx)))
+                    .when(self.page != Page::Settings && !self.side.hidden, |w| w.child(self.sidebar(cx)))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .h_full()
+                            .pt_2()
+                            .pr_2()
+                            .when(self.side.hidden && self.page != Page::Settings, |p| p.pl_2())
+                            .child(div().size_full().rounded(px(8.)).border_1().border_color(border).bg(page_bg).overflow_hidden().child(page)),
+                    ),
             )
+            // the bar along the window's bottom, under the sidebar and the page
+            .child(self.status_bar(cx))
+            .child(self.tips.clone())
             .children(self.search.as_ref().map(|(open, _, _)| {
                 let top = window.viewport_size().height * 0.13;
                 deferred(div().absolute().top_0().left_0().size_full().flex().justify_center().pt(top).child(open.clone())).with_priority(3)
