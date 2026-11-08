@@ -245,7 +245,7 @@ export function build(view: View, pageIssues: Issue[], everyone: Map<string, Iss
   if (holds) pageIssues = pageIssues.filter((i) => holds.includes(i.state));
   const updatedCache = new Map<string, number>();
   const updated = (slug: string) => {
-    if (!updatedCache.has(slug)) updatedCache.set(slug, store.changed(slug));
+    if (!updatedCache.has(slug)) updatedCache.set(slug, store.changed(everyone.get(slug)!));
     return updatedCache.get(slug)!;
   };
   const days = DONE_DAYS[view.done ?? "none"];

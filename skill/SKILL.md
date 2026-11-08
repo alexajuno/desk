@@ -5,9 +5,9 @@ description: Files, finds, updates and starts issues in desk, the user's own wor
 
 # desk
 
-desk keeps the user's work as issues, in its database. Each issue has one document, its body: `## Context`, what the user asks, and `## Plan` when its Claude Code session talks the work over first, which it writes through the API; an older issue may also hold a `## Result`, which stays as it was. Everything about the issue goes in it or on its steps, every diagram and every decision talked over. desk writes it out on every save as `issue.md` (YAML front matter, then the body) in the issue's folder, which also holds the session's screenshots. The user sees an issue at `http://127.0.0.1:8790/issue/<slug>`.
+desk keeps the user's work as issues, in its database. Each issue has one document, its body: `## Context`, what the user asks, and `## Plan` when its Claude Code session talks the work over first, which it writes through the API; an older issue may also hold a `## Result`, which stays as it was. Everything about the issue goes in it or on its steps, every diagram and every decision talked over. The issue's folder holds only its files, such as the session's screenshots. The user sees an issue at `http://127.0.0.1:8790/issue/<slug>`.
 
-Change issues through the API below. `issue.md` is only for reading: desk never reads an edit to it, and its next save writes over the edit.
+Change issues through the API below. The database is the only record: no file holds an issue's document, so read it with the call below, and write it only through the API.
 
 ## Calls
 
@@ -38,7 +38,7 @@ List the open issues, or search them by the words in their title or body, best m
 curl -s "http://127.0.0.1:8790/api/issues?q=login+redirect"
 ```
 
-Read one issue, with its body, its files and the path of its `issue.md`:
+Read one issue, with its body (the document) and the names of its files:
 
 ```bash
 curl -s "http://127.0.0.1:8790/api/issues/<slug>"

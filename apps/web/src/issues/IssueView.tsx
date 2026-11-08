@@ -45,7 +45,6 @@ export interface IssuePageData {
   trail: { slug: string; title: string }[];
   kids: TreeRow[];
   progress: [number, number];
-  agent_files: Record<string, string>; // an older issue's plan.md and result.md, while its document lacks the section
   plan: string; // the Plan, as Markdown, or ""
   plan_card: [string, string] | null; // the Plan drawn, above its "### Details" and under it, as its chat shows it
   context_html: string; // the Context drawn, which its chat opens on, folded
@@ -163,17 +162,10 @@ export const IssueView = observer(function IssueView({ data, inInbox = false, pa
             </section>
           )}
           {/* The issue's one document: its Context, then its Plan, which its session writes through the API, and an
-              older issue's Result. An older issue's plan.md and result.md follow it, in the same order. Then the
+              older issue's Result. Then the
               sub-issues, which the agent files, so the section shows only once there is one (Add sub-issue is in the ⋯
               menu). */}
           <Description key={p.slug} body={data.body} html={data.body_html} save={(t, base) => setField(p.slug, "body", t, base)} />
-          {"plan.md" in data.agent_files && (
-            <section className="sec" data-sec="plan.md">
-              <div className="section-label sec-head"><Fold />Plan <Go className="muted" to={`/issue/${p.slug}/f/plan.md`} title="Open the plan on its own page, with its contents">plan.md</Go></div>
-              <div className="sec-body"><Html className="body plan" html={data.agent_files["plan.md"]} /></div>
-            </section>
-          )}
-          {"result.md" in data.agent_files && <Result html={data.agent_files["result.md"]} />}
           {data.kids.length > 0 && (
             <section className="sec" data-sec="sub-issues">
               <div className="section-label sec-head"><Fold />Sub-issues
@@ -250,16 +242,6 @@ export function Lands({ steps, skip, setSkip }: { steps: string[]; skip: number[
         })}
       </ul>
     </div>
-  );
-}
-
-// The result.md an older issue's session wrote, under its own head.
-function Result({ html }: { html: string }) {
-  return (
-    <section className="sec" data-sec="result.md">
-      <div className="section-label sec-head"><Fold />Result <span className="muted">from the agent · result.md</span></div>
-      <div className="sec-body"><Html className="body" html={html} /></div>
-    </section>
   );
 }
 

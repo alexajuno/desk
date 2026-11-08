@@ -11,8 +11,8 @@
 //
 // The tables are the record of desk's state ("you should find whatever represent state, should be in db", the user, 19
 // Oct): issues, teams and projects, the Inbox, the trash, pins, each session's model, settings and the test desks.
-// issue.md, team.md and project.md are only written out, for agents, git and an editor to read; desk reads them in only
-// into a database with no issues yet, as a new one (issues.importAll).
+// An issue, a team and a project live in their rows alone: no file holds a copy of them ("issue.md and team.md and
+// whatever markdown files. to db", the user, 8 Nov).
 import { PGlite, type Transaction } from "@electric-sql/pglite";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { unaccent } from "@electric-sql/pglite/contrib/unaccent";
@@ -26,12 +26,12 @@ let db: PGlite | null = null;
 // What a query can run on: the database, or a write's transaction, which every query of the write must use.
 export type Db = Pick<Transaction, "query">;
 
-// The tables the app holds, each with its key, the columns it is not sent (a description, and the text desk last
-// wrote, stay on the server) and which rows it holds, when not all: a deleted issue is not the app's.
+// The tables the app holds, each with its key, the columns it is not sent (a description stays on the server) and which
+// rows it holds, when not all: a deleted issue is not the app's.
 const HELD: Record<string, { key: string; hidden: string[]; live?: string }> = {
-  issues: { key: "slug", hidden: ["body", "written", "session", "deleted_at"], live: "deleted_at is null" }, // session: unread since 29 Oct (chats.issue)
-  teams: { key: "slug", hidden: ["body", "written"] },
-  projects: { key: "slug", hidden: ["body", "written"] },
+  issues: { key: "slug", hidden: ["body", "updated", "session", "deleted_at"], live: "deleted_at is null" }, // session: unread since 29 Oct (chats.issue)
+  teams: { key: "slug", hidden: ["body"] },
+  projects: { key: "slug", hidden: ["body"] },
   milestones: { key: "id", hidden: [] },
   activity: { key: "id", hidden: [] },
   chats: { key: "id", hidden: ["folder", "cwd", "seen"] }, // threads: shown since 3 Nov, for Claude's draft on one (YourReply.tsx)
@@ -67,7 +67,7 @@ create table if not exists issues (
   review_since text,
   created text not null,
   body text not null default '',
-  written text -- issue.md as desk last wrote it, which tells an editor's change from desk's own
+  updated text -- when it was last saved, in epoch seconds
 );
 create table if not exists teams ( -- teams.ts: desk's projects until 20 Oct
   slug text primary key,
@@ -75,8 +75,7 @@ create table if not exists teams ( -- teams.ts: desk's projects until 20 Oct
   state text not null default 'active',
   created text not null,
   aliases text not null default '', -- the slugs it had before a rename, space-separated, which still lead to it
-  body text not null default '',
-  written text
+  body text not null default ''
 );
 create table if not exists projects ( -- projects.ts: Linear's, which finish, since 20 Oct
   slug text primary key,
@@ -86,8 +85,7 @@ create table if not exists projects ( -- projects.ts: Linear's, which finish, si
   start text,
   target text,
   created text not null,
-  body text not null default '',
-  written text
+  body text not null default ''
 );
 create table if not exists milestones ( -- projects.ts: a project's stages, Linear's, in the order of sort
   id text primary key,
@@ -320,6 +318,8 @@ export async function open(): Promise<PGlite> {
   });
   await toTeams(opened);
   await opened.exec(SCHEMA);
+  await opened.exec("alter table issues add column if not exists updated text;"); // from 8 Nov, in place of issue.md's mtime
+  await opened.exec(["issues", "teams", "projects"].map((t) => `alter table ${t} drop column if exists written;`).join(" ")); // the copy of issue.md, out since 8 Nov
   // Since 20 Oct, an issue's project is Linear's (projects.ts), as its team is what its project was before. An issue's
   // delete marks it, deleted_at, since 8 Nov (issues.ts, trash).
   await opened.exec(["review_of", "review_since", "landed", "project", "milestone", "due", "lands", "plan_steps", "deleted_at"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));

@@ -30,16 +30,9 @@ import * as wakes from "./wakes.ts";
 import * as web from "./web.ts";
 
 await db.open();
-// Postgres is the record. A new database, or one lost, starts from the issue.md, team.md and project.md desk wrote out.
-await teams.moveFolders(); // before projects.importAll, which reads projects/, where the teams' folders were
-const issues = await store.importAll(), teamCount = await teams.importAll(), projectCount = await projects.importAll();
-if (issues || teamCount || projectCount)
-  console.log(`desk read ${issues} issue.md, ${teamCount} team.md and ${projectCount} project.md into a new database`);
-const untrashed = await store.untrash(); // once: the trash's folders and rows back in place, marked deleted
-if (untrashed) console.log(`desk moved ${untrashed} deleted issues out of the trash, marked deleted where they were`);
-const rewritten = await store.rewrite();
-if (rewritten) console.log(`desk wrote ${rewritten} issue.md out again, as their rows now hold them`);
-await store.readLanded();
+// Postgres is the record, with no file written out beside it: once, the old issue.md, team.md, project.md, plan.md and result.md go.
+const gone = await store.leaveFiles();
+if (gone) console.log(`desk removed ${gone} files its database now holds`);
 await chats.readIn();
 const adopted = await chats.adoptSessions(); // once: the sessions no chat held become chats on their issues
 if (adopted) console.log(`desk made ${adopted} sessions with no chat into chats on their issues`);

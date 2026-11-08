@@ -2,19 +2,13 @@
 // feature launch" (linear.app/docs/projects). Unlike a team (teams.ts), a project finishes: it moves through Linear's
 // statuses by hand, Backlog to Completed or Canceled, and has a start and a target date, each a day or a vaguer
 // period (periods.ts). It sits in a team, and an issue belongs to one project at most, as in Linear. Postgres is the
-// record; each keeps its folder in PROJECTS_DIR, where project.md is written out on every save, through db.write, as
-// an issue is, and read back only into a new database.
+// record.
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { PROJECTS_DIR } from "./config.ts";
 import * as db from "./db.ts";
 import { sql, type Db } from "./db.ts";
-import { asText, dump, split } from "./frontmatter.ts";
-import { byRank, listingOrder, loadAll as loadIssues, now, saveIn as saveIssue, type Issue } from "./issues.ts";
+import { byRank, loadAll as loadIssues, now, saveIn as saveIssue, type Issue } from "./issues.ts";
 import { slugify } from "./slug.ts";
 
-export const MAIN = "project.md";
 // Linear's project statuses, by their category in its API (ProjectStatusType), in the order its menu lists them; the
 // workspace's defaults, as linear.app's Change status menu listed them on 20 Oct. Linear's API also has a paused
 // category, which a workspace adds as a status of its own; Linear's defaults have none.
@@ -35,36 +29,16 @@ export interface Project {
 
 const FIELDS = ["title", "team", "status", "start", "target", "created"] as const;
 
-export const folder = (slug: string) => join(PROJECTS_DIR, slug);
-
 export function blank(slug: string, title: string): Project {
   return { slug, title, team: null, status: "backlog", start: null, target: null, created: now(), body: "" };
 }
 
-export function parse(slug: string, text: string): Project {
-  const { meta, body } = split(text);
-  const p = blank(slug, slug);
-  p.created = "";
-  for (const name of FIELDS) if (meta[name] !== undefined && meta[name] !== null) p[name] = asText(meta[name]);
-  if (!p.created) p.created = now();
-  p.body = body.trim();
-  return p;
-}
-
-export function render(p: Project): string {
-  const meta: Record<string, string> = {};
-  for (const name of FIELDS) if (p[name]) meta[name] = p[name]!;
-  return `---\n${dump(meta)}\n---\n\n${p.body.trim()}\n`;
-}
-
 // A database from before 21 Oct also has the column updates, the reminder's cadence (updates.ts), which nothing reads.
-type Row = Project & { written: string | null; updates?: string };
-const fromRow = ({ written: _, updates: __, ...p }: Row): Project => p;
+type Row = Project & { updates?: string };
+const fromRow = ({ updates: _, ...p }: Row): Project => p;
 
 export async function loadAll(q: Db = sql()): Promise<Map<string, Project>> {
   const rows = (await q.query<Row>('select * from projects order by slug collate "C"')).rows;
-  const at = listingOrder(PROJECTS_DIR);
-  rows.sort((a, b) => (at.get(a.slug) ?? Infinity) - (at.get(b.slug) ?? Infinity));
   return new Map(rows.map((r) => [r.slug, fromRow(r)]));
 }
 
@@ -78,12 +52,13 @@ export async function load(slug: string, q: Db = sql()): Promise<Project> {
   return fromRow(row);
 }
 
-async function upsert(tx: Db, p: Project, written: string) {
-  const cols = ["slug", ...FIELDS, "body", "written"];
+async function upsert(tx: Db, p: Project) {
+  p.body = p.body.trim();
+  const cols = ["slug", ...FIELDS, "body"];
   await tx.query(
     `insert into projects (${cols.join(", ")}) values (${cols.map((_, n) => `$${n + 1}`).join(", ")})
      on conflict (slug) do update set ${cols.slice(1).map((c) => `${c} = excluded.${c}`).join(", ")}`,
-    [p.slug, ...FIELDS.map((f) => p[f]), p.body, written],
+    [p.slug, ...FIELDS.map((f) => p[f]), p.body],
   );
 }
 
@@ -96,10 +71,7 @@ export async function saveIn(tx: Db, p: Project) {
   const was = (await tx.query<Row>("select * from projects where slug = $1", [p.slug])).rows[0];
   if (!was) await logChange(tx, p.slug, "created", null, p.title);
   else for (const field of ["status", "start", "target", "team"] as const) if (was[field] !== p[field]) await logChange(tx, p.slug, field, was[field], p[field]);
-  const text = render(p);
-  mkdirSync(folder(p.slug), { recursive: true });
-  writeFileSync(join(folder(p.slug), MAIN), text, "utf8");
-  await upsert(tx, parse(p.slug, text), text); // as a load reads it back from the file
+  await upsert(tx, p);
 }
 
 export const save = (p: Project): Promise<void> => db.write((tx) => saveIn(tx, p));
@@ -107,7 +79,7 @@ export const save = (p: Project): Promise<void> => db.write((tx) => saveIn(tx, p
 export async function newSlug(title: string): Promise<string> {
   const base = slugify(title, "project");
   let slug = base, n = 2;
-  while (existsSync(folder(slug)) || (await exists(slug))) slug = `${base}-${n++}`;
+  while (await exists(slug)) slug = `${base}-${n++}`;
   return slug;
 }
 
@@ -209,34 +181,5 @@ export function milestoneProgress(milestones: Milestone[], issues: Issue[]) {
     const done = progress(mine);
     if (!current && done < 1) current = m.id;
     return { ...m, issues: mine.length, progress: Math.round(done * 100), current: current === m.id };
-  });
-}
-
-// Each project.md written out again from its row where the row changed under it, as when its team's slug changes
-// (teams.rename).
-export async function rewriteIn(tx: Db) {
-  for (const row of (await tx.query<Row>("select * from projects")).rows) {
-    const text = render(fromRow(row));
-    if (text === row.written) continue;
-    mkdirSync(folder(row.slug), { recursive: true });
-    writeFileSync(join(folder(row.slug), MAIN), text, "utf8");
-    await tx.query("update projects set written = $1 where slug = $2", [text, row.slug]);
-  }
-}
-
-// Read every project.md in, as Postgres held none: a new database, or one lost (issues.importAll). Before 20 Oct
-// projects/ held what are teams now, which teams.moveFolders moves out first.
-export function importAll(): Promise<number> {
-  return db.write(async (tx) => {
-    if ((await tx.query("select 1 from projects limit 1")).rows.length) return 0;
-    let read = 0;
-    for (const slug of existsSync(PROJECTS_DIR) ? readdirSync(PROJECTS_DIR) : []) {
-      const path = join(folder(slug), MAIN);
-      if (!/^[\w-]+$/.test(slug) || !existsSync(path)) continue;
-      const text = readFileSync(path, "utf8");
-      await upsert(tx, parse(slug, text), text);
-      read++;
-    }
-    return read;
   });
 }

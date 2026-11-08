@@ -8,7 +8,7 @@ import * as auto from "./auto.ts";
 import * as automations from "./automations.ts";
 import * as changes from "./changes.ts";
 import * as chats from "./chats.ts";
-import { ISSUES_DIR, TEAMS_DIR } from "./config.ts";
+import { ISSUES_DIR } from "./config.ts";
 import * as fields from "./fields.ts";
 import * as store from "./issues.ts";
 import { byRank, CLOSED, type Issue } from "./issues.ts";
@@ -37,7 +37,7 @@ import { nearDay, parseLocal, shortDate, waited } from "./when.ts";
 import { HttpError } from "./httperror.ts";
 export { HttpError };
 
-// Changes whenever an issue's or a team's file is added, removed or edited: "<files>:<newest mtime in ns>".
+// Changes whenever an issue's file is added, removed or edited: "<files>:<newest mtime in ns>".
 export function version(): string {
   let count = 0, newest = 0n;
   const walk = (dir: string) => {
@@ -58,7 +58,6 @@ export function version(): string {
     }
   };
   walk(ISSUES_DIR);
-  walk(TEAMS_DIR);
   return `${count}:${newest}`;
 }
 
@@ -95,11 +94,8 @@ export function nextMove(all: Map<string, Issue>): number | null {
   return at.length ? Math.min(...at) + 1 : null;
 }
 
-// When issue.md was last written, in seconds: when the issue last moved, as into In progress, or changed since.
-const savedAt = (i: Issue) => {
-  const path = join(store.folder(i.slug), store.MAIN);
-  return isFile(path) ? statSync(path).mtimeMs / 1000 : 0;
-};
+// When the issue was last saved, in seconds: when it last moved, as into In progress, or changed since.
+const savedAt = (i: Issue) => Number(i.updated) || 0;
 
 // Whether the session's turn ended since the issue was last saved, as when it moved to In progress: it is not working,
 // and a turn of it ended after that. So a message desk is still handing over, as Go's, ends nothing, and an issue you
@@ -469,13 +465,6 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     up = all.get(up)!.parent;
   }
   const kidsOf = allKids(all);
-  // The plan and the result are sections of the issue's document; an older issue kept them in plan.md and result.md,
-  // which show under their own heads while the document lacks the section.
-  const agentFiles: Record<string, string> = {};
-  for (const [name, head] of [[store.PLAN, "Plan"], [store.RESULT, "Result"]]) {
-    const path = join(store.folder(slug), name);
-    if (!store.section(i, head) && isFile(path)) agentFiles[name] = toHtml(read(path), `/issue/${slug}/f/`);
-  }
   const direct = store.children(all, slug);
   const session = await agents.shownRow(sessionOf(i));
   const result = store.result(i);
@@ -488,7 +477,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
   const reviewing = of === "result";
   const split = (text: string) => (splitResult(text) ?? [text, ""]).map((part) => toHtml(part, `/issue/${slug}/f/`));
   const card = result && splitResult(result) ? split(result) : null;
-  const plan = store.section(i, "Plan") || readOr(join(store.folder(slug), store.PLAN));
+  const plan = store.section(i, "Plan");
   return {
     issue: issueJson(i), body: i.body.trim(), body_html: toHtml(i.body, `/issue/${slug}/f/`), result_html: result && toHtml(result, `/issue/${slug}/f/`),
     team: team && { slug: team.slug, title: team.title },
@@ -497,7 +486,7 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     trail: trail.map((t) => ({ slug: t.slug, title: t.title })),
     kids: treeJson(kidsOf(slug), kidsOf),
     progress: [direct.filter((k) => k.state === "done").length, direct.filter((k) => k.state !== "dropped").length],
-    agent_files: agentFiles, plan, plan_card: plan ? split(plan) : null, result, card, reviewing,
+    plan, plan_card: plan ? split(plan) : null, result, card, reviewing,
     context_html: toHtml(store.section(i, "Context"), `/issue/${slug}/f/`), // the chat's first message, folded
     session_kind: session.kind ?? null, live: talkOf(i),
     step: step(i, await asking()), landed: i.landed,
@@ -746,7 +735,7 @@ export async function searchPage(q: string, kind = "") {
   let issues = (words("issues") ? findScored(all, read.issues.words).map(([, h]) => h) : [...all.values()].filter((i) => !live("issues") || !CLOSED.has(i.state))
     .map((issue) => ({ issue, title: markRanges(issue.title), snippet: "" }))).filter((h) => kept("issues", fields.issueRow(h.issue)));
   if (!words("issues") && limit("issues")) {
-    const moved = new Map(issues.map((h) => [h.issue.slug, store.changed(h.issue.slug)]));
+    const moved = new Map(issues.map((h) => [h.issue.slug, store.changed(h.issue)]));
     issues = issues.sort((a, b) => moved.get(b.issue.slug)! - moved.get(a.issue.slug)!);
   }
   const issueHits = issues.filter((h) => !shown.has(h.issue.slug)).slice(0, limit("issues"))

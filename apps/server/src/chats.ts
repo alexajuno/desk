@@ -446,7 +446,7 @@ export async function handOn(i: Issue, note: string, sender: Chat | null): Promi
     await agents.tell(chat.session, fill(HANDED_ON, { who, Who, note: note.trim(), where }));
     return { chat, started: false };
   }
-  const p = { title: i.title, base: BASE, slug: i.slug, file: join(store.folder(i.slug), store.MAIN) };
+  const p = { title: i.title, base: BASE, slug: i.slug };
   const start = fill(ON_ISSUE, { ...p, told: fill(HANDED_TOLD, { Who, where }), todo: HANDED_TODO });
   return { chat: await onIssue(i, fill(HANDED, { who, note: note.trim(), start }), sender ? { from: sender.id } : {}), started: true };
 }

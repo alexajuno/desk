@@ -1,27 +1,21 @@
-// Issues (ported from desk/issues.py). Postgres is the record of every issue; each issue also keeps its folder in ISSUES_DIR,
-// where issue.md is written out on every save, and where its other files live: a plan, a design doc, a diagram, an
-// agent's result. So agents, git and an editor still find each issue where they always did, but an issue.md changed
-// by hand changes nothing, and the next save writes over it: "when agent changes sth, it calls api, not edit file and
-// desk fetches from file later" (the user, 19 Oct). Every write here goes through db.write, which logs it for the apps.
+// Issues (ported from desk/issues.py). Postgres is the record of every issue, its document included: no issue.md holds a
+// copy ("issue.md and team.md and whatever markdown files. to db", the user, 8 Nov). Each issue keeps a folder in
+// ISSUES_DIR only for its real files: screenshots, mockups, a session's attachments. Every write here goes through
+// db.write, which sends it to the apps.
 //
 // Nesting is a `parent` slug, not nested folders, so a sub-issue can have its own sub-issues to any depth. Deleting
 // marks an issue and its sub-issues deleted, deleted_at, as Laravel's soft delete ("in laravel there is such thing as
 // deleted_at", the user, 8 Nov): their rows and folders stay where they are, and undo clears the mark.
-import { existsSync, mkdirSync, opendirSync, readdirSync, readFileSync, renameSync, rmdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, opendirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ISSUES_DIR, TRASH_DIR } from "./config.ts";
+import { ISSUES_DIR, PROJECTS_DIR, TEAMS_DIR } from "./config.ts";
 import * as db from "./db.ts";
 import { sql, type Db } from "./db.ts";
-import { asText, dump, split } from "./frontmatter.ts";
 import * as projects from "./projects.ts";
 import * as settings from "./settings.ts";
 import { slugify } from "./slug.ts";
 
-export const MAIN = "issue.md";
-// Where a session kept its plan and its result until 19 Oct, beside issue.md: an older issue still shows them.
-export const PLAN = "plan.md";
-export const RESULT = "result.md";
 // Where a session keeps its drafts of the document's sections, which it sends through the API: scratch, not the record.
 export const drafts = (slug: string) => join(tmpdir(), "desk-drafts", slug);
 
@@ -59,14 +53,15 @@ export interface Issue {
   waiting_since: string | null;
   review_of: string | null; // in review, one of REVIEWS; none in a review from before 19 Oct, which held a result
   review_since: string | null;
+  updated: string | null; // when it was last saved, in epoch seconds
   created: string;
   deleted_at: string | null; // when its delete took it out of sight, with its sub-issues (trash); null while it is not
   body: string;
 }
 
-// The fields in issue.md, in the order issues.py's dataclass wrote them.
+// The issues table's columns besides the slug and the body.
 const FIELDS = ["title", "priority", "state", "parent", "team", "project", "milestone", "due", "folder", "link", "landing", "landed",
-  "lands", "plan_steps", "waiting_on", "waiting_since", "review_of", "review_since", "created", "deleted_at"] as const;
+  "lands", "plan_steps", "waiting_on", "waiting_since", "review_of", "review_since", "updated", "created", "deleted_at"] as const;
 
 export const now = (d = new Date()) => {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -76,7 +71,7 @@ export const now = (d = new Date()) => {
 export function blank(slug: string, title: string): Issue {
   return { slug, title, priority: "none", state: "backlog", parent: null, team: null, project: null, milestone: null, due: null, folder: null, link: null,
     landing: null, landed: null, lands: null, plan_steps: null, waiting_on: null, waiting_since: null, review_of: null, review_since: null,
-    created: now(), deleted_at: null, body: "" };
+    updated: null, created: now(), deleted_at: null, body: "" };
 }
 
 // Most urgent first, then oldest: the backlog's order.
@@ -197,46 +192,13 @@ export function merged(current: string, sent: string, base: string): string {
   return joined(out);
 }
 
-// --- issue.md ----------------------------------------------------------------------------------------------------
-
-// An issue as issue.md holds it (issues.py, _parse).
-export function parse(slug: string, text: string): Issue {
-  const { meta, body } = split(text);
-  const i = blank(slug, slug);
-  i.created = "";
-  for (const name of FIELDS) {
-    const v = meta[name];
-    if (v === undefined || v === null) continue;
-    (i as unknown as Record<string, string>)[name] = asText(v);
-  }
-  if (!("created" in meta)) i.created = now();
-  i.body = body;
-  if (i.state === "planning") i.state = "running"; // the name In progress had before 15 Oct
-  if (i.state === "running" && i.landing) i.state = "landing"; // Landing as saved before it was a state
-  return i;
-}
-
-// issue.md for an issue (issues.py, save): its set fields as YAML front matter, then its body.
-export function render(i: Issue): string {
-  const meta: Record<string, string> = {};
-  for (const name of FIELDS) {
-    const v = i[name];
-    if (v !== null && v !== "") meta[name] = v;
-  }
-  return `---\n${dump(meta)}\n---\n\n${i.body.trim()}\n`;
-}
-
 // --- the store -----------------------------------------------------------------------------------------------------
 
 export const folder = (slug: string) => join(ISSUES_DIR, slug);
 export const validSlug = (slug: string) => /^[\w-]+$/.test(slug);
 
-// written: issue.md as desk last wrote it, against which a desk of an older branch tells a hand edit.
-type Row = Issue & { written: string | null };
-const fromRow = (r: Row): Issue => {
-  const { written: _, ...i } = r;
-  return i;
-};
+type Row = Issue;
+const fromRow = (r: Row): Issue => r;
 
 // Each name in the folder with its place in the folder's own listing, unsorted, as os.scandir gives it (Node's readdir
 // sorts its answer).
@@ -275,9 +237,9 @@ export async function load(slug: string, q: Db = sql()): Promise<Issue> {
   return fromRow(row);
 }
 
-async function upsert(tx: Db, i: Issue, written: string) {
-  const cols = ["slug", ...FIELDS, "body", "written"];
-  const values = [i.slug, ...FIELDS.map((f) => i[f]), i.body, written];
+async function upsert(tx: Db, i: Issue) {
+  const cols = ["slug", ...FIELDS, "body"];
+  const values = [i.slug, ...FIELDS.map((f) => i[f]), i.body];
   await tx.query(
     `insert into issues (${cols.join(", ")}) values (${cols.map((_, n) => `$${n + 1}`).join(", ")})
      on conflict (slug) do update set ${cols.slice(1).map((c) => `${c} = excluded.${c}`).join(", ")}`,
@@ -299,10 +261,9 @@ async function put(tx: Db, i: Issue) {
   // A milestone is one of the issue's project's: moving the issue to another project, or out of one, drops it.
   if (i.milestone && (await tx.query<{ project: string }>("select project from milestones where id = $1", [i.milestone])).rows[0]?.project !== i.project)
     i.milestone = null;
-  const text = render(i);
-  mkdirSync(folder(i.slug), { recursive: true });
-  writeFileSync(join(folder(i.slug), MAIN), text, "utf8");
-  await upsert(tx, parse(i.slug, text), text); // as a load reads it back from the file, as the Python's did
+  i.body = i.body.trim();
+  i.updated = String(Date.now() / 1000);
+  await upsert(tx, i);
 }
 
 // Linear's two Workflow automations (linear.app/docs/parent-and-sub-issues#status-automation), each a toggle in
@@ -342,7 +303,6 @@ export async function saveIn(tx: Db, i: Issue): Promise<string[]> {
   const had = (await tx.query<{ state: string; title: string }>("select state, title from issues where slug = $1", [i.slug])).rows[0];
   const moved = had && had.title !== i.title && (await follow(tx, i));
   await put(tx, i);
-  if (moved) await rewriteAll(tx);
   const closed = await autoClose(tx, i, had?.state);
   if (had && !CLOSED.has(had.state) && CLOSED.has(i.state)) {
     for (const told of closing) told([i.slug, ...closed]);
@@ -391,37 +351,29 @@ export function move(i: Issue, changes: Partial<Issue>): Promise<boolean> {
 // The issue's own files besides issue.md, by name.
 export function files(slug: string): string[] {
   try {
-    return readdirSync(folder(slug), { withFileTypes: true }).filter((e) => e.isFile() && e.name !== MAIN).map((e) => e.name).sort();
+    return readdirSync(folder(slug), { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name).sort();
   } catch {
     return [];
   }
 }
 
-// When anything of the issue last changed, in seconds: its files are its record.
-export function changed(slug: string): number {
-  let latest = 0;
+// When anything of the issue last changed, in seconds: its row's last save, or a file of its folder.
+export function changed(i: Issue): number {
+  let latest = Number(i.updated) || 0;
   try {
-    for (const e of readdirSync(folder(slug), { withFileTypes: true }))
-      if (e.isFile()) latest = Math.max(latest, statSync(join(folder(slug), e.name)).mtimeMs / 1000);
+    for (const e of readdirSync(folder(i.slug), { withFileTypes: true }))
+      if (e.isFile()) latest = Math.max(latest, statSync(join(folder(i.slug), e.name)).mtimeMs / 1000);
   } catch {
     // a folder gone
   }
   return latest;
 }
 
-// The document's Plan, or an older issue's plan.md.
-export const hasPlan = (i: Issue) => Boolean(section(i, "Plan")) || existsSync(join(folder(i.slug), PLAN));
+// The document's Plan.
+export const hasPlan = (i: Issue) => Boolean(section(i, "Plan"));
 
-// The document's Result, or an older issue's result.md; "" when there is none.
-export function result(i: Issue): string {
-  const text = section(i, "Result");
-  if (text) return text;
-  try {
-    return readFileSync(join(folder(i.slug), RESULT), "utf8");
-  } catch {
-    return "";
-  }
-}
+// The document's Result; "" when there is none.
+export const result = (i: Issue): string => section(i, "Result");
 
 export async function newSlug(title: string, q: Db = sql()): Promise<string> {
   const base = slugify(title, "issue");
@@ -439,7 +391,7 @@ export const onRename = (told: (tx: Db, from: string, to: string) => Promise<voi
 // here. no one is using it. we don't over engineer here right?". So in the write that saves it, all that names the
 // issue follows it: its row, its folder, its sub-issues, its chat, its test desk, the trash, and the links to it in every
 // issue's and project's document, its own screenshots' among them. The Inbox's rows follow on its next take. Whether
-// it moved; the caller saves the issue, then writes out the files of the others it changed (rewriteAll).
+// it moved; the caller saves the issue.
 async function follow(tx: Db, i: Issue): Promise<boolean> {
   const from = i.slug, want = slugify(i.title, "issue");
   if (from === want || new RegExp(`^${escapeRe(want)}-\\d+$`).test(from)) return false;
@@ -464,11 +416,6 @@ async function follow(tx: Db, i: Issue): Promise<boolean> {
   return true;
 }
 
-const rewriteAll = async (tx: Db) => {
-  await rewriteIn(tx);
-  await projects.rewriteIn(tx);
-};
-
 // Until 28 Oct a slug was cut at 50 characters, mid-word or on a dash, and never followed a new title. Each issue's is
 // made once, at the first start that knows the new cut, as a new title makes it: "yeah, just rename all" (the user, 28
 // Oct). Returns how many moved.
@@ -482,7 +429,6 @@ export function renameAll(): Promise<number> {
       await put(tx, i);
       moved++;
     }
-    if (moved) await rewriteAll(tx);
     await tx.query("insert into meta values ('slugs cut', now()::text)");
     return moved;
   });
@@ -507,14 +453,12 @@ export function descendants(issues: Map<string, Issue>, slug: string): string[] 
   return found;
 }
 
-// Mark the issue and all its sub-issues deleted, as of the same second; returns their slugs, the issue first. Their
-// issue.md say so, for an agent reading the folder.
+// Mark the issue and all its sub-issues deleted, as of the same second; returns their slugs, the issue first.
 export function trash(slug: string): Promise<string[]> {
   return db.write(async (tx) => {
     const names = [slug, ...descendants(await loadAll(tx), slug)];
     const at = now();
     await tx.query("update issues set deleted_at = $2 where slug = any($1)", [names, at]);
-    await rewriteSome(tx, names);
     return names;
   });
 }
@@ -530,103 +474,59 @@ export async function restore(slug: string): Promise<string[]> {
     if (!validSlug(slug) || !at) throw new Missing(slug);
     const names = [slug, ...descendants(all, slug).filter((name) => all.get(name)!.deleted_at === at)];
     await tx.query("update issues set deleted_at = null where slug = any($1)", [names]);
-    await rewriteSome(tx, names);
     return names;
   });
 }
 
-// The issue.md of these issues, written out again from their rows.
-async function rewriteSome(tx: Db, slugs: string[]) {
-  for (const row of (await tx.query<Row>("select * from issues where slug = any($1)", [slugs])).rows) {
-    const text = render(fromRow(row));
-    mkdirSync(folder(row.slug), { recursive: true });
-    writeFileSync(join(folder(row.slug), MAIN), text, "utf8");
-    await tx.query("update issues set written = $1 where slug = $2", [text, row.slug]);
-  }
-}
-
-// Until 8 Nov a delete moved the issue's folder to TRASH_DIR/<the deleted issue>/ and its row to the trashed table.
-// Once, each comes back where it was, marked deleted: its row from the table, or from its issue.md for one deleted
-// before the table (19 Oct). A folder whose slug a live issue took since stays in the trash.
-export async function untrash(): Promise<number> {
-  if (!existsSync(TRASH_DIR) && !(await db.sql().query("select 1 from information_schema.tables where table_name = 'trashed'")).rows.length) return 0;
+// Until 8 Nov desk wrote each issue, team and project out as issue.md, team.md and project.md, and an issue from before
+// 19 Oct kept its plan and its result in plan.md and result.md. The database is the only record now ("issue.md and
+// team.md and whatever markdown files. to db", the user, 8 Nov): at the first start that knows it, a plan.md or
+// result.md the document lacks goes into it as that section, its own headings pushed down to ###, and those files and
+// the written-out ones are deleted, a deleted issue's too. The other files of an issue's folder stay, as its files.
+// Returns how many files went.
+export function leaveFiles(): Promise<number> {
   return db.write(async (tx) => {
-    const kept = (await tx.query("select 1 from information_schema.tables where table_name = 'trashed'")).rows.length
-      ? new Map((await tx.query<{ slug: string; row: Row }>("select slug, row from trashed")).rows.map((r) => [r.slug, r.row]))
-      : new Map<string, Row>();
-    let moved = 0;
-    for (const bin of existsSync(TRASH_DIR) ? readdirSync(TRASH_DIR) : []) {
-      const at = statSync(join(TRASH_DIR, bin)).mtime;
-      for (const name of readdirSync(join(TRASH_DIR, bin))) {
-        const from = join(TRASH_DIR, bin, name);
-        if (!validSlug(name) || !statSync(from).isDirectory() || (await taken(name, tx)) || existsSync(folder(name))) continue;
-        const row = kept.get(name);
-        const path = join(from, MAIN);
-        if (!row && !existsSync(path)) continue;
-        const i = row ? { ...blank(name, name), ...fromRow(row), slug: name } : parse(name, readFileSync(path, "utf8"));
-        i.deleted_at = now(at);
-        renameSync(from, folder(name));
-        const text = render(i);
-        writeFileSync(join(folder(name), MAIN), text, "utf8");
-        await upsert(tx, i, text);
-        moved++;
+    if ((await tx.query("select 1 from meta where name = 'files in db'")).rows.length) return 0;
+    let gone = 0;
+    const drop = (path: string) => {
+      if (!existsSync(path)) return false;
+      rmSync(path);
+      gone++;
+      return true;
+    };
+    for (const i of (await tx.query<Row>("select * from issues")).rows) {
+      let changed = false;
+      for (const [file, name] of [["plan.md", "Plan"], ["result.md", "Result"]]) {
+        const path = join(folder(i.slug), file);
+        if (!existsSync(path)) continue;
+        if (!section(i, name)) {
+          const text = readFileSync(path, "utf8").replace(/^\s*#{1,2} +(Plan|Result)[ \t#]*\n/i, "");
+          const down = [...lines(text)].map(([line, outside]) => (outside && /^#{1,2}(\s|$)/.test(line) ? line.replace(/^#+/, "###") : line)).join("");
+          if (down.trim()) {
+            setSection(i, name, down);
+            changed = true;
+          }
+        }
+        drop(path);
       }
-      if (!readdirSync(join(TRASH_DIR, bin)).length) rmdirSync(join(TRASH_DIR, bin));
+      if (changed) await put(tx, i);
+      const main = join(folder(i.slug), "issue.md");
+      if (existsSync(main) && !i.updated) // the last save is when the file was written
+        await tx.query("update issues set updated = $2 where slug = $1", [i.slug, String(statSync(main).mtimeMs / 1000)]);
+      drop(main);
     }
-    if (existsSync(TRASH_DIR) && !readdirSync(TRASH_DIR).length) rmdirSync(TRASH_DIR);
-    await tx.query("drop table if exists trashed");
-    return moved;
-  });
-}
-
-// Each issue.md desk wrote before what it holds changed, such as on 20 Oct, when each issue's project became its team,
-// or when a team's slug changes (teams.rename), written out again from its row, so the files say what the table does.
-// Returns how many.
-export async function rewriteIn(tx: Db): Promise<number> {
-  let wrote = 0;
-  for (const row of (await tx.query<Row>("select * from issues")).rows) {
-    const text = render(fromRow(row));
-    if (text === row.written) continue;
-    mkdirSync(folder(row.slug), { recursive: true });
-    writeFileSync(join(folder(row.slug), MAIN), text, "utf8");
-    await tx.query("update issues set written = $1 where slug = $2", [text, row.slug]);
-    wrote++;
-  }
-  return wrote;
-}
-
-export const rewrite = (): Promise<number> => db.write(rewriteIn);
-
-// Read every issue.md in, as Postgres held none: a new database, or one lost. desk reads issue.md at no other time.
-export function importAll(): Promise<number> {
-  return db.write(async (tx) => {
-    if ((await tx.query("select 1 from issues limit 1")).rows.length) return 0;
-    let read = 0;
-    for (const slug of existsSync(ISSUES_DIR) ? readdirSync(ISSUES_DIR) : []) {
-      const path = join(folder(slug), MAIN);
-      if (!validSlug(slug) || !existsSync(path)) continue;
-      const text = readFileSync(path, "utf8");
-      await upsert(tx, parse(slug, text), text);
-      read++;
+    for (const dir of [TEAMS_DIR, PROJECTS_DIR]) {
+      for (const slug of existsSync(dir) ? readdirSync(dir) : []) {
+        drop(join(dir, slug, "team.md"));
+        drop(join(dir, slug, "project.md"));
+        try {
+          rmdirSync(join(dir, slug)); // its folder, when nothing else is in it
+        } catch {
+          // something else is in it
+        }
+      }
     }
-    return read;
-  });
-}
-
-// Until 19 Oct a session said where its work landed on the first line of result.md, **Landed:**, and desk read it from
-// there; since, it says so through the API (api.ts). Each done issue's old line is read once into the field, at the
-// first start that knows it, and never again.
-export function readLanded(): Promise<void> {
-  return db.write(async (tx) => {
-    if ((await tx.query("select 1 from meta where name = 'landed read'")).rows.length) return;
-    for (const i of (await loadAll(tx)).values()) {
-      const result = join(folder(i.slug), "result.md");
-      if (i.state !== "done" || i.landed || !existsSync(result)) continue;
-      const first = readFileSync(result, "utf8").trim().split(/\r\n|\r|\n/)[0];
-      if (!first.startsWith("**Landed:**")) continue;
-      i.landed = first.slice("**Landed:**".length).trim() || null;
-      await put(tx, i);
-    }
-    await tx.query("insert into meta values ('landed read', now()::text)");
+    await tx.query("insert into meta values ('files in db', now()::text)");
+    return gone;
   });
 }

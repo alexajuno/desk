@@ -20,18 +20,17 @@
 //
 // The first answer is the snapshot, or no changes when the app missed none. Each "changes" goes on from the one
 // before it, whose last change is its "after": an app that holds another seq missed some, and connects again to get
-// them. A row is the table's, less what the app is not sent (db.ts, HELD): an <issue> is every field of issue.md but
+// them. A row is the table's, less what the app is not sent (db.ts, HELD): an <issue> is every column but
 // its description, a <team> its slug, title, state, created and aliases, a <chat> its id, session, issue, title and who it is
 // with, an Inbox <row> every column (inbox.ts); a deleted row comes as null. A description is part of its issue's row, so a new one comes as a change: the page
 // showing it asks again. A <frame> is the sidebar's sessions, with each open issue's session state
-// (pages.ts, framePage), which no table holds yet. "files" names the issues whose files beside issue.md may have changed
-// (a screenshot, or an older issue's plan.md and result.md), which no row holds either: a page showing one of them asks
+// (pages.ts, framePage), which no table holds yet. "files" names the issues whose files may have changed
+// (a screenshot), which no row holds either: a page showing one of them asks
 // again.
 //
 // desk watches no file and asks nothing again on a timer: "when agent changes sth, it calls api, not edit file and desk
 // fetches from file later" (the user, 19 Oct). Each change comes from a write, through the one write path, or from the
-// session host's word (turns.ts). issue.md and team.md are only written out: one changed by hand is not read, and
-// tells the apps nothing (db.ts).
+// session host's word (turns.ts). No file holds a copy of an issue, a team or a project (db.ts).
 import type { WebSocket } from "ws";
 import * as agents from "./agents.ts";
 import { asJson } from "./api.ts";

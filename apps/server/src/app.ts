@@ -562,7 +562,7 @@ export async function create(): Promise<FastifyInstance> {
   app.post("/teams", async (req: Req, reply) => {
     const title = words(field(req, "title"));
     if (!title) throw new HttpError(422, "A team needs a title.");
-    const t = { slug: teams.newSlug(title), title, state: "active", created: store.now(), aliases: "", body: "" };
+    const t = { slug: await teams.newSlug(title), title, state: "active", created: store.now(), aliases: "", body: "" };
     await teams.save(t);
     return reply.redirect(`/team/${t.slug}`, 303);
   });

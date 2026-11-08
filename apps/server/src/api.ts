@@ -81,7 +81,7 @@ export function asJson(i: Issue, full = false) {
   if (i.state === "done" && i.landed) data.landed = i.landed;
   if (i.lands) data.lands = JSON.parse(i.lands);
   if (i.plan_steps) data.plan_steps = briefSteps(JSON.parse(i.plan_steps));
-  if (full) Object.assign(data, { file: join(store.folder(i.slug), store.MAIN), files: store.files(i.slug), body: i.body });
+  if (full) Object.assign(data, { files: store.files(i.slug), body: i.body });
   return data;
 }
 
@@ -352,7 +352,7 @@ async function teamJson(t: Team, full = false) {
   const data: Record<string, unknown> = { slug: t.slug, title: t.title, state: t.state, created: t.created, url: `/team/${t.slug}`,
     aliases: t.aliases ? t.aliases.split(" ") : [],
     issues: mine.length, open_issues: mine.filter((i) => OPEN.includes(i.state)).length };
-  if (full) Object.assign(data, { file: join(teams.folder(t.slug), teams.MAIN), body: t.body, issue_list: mine.map((i) => asJson(i)) });
+  if (full) Object.assign(data, { body: t.body, issue_list: mine.map((i) => asJson(i)) });
   return data;
 }
 
@@ -395,7 +395,7 @@ export async function projectJson(p: Project, full = false) {
     progress: Math.round(projects.progress(mine) * 100) };
   const h = updates.healthOf(await updates.activityOf(p.slug));
   data.health = { state: h.state, label: h.label, posted: h.at };
-  if (full) Object.assign(data, { file: join(projects.folder(p.slug), projects.MAIN), body: p.body,
+  if (full) Object.assign(data, { body: p.body,
     milestones: projects.milestoneProgress(await projects.milestonesOf(p.slug), mine).map(({ sort: _, created: __, project: ___, ...m }) => m),
     issue_list: mine.map((i) => asJson(i)) });
   return data;
@@ -672,7 +672,7 @@ export function routes(app: FastifyInstance) {
   app.post("/api/teams", async (req, reply) => {
     const fields = given(req.body, ["title", "body", "state"]);
     if (!(fields.title ?? "").trim()) throw new HttpError(422, "title is required");
-    const t: Team = { slug: teams.newSlug(fields.title!), title: fields.title!, state: "active", created: store.now(), aliases: "", body: "" };
+    const t: Team = { slug: await teams.newSlug(fields.title!), title: fields.title!, state: "active", created: store.now(), aliases: "", body: "" };
     applyTeam(t, fields);
     await teams.save(t);
     return reply.code(201).send(await teamJson(t, true));
