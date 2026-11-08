@@ -14,6 +14,10 @@ pub struct Issue {
     pub slug: String,
     pub title: String,
     pub state: String,
+    pub priority: String,
+    pub team: Option<String>,
+    pub project: Option<String>,
+    pub folder: Option<String>,
 }
 
 // A row of the Inbox (the server's inbox.ts): what a session last did for you, a chat with no issue, an issue to
@@ -37,8 +41,16 @@ pub struct InboxRow {
     pub who: Option<String>,
 }
 
+// A team's or a project's name, by its table and slug, which the Inbox's filters show.
+pub struct Name {
+    pub table: String,
+    pub key: String,
+    pub title: Option<String>,
+}
+
 pub enum Event {
-    Snapshot(Vec<Issue>, Vec<InboxRow>),
+    Snapshot(Vec<Issue>, Vec<InboxRow>, Vec<Name>),
+    Named(Name),
     Issue { slug: String, row: Option<Issue> },
     Inbox { id: String, row: Option<InboxRow> },
     // the issue shown, as its page draws it (pages.ts, issuePageJson)
@@ -47,7 +59,15 @@ pub enum Event {
 
 fn issue(row: &Value) -> Option<Issue> {
     let text = |k: &str| row.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-    row.is_object().then(|| Issue { slug: text("slug"), title: text("title"), state: text("state") })
+    let some = |k: &str| row.get(k).and_then(Value::as_str).filter(|v| !v.is_empty()).map(str::to_string);
+    row.is_object().then(|| Issue { slug: text("slug"), title: text("title"), state: text("state"), priority: text("priority"),
+        team: some("team"), project: some("project"), folder: some("folder") })
+}
+
+const NAMED: [&str; 2] = ["teams", "projects"];
+
+fn name(table: &str, key: &str, row: &Value) -> Name {
+    Name { table: table.into(), key: key.into(), title: row.get("title").and_then(Value::as_str).map(str::to_string) }
 }
 
 fn inbox_row(row: &Value) -> Option<InboxRow> {
@@ -110,7 +130,11 @@ fn follow(events: &Sender<Event>, shows: &Receiver<String>, shown: &mut Option<S
             Some("snapshot") => {
                 let rows = message["rows"]["issues"].as_array().cloned().unwrap_or_default();
                 let inbox = message["rows"]["inbox"].as_array().cloned().unwrap_or_default();
-                events.send_blocking(Event::Snapshot(rows.iter().filter_map(issue).collect(), inbox.iter().filter_map(inbox_row).collect()))?;
+                let names = NAMED.iter().flat_map(|table| {
+                    let rows = message["rows"][*table].as_array().cloned().unwrap_or_default();
+                    rows.into_iter().map(move |row| name(table, row["slug"].as_str().unwrap_or(""), &row))
+                });
+                events.send_blocking(Event::Snapshot(rows.iter().filter_map(issue).collect(), inbox.iter().filter_map(inbox_row).collect(), names.collect()))?;
             }
             Some("changes") => {
                 for change in message["changes"].as_array().into_iter().flatten() {
@@ -119,6 +143,8 @@ fn follow(events: &Sender<Event>, shows: &Receiver<String>, shown: &mut Option<S
                         events.send_blocking(Event::Issue { slug: key, row: issue(&change["row"]) })?;
                     } else if change["kind"] == "inbox" {
                         events.send_blocking(Event::Inbox { id: key, row: inbox_row(&change["row"]) })?;
+                    } else if let Some(table) = NAMED.iter().find(|t| change["kind"] == **t) {
+                        events.send_blocking(Event::Named(name(table, &key, &change["row"])))?;
                     }
                 }
             }

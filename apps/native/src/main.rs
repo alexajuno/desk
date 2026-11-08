@@ -8,6 +8,8 @@ mod chat;
 mod inbox;
 mod issue;
 mod emoji;
+mod filters;
+mod listing;
 mod thread;
 mod live;
 mod net;
@@ -61,7 +63,14 @@ struct Desk {
     inbox_thread: Option<Entity<thread::ThreadPage>>, // a thread's row open: its messages
     started: HashMap<String, String>, // the chat you started on a thread, by the thread, until its row says so itself
     _inbox_issue_events: Option<Subscription>,
-    unreads_only: bool,
+    teams: HashMap<String, String>,    // a team's name by its slug, for the Inbox's filters
+    projects: HashMap<String, String>, // a project's name by its slug
+    inbox_view: listing::View,         // Filter, Display options and Show unreads only
+    filter_menu: Option<filters::FilterMenu>,
+    _filter_typed: Option<Subscription>,
+    display_open: bool,
+    order_open: bool,
+    anchors: filters::Anchors,
     stay: inbox::Stay,
     hovered_row: Option<String>,
     reading: std::collections::HashSet<String>,
@@ -113,7 +122,14 @@ impl Desk {
             inbox_thread: None,
             started: HashMap::new(),
             _inbox_issue_events: None,
-            unreads_only: false,
+            teams: HashMap::new(),
+            projects: HashMap::new(),
+            inbox_view: listing::View::load(),
+            filter_menu: None,
+            _filter_typed: None,
+            display_open: false,
+            order_open: false,
+            anchors: Default::default(),
             stay: inbox::Stay::new(),
             hovered_row: None,
             reading: Default::default(),
@@ -143,7 +159,14 @@ impl Desk {
                 }
                 return;
             }
-            Event::Snapshot(issues, inbox) => {
+            Event::Named(name) => {
+                self.name(name);
+                return;
+            }
+            Event::Snapshot(issues, inbox, names) => {
+                self.teams.clear();
+                self.projects.clear();
+                for name in names { self.name(name) }
                 self.all = issues.iter().map(|i| (i.slug.clone(), i.clone())).collect();
                 self.issues = issues;
                 self.inbox = inbox.into_iter().map(|r| (r.id.clone(), r)).collect();
@@ -173,6 +196,14 @@ impl Desk {
         self.issues.retain(|issue| OPEN.contains(&issue.state.as_str()));
         let rank = |s: &str| OPEN.iter().position(|o| *o == s).unwrap_or(OPEN.len());
         self.issues.sort_by(|a, b| rank(&a.state).cmp(&rank(&b.state)).then_with(|| a.title.cmp(&b.title)));
+    }
+
+    fn name(&mut self, name: sync::Name) {
+        let names = if name.table == "teams" { &mut self.teams } else { &mut self.projects };
+        match name.title {
+            Some(title) => { names.insert(name.key, title); }
+            None => { names.remove(&name.key); }
+        }
     }
 
     // The issue whose page desk pushes over the sync socket: the one whose page the Inbox shows, else the one picked.

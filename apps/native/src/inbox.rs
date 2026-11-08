@@ -7,6 +7,7 @@
 //
 // J, K, ↑ and ↓ move through the rows and open each, as Linear's; U marks the row under the mouse, else the open one,
 // read or unread; Backspace deletes it; Alt U marks all read and Shift Backspace deletes all read, as the ⋯ menu does.
+// F opens Filter and Shift V Display options (filters.rs), whose view decides the rows and their order (listing.rs).
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -48,17 +49,9 @@ fn is_thread(r: &InboxRow) -> bool {
 }
 
 impl Desk {
-    // The rows the list shows, in its order: every row but the deleted ones, save the one open, newest first; with Show
-    // unreads only, the unread ones, the one open and those read in this visit, so that reading never moves the list.
+    // The rows the list shows, in the view's order and with its filters (listing.rs).
     pub(crate) fn inbox_rows(&self) -> Vec<InboxRow> {
-        let open = self.open_row.as_deref();
-        let mut rows: Vec<InboxRow> = self.inbox.values().filter(|r| !r.gone || Some(r.slug.as_str()) == open).cloned().collect();
-        rows.sort_by(|a, b| b.at.total_cmp(&a.at));
-        if self.unreads_only {
-            rows.retain(|r| !r.read || self.stay.contains(&r.id) || Some(r.slug.as_str()) == open);
-        }
-        // a row seen unread while Show unreads only is on stays listed once read
-        rows
+        self.store().rows(&self.inbox_view, self.open_row.as_deref(), &self.stay)
     }
 
     pub(crate) fn unread(&self) -> usize {
@@ -85,7 +78,7 @@ impl Desk {
                 self.open_row = Some(row.slug);
             }
         }
-        if self.unreads_only {
+        if self.inbox_view.unread {
             let unread: Vec<String> = self.inbox.values().filter(|r| !r.read).map(|r| r.id.clone()).collect();
             self.stay.extend(unread);
         }
@@ -247,6 +240,9 @@ impl Desk {
         if m.control || m.platform { return }
         match (k.key.as_str(), m.alt, m.shift) {
             ("u", true, false) => self.inbox_call("/api/inbox/read", json!({}), cx),
+            ("f", false, false) => self.open_filter(None, "filter", window, cx),
+            ("v", false, true) => self.toggle_display(cx),
+            ("escape", false, false) if self.display_open => self.close_popups(window, cx),
             ("backspace", false, true) => self.delete_all(true, window, cx),
             ("u", false, false) => self.toggle_read(window, cx),
             ("backspace" | "delete", false, false) => self.delete_row(window, cx),
@@ -266,8 +262,7 @@ impl Desk {
     fn inbox_bar(&self, list: f32, cx: &mut Context<Self>) -> Div {
         let theme = cx.theme();
         let t = theme::text(cx);
-        let (muted, hover, divider) = (theme.muted_foreground, t.hover, t.divider);
-        let on_fill: Hsla = if theme.mode.is_dark() { rgb(0x2d2d2f).into() } else { rgb(0xf0f0f0).into() };
+        let (muted, divider) = (theme.muted_foreground, t.divider);
         let this = cx.entity().downgrade();
         let more = Button::new("inbox-more")
             .ghost()
@@ -287,23 +282,6 @@ impl Desk {
                     let _ = read_only.update(cx, |d, cx| d.delete_all(true, window, cx));
                 }))
             });
-        let unreads = div()
-            .id("inbox-unreads")
-            .flex()
-            .flex_none()
-            .items_center()
-            .justify_center()
-            .size(px(28.))
-            .rounded_full()
-            .when(self.unreads_only, |b| b.bg(on_fill))
-            .when(!self.unreads_only, |b| b.hover(|s| s.bg(hover)))
-            .cursor_pointer()
-            .on_click(cx.listener(|desk, _, _, cx| {
-                desk.unreads_only = !desk.unreads_only;
-                desk.stay = if desk.unreads_only { desk.inbox.values().filter(|r| !r.read).map(|r| r.id.clone()).collect() } else { Stay::new() };
-                cx.notify();
-            }))
-            .child(theme::glyph("unreads", if self.unreads_only { t.strong } else { muted }));
         let open = self.open_row.as_ref().and_then(|s| self.inbox.values().find(|r| &r.slug == s));
         let crumb = open.map(|r| match (r.issue && r.source.is_none(), &r.agent) {
             (true, _) => self.all.get(&r.slug).map(|i| i.title.clone()).unwrap_or_else(|| r.title.clone()),
@@ -330,7 +308,7 @@ impl Desk {
                     .child(div().font_medium().text_color(theme.foreground).child("Inbox"))
                     .child(div().ml(px(4.)).child(more))
                     .child(div().flex_1())
-                    .child(unreads),
+                    .child(self.inbox_tools(cx)),
             )
             .children(crumb.map(|title| div().flex_1().min_w_0().px(px(16.)).truncate().font_medium().text_color(t.strong).child(title)))
     }
@@ -419,8 +397,10 @@ impl Desk {
             format!("{count} unread notification{}", if count == 1 { "" } else { "s" })
         } else if !rows.is_empty() {
             "No notification selected".into()
-        } else if self.unreads_only {
+        } else if self.inbox_view.unread {
             "No unread notifications".into()
+        } else if !self.inbox_view.filters.is_empty() {
+            "No notifications match".into()
         } else {
             "No notifications".into()
         };
@@ -481,10 +461,14 @@ impl Desk {
                             .border_color(divider)
                             .on_mouse_down(MouseButton::Left, cx.listener(|desk, _, window, cx| window.focus(&desk.inbox_focus, cx)))
                             .when_some(self.notice.clone(), |l, (notice, wrong)| l.child(div().px(px(18.)).pb(px(8.)).text_xs().text_color(if wrong { waiting } else { muted }).child(notice)))
+                            .children(self.filter_box(cx))
                             .child(list_rows),
                     )
                     .child(div().flex_1().min_w_0().h_full().child(pane)),
             ))
+            .children(self.filter_popup(cx))
+            .children(self.display_popup(cx))
+            .children(self.order_popup(cx))
     }
 
     // The sidebar's Inbox, over the issues, with how many rows are unread.
