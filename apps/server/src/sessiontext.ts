@@ -142,16 +142,28 @@ function promptsIn(path: string, from: number, to: number): string[] {
 // A word the way it is kept: letters and digits, folded.
 const WORD = /[\p{L}\p{N}]+/gu;
 
-// What a word of the query finds, as wordsOf gives it: a word that starts with it, or one of its near words, written
-// "typed|near|near" (a folded word holds no |).
-interface Found { start: string; near: string[] }
-const parse = (word: string): Found => {
-  const [start, ...near] = word.split("|");
-  return { start, near };
-};
-const matches = (token: string, f: Found) => token.startsWith(f.start) || f.near.includes(token);
-// As SQLite's full-text search reads it: the word's start, or a near word whole.
-const asMatch = (f: Found) => `(${[`"${f.start}"*`, ...f.near.map((w) => `"${w}"`)].join(" OR ")})`;
+// What a word of the query finds, as wordsOf gives it, as JSON: a word that starts with it or with its stem, or one of
+// its near words.
+interface Found { start: string; stem?: string; near: string[] }
+const parse = (word: string): Found => JSON.parse(word);
+const matches = (token: string, f: Found) => token.startsWith(f.start) || (f.stem !== undefined && token.startsWith(f.stem)) || f.near.includes(token);
+// As SQLite's full-text search reads it: the word's start, its stem's, or a near word whole.
+const asMatch = (f: Found) => `(${[`"${f.start}"*`, ...(f.stem ? [`"${f.stem}"*`] : []), ...f.near.map((w) => `"${w}"`)].join(" OR ")})`;
+
+// An inflected word's stem, so that searching and searched find search, as Postgres's English stems (Snowball's) did:
+// only the endings of its first step, -ing, -ed, -es, -s and -ly, and a doubled last letter after them (running, run).
+function stem(word: string): string | undefined {
+  if ([...word].length < 5 || /\d/.test(word)) return undefined;
+  const cut = (n: number) => word.slice(0, -n).replace(/(bb|dd|ff|gg|mm|nn|pp|rr|tt)$/, (d) => d[0]);
+  const root = word.endsWith("ing") ? cut(3)
+    : /ie[sd]$/.test(word) ? `${word.slice(0, -3)}i`
+    : word.endsWith("ed") ? cut(2)
+    : /(s|x|z|ch|sh)es$/.test(word) ? word.slice(0, -2)
+    : word.endsWith("ly") ? word.slice(0, -2)
+    : /[^su]s$/.test(word) ? word.slice(0, -1)
+    : word;
+  return root !== word && root.length >= 3 && /[aeiouy]/.test(root) ? root : undefined;
+}
 
 // pg_trgm's similarity, which the search used on Postgres: the share of three-letter pieces two words have in common, each
 // word with two spaces before it and one after.
@@ -171,8 +183,9 @@ function similarity(a: Set<string>, b: Set<string>): number {
 async function wordsOf(query: string): Promise<string[]> {
   const found: string[] = [];
   for (const word of fold(query).match(WORD) ?? []) {
-    if ([...word].length < 4 || (await sql().query("select 1 from session_find where session_find match $1 limit 1", [asMatch({ start: word, near: [] })])).rows.length) {
-      found.push(word);
+    const typed: Found = { start: word, ...(stem(word) ? { stem: stem(word) } : {}), near: [] };
+    if ([...word].length < 4 || (await sql().query("select 1 from session_find where session_find match $1 limit 1", [asMatch(typed)])).rows.length) {
+      found.push(JSON.stringify(typed));
       continue;
     }
     const mine = trigrams(word);
@@ -181,7 +194,7 @@ async function wordsOf(query: string): Promise<string[]> {
       .filter((r) => r.score >= 0.3)
       .sort((a, b) => b.score - a.score || (a.word < b.word ? -1 : 1))
       .slice(0, 3);
-    found.push([word, ...near.map((r) => r.word)].join("|"));
+    found.push(JSON.stringify({ ...typed, near: near.map((r) => r.word) }));
   }
   return found;
 }
@@ -237,7 +250,7 @@ function unmarked(text: string): { text: string; marks: [number, number][] } {
 }
 
 // The words a search found, marked in each session's title as the menu shows it; for a session whose title lacks one of
-// them, a line from its prompts around the words it lacks: up to 14 words, from 4 before the first.
+// them, a line from its prompts around the words it lacks: up to 12 words, from 4 before the first.
 export async function marked(words: string[], sessions: [string, string][]): Promise<Map<string, Marked>> {
   const found = new Map<string, Marked>();
   if (!sessions.length) return found;
@@ -259,7 +272,7 @@ export async function marked(words: string[], sessions: [string, string][]): Pro
     const hit = (piece: string) => tokens(piece).some((t) => missing.some((f) => matches(t.word, f)));
     const first = pieces.findIndex(hit);
     if (first < 0) continue;
-    const line = pieces.slice(Math.max(0, first - 4), Math.max(0, first - 4) + 14).map((piece) => {
+    const line = pieces.slice(Math.max(0, first - 4), first + 8).map((piece) => {
       let out = "", at = 0;
       for (const t of tokens(piece)) {
         if (!missing.some((f) => matches(t.word, f))) continue;
