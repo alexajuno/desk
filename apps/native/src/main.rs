@@ -11,6 +11,7 @@ mod issue;
 mod emoji;
 mod filters;
 mod listing;
+mod lists;
 mod picker;
 mod search;
 mod notify;
@@ -54,6 +55,7 @@ pub(crate) enum Page {
     Session,
     Inbox,
     Settings,
+    List, // My issues, or a team's Issues (lists.rs)
     Soon,
 }
 
@@ -121,6 +123,7 @@ struct Desk {
     titled: String,       // the window's title, as the web's page title: what it shows, then desk
     seat: Option<serde_json::Value>, // seat's Claude profiles, as the server last read them, for the status bar
     tips: Entity<gpui_kit::base::TooltipOverlay>, // the one tip shown, over everything (tip.rs)
+    list: Option<(Entity<lists::IssueList>, Subscription)>, // the issue list shown last, My issues' or a team's
     _appearance: Subscription,
 }
 
@@ -182,10 +185,14 @@ impl Desk {
             notice: None,
             inbox_focus: cx.focus_handle(),
             inbox_scroll: UniformListScrollHandle::new(),
-            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, notes: notify::Notes::start(window, cx), titled: String::new(), seat: None, tips: tip::install(cx), _appearance: appearance }
+            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, notes: notify::Notes::start(window, cx), titled: String::new(), seat: None, tips: tip::install(cx), list: None, _appearance: appearance }
     }
 
     fn apply(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
+        // an issue changed: the list shown is drawn again
+        if matches!(event, Event::Issue { .. }) && self.page == Page::List {
+            if let Some((list, _)) = &self.list { list.update(cx, |l, cx| l.refresh(cx)) }
+        }
         match event {
             Event::Page { slug, page } => {
                 if let Some(open) = self.inbox_issue.clone().filter(|p| p.read(cx).slug == slug) {
@@ -550,6 +557,7 @@ impl Desk {
             Page::Session => self.chat.as_ref().and_then(|c| c.read(cx).title()),
             Page::Inbox => Some("Inbox".into()),
             Page::Settings => self.settings.as_ref().map(|s| s.read(cx).section.title().into()),
+            Page::List => self.list.as_ref().map(|(l, _)| l.read(cx).title()),
             Page::Soon => None,
         };
         name.filter(|n| !n.is_empty()).map_or_else(|| "desk".into(), |n| format!("{n} · desk"))
@@ -582,6 +590,7 @@ impl Render for Desk {
         let page = match &self.chat {
             _ if self.page == Page::Inbox => self.inbox_page(page_width, cx),
             _ if self.page == Page::Settings => div().size_full().children(self.settings.clone()),
+            _ if self.page == Page::List => div().size_full().children(self.list.as_ref().map(|(l, _)| l.clone())),
             _ if self.page == Page::Soon => div().size_full().flex().items_center().justify_center().text_color(muted).child(format!("{}: a later step of this issue builds it", self.soon)),
             Some(chat) => div()
                 .v_flex()

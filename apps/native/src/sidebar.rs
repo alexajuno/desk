@@ -103,8 +103,8 @@ impl Desk {
         let mut list = div().id("side-list").v_flex().flex_1().min_h_0().overflow_y_scroll().pb_3();
         list = list
             .child(self.inbox_item(cx).flex_none())
-            .child(self.nav_item("nav-issues", "issues", "My issues".into(), self.page == Page::Soon && self.soon == "issues", cx)
-                .on_click(cx.listener(|desk, _, _, cx| desk.show_soon("issues", cx))))
+            .child(self.nav_item("nav-issues", "issues", "My issues".into(), self.list_here(None, cx), cx)
+                .on_click(cx.listener(|desk, _, window, cx| desk.open_list("", None, window, cx))))
             .child(self.fold_label("Your teams", cx));
         if self.side.open("Your teams") {
             for team in self.active_teams() {
@@ -263,8 +263,8 @@ impl Desk {
         div().v_flex().flex_none().child(row).when(open, |group| {
             let (issues, projects) = (slug.clone(), slug.clone());
             group
-                .child(div().ml(px(19.)).child(self.nav_item(SharedString::from(format!("team-issues-{slug}")), "issues", "Issues".into(), here("all"), cx)
-                    .on_click(cx.listener(move |desk, _, _, cx| desk.show_soon(&format!("team/{issues}/all"), cx)))))
+                .child(div().ml(px(19.)).child(self.nav_item(SharedString::from(format!("team-issues-{slug}")), "issues", "Issues".into(), self.list_here(Some(&slug), cx), cx)
+                    .on_click(cx.listener(move |desk, _, window, cx| desk.open_list("", Some(issues.clone()), window, cx)))))
                 .child(div().ml(px(19.)).child(self.nav_item(SharedString::from(format!("team-projects-{slug}")), "project", "Projects".into(), here("projects"), cx)
                     .on_click(cx.listener(move |desk, _, _, cx| desk.show_soon(&format!("team/{projects}/projects"), cx)))))
         })
@@ -485,6 +485,38 @@ impl Desk {
             }
             None => self.current.title = row.title,
         }
+    }
+
+    // Whether the page shows this list: My issues (None), or a team's Issues.
+    fn list_here(&self, team: Option<&str>, cx: &App) -> bool {
+        self.page == Page::List && self.list.as_ref().is_some_and(|(l, _)| l.read(cx).team.as_deref() == team)
+    }
+
+    // My issues, or a team's Issues, on the tab it was left on, and drawn again.
+    pub(crate) fn open_list(&mut self, tab: &str, team: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
+        let list = match &self.list {
+            Some((list, _)) if list.read(cx).team == team => {
+                let list = list.clone();
+                list.update(cx, |l, cx| l.refresh(cx));
+                list
+            }
+            _ => {
+                let list = cx.new(|cx| crate::lists::IssueList::new(tab, team, cx));
+                let events = cx.subscribe_in(&list, window, |desk, _, event, window, cx| match event {
+                    crate::lists::ListEvent::Open(slug) => {
+                        let issue = desk.all.get(slug).cloned().unwrap_or_else(|| crate::Issue { slug: slug.clone(), ..Default::default() });
+                        desk.open(&issue, window, cx);
+                    }
+                    crate::lists::ListEvent::New(_) => desk.show_soon("new issue", cx),
+                });
+                self.list = Some((list.clone(), events));
+                list
+            }
+        };
+        self.page = Page::List;
+        let focus = list.read(cx).focus.clone();
+        window.focus(&focus, cx);
+        cx.notify();
     }
 
     // A page this issue builds in a later step.
