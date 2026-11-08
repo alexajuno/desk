@@ -8,6 +8,7 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use gpui_kit::base::StyledExt;
+use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::ActiveTheme;
 use gpui_kit::component::menu::{ContextMenuExt, PopupMenuItem};
 use gpui_kit::prelude::FluentBuilder;
@@ -100,7 +101,7 @@ struct Actions {
 impl Desk {
     pub(crate) fn sidebar(&self, cx: &mut Context<Self>) -> Div {
         // Linear's sidebar keeps its scrollbar's room whether it shows or not, 2px beside it: rows end 12px from its edge.
-        let mut list = div().id("side-list").v_flex().flex_1().min_h_0().overflow_y_scroll().pb_3();
+        let mut list = div().id("side-list").v_flex().flex_1().min_h_0().overflow_y_scrollbar().pb_3();
         list = list
             .child(self.inbox_item(cx).flex_none())
             .child(self.nav_item("nav-issues", "issues", "My issues".into(), self.list_here(None, cx), cx)
