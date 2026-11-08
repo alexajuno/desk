@@ -126,7 +126,7 @@ impl Desk {
         div()
             .v_flex()
             .flex_none()
-            .w(px(244.))
+            .w(px(self.widths.side))
             .h_full()
             .pt_3()
             .pl_3()

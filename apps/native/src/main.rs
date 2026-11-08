@@ -9,6 +9,7 @@ mod chat;
 mod hyprland;
 mod command;
 mod creator;
+mod edges;
 mod inbox;
 mod issue;
 mod emoji;
@@ -46,7 +47,9 @@ const OPEN: [&str; 5] = ["triage", "running", "review", "waiting", "backlog"];
 
 // The chat is a column this wide beside its right half, and the half takes the rest; where the page can't give the half
 // HALF beside it, the half takes the chat's place under the chat's head, one screen at a time (the web app's
-// frame/oneScreen.ts). SIDE is the sidebar and the page's margin, or the page's margins alone while it is hidden.
+// frame/oneScreen.ts). SIDE is Settings' nav and the page's margin. The chat's column and the sidebar are as wide as
+// their edges were dragged (edges.rs); the half takes the chat's place at CHAT + HALF, whatever the chat's width, as the
+// web's.
 const CHAT: f32 = 480.;
 const HALF: f32 = 780.;
 const SIDE: f32 = 252.;
@@ -85,6 +88,7 @@ struct Desk {
     rows: sync::Rows,                  // teams, projects, milestones, activity and chats, as desk sends them
     frame: sidebar::Frame,             // the sidebar's sessions
     side: sidebar::Side,
+    widths: edges::Widths, // the sidebar's and the chat's, as their edges were dragged
     hovered_chat: Option<String>,      // the sidebar's chat under the mouse, which P, R and Delete act on
     renaming: Option<(Entity<picker::Picker>, Point<Pixels>, Subscription)>,
     session_shown: Option<String>,     // the chat shown before its issue
@@ -168,6 +172,7 @@ impl Desk {
             rows: sync::Rows::new(),
             frame: sidebar::Frame::default(),
             side: sidebar::Side::load(),
+            widths: edges::Widths::load(),
             hovered_chat: None,
             renaming: None,
             session_shown: None,
@@ -558,7 +563,11 @@ impl Desk {
     }
 
     fn side_width(&self) -> f32 {
-        if self.side.hidden && self.page != Page::Settings { 16. } else { SIDE }
+        match self.page {
+            Page::Settings => SIDE,
+            _ if self.side.hidden => 16.,
+            _ => self.widths.side + 8.,
+        }
     }
 
     // Whether the page can't give the chat its column and the half its room beside it.
@@ -679,8 +688,12 @@ impl Render for Desk {
             Some(Half::Browser) => self.browser.clone().map(Into::into),
             None => None,
         };
-        let half_width = if one_screen { page_width } else { page_width - CHAT };
+        let chat_width = self.widths.chat(page_width);
+        let half_width = if one_screen { page_width } else { page_width - chat_width };
         self.steps.update(cx, |steps, _| steps.width = half_width);
+        // the chat's edge has a grip only while its half is beside it
+        let split = half.is_some() && !one_screen && self.chat.is_some() && (self.page == Page::Issue || self.page == Page::Session);
+        let panel_left = self.side_width() - 8.; // where the page's panel starts, its border inside
         let page = match &self.chat {
             _ if self.page == Page::Inbox => self.inbox_page(page_width, cx),
             _ if self.page == Page::Settings => div().size_full().children(self.settings.clone()),
@@ -695,7 +708,7 @@ impl Render for Desk {
                         .flex_1()
                         .min_h_0()
                         .when(half.is_none() || !one_screen, |row| {
-                            row.child(div().h_full().when(half.is_some(), |c| c.flex_none().w(px(CHAT))).when(half.is_none(), |c| c.flex_1().min_w_0()).child(chat.clone()))
+                            row.child(div().h_full().when(half.is_some(), |c| c.flex_none().w(px(chat_width))).when(half.is_none(), |c| c.flex_1().min_w_0()).child(chat.clone()))
                         })
                         .when_some(half, |row, half| {
                             row.child(div().flex_1().min_w_0().h_full().when(!one_screen, |h| h.border_l_1().border_color(divider)).child(half))
@@ -782,6 +795,12 @@ impl Render for Desk {
                 }
                 cx.stop_propagation();
             }))
+            // an edge dragged follows the mouse, and keeps its width once let go (edges.rs)
+            .on_drag_move(cx.listener(|desk, e: &DragMoveEvent<edges::Edge>, window, cx| {
+                let edge = *e.drag(cx);
+                desk.drag_edge(edge, e.event.position.x.as_f32(), window, cx);
+            }))
+            .capture_any_mouse_up(cx.listener(|desk, _, _, cx| desk.drop_edge(cx)))
             .font_family(font)
             .text_size(px(13.))
             .bg(window_bg)
@@ -803,7 +822,11 @@ impl Render for Desk {
                             .pr_2()
                             .when(self.side.hidden && self.page != Page::Settings, |p| p.pl_2())
                             .child(div().size_full().rounded(px(8.)).border_1().border_color(border).bg(page_bg).overflow_hidden().child(page)),
-                    ),
+                    )
+                    // the grips last, over the page, so that the mouse finds them first
+                    .relative()
+                    .when(self.page != Page::Settings && !self.side.hidden, |w| w.child(self.grip(edges::Edge::Side, self.widths.side, 0., cx)))
+                    .when(split, |w| w.child(self.grip(edges::Edge::Chat, panel_left + 1. + chat_width, 8. + 1. + 44., cx))),
             )
             // the bar along the window's bottom, under the sidebar and the page
             .child(self.status_bar(cx))
