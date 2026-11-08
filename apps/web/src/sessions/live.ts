@@ -427,11 +427,15 @@ export async function renameChat(id: string, title: string) {
   }
 }
 
-// A chat's Delete, which takes it out of sight and keeps its files (the server's chats.ts, remove), and its toast's Undo.
-export async function deleteChat(id: string, deleted = true): Promise<boolean> {
-  const res = await postJson(`/api/live/${id}/delete`, { deleted });
+// A chat's Delete, which takes it out of sight and keeps its files (the server's chats.ts, remove), and its toast's Undo,
+// which hands back the Triage issue the delete dropped, for desk to put back.
+export async function deleteChat(id: string, deleted = true, dropped?: string): Promise<boolean> {
+  const res = await postJson(`/api/live/${id}/delete`, { deleted, dropped });
   if (!res.ok) toast(await reason(res));
-  else if (deleted) toast("Chat deleted", { label: "Undo", run: () => deleteChat(id, false) });
+  else if (deleted) {
+    const answer = (await res.json()) as { dropped?: string };
+    toast("Chat deleted", { label: "Undo", run: () => deleteChat(id, false, answer.dropped) });
+  }
   return res.ok;
 }
 

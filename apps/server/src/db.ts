@@ -34,7 +34,7 @@ const HELD: Record<string, { key: string; hidden: string[] }> = {
   projects: { key: "slug", hidden: ["body", "written"] },
   milestones: { key: "id", hidden: [] },
   activity: { key: "id", hidden: [] },
-  chats: { key: "id", hidden: ["folder", "cwd", "seen", "extra"] }, // threads: shown since 3 Nov, for Claude's draft on one (YourReply.tsx)
+  chats: { key: "id", hidden: ["folder", "cwd", "seen"] }, // threads: shown since 3 Nov, for Claude's draft on one (YourReply.tsx)
   inbox: { key: "id", hidden: [] },
   tabs: { key: "target", hidden: [] },
   replies: { key: "id", hidden: [] },
@@ -129,8 +129,7 @@ create table if not exists chats ( -- desk's chats (chats.ts): each a session, a
   threads text[], -- the Slack threads, DMs and mail threads it follows (chats.ts, follow)
   unsubscribed text[], -- those whose new messages wait rather than wake it (chats.ts, setSubscribed)
   seen double precision,
-  deleted text, -- when the user deleted it: out of sight, its row and transcript kept
-  extra jsonb not null default '{}' -- what else its file held, such as the messages of a chat from before the panel
+  deleted text -- when the user deleted it: out of sight, its row and transcript kept
 );
 create table if not exists tabs ( -- each tab a desk session has open in the agents' Chrome, as the host's relay tells it (tabs.ts)
   target text primary key, -- Chrome's id for it
@@ -334,6 +333,10 @@ export async function open(): Promise<PGlite> {
   await opened.exec(["source", "who"].map((c) => `alter table inbox add column if not exists ${c} text;`).join(" "));
   await opened.exec("alter table chats add column if not exists deleted text;"); // a chat's Delete (chats.ts, remove), from 25 Oct
   await opened.exec("alter table chats add column if not exists auto boolean not null default false;"); // its composer's Auto (chats.ts, setAuto), from 29 Oct
+  // A chat's fields with no column of their own went into extra until 8 Nov, as JSON, what its file held before the
+  // table (19 Oct) among them: the copies of its messages, all left unread. Its Delete's Undo learns from the delete
+  // which Triage issue to take back (chats.ts, remove), rather than from extra.
+  await opened.exec("alter table chats drop column if exists extra;");
   // What each session has spent so far, as its host hears it (turns.ts), from 3 Nov
   await opened.exec(["cost", "tokens"].map((c) => `alter table sessions add column if not exists ${c} double precision;`).join(" "));
   await opened.exec("alter table chats add column if not exists threads text[];"); // the threads it follows (chats.ts, follow), from 3 Nov

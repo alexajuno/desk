@@ -963,9 +963,10 @@ export async function create(): Promise<FastifyInstance> {
   // A sidebar row's Delete, out of sight with its files kept, and its toast's Undo (deleted false).
   app.post("/api/live/:id/delete", async (req: Req) => {
     mustBePage(req);
-    const { deleted } = (req.body ?? {}) as unknown as { deleted?: boolean };
+    const { deleted, dropped } = (req.body ?? {}) as unknown as { deleted?: boolean; dropped?: string };
+    let answer: { dropped?: string };
     try {
-      await chats.remove(sessionOf(req), deleted !== false);
+      answer = await chats.remove(sessionOf(req), deleted !== false, typeof dropped === "string" ? dropped : undefined);
       // its terminal ends with it, and Undo leaves it ended
       if (deleted !== false) void terminal.stop(terminal.nameOf(sessionOf(req))).catch((error) => console.error("ending a terminal", error));
     } catch (error) {
@@ -973,7 +974,7 @@ export async function create(): Promise<FastifyInstance> {
       if (error instanceof chats.AtWork) throw new HttpError(409, error.message);
       throw error;
     }
-    return { ok: true };
+    return { ok: true, ...answer };
   });
   // A sidebar row's Pin and Unpin: the session goes up into Pinned, or back to Chats.
   app.post("/api/live/:id/pin", async (req: Req) => {

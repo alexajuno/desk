@@ -10,11 +10,11 @@
 //
 // A chat is a row of the chats table, which the app holds (db.ts): "you should find whatever represent state, should
 // be in db" (the user, 19 Oct). Until then it was a JSON file in DESK_DATA/chats/.
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 import * as agents from "./agents.ts";
-import { CHATS_DIR, DATA_DIR, HOME, PORT, REPO } from "./config.ts";
+import { DATA_DIR, HOME, PORT, REPO } from "./config.ts";
 import * as db from "./db.ts";
 import type { Db } from "./db.ts";
 import * as hosted from "./hosted.ts";
@@ -53,7 +53,6 @@ export interface Chat {
   unsubscribed?: string[]; // those of its threads whose new messages wait rather than wake it (setSubscribed)
   seen?: number; // when the user last looked at it, in seconds, until 19 Oct: the inbox table keeps it since (inbox.ts)
   deleted?: string; // when the user deleted it (remove)
-  [key: string]: unknown; // what else its file held, such as the messages of a chat from before the panel
 }
 
 export class NoChat extends Error {}
@@ -130,23 +129,22 @@ const now = () => store.now();
 
 // --- the table -------------------------------------------------------------------------------------------------------
 
-const COLUMNS = ["id", "kind", "title", "created", "updated", "session", "issue", "folder", "cwd", "agent", "bare", "auto", "named", "from", "automation", "threads", "unsubscribed", "seen", "deleted"];
+const COLUMNS = ["id", "kind", "title", "created", "updated", "session", "issue", "folder", "cwd", "agent", "bare", "auto", "named", "from", "automation", "threads", "unsubscribed", "seen", "deleted"] as const;
 
-const UPSERT = `insert into chats (${[...COLUMNS, "extra"].map((c) => `"${c}"`).join(", ")})
-  values (${[...COLUMNS, "extra"].map((_, n) => `$${n + 1}`).join(", ")})
-  on conflict (id) do update set ${[...COLUMNS.slice(1), "extra"].map((c) => `"${c}" = excluded."${c}"`).join(", ")}`;
+const UPSERT = `insert into chats (${COLUMNS.map((c) => `"${c}"`).join(", ")})
+  values (${COLUMNS.map((_, n) => `$${n + 1}`).join(", ")})
+  on conflict (id) do update set ${COLUMNS.slice(1).map((c) => `"${c}" = excluded."${c}"`).join(", ")}`;
 
 async function put(tx: Db, chat: Chat) {
-  const extra = Object.fromEntries(Object.entries(chat).filter(([k]) => !COLUMNS.includes(k)));
-  const value = (c: string) => (c === "bare" || c === "auto" ? Boolean(chat[c]) : c === "threads" || c === "unsubscribed" ? (chat[c]?.length ? chat[c] : null) : (chat[c] ?? null));
-  await tx.query(UPSERT, [...COLUMNS.map(value), extra]);
+  const value = (c: (typeof COLUMNS)[number]) => (c === "bare" || c === "auto" ? Boolean(chat[c]) : c === "threads" || c === "unsubscribed" ? (chat[c]?.length ? chat[c] : null) : (chat[c] ?? null));
+  await tx.query(UPSERT, COLUMNS.map(value));
 }
 
-// The chat a row holds, with the fields it leaves empty left out, as its file did.
+// The chat a row holds, with the fields it leaves empty left out.
 function chatOf(row: Record<string, unknown>): Chat {
-  const { extra, bare, auto, ...columns } = row;
-  const chat = Object.fromEntries(Object.entries(columns).filter(([, v]) => v !== null)) as Chat;
-  return { ...(extra as object), ...chat, ...(bare ? { bare: true } : {}), ...(auto ? { auto: true } : {}) };
+  const { bare, auto, ...columns } = row;
+  const chat = Object.fromEntries(Object.entries(columns).filter(([, v]) => v !== null)) as unknown as Chat;
+  return { ...chat, ...(bare ? { bare: true } : {}), ...(auto ? { auto: true } : {}) };
 }
 
 // Write the chat, and what more writes with it, as one write. The chat is kept before it commits, so the frame the apps
@@ -173,33 +171,9 @@ export async function save(chat: Chat, more?: (tx: Db) => Promise<unknown>) {
   if (fresh) lastMoved.set(chat.id, Date.now());
 }
 
-// At start: the chats' files written since desk last looked are read in, then every row is kept. Every file, the first
-// time; then any a desk from before the table wrote, as an older branch on Try did, which wins over the row, being
-// newer.
+// At start: every row is read, then kept. Until 8 Nov desk also read in the chats' files from before the table (19
+// Oct), which nothing writes any more.
 export async function readIn() {
-  await db.write(async (tx) => {
-    const since = Number((await tx.query<{ value: string }>("select value from meta where name = 'chats read'")).rows[0]?.value ?? 0);
-    let newest = since;
-    for (const name of existsSync(CHATS_DIR) ? readdirSync(CHATS_DIR) : []) {
-      const path = join(CHATS_DIR, name), at = statSync(path).mtimeMs;
-      if (!name.endsWith(".json") || at <= since) continue;
-      newest = Math.max(newest, at);
-      let chat: Chat;
-      try {
-        chat = JSON.parse(readFileSync(path, "utf8"));
-      } catch (error) {
-        console.error(`desk: could not read in ${path}: ${error}`);
-        continue;
-      }
-      // Checked first: a query that fails would end the whole read-in.
-      if (CHAT_ID.test(chat.id) && [chat.title, chat.created, chat.session].every((v) => typeof v === "string")) await put(tx, chat);
-      else console.error(`desk: ${path} is no chat`);
-    }
-    if (newest > since)
-      await tx.query("insert into meta values ('chats read', $1) on conflict (name) do update set value = excluded.value", [String(newest)]);
-    // A thread's chat from before 3 Nov kept its one thread in extra: it follows it, from its threads.
-    await tx.query("update chats set threads = coalesce(threads, '{}') || array[extra->>'thread'], extra = extra - 'thread' where extra ? 'thread'");
-  });
   const read = new Map<string, Chat>();
   for (const row of (await db.sql().query<Record<string, unknown>>("select * from chats")).rows) {
     const chat = chatOf(row);
@@ -717,8 +691,10 @@ export class AtWork extends Error {}
 // Delete in a chat's menu, or its Undo: the chat goes out of sight, from the sidebar, the Inbox and the corner's history
 // (pages.ts, sessions.ts), and comes back. Its row and its transcript stay. "some chats were started for testing and not
 // meant to be displayed... maybe we don't need to clean up locally but just removing out of sight is better" (the user,
-// 25 Oct). A chat's issue in Triage is the chat's own, so it is dropped with it, and Undo puts it back in Triage.
-export async function remove(session: string, deleted: boolean) {
+// 25 Oct). A chat's issue in Triage is the chat's own, so it is dropped with it, and named in the answer: Undo sends it
+// back as dropped, and puts it back in Triage if it is still dropped. Nothing is kept for it ("we just need a button of
+// reverse, no new column pls", the user, 8 Nov).
+export async function remove(session: string, deleted: boolean, dropped?: string): Promise<{ dropped?: string }> {
   const chat = agentChatOf(session);
   if (!chat) throw new NoChat("No such chat");
   const i = chat.issue && (await store.exists(chat.issue)) ? await store.load(chat.issue) : null;
@@ -731,18 +707,17 @@ export async function remove(session: string, deleted: boolean) {
     chat.deleted = now();
     if (i?.state === "triage") {
       i.state = "dropped";
-      chat.dropped = i.slug;
       moves = true;
     }
   } else {
     delete chat.deleted;
-    if (i && chat.dropped === i.slug && i.state === "dropped") {
+    if (i && dropped === i.slug && i.state === "dropped") {
       i.state = "triage";
       moves = true;
     }
-    delete chat.dropped;
   }
   await save(chat, moves ? (tx) => store.saveIn(tx, i!) : undefined);
+  return deleted && moves ? { dropped: i!.slug } : {};
 }
 
 // The user's words and the agent's, in order, from a chat's transcript.
