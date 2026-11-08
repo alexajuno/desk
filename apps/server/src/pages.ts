@@ -376,9 +376,9 @@ function chatsNow(all: Map<string, Issue>) {
     working: turns.working(h.session), auto: auto.quiet(h.session, h.chat, h.issue),
   });
   const bySession = new Map(shown.map((h) => [h.session, h]));
-  const pinned = pins.all().filter((s) => bySession.has(s));
+  const pinned = pins.all().filter((s) => bySession.has(s)), unread = inbox.unreadSessions();
   const inHand = (h: Held) => (h.issue && IN_HAND.has(h.issue.state))
-    || Date.now() - moved(h) < DAY || turns.working(h.session) || inbox.unread(h.session);
+    || Date.now() - moved(h) < DAY || turns.working(h.session) || unread.has(h.session);
   return {
     pinned: pinned.map((s) => row(bySession.get(s)!)),
     chats: shown.filter((h) => !pinned.includes(h.session) && inHand(h)).sort((a, b) => moved(b) - moved(a)).map(row),

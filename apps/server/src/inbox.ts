@@ -75,8 +75,13 @@ export function listed(keep = ""): Row[] {
   return [...rows.values()].filter((r) => r.read === null || r.waits || r.slug === keep).sort((a, b) => b.at - a.at);
 }
 
-// Whether the session said something you have not read, or one of its threads did, on its row.
-export const unread = (session: string) => [...rows.values()].some((r) => r.session === session && r.read === null);
+// The sessions that said something you have not read, or one of whose threads did, on its row: asked once a frame for
+// every chat, rather than once a chat, which looked through every row each time.
+export function unreadSessions(): Set<string> {
+  const found = new Set<string>();
+  for (const r of rows.values()) if (r.read === null && r.session) found.add(r.session);
+  return found;
+}
 
 export const unreadCount = () => [...rows.values()].filter((r) => r.read === null).length;
 
