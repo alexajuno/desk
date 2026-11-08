@@ -37,6 +37,15 @@ pub fn get(path: &str) -> Result<Value, String> {
         .map_err(|e| e.to_string())
 }
 
+// A file desk gives, such as a tab's site icon, with its type.
+pub fn bytes(path: &str) -> Result<(String, Vec<u8>), String> {
+    let host = host();
+    let mut answer = ureq::get(&format!("http://{host}{path}")).header("Origin", &format!("http://{host}")).call().map_err(|e| e.to_string())?;
+    let kind = answer.headers().get("content-type").and_then(|t| t.to_str().ok()).unwrap_or("").to_string();
+    let bytes = answer.body_mut().read_to_vec().map_err(|e| e.to_string())?;
+    Ok((kind, bytes))
+}
+
 pub fn post(path: &str, body: Value) -> Result<Value, String> {
     let host = host();
     ureq::post(&format!("http://{host}{path}"))

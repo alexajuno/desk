@@ -1231,6 +1231,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "gpui-kit",
+ "image",
  "libc",
  "regex",
  "serde_json",

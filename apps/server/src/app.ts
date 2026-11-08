@@ -1064,14 +1064,15 @@ export async function create(): Promise<FastifyInstance> {
     if (!(await tabs.close(req.params.target).catch(() => { throw new HttpError(503, "desk's Chrome is not running."); }))) throw new HttpError(404, "That tab is not open.");
     return {};
   });
-  // What Chrome draws outside the tab's page, for the chat's Browser in desk's app, which shows the tab itself (cast.ts).
+  // A tab's picture, live, and your mouse and keys for it, for the chat's Browser in desk's native window (cast.ts).
   app.get("/api/tabs/:target/screen", {
     websocket: true,
     preValidation: async (req, reply) => {
       if (!fromDesk(req) || !cast.TARGET.test((req.params as { target: string }).target)) await reply.code(403).send();
     },
   }, (socket, req) => {
-    void cast.watch(socket, (req.params as { target: string }).target);
+    const q = req.query as Record<string, string | undefined>;
+    void cast.watch(socket, (req.params as { target: string }).target, { w: Number(q.w), h: Number(q.h), scale: Number(q.scale) });
   });
   app.get("/api/live/:id/terminal/screen", {
     websocket: true,

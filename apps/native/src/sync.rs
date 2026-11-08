@@ -41,6 +41,16 @@ pub struct InboxRow {
     pub who: Option<String>,
 }
 
+// A tab a chat's session has open in desk's Chrome (the server's tabs.ts), which its Browser shows.
+#[derive(Clone, Default, PartialEq)]
+pub struct Tab {
+    pub target: String, // Chrome's id for it
+    pub session: String,
+    pub url: String,
+    pub title: String,
+    pub opened: String, // when desk first heard of it, which orders the strip
+}
+
 // A team's or a project's name, by its table and slug, which the Inbox's filters show.
 pub struct Name {
     pub table: String,
@@ -49,7 +59,12 @@ pub struct Name {
 }
 
 pub enum Event {
-    Snapshot(Vec<Issue>, Vec<InboxRow>, Vec<Name>),
+    Snapshot(Vec<Issue>, Vec<InboxRow>, Vec<Name>, Vec<Tab>),
+    Tab { target: String, row: Option<Tab> },
+    // Claude opened a tab, or works in one: the chat's Browser shows it (the server's tabs.ts, used)
+    Browser { session: String, target: String },
+    // the session closed its last tab: its Browser closes
+    BrowserClosed(String),
     Named(Name),
     Issue { slug: String, row: Option<Issue> },
     Inbox { id: String, row: Option<InboxRow> },
@@ -64,6 +79,11 @@ fn issue(row: &Value) -> Option<Issue> {
     let some = |k: &str| row.get(k).and_then(Value::as_str).filter(|v| !v.is_empty()).map(str::to_string);
     row.is_object().then(|| Issue { slug: text("slug"), title: text("title"), state: text("state"), priority: text("priority"),
         team: some("team"), project: some("project"), folder: some("folder") })
+}
+
+fn tab(row: &Value) -> Option<Tab> {
+    let text = |k: &str| row.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+    row.is_object().then(|| Tab { target: text("target"), session: text("session"), url: text("url"), title: text("title"), opened: text("opened") })
 }
 
 const NAMED: [&str; 2] = ["teams", "projects"];
@@ -136,13 +156,16 @@ fn follow(events: &Sender<Event>, shows: &Receiver<String>, shown: &mut Option<S
                     let rows = message["rows"][*table].as_array().cloned().unwrap_or_default();
                     rows.into_iter().map(move |row| name(table, row["slug"].as_str().unwrap_or(""), &row))
                 });
-                events.send_blocking(Event::Snapshot(rows.iter().filter_map(issue).collect(), inbox.iter().filter_map(inbox_row).collect(), names.collect()))?;
+                let tabs = message["rows"]["tabs"].as_array().into_iter().flatten().filter_map(tab).collect();
+                events.send_blocking(Event::Snapshot(rows.iter().filter_map(issue).collect(), inbox.iter().filter_map(inbox_row).collect(), names.collect(), tabs))?;
             }
             Some("changes") => {
                 for change in message["changes"].as_array().into_iter().flatten() {
                     let key = change["key"].as_str().unwrap_or("").to_string();
                     if change["kind"] == "issues" {
                         events.send_blocking(Event::Issue { slug: key, row: issue(&change["row"]) })?;
+                    } else if change["kind"] == "tabs" {
+                        events.send_blocking(Event::Tab { target: key, row: tab(&change["row"]) })?;
                     } else if change["kind"] == "inbox" {
                         events.send_blocking(Event::Inbox { id: key, row: inbox_row(&change["row"]) })?;
                     } else if let Some(table) = NAMED.iter().find(|t| change["kind"] == **t) {
@@ -152,6 +175,13 @@ fn follow(events: &Sender<Event>, shows: &Receiver<String>, shown: &mut Option<S
             }
             Some("terminal") => {
                 events.send_blocking(Event::Terminal(message["session"].as_str().unwrap_or("").to_string()))?;
+            }
+            Some("browser") => {
+                let text = |k: &str| message[k].as_str().unwrap_or("").to_string();
+                events.send_blocking(Event::Browser { session: text("session"), target: text("target") })?;
+            }
+            Some("browser-closed") => {
+                events.send_blocking(Event::BrowserClosed(message["session"].as_str().unwrap_or("").to_string()))?;
             }
             Some("page") => {
                 let slug = message["slug"].as_str().unwrap_or("").to_string();
