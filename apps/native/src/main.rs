@@ -1,36 +1,37 @@
-// desk's window, native: GPUI (Zed's toolkit) with gpui-component, on desk's Node server, read over its sync socket.
-// The first step of the issue "Rebuild desk as a native Rust app like Zed, off Electron": the open issues, kept live,
-// and a composer to check typing through fcitx5.
+// desk's window, native: GPUI (Zed's toolkit) with gpui-component, on desk's Node server, which it reads as the page
+// does (desk issue "Rebuild desk as a native Rust app like Zed, off Electron"). The open issues on the left, kept live
+// over the sync socket, and the chat of the one picked in the middle.
+mod chat;
+mod live;
+mod net;
 mod sync;
 
-use gpui_kit::component::input::{Textarea, TextareaState};
+use chat::Chat;
 use gpui_kit::base::StyledExt;
 use gpui_kit::component::ActiveTheme;
 use gpui_kit::*;
+use gpui_kit::prelude::FluentBuilder;
 use sync::{Event, Issue};
 
 const OPEN: [&str; 5] = ["triage", "running", "review", "waiting", "backlog"];
 
 struct Desk {
     issues: Vec<Issue>,
-    composer: Entity<TextareaState>,
+    picked: Option<String>,
+    chat: Option<Entity<Chat>>,
 }
 
 impl Desk {
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let composer = cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 8));
+    fn new(cx: &mut Context<Self>) -> Self {
         let (send, events) = smol::channel::unbounded();
-        let host = std::env::var("DESK_HOST").unwrap_or_else(|_| "127.0.0.1:8790".into());
-        sync::start(host, send);
+        sync::start(send);
         cx.spawn(async move |this, cx| {
             while let Ok(event) = events.recv().await {
-                if this.update(cx, |desk, cx| { desk.apply(event); cx.notify() }).is_err() {
-                    break;
-                }
+                if this.update(cx, |desk, cx| { desk.apply(event); cx.notify() }).is_err() { break }
             }
         })
         .detach();
-        Self { issues: Vec::new(), composer }
+        Self { issues: Vec::new(), picked: None, chat: None }
     }
 
     fn apply(&mut self, event: Event) {
@@ -45,37 +46,61 @@ impl Desk {
         let rank = |s: &str| OPEN.iter().position(|o| *o == s).unwrap_or(OPEN.len());
         self.issues.sort_by(|a, b| rank(&a.state).cmp(&rank(&b.state)).then_with(|| a.title.cmp(&b.title)));
     }
+
+    fn open(&mut self, issue: &Issue, window: &mut Window, cx: &mut Context<Self>) {
+        if self.picked.as_deref() == Some(&issue.slug) { return }
+        self.picked = Some(issue.slug.clone());
+        let (slug, title) = (issue.slug.clone(), issue.title.clone());
+        self.chat = Some(cx.new(|cx| Chat::new(slug, title, window, cx)));
+        cx.notify();
+    }
 }
 
 impl Render for Desk {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let issues = self.issues.clone();
-        let muted = cx.theme().muted_foreground;
+        let picked = self.picked.clone();
+        let this = cx.entity().downgrade();
+        let theme = cx.theme();
+        let (muted, selected) = (theme.muted_foreground, theme.list_active);
         let rows = uniform_list("issues", issues.len(), move |range, _, _| {
             range
                 .map(|i| {
-                    let issue = &issues[i];
+                    let issue = issues[i].clone();
+                    let this = this.clone();
                     div()
+                        .id(("issue", i))
                         .h_flex()
                         .w_full()
-                        .gap_3()
-                        .px_4()
-                        .h(px(36.))
-                        .child(div().flex_none().w(px(84.)).text_color(muted).text_sm().child(issue.state.clone()))
-                        .child(div().flex_1().min_w_0().overflow_hidden().truncate().child(issue.title.clone()))
-                        .child(div().flex_none().text_color(muted).text_sm().child(issue.priority.clone()))
+                        .gap_2()
+                        .px_3()
+                        .h(px(32.))
+                        .text_sm()
+                        .when(picked.as_deref() == Some(&issue.slug), |row| row.bg(selected))
+                        .child(div().flex_none().w(px(60.)).text_xs().text_color(muted).child(issue.state.clone()))
+                        .child(div().flex_1().min_w_0().truncate().child(issue.title.clone()))
+                        .on_click(move |_, window, cx| {
+                            let _ = this.update(cx, |desk, cx| desk.open(&issue, window, cx));
+                        })
                 })
                 .collect()
         })
         .flex_1();
-        div()
+        let sidebar = div()
             .v_flex()
-            .size_full()
-            .bg(cx.theme().background)
-            .text_color(cx.theme().foreground)
-            .child(div().px_4().py_2().text_sm().text_color(muted).child(format!("{} open issues", self.issues.len())))
-            .child(rows)
-            .child(div().p_3().border_t_1().border_color(cx.theme().border).child(Textarea::new(&self.composer)))
+            .flex_none()
+            .w(px(320.))
+            .h_full()
+            .border_r_1()
+            .border_color(theme.border)
+            .bg(theme.sidebar)
+            .child(div().px_3().py_3().text_sm().text_color(muted).child(format!("{} open issues", self.issues.len())))
+            .child(rows);
+        let middle = match &self.chat {
+            Some(chat) => div().flex_1().min_w_0().h_full().child(chat.clone()),
+            None => div().flex_1().h_full().flex().items_center().justify_center().text_color(muted).child("Pick an issue"),
+        };
+        div().h_flex().size_full().bg(theme.background).text_color(theme.foreground).child(sidebar).child(middle)
     }
 }
 
@@ -83,6 +108,17 @@ fn main() {
     gpui_kit::application().run(move |cx| {
         gpui_kit::init(cx);
         let options = WindowOptions { app_id: Some("desk-native".into()), ..Default::default() };
-        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| Desk::new(window, cx))).expect("open the window");
+        // `desk <slug>` opens on that issue's chat.
+        let slug = std::env::args().nth(1);
+        gpui_kit::open_window(options, cx, |window, cx| {
+            cx.new(|cx| {
+                let mut desk = Desk::new(cx);
+                if let Some(slug) = slug {
+                    desk.open(&Issue { title: slug.clone(), slug, ..Issue::default() }, window, cx);
+                }
+                desk
+            })
+        })
+        .expect("open the window");
     });
 }

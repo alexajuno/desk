@@ -1,13 +1,14 @@
 // desk's live sync (apps/server/src/sync.ts), read on a thread of its own: the snapshot of every issue, then each
-// change as it is written. The socket answers only a loopback peer whose Origin is desk itself, as the page's is.
-// When desk restarts, it connects again with no log, and gets a fresh snapshot.
+// change as it is written. When desk restarts, it connects again with no log, and gets a fresh snapshot.
 use std::{thread, time::Duration};
 
 use serde_json::Value;
 use smol::channel::Sender;
-use tungstenite::{client::IntoClientRequest, Message};
+use tungstenite::Message;
 
-#[derive(Clone)]
+use crate::net;
+
+#[derive(Clone, Default)]
 pub struct Issue {
     pub slug: String,
     pub title: String,
@@ -25,9 +26,9 @@ fn issue(row: &Value) -> Option<Issue> {
     row.is_object().then(|| Issue { slug: text("slug"), title: text("title"), state: text("state"), priority: text("priority") })
 }
 
-pub fn start(host: String, events: Sender<Event>) {
+pub fn start(events: Sender<Event>) {
     thread::spawn(move || loop {
-        if let Err(error) = follow(&host, &events) {
+        if let Err(error) = follow(&events) {
             eprintln!("desk sync: {error}");
         }
         if events.is_closed() {
@@ -37,12 +38,18 @@ pub fn start(host: String, events: Sender<Event>) {
     });
 }
 
-fn follow(host: &str, events: &Sender<Event>) -> Result<(), Box<dyn std::error::Error>> {
-    let mut request = format!("ws://{host}/api/sync?log=&since=").into_client_request()?;
-    request.headers_mut().insert("Origin", format!("http://{host}").parse()?);
-    let (mut socket, _) = tungstenite::connect(request)?;
+fn follow(events: &Sender<Event>) -> Result<(), Box<dyn std::error::Error>> {
+    let mut socket = net::socket("/api/sync?log=&since=")?;
     loop {
-        let Message::Text(text) = socket.read()? else { continue };
+        let text = match socket.read() {
+            Ok(Message::Text(text)) => text,
+            Ok(_) => continue,
+            Err(e) if net::timed_out(&e) => {
+                if events.is_closed() { return Ok(()) }
+                continue;
+            }
+            Err(e) => return Err(e.into()),
+        };
         let message: Value = serde_json::from_str(&text)?;
         match message["type"].as_str() {
             Some("snapshot") => {
