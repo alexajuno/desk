@@ -1,5 +1,4 @@
 packages:
   - apps/*
 onlyBuiltDependencies:
-  - electron
   - node-pty

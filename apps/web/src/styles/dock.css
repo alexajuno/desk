@@ -555,11 +555,6 @@ html.one-screen .session-split:has(> .half) > .session-view > :not(.dock-head) {
 html.one-screen .session-split > .half { flex: 1; min-width: 0; border-left: 0; }
 html.one-screen .half-grip { display: none; }
 html:not(.one-screen) .half-chat { display: none; }
-/* The Browser's tab strip and its address row share one 40px line, the tabs at their own width up to 45%, so the page
-   gets back the 44px that a head, a strip and a row cost under the chat's head. */
-html.one-screen .browser { display: grid; grid-template-columns: fit-content(45%) minmax(0, 1fr); grid-template-rows: 40px minmax(0, 1fr); }
-html.one-screen .browser-tabs { height: 40px; }
-html.one-screen .browser-page { grid-column: 1 / -1; }
 /* The slide between them: the half comes in from the right, and the chat from the left (Dock.tsx, back, set as the half
    closes). A half switching to another view stays mounted and does not slide again. */
 html.one-screen .session-split > .half { animation: half-in 0.2s var(--dock-ease) both; }
@@ -624,41 +619,6 @@ button.steps-row-fold:hover { background: var(--btn-ghost-hover); color: var(--t
 .step-half-pic[data-dir="column"] .d2-row { flex-direction: column; align-items: center; }
 .step-half-pic .d2-row > .d2-pic { flex: none; max-width: none; min-width: 0; }
 .step-half-none { margin: 0; font-size: 13px; color: var(--text-4); }
-
-/* The chat's Browser (Browser.tsx), mockup A ("okay A", 31 Oct): a strip of its session's tabs, as tall as the chat's
-   head beside it, pills as the head's tabs, the open one filled as a current tab is; then a 40px row of back, forward,
-   reload and the address, a filled pill; then the page. */
-.browser { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.browser-tabs, .browser-nav { flex: none; display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 8px; border-bottom: 1px solid var(--border-1); }
-.browser-tabs { height: 44px; overflow-x: auto; scrollbar-width: none; }
-.browser-tab { flex: 0 1 auto; display: flex; align-items: center; min-width: 88px; max-width: 190px; height: 28px; border-radius: 9999px; color: var(--text-3); }
-.browser-tab:hover { background: var(--btn-ghost-hover); color: var(--text-2); }
-.browser-tab.here { background: var(--bg-tab-on); color: var(--text-1); box-shadow: 0 0 0 0.5px var(--ring-btn); }
-.browser-tab-pick { flex: 1; min-width: 0; padding: 0 2px 0 8px; background: transparent; color: inherit; box-shadow: none; }
-.browser-tab-pick:hover { background: transparent; }
-.browser-tab-pick span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* the shown tab's × always, another's with the mouse on it, keeping its room so the pill never changes size */
-.browser-tab-close { flex: none; width: 20px; height: 20px; margin-right: 4px; padding: 0; justify-content: center; background: transparent; color: var(--text-3); box-shadow: none; opacity: 0; }
-.browser-tab:hover .browser-tab-close, .browser-tab.here .browser-tab-close, .browser-tab-close:focus-visible { opacity: 1; }
-.browser-tab-close:hover { background: var(--bg-icon-hover); color: var(--text-1); }
-.browser-tab-close .glyph { width: 14px; height: 14px; }
-.browser-fav { flex: none; display: flex; width: 14px; height: 14px; border-radius: 3px; }
-.browser-fav .glyph { width: 14px; height: 14px; }
-.browser-nav .dock-btn:disabled { background: transparent; }
-.browser-url { flex: 1; min-width: 0; height: 28px; margin-left: 4px; padding: 0 12px; border-radius: 9999px; background: var(--btn); box-shadow: 0 0 0 0.5px var(--ring-btn);
-               font: 450 12px/28px var(--font); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.browser-url b { font-weight: 450; color: var(--text-2); }
-.browser-url { cursor: text; }
-.browser-url.editing { border: 0; outline: none; color: var(--text-1); box-shadow: 0 0 0 1px var(--accent); } /* as a text field's focus */
-.browser-page { position: relative; flex: 1; min-height: 0; overflow: hidden; }
-.browser-shot { display: block; width: 100%; height: 100%; object-fit: contain; object-position: top center; user-select: none; }
-.browser-empty { margin: 48px 12px; text-align: center; font-size: 13px; color: var(--text-3); }
-/* what the page asks of you, which Chrome draws outside it (Browser.tsx): the picture dimmed as under a modal, and the
-   chat's question card (.ask) at its top, where Chrome puts its own dialogs */
-.browser-held { position: absolute; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 16px; background: var(--overlay); }
-.browser-ask { width: min(440px, calc(100% - 32px)); margin: 0; box-shadow: var(--shadow-pop); }
-.browser-ask .ask-what { white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 450; }
-.browser-prompt { display: block; box-sizing: border-box; width: 100%; }
 
 /* The terminal (Terminal.tsx): xterm.js, in the mono font, its cells filling the half less a margin; its sixteen
    colours are VS Code's Dark+ and Light+ terminal ones (terminalColorRegistry.ts, read 31 Oct), and its ground and

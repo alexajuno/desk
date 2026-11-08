@@ -12,7 +12,6 @@ import { flushSync } from "react-dom";
 import { postJson, reason } from "../api/http";
 import { go } from "../app/nav";
 import { splashUp, useSplash } from "../app/splash";
-import { APP } from "../lib/desktop";
 import { markdown } from "../lib/markdown";
 import { seenPage, usePage } from "../api/page";
 import { HeadStatus, IssueDetails, landSkip, Lands, StepButtons, Title, useStep, type IssuePageData } from "../issues/IssueView";
@@ -141,20 +140,6 @@ const Dot = observer(function Dot({ s }: { s: LiveSession }) {
 const quiet = (s: LiveSession) => !s.items.length && !s.pending.length && !s.working;
 
 // A chat as the middle shows it; the Inbox draws one in its right pane too.
-// A link to another site, clicked in the chat in the middle, opens in its Browser: a tab for its session in desk's app,
-// beside the chat ("i want everything on chrome that desk opens sit inside desk. e.g. open a link from agent's result",
-// the user, 1 Nov). Ctrl, Shift, Alt or the middle button opens it in your own browser, as before, and so does any
-// click in desk in a web page, which has no Browser (lib/desktop.ts).
-function browse(e: React.MouseEvent, session: string) {
-  if (!APP) return;
-  const a = (e.target as Element).closest?.("a[href]") as HTMLAnchorElement | null;
-  if (!a || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-  if (!/^https?:$/.test(a.protocol) || a.origin === location.origin) return;
-  e.preventDefault();
-  dock.setHalf(session, "browser", true);
-  void postJson(`/api/live/${session}/browse`, { url: a.href }).then(async (res) => res.ok || toast(await reason(res)));
-}
-
 // Whether a step can show what it holds in the list in the chat's right half, as only the chat in the middle can, and not
 // on a phone, where the half would take the chat's place; and which step shows there now (StepsHalf.tsx), whose diagram the
 // chat then leaves out, as one fact goes once. Any other draws its own where it was sent.
@@ -260,7 +245,7 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
         <ChatHead s={s} docked={docked} />
         {here && docked && dock.details && <IssueDetails data={here} />}
         <div className="dock-scroll" ref={scroller} onScroll={onScroll} tabIndex={-1}>
-          <div className="convo" onClick={docked && m?.chat ? (e) => browse(e, id) : undefined}>
+          <div className="convo">
             {!s.loaded ? <p className="convo-empty">Connecting…</p>
               : quiet(s) ? <p className="convo-empty">{m?.agent ? `Talk to ${m.agent}.`
                 : m?.chat && m.issue ? "This issue's chat. Write to carry the issue on: it starts from the issue's document."
@@ -330,7 +315,7 @@ const ChatHead = observer(function ChatHead({ s, docked }: { s: LiveSession; doc
           <ChatButton id={s.id} />
           {here && Boolean(here.plan_steps?.length) && <HalfButton id={s.id} view="steps" />}
           {here && anyCommit(here.plan_steps) && <HalfButton id={s.id} view="changes" />}
-          <HalfButton id={s.id} view="terminal" />{APP && <HalfButton id={s.id} view="browser" />}
+          <HalfButton id={s.id} view="terminal" />
         </span>
       )}
       {here && docked && <HeadStep data={here} />}
@@ -1475,9 +1460,9 @@ const Composer = observer(function Composer({ s }: { s: LiveSession }) {
   );
 });
 
-// The terminal and the globe in the chat's head: the chat's right half, on its terminal or its browser, open, switched
-// to the other or hidden (Half.tsx), each lit while the half shows its view. They are the only place it is, as the half
-// has no head of its own ("yeah A", 1 Nov). The globe is only in desk's app, which alone has the Browser (lib/desktop.ts).
+// The terminal in the chat's head: the chat's right half on its terminal, open or hidden (Half.tsx), lit while the half
+// shows it. It is the only place it is, as the half has no head of its own ("yeah A", 1 Nov). The Browser, Claude's
+// tabs, is the native window's alone (apps/native).
 // Before them, in an issue's chat with steps, its steps (StepsHalf.tsx), lit too on a step's diagram, which it leaves for
 // the list, then, once a step has sent its commit, its Changes: the two you read, then the two Claude drives. The diagram
 // has no button: the head is full ("the header in chat interface looks kinda tight", 28 Oct), and it opens from its step.
@@ -1487,7 +1472,6 @@ const HALF_BUTTONS = {
   steps: { icon: GLYPH.steps, label: "Steps", key: "Ctrl ⇧ S" },
   changes: { icon: GLYPH.changes, label: "Changes", key: "Ctrl ⇧ G" },
   terminal: { icon: GLYPH.terminal, label: "Terminal", key: "Ctrl `" },
-  browser: { icon: GLYPH.globe, label: "Browser", key: "Ctrl ⇧ B" },
 } as const;
 
 // Chat, first of the half's buttons while the half takes the chat's place (frame/oneScreen.ts): lit while the chat is

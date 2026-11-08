@@ -19,12 +19,11 @@
 // right sidebar similar to diagrams and browser and all other things", the user, 4 Nov).
 import { action, computed, makeObservable, observable } from "mobx";
 import { oneScreen } from "../frame/oneScreen";
-import { APP } from "../lib/desktop";
 
 export type Layout = "page" | "chat";
 // What the right half beside it shows: the chat's terminal, or its browser, the tabs its session has open, its issue's
 // steps (sessions/StepsHalf.tsx), or its issue's changes, each step's diff (sessions/Changes.tsx).
-export type Half = "terminal" | "browser" | "steps" | "changes";
+export type Half = "terminal" | "steps" | "changes";
 // The step part being read in a chat: the step, by its title, and the part's place in it, from 0.
 export type Reading = { title: string; part: number };
 
@@ -45,10 +44,10 @@ class Dock {
   center = false; // a chat holds the middle now
   details = false; // its issue's details dropped open under its head; each chat comes with them folded
   pill = saved.pill ?? false; // the chat you left, at the bottom right
-  // the chats whose right half is open, and on which view; desk in a web page has no Browser (lib/desktop.ts)
-  halves: Record<string, Half> = Object.fromEntries(Object.entries(Object.fromEntries(Object.entries(saved.halves ?? {}).map(([id, half]) => [id, (half as string) === "step" ? "steps" : half]))).filter(([, half]) => APP || half !== "browser"));
+  // the chats whose right half is open, and on which view; the web app has no Browser, which only Electron drew, and
+  // the native window draws now (apps/native)
+  halves: Record<string, Half> = Object.fromEntries(Object.entries(Object.fromEntries(Object.entries(saved.halves ?? {}).map(([id, half]) => [id, (half as string) === "step" ? "steps" : half]))).filter(([, half]) => (half as string) !== "browser"));
   chatWidth = saved.chatWidth ?? CHAT.start; // the chat's width in px while its right half is open, which gets the rest
-  tab: Record<string, string> = {}; // the tab each chat's Browser shows, by Chrome's id, once you picked one
   reading: Record<string, Reading> = {}; // the step part being read in each chat, whose diagram its list shows
   picked: Record<string, { title: string | null; on: string | null }> = {}; // the row you opened or closed in each chat's list, and the step being worked on then
   private stepsShown: string[] = saved.stepsShown ?? []; // the step sends and commits that opened their chat's half
@@ -57,8 +56,8 @@ class Dock {
   constructor() {
     makeObservable(this, {
       session: observable, center: observable, details: observable, pill: observable, halves: observable, chatWidth: observable,
-      tab: observable, reading: observable, picked: observable, pickRow: action, layout: computed, arrange: action, setDetails: action, dismiss: action, setHalf: action,
-      setChatWidth: action, showTab: action, openTab: action, closeBrowser: action, read: action, showStep: action, showChanges: action,
+      reading: observable, picked: observable, pickRow: action, layout: computed, arrange: action, setDetails: action, dismiss: action, setHalf: action,
+      setChatWidth: action, read: action, showStep: action, showChanges: action,
     });
   }
 
@@ -114,27 +113,6 @@ class Dock {
   setChatWidth(px: number) {
     this.chatWidth = Math.max(CHAT.min, Math.round(px));
     this.save();
-  }
-
-  // The tab the chat's Browser shows, picked in its strip.
-  showTab(session: string, target: string) {
-    this.tab = { ...this.tab, [session]: target };
-  }
-
-  // A tab the chat's session just opened, or works in, which its Browser shows, open beside it: Claude's tabs have no
-  // window ("when browser is in use, will the browsre tab show?", "on using browser, the desk should open the browser
-  // tab", the user, 1 Nov). desk says so once a turn for each tab (the server's tabs.ts). desk in a web page shows none.
-  openTab(session: string, target: string) {
-    if (!APP) return;
-    this.setHalf(session, "browser");
-    this.showTab(session, target);
-  }
-
-  // The chat's session closed its last tab: its Browser, which would show nothing, closes ("after claude is done with
-  // browser usage, it closes the browser but doesn’t close the tab, leaving an empty browser sidebar", the user, 1 Nov).
-  // A half on the terminal stays.
-  closeBrowser(session: string) {
-    if (this.halves[session] === "browser") this.setHalf(session, null);
   }
 
   // The step part being read in the chat, as its scroll says, or as picked in its half, which then holds for a moment

@@ -2,8 +2,8 @@
 // tab opened to receive noti and it might interrupt with my concentration" (the user, 2 Nov; the desk issue "desk as my
 // notification center"). The company removed personal apps on 22 Oct, so desk does what the Slack tab does:
 //
-//   1. It reads the user's Slack cookies, `d` and `d-s`, from their Chrome's Profile 2, as desk's app reads its logins
-//      (apps/desktop/src/logins.ts).
+//   1. It reads the user's Slack cookies, `d` and `d-s`, from their Chrome's Profile 2, as desk's Electron app read its
+//      logins until 8 Nov.
 //   2. It loads one of the workspace's own pages with them, whose HTML holds the session token, xoxc-, that the tab's
 //      calls use; the workspace's front page holds none, its emoji settings page does.
 //   3. It opens Slack's own socket, rtm.connect, with the cookie, and Slack pushes each new message as it comes.
