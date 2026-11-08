@@ -484,6 +484,10 @@ button.cmd-more:hover { background: none; color: var(--text-2); }
 .skill { color: var(--skill-text); }
 .skill-slash { opacity: 0.5; }
 .composer-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+/* Beside the right half the composer is too narrow for the model's whole name and its effort, which pushed Send past its
+   edge: the effort goes, and stays in the model's menu. */
+.composer { container-type: inline-size; }
+@container (max-width: 480px) { .composer-foot .runs .effort { display: none; } }
 /* No line of key hints: each button names its keys in its tooltip, as Linear's do ("i'm familiar with it already",
    the user, 19 Oct). */
 .composer-foot .spacer { flex: 1; }
@@ -492,6 +496,8 @@ button.cmd-more:hover { background: none; color: var(--text-2); }
 .runs:hover { background: var(--bg-icon-hover); color: var(--text-1); }
 /* Wide enough for claude.ai's line under each model beside the Re-reads number, which cut it at 264px. */
 .menu.runs-menu { width: 320px; }
+/* The effort after the model, as claude.ai's chip: "Sonnet 5.5 Medium", the effort in a lighter grey. */
+.runs .effort { color: var(--text-4); }
 /* The context beside Manual (Dock.tsx, Used), and the live profile's numbers in the window's bar (frame/StatusBar.tsx):
    each a ring and its number after its word, in the chip's grey, the word a step quieter, named on hover. */
 .used { display: flex; flex: none; align-items: center; gap: 2px; }

@@ -54,6 +54,7 @@
   .composer { width: calc(100% - 16px); margin-bottom: 8px; }
   /* A new chat's folder shows its end, where folders differ, as "…/projects/desk"; its effort makes room for it. */
   .start-in > span { direction: rtl; }
+  .composer-foot:has(.start-in) .runs .effort { display: none; }
   /* and Manual or Auto waits for its first message, where Auto is picked in its chip (Dock.tsx, Mode) */
   .composer-foot:has(.start-in) .mode { display: none; }
   /* The context and the week stay in the model menu: with them the foot ran 465px in its 359 at 412 wide (31 Oct). */

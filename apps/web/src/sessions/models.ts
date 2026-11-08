@@ -58,8 +58,8 @@ const about = (name: string) => ABOUT.find(([family]) => name.toLowerCase().incl
 type Pick = (set: { model?: string; effort?: string; picking?: boolean }, shown?: Partial<Runs>) => void;
 
 // The menu under the chip, claude.ai's: the models, then one Effort row that opens the efforts the current model takes
-// (so the chip names the model only and stays short, the user, 8 Nov: "not have effort clutters the bar making it that
-// long"), then the usage: the live profile by name, as seat says, its own numbers, a plan's 5-hour and Week or api's
+// (so the menu stays one short list, the user, 8 Nov: "not have effort clutters the bar making it that long"), then the
+// usage: the live profile by name, as seat says, its own numbers, a plan's 5-hour and Week or api's
 // credits, as the window's bar shows them, and how full the session's context is. A phone has no bar, so this is where
 // it reads them.
 export function runsMenu(anchor: Element, session: string, runs: Runs, pick: Pick) {
