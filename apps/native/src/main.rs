@@ -814,7 +814,10 @@ fn main() {
         // `desk --hidden`, as desk-app.service starts it at login, opens hidden, with no focus taken
         let hidden = std::env::args().any(|a| a == "--hidden");
         let args: Vec<String> = std::env::args().skip(1).filter(|a| !a.starts_with("--")).collect();
-        let options = WindowOptions { app_id: Some("desk-native".into()), focus: !hidden, ..Default::default() };
+        // a test's window runs with DESK_APP_ID=desk-native-test, so that the Hyprland rule placing it never catches yours
+        // (8 Nov: one left in Hyprland floated the real window at the test's size)
+        let app_id = std::env::var("DESK_APP_ID").unwrap_or_else(|_| "desk-native".into());
+        let options = WindowOptions { app_id: Some(app_id), focus: !hidden, ..Default::default() };
         // `desk <slug>` opens on that issue's chat.
         let slug = args.first().cloned();
         gpui_kit::open_window(options, cx, |window, cx| {
