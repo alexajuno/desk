@@ -43,28 +43,13 @@ pub struct InboxRow {
     pub who: Option<String>,
 }
 
-// A tab a chat's session has open in desk's Chrome (the server's tabs.ts), which its Browser shows.
-#[derive(Clone, Default, PartialEq)]
-pub struct Tab {
-    pub target: String, // Chrome's id for it
-    pub session: String,
-    pub url: String,
-    pub title: String,
-    pub opened: String, // when desk first heard of it, which orders the strip
-}
-
 // The rows of the other tables desk holds (the server's db.ts, HELD), as desk sends them, by their key: teams, projects,
 // milestones, a project's activity and the chats.
 pub type Rows = HashMap<String, HashMap<String, Value>>;
 pub const OTHERS: [&str; 5] = ["teams", "projects", "milestones", "activity", "chats"];
 
 pub enum Event {
-    Snapshot(Vec<Issue>, Vec<InboxRow>, Rows, Vec<Tab>),
-    Tab { target: String, row: Option<Tab> },
-    // Claude opened a tab, or works in one: the chat's Browser shows it (the server's tabs.ts, used)
-    Browser { session: String, target: String },
-    // the session closed its last tab: its Browser closes
-    BrowserClosed(String),
+    Snapshot(Vec<Issue>, Vec<InboxRow>, Rows),
     // a row of another table changed, or went (None)
     Row { table: String, key: String, row: Option<Value> },
     // the sidebar's sessions and where each open issue's stands (pages.ts, framePage), on connect and when it changed
@@ -87,11 +72,6 @@ fn issue(row: &Value) -> Option<Issue> {
 // A key as text, a number's too (milestones and activity are keyed by their id).
 fn text_of(v: &Value) -> String {
     v.as_str().map(str::to_string).unwrap_or_else(|| v.to_string())
-}
-
-fn tab(row: &Value) -> Option<Tab> {
-    let text = |k: &str| row.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-    row.is_object().then(|| Tab { target: text("target"), session: text("session"), url: text("url"), title: text("title"), opened: text("opened") })
 }
 
 fn inbox_row(row: &Value) -> Option<InboxRow> {
@@ -159,16 +139,13 @@ fn follow(events: &Sender<Event>, shows: &Receiver<String>, shown: &mut Option<S
                     let rows = message["rows"][*table].as_array().into_iter().flatten();
                     (table.to_string(), rows.map(|row| (text_of(&row[key]), row.clone())).collect())
                 }).collect();
-                let tabs = message["rows"]["tabs"].as_array().into_iter().flatten().filter_map(tab).collect();
-                events.send_blocking(Event::Snapshot(rows.iter().filter_map(issue).collect(), inbox.iter().filter_map(inbox_row).collect(), others, tabs))?;
+                events.send_blocking(Event::Snapshot(rows.iter().filter_map(issue).collect(), inbox.iter().filter_map(inbox_row).collect(), others))?;
             }
             Some("changes") => {
                 for change in message["changes"].as_array().into_iter().flatten() {
                     let key = text_of(&change["key"]);
                     if change["kind"] == "issues" {
                         events.send_blocking(Event::Issue { slug: key, row: issue(&change["row"]) })?;
-                    } else if change["kind"] == "tabs" {
-                        events.send_blocking(Event::Tab { target: key, row: tab(&change["row"]) })?;
                     } else if change["kind"] == "inbox" {
                         events.send_blocking(Event::Inbox { id: key, row: inbox_row(&change["row"]) })?;
                     } else if let Some(table) = OTHERS.iter().find(|t| change["kind"] == **t) {
@@ -180,13 +157,6 @@ fn follow(events: &Sender<Event>, shows: &Receiver<String>, shown: &mut Option<S
             Some("frame") => events.send_blocking(Event::Frame(message["frame"].clone()))?,
             Some("terminal") => {
                 events.send_blocking(Event::Terminal(message["session"].as_str().unwrap_or("").to_string()))?;
-            }
-            Some("browser") => {
-                let text = |k: &str| message[k].as_str().unwrap_or("").to_string();
-                events.send_blocking(Event::Browser { session: text("session"), target: text("target") })?;
-            }
-            Some("browser-closed") => {
-                events.send_blocking(Event::BrowserClosed(message["session"].as_str().unwrap_or("").to_string()))?;
             }
             Some("page") => {
                 let slug = message["slug"].as_str().unwrap_or("").to_string();

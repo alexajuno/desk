@@ -451,7 +451,7 @@ impl Desk {
         }));
         self.changes = None;
         self.commits = None;
-        let half = self.half.filter(|h| *h != Half::Terminal && *h != Half::Browser && *h != Half::Steps && *h != Half::Changes);
+        let half = self.half.filter(|h| *h != Half::Terminal && *h != Half::Steps && *h != Half::Changes);
         self.set_half(half, cx);
         crate::give_back(cx);
         cx.notify();

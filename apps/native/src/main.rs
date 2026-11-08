@@ -2,8 +2,7 @@
 // does (desk issue "Rebuild desk as a native Rust app like Zed, off Electron"). It copies the web app's frame, which
 // copies Linear's: the open issues down the left, directly on the window's background, and the page beside them, one
 // panel floating a few pixels in, with the picked issue's chat and, when its head's buttons say so, its right half: its
-// steps, its Changes, its terminal or its Browser.
-mod browser;
+// steps, its Changes or its terminal.
 mod changes;
 mod chat;
 mod hyprland;
@@ -68,7 +67,6 @@ pub(crate) enum Page {
 #[derive(Clone, Copy, PartialEq)]
 enum Half {
     Terminal,
-    Browser,
     Steps,
     Changes,
 }
@@ -112,10 +110,6 @@ struct Desk {
     half: Option<Half>,
     terminal: Option<Entity<terminal::Terminal>>, // the chat's terminal, while the half shows it
     _terminal_events: Option<Subscription>,
-    tabs: Vec<sync::Tab>, // the tabs Claude's sessions have open in desk's Chrome
-    browser: Option<Entity<browser::Browser>>, // the chat's Browser, while the half shows it
-    tab_of: HashMap<String, String>, // the tab each chat's Browser shows, by its session, once you picked one or Claude used one
-    _browser_events: Option<Subscription>,
     commits: Option<Vec<String>>, // the picked issue's steps' commits, once its page came
     shows: smol::channel::Sender<String>,
     settings: Option<Entity<settings::SettingsPage>>, // while Settings shows
@@ -188,7 +182,7 @@ impl Desk {
             notice: None,
             inbox_focus: cx.focus_handle(),
             inbox_scroll: UniformListScrollHandle::new(),
-            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, notes: notify::Notes::start(window, cx), titled: String::new(), seat: None, tips: tip::install(cx), list: None, creator: None, command: None, field_pick: None, o_pressed: None, _appearance: appearance }
+            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, notes: notify::Notes::start(window, cx), titled: String::new(), seat: None, tips: tip::install(cx), list: None, creator: None, command: None, field_pick: None, o_pressed: None, _appearance: appearance }
     }
 
     fn apply(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
@@ -232,26 +226,7 @@ impl Desk {
                 }
                 return;
             }
-            Event::Tab { target, row } => {
-                self.tabs.retain(|t| t.target != target);
-                self.tabs.extend(row);
-                self.tabs_changed(cx);
-                return;
-            }
-            // Claude opened a tab or works in one: the chat's Browser opens on it, where you watch what it does there
-            Event::Browser { session, target } => {
-                self.tab_of.insert(session.clone(), target);
-                if self.page == Page::Issue && self.session(cx).as_deref() == Some(session.as_str()) { self.open_browser(cx) }
-                return;
-            }
-            // the session closed its last tab: its Browser, which would show nothing, closes
-            Event::BrowserClosed(session) => {
-                if self.half == Some(Half::Browser) && self.session(cx).as_deref() == Some(session.as_str()) { self.set_half(None, cx) }
-                return;
-            }
-            Event::Snapshot(issues, inbox, rows, tabs) => {
-                self.tabs = tabs;
-                self.tabs_changed(cx);
+            Event::Snapshot(issues, inbox, rows) => {
                 self.rows = rows;
                 let names = |table: &str| -> HashMap<String, String> {
                     self.rows.get(table).into_iter().flatten().map(|(k, r)| (k.clone(), r["title"].as_str().unwrap_or(k).to_string())).collect()
@@ -305,7 +280,7 @@ impl Desk {
     }
 
     // Whether something other than the window, the Inbox's list or an issue list holds the keys: a box typed in, the
-    // terminal, the Browser's page; the window's own keys then leave them alone, as the web's do while typing.
+    // terminal; the window's own keys then leave them alone, as the web's do while typing.
     fn typing(&self, window: &Window, cx: &App) -> bool {
         let list = self.list.as_ref().map(|(l, _)| l.read(cx).focus.clone());
         window.focused(cx).is_some_and(|f| f != self.focus && f != self.inbox_focus && Some(&f) != list.as_ref())
@@ -429,7 +404,7 @@ impl Desk {
         self.changes = Some(cx.new(|cx| Changes::new(slug, weak, window, cx)));
         self.chat = Some(chat);
         self.commits = None;
-        let half = self.half.filter(|h| *h != Half::Terminal && *h != Half::Browser); // the terminal and the tabs were the other chat's
+        let half = self.half.filter(|h| *h != Half::Terminal); // the terminal was the other chat's
         self.set_half(half, cx);
         give_back(cx); // what the chat left held
         cx.notify();
@@ -491,11 +466,6 @@ impl Desk {
             self.terminal = None;
             self._terminal_events = None;
         }
-        // the Browser lets go of its tab, which goes back to its own size
-        if half != Some(Half::Browser) {
-            self.browser = None;
-            self._browser_events = None;
-        }
         if let Some(changes) = &self.changes { changes.update(cx, |c, cx| c.show(half == Some(Half::Changes), cx)) }
         cx.notify();
     }
@@ -511,46 +481,6 @@ impl Desk {
         self.half = Some(Half::Terminal);
         if let Some(changes) = &self.changes { changes.update(cx, |c, cx| c.show(false, cx)) }
         cx.notify();
-    }
-
-    fn session(&self, cx: &App) -> Option<String> {
-        self.chat.as_ref().and_then(|c| c.read(cx).session().map(str::to_string))
-    }
-
-    // The chat's Browser in the half, on the tab Claude last used or you last picked, else its last.
-    fn open_browser(&mut self, cx: &mut Context<Self>) {
-        let Some(session) = self.session(cx) else { return };
-        let tabs: Vec<sync::Tab> = self.tabs.iter().filter(|t| t.session == session).cloned().collect();
-        let picked = self.tab_of.get(&session).cloned();
-        match &self.browser {
-            Some(browser) => browser.update(cx, |b, cx| {
-                b.set_tabs(tabs, cx);
-                if let Some(target) = picked { b.show(&target, cx) }
-            }),
-            None => {
-                let browser = cx.new(|cx| browser::Browser::new(tabs, picked, cx));
-                self._browser_events = Some(cx.subscribe(&browser, move |desk, _, event: &browser::BrowserEvent, _| match event {
-                    browser::BrowserEvent::Picked(target) => { desk.tab_of.insert(session.clone(), target.clone()); }
-                }));
-                self.browser = Some(browser);
-            }
-        }
-        self.half = Some(Half::Browser);
-        self.terminal = None;
-        self._terminal_events = None;
-        if let Some(changes) = &self.changes { changes.update(cx, |c, cx| c.show(false, cx)) }
-        cx.notify();
-    }
-
-    fn flip_browser(&mut self, cx: &mut Context<Self>) {
-        if self.half == Some(Half::Browser) { self.set_half(None, cx) } else { self.open_browser(cx) }
-    }
-
-    // The tabs changed: the Browser shown takes its session's.
-    fn tabs_changed(&mut self, cx: &mut Context<Self>) {
-        let (Some(browser), Some(session)) = (self.browser.clone(), self.session(cx)) else { return };
-        let tabs: Vec<sync::Tab> = self.tabs.iter().filter(|t| t.session == session).cloned().collect();
-        browser.update(cx, |b, cx| b.set_tabs(tabs, cx));
     }
 
     fn flip_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -641,7 +571,6 @@ impl Desk {
             })
             .when(self.chat.as_ref().is_some_and(|c| c.read(cx).session().is_some()), |head| {
                 head.child(self.half_button("terminal", self.half == Some(Half::Terminal), cx).on_click(cx.listener(|desk, _, window, cx| desk.flip_terminal(window, cx))))
-                    .child(self.half_button("globe", self.half == Some(Half::Browser), cx).on_click(cx.listener(|desk, _, _, cx| desk.flip_browser(cx))))
             })
             .when(self.page == Page::Issue, |head| {
                 head.child(self.half_button("steps", self.half == Some(Half::Steps), cx).on_click(cx.listener(|desk, _, _, cx| desk.flip(Half::Steps, cx))))
@@ -685,7 +614,6 @@ impl Render for Desk {
             Some(Half::Steps) => Some(self.steps.clone().into()),
             Some(Half::Changes) => self.changes.clone().map(Into::into),
             Some(Half::Terminal) => self.terminal.clone().map(Into::into),
-            Some(Half::Browser) => self.browser.clone().map(Into::into),
             None => None,
         };
         let chat_width = self.widths.chat(page_width);
@@ -728,7 +656,7 @@ impl Render for Desk {
             .size_full()
             .track_focus(&self.focus)
             // Ctrl Shift O a new chat; Ctrl , Settings, as the web app's; and the half's: Ctrl ` its terminal, Ctrl Shift S
-            // its steps, Ctrl Shift G its Changes, Ctrl Shift B its Browser. While nothing types: [ hides or shows the
+            // its steps, Ctrl Shift G its Changes. While nothing types: [ hides or shows the
             // sidebar, P, R and Delete act on the sidebar's chat under the mouse, and Enter or I goes into the composer.
             .on_key_down(cx.listener(move |desk, e: &KeyDownEvent, window, cx| {
                 let k = &e.keystroke;
@@ -789,7 +717,6 @@ impl Render for Desk {
                 if !(k.modifiers.control && k.modifiers.shift) || k.modifiers.alt || desk.chat.is_none() || !chat_page { return }
                 match k.key.to_lowercase().as_str() {
                     "s" if desk.page == Page::Issue => desk.flip(Half::Steps, cx),
-                    "b" if desk.session(cx).is_some() => desk.flip_browser(cx),
                     "g" if desk.commits.as_ref().is_some_and(|c| !c.is_empty()) => desk.flip(Half::Changes, cx),
                     _ => return,
                 }
