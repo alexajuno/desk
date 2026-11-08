@@ -89,7 +89,7 @@ fn text(v: &Value) -> String {
 
 // A menu's choices, from desk, on a thread of its own: its teams, its open projects with the issue's team's first and
 // the one it is in, or its project's milestones in their order; each with None first (issues/menus.tsx).
-fn choices(field: &'static str, team: Option<String>, project: Option<String>, milestone: Option<String>) -> Result<Menu, String> {
+pub(crate) fn choices(field: &'static str, team: Option<String>, project: Option<String>, milestone: Option<String>) -> Result<Menu, String> {
     let none = |label: &str, current: bool| Pick { icon: "none", label: label.into(), value: String::new(), current };
     let rows = |v: &Value| v.as_array().cloned().unwrap_or_default();
     let menu = |picks: Vec<Pick>, placeholder: &'static str, empty: &'static str, width: f32| Menu {
@@ -125,6 +125,17 @@ fn choices(field: &'static str, team: Option<String>, project: Option<String>, m
             Ok(menu(picks, "Set milestone…", "No milestone matches", 264.))
         }
     }
+}
+
+// Set parent…: the open issues desk offers to sit under, without `exclude` and its own sub-issues, No parent first.
+pub(crate) fn parents(exclude: &str, current: &str) -> Result<Menu, String> {
+    let found = net::get(&format!("/api/parents?exclude={}", picker::encode(exclude)))?;
+    let mut picks = vec![Pick { icon: "none", label: "No parent".into(), value: String::new(), current: current.is_empty() }];
+    for i in found.as_array().into_iter().flatten() {
+        let value = text(&i["slug"]);
+        picks.push(Pick { icon: theme::state_glyph(i["state"].as_str().unwrap_or("")), label: text(&i["title"]), current: value == current, value });
+    }
+    Ok(Menu { source: Source::Fixed(picks), placeholder: "Set parent…", empty: "No open issue matches", width: 340., takes_typed: false, start: String::new() })
 }
 
 pub enum IssueEvent {

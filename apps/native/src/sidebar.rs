@@ -162,7 +162,7 @@ impl Desk {
                 .on_click(cx.listener(|desk, _, window, cx| desk.open_search(window, cx))))
             .child(round("side-new-issue").bg(button).shadow(vec![crate::filters::ring(ring, 0.5)]).hover(move |s| s.bg(button_hover))
                 .child(theme::glyph("new-issue", fg).size(px(14.)))
-                .on_click(cx.listener(|desk, _, _, cx| desk.show_soon("new issue", cx))))
+                .on_click(cx.listener(|desk, _, window, cx| desk.new_issue(serde_json::json!({}), window, cx))))
     }
 
     // A row of the sidebar, Linear's: 28px, its 16px icon and its words in --text-3, a fill under the mouse, and the
@@ -507,7 +507,7 @@ impl Desk {
                         let issue = desk.all.get(slug).cloned().unwrap_or_else(|| crate::Issue { slug: slug.clone(), ..Default::default() });
                         desk.open(&issue, window, cx);
                     }
-                    crate::lists::ListEvent::New(_) => desk.show_soon("new issue", cx),
+                    crate::lists::ListEvent::New(preset) => desk.new_issue(preset.clone(), window, cx),
                 });
                 self.list = Some((list.clone(), events));
                 list

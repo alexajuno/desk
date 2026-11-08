@@ -6,6 +6,7 @@
 mod browser;
 mod changes;
 mod chat;
+mod creator;
 mod inbox;
 mod issue;
 mod emoji;
@@ -121,6 +122,7 @@ struct Desk {
     seat: Option<serde_json::Value>, // seat's Claude profiles, as the server last read them, for the status bar
     tips: Entity<gpui_kit::base::TooltipOverlay>, // the one tip shown, over everything (tip.rs)
     list: Option<(Entity<lists::IssueList>, Subscription)>, // the issue list shown last, My issues' or a team's
+    creator: Option<(Entity<creator::Creator>, Option<FocusHandle>, Subscription)>, // New issue, and what had the keys
     _appearance: Subscription,
 }
 
@@ -179,7 +181,7 @@ impl Desk {
             notice: None,
             inbox_focus: cx.focus_handle(),
             inbox_scroll: UniformListScrollHandle::new(),
-            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, notes: notify::Notes::start(window, cx), titled: String::new(), seat: None, tips: tip::install(cx), list: None, _appearance: appearance }
+            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, notes: notify::Notes::start(window, cx), titled: String::new(), seat: None, tips: tip::install(cx), list: None, creator: None, _appearance: appearance }
     }
 
     fn apply(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
@@ -297,8 +299,41 @@ impl Desk {
 
     // Whether something other than the window or the Inbox's list holds the keys: a box typed in, the terminal, the
     // Browser's page; the window's own keys then leave them alone, as the web's do while typing.
+    // Keys go to a box being typed in, rather than to the window: anything focused but the window, the Inbox's list
+    // and an issue list.
     fn typing(&self, window: &Window, cx: &App) -> bool {
-        window.focused(cx).is_some_and(|f| f != self.focus && f != self.inbox_focus)
+        let list = self.list.as_ref().map(|(l, _)| l.read(cx).focus.clone());
+        window.focused(cx).is_some_and(|f| f != self.focus && f != self.inbox_focus && Some(&f) != list.as_ref())
+    }
+
+    // New issue, with what its opener says: a team, a group's status or priority, or the parent of a sub-issue.
+    pub(crate) fn new_issue(&mut self, mut preset: serde_json::Value, window: &mut Window, cx: &mut Context<Self>) {
+        if self.creator.is_some() { return }
+        for (k, names) in [("team", &self.teams), ("project", &self.projects)] {
+            let title = preset[k].as_str().and_then(|v| names.get(v)).cloned();
+            if let (Some(t), Some(o)) = (title, preset.as_object_mut()) { o.entry(format!("{k}Title")).or_insert(t.into()); }
+        }
+        let back = window.focused(cx);
+        let open = cx.new(|cx| creator::Creator::new(&preset, window, cx));
+        let this = cx.entity().downgrade();
+        let events = cx.subscribe_in(&open, window, move |desk, _, event: &creator::CreatorEvent, window, cx| match event {
+            creator::CreatorEvent::Made { slug, sub } => {
+                let (this, slug) = (this.clone(), slug.clone());
+                let view: toast::Run = std::rc::Rc::new(move |window, cx| {
+                    let issue = Issue { slug: slug.clone(), ..Default::default() };
+                    let _ = this.update(cx, |desk, cx| desk.open(&issue, window, cx));
+                });
+                toast::show(if *sub { "Sub-issue created" } else { "Issue created" }, Some(("View issue", view)), cx);
+            }
+            creator::CreatorEvent::Closed => {
+                if let Some((_, back, _)) = desk.creator.take() {
+                    if let Some(back) = back { window.focus(&back, cx) } else { window.focus(&desk.focus, cx) }
+                }
+                cx.notify();
+            }
+        });
+        self.creator = Some((open, back, events));
+        cx.notify();
     }
 
     // The issue whose page desk pushes over the sync socket: the one whose page the Inbox shows, else the one picked.
@@ -636,6 +671,12 @@ impl Render for Desk {
                         return cx.stop_propagation();
                     }
                     if desk.chat_key(e, window, cx) { return cx.stop_propagation() }
+                    // C, a new issue, in the team whose list this is, as Linear's C does in a team's views
+                    if bare && !k.modifiers.shift && k.key == "c" {
+                        let team = desk.list.as_ref().filter(|_| desk.page == Page::List).and_then(|(l, _)| l.read(cx).team.clone());
+                        desk.new_issue(team.map_or_else(|| serde_json::json!({}), |t| serde_json::json!({"team": t})), window, cx);
+                        return cx.stop_propagation();
+                    }
                     // Enter, or I as vim's insert, in a chat opened to read: into its composer
                     if bare && chat_page && !k.modifiers.shift && (k.key == "enter" || k.key == "i") {
                         if let Some(chat) = &desk.chat { chat.update(cx, |c, cx| c.focus_composer(window, cx)) }
@@ -685,6 +726,7 @@ impl Render for Desk {
             // the bar along the window's bottom, under the sidebar and the page
             .child(self.status_bar(cx))
             .child(self.tips.clone())
+            .children(self.creator.as_ref().map(|(open, _, _)| deferred(open.clone()).with_priority(4)))
             .children(self.search.as_ref().map(|(open, _, _)| {
                 let top = window.viewport_size().height * 0.13;
                 deferred(div().absolute().top_0().left_0().size_full().flex().justify_center().pt(top).child(open.clone())).with_priority(3)
