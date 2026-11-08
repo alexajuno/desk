@@ -622,10 +622,11 @@ function You({ text, thumbs, files, when, queued, lost, onSend, onSendNow }: { t
         {files?.length ? <span className="you-images">{files.join(" · ")}</span> : null}
         {text}
       </div>
-      {big && (
+      {big && createPortal(
         <div className="lightbox" role="dialog" onClick={() => setBig(null)} onKeyDown={(e) => e.key === "Escape" && setBig(null)} tabIndex={-1} ref={(el) => el?.focus()}>
           <img src={big} alt="Attached image" />
-        </div>
+        </div>,
+        document.body,
       )}
       {long && <button className="you-more" type="button" onClick={() => setAll(true)}>Show all</button>}
       {text && <CopyMessage text={text} when={when} />}
