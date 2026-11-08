@@ -41,7 +41,8 @@ if (!SOCKET) throw new Error("usage: node host.ts --socket <path> [--desk <desk'
 const DESK = option("--desk"); // desk, which the host tells what each session does: http://127.0.0.1:<port>
 const RELAY = Number(option("--relay")) || 0; // the first port the browser relay tries (relay.ts), or 0 for none
 // desk compares this with its own copy of the files, and starts a host of the new code beside this one when they differ;
-// this one then drains, taking no new session, and desk asks it to quit once it holds none (hosted.ts).
+// this one then drains, taking no new session, and desk asks it to quit once it holds none (hosted.ts, whose CODE lists
+// the same files).
 const VERSION = ["./host.ts", "./relay.ts", "./chrome.ts"].reduce((h, f) => h.update(readFileSync(fileURLToPath(new URL(f, import.meta.url)))), createHash("sha1"))
   .digest("hex").slice(0, 12);
 // The user's own Claude Code, the one their terminal runs, rather than the copy the SDK's package carries.

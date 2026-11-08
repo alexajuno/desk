@@ -24,7 +24,9 @@ const NAMED = new RegExp(`^desk-host-${PORT}-([0-9a-f]{12})\\.sock$`);
 const OLD = `desk-host-${PORT}.sock`; // the one socket of a host from before 2 Nov
 const socketOf = (version: string) => join(RUN, `desk-host-${PORT}-${version}.sock`);
 const HOST = join(REPO, "apps", "server", "src", "host.ts");
-const CODE = [HOST, join(dirname(HOST), "relay.ts")]; // the files a host runs, whose content is its version
+// The files a host runs, whose content is its version: the same list as host.ts's VERSION, or desk takes every host for
+// an older one and starts another beside it, on the same socket, each time one says hello.
+const CODE = ["host.ts", "relay.ts", "chrome.ts"].map((f) => join(dirname(HOST), f));
 const LOG = join(HOME, ".cache", "desk", `host-${PORT}.log`);
 const UNIT = `desk-host-${PORT}`;
 
