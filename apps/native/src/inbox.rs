@@ -60,6 +60,7 @@ impl Desk {
 
     // What changed in the Inbox: the open row's news is read as it comes.
     pub(crate) fn inbox_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.notify_new(window);
         if let Some(row) = self.pending_row.take() {
             if self.inbox.values().any(|r| r.slug == row) { self.open_row(Some(row), window, cx) } else { self.pending_row = Some(row) }
         }

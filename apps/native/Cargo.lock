@@ -1241,6 +1241,7 @@ dependencies = [
  "ureq",
  "uuid",
  "vt100",
+ "zbus",
 ]
 
 [[package]]

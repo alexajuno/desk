@@ -13,6 +13,7 @@ mod filters;
 mod listing;
 mod picker;
 mod search;
+mod notify;
 mod settings;
 mod sidebar;
 mod toast;
@@ -114,6 +115,8 @@ struct Desk {
     settings: Option<Entity<settings::SettingsPage>>, // while Settings shows
     back_to: Page, // the page Back to app returns to
     search: Option<(Entity<search::Search>, Option<FocusHandle>, Subscription)>, // the search box while open, what had the keys before it
+    notes: notify::Notes, // the Inbox's desktop notifications
+    titled: String,       // the window's title, as the web's page title: what it shows, then desk
     _appearance: Subscription,
 }
 
@@ -174,7 +177,7 @@ impl Desk {
             notice: None,
             inbox_focus: cx.focus_handle(),
             inbox_scroll: UniformListScrollHandle::new(),
-            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, _appearance: appearance }
+            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, notes: notify::Notes::start(window, cx), titled: String::new(), _appearance: appearance }
     }
 
     fn apply(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
@@ -533,8 +536,28 @@ impl Desk {
     }
 }
 
+impl Desk {
+    // The window's title, as the web's page titles: the issue, the chat, the Inbox or the settings page, then desk. The
+    // bar shows it, and a clicked notification finds the window by it (notify.rs).
+    fn window_title(&self, cx: &App) -> String {
+        let name = match self.page {
+            Page::Issue => Some(self.current.title.clone()),
+            Page::Session => self.chat.as_ref().and_then(|c| c.read(cx).title()),
+            Page::Inbox => Some("Inbox".into()),
+            Page::Settings => self.settings.as_ref().map(|s| s.read(cx).section.title().into()),
+            Page::Soon => None,
+        };
+        name.filter(|n| !n.is_empty()).map_or_else(|| "desk".into(), |n| format!("{n} · desk"))
+    }
+}
+
 impl Render for Desk {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let title = self.window_title(cx);
+        if title != self.titled {
+            window.set_window_title(&title);
+            self.titled = title;
+        }
         let theme = cx.theme();
         let (window_bg, page_bg, fg, muted) = (theme.sidebar, theme.background, theme.foreground, theme.muted_foreground);
         let font = theme.font_family.clone();
