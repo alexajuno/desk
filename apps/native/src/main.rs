@@ -16,6 +16,7 @@ mod live;
 mod net;
 mod steps;
 mod sync;
+mod terminal;
 mod theme;
 
 use changes::Changes;
@@ -48,6 +49,7 @@ pub(crate) enum Page {
 // What the right half shows.
 #[derive(Clone, Copy, PartialEq)]
 enum Half {
+    Terminal,
     Steps,
     Changes,
 }
@@ -84,6 +86,8 @@ struct Desk {
     steps: Entity<Steps>,
     changes: Option<Entity<Changes>>,
     half: Option<Half>,
+    terminal: Option<Entity<terminal::Terminal>>, // the chat's terminal, while the half shows it
+    _terminal_events: Option<Subscription>,
     commits: Option<Vec<String>>, // the picked issue's steps' commits, once its page came
     shows: smol::channel::Sender<String>,
     _appearance: Subscription,
@@ -137,7 +141,7 @@ impl Desk {
             notice: None,
             inbox_focus: cx.focus_handle(),
             inbox_scroll: UniformListScrollHandle::new(),
-            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, commits: None, shows, _appearance: appearance }
+            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, commits: None, shows, _appearance: appearance }
     }
 
     fn apply(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
@@ -162,6 +166,14 @@ impl Desk {
             }
             Event::Named(name) => {
                 self.name(name);
+                return;
+            }
+            // Claude opened the chat's terminal (tt, or desk's call): it opens beside the chat, where you watch it type
+            Event::Terminal(session) => {
+                let shown = self.chat.as_ref().and_then(|c| c.read(cx).session().map(str::to_string));
+                if self.page == Page::Issue && shown.as_deref() == Some(session.as_str()) && self.half != Some(Half::Terminal) {
+                    self.open_terminal(false, window, cx);
+                }
                 return;
             }
             Event::Snapshot(issues, inbox, names) => {
@@ -234,16 +246,38 @@ impl Desk {
         self.changes = Some(cx.new(|cx| Changes::new(slug, weak, window, cx)));
         self.chat = Some(chat);
         self.commits = None;
-        let half = self.half;
+        let half = self.half.filter(|h| *h != Half::Terminal); // the terminal was the other chat's
         self.set_half(half, cx);
         cx.notify();
     }
 
-    // The half shown, or none: Changes reads its diffs only while it shows them.
+    // The half shown, or none: Changes reads its diffs only while it shows them, and the terminal stays attached only
+    // while it shows, as the web's (tmux keeps the session meanwhile).
     fn set_half(&mut self, half: Option<Half>, cx: &mut Context<Self>) {
         self.half = half;
+        if half != Some(Half::Terminal) {
+            self.terminal = None;
+            self._terminal_events = None;
+        }
         if let Some(changes) = &self.changes { changes.update(cx, |c, cx| c.show(half == Some(Half::Changes), cx)) }
         cx.notify();
+    }
+
+    // The chat's terminal in the half: you opening it starts its session, and the keys go to it.
+    fn open_terminal(&mut self, yours: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(session) = self.chat.as_ref().and_then(|c| c.read(cx).session().map(str::to_string)) else { return };
+        let term = cx.new(|cx| terminal::Terminal::new(session, yours, window, cx));
+        self._terminal_events = Some(cx.subscribe(&term, |desk, _, event: &terminal::TerminalEvent, cx| match event {
+            terminal::TerminalEvent::Ended => desk.set_half(None, cx),
+        }));
+        self.terminal = Some(term);
+        self.half = Some(Half::Terminal);
+        if let Some(changes) = &self.changes { changes.update(cx, |c, cx| c.show(false, cx)) }
+        cx.notify();
+    }
+
+    fn flip_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.half == Some(Half::Terminal) { self.set_half(None, cx) } else { self.open_terminal(true, window, cx) }
     }
 
     fn flip(&mut self, half: Half, cx: &mut Context<Self>) {
@@ -341,6 +375,9 @@ impl Desk {
             .when(self.one_screen(window), |head| {
                 head.child(self.half_button("chat", self.half.is_none(), cx).on_click(cx.listener(|desk, _, _, cx| desk.set_half(None, cx))))
             })
+            .when(self.chat.as_ref().is_some_and(|c| c.read(cx).session().is_some()), |head| {
+                head.child(self.half_button("terminal", self.half == Some(Half::Terminal), cx).on_click(cx.listener(|desk, _, window, cx| desk.flip_terminal(window, cx))))
+            })
             .child(self.half_button("steps", self.half == Some(Half::Steps), cx).on_click(cx.listener(|desk, _, _, cx| desk.flip(Half::Steps, cx))))
             .when(self.commits.as_ref().is_some_and(|c| !c.is_empty()), |head| {
                 head.child(self.half_button("changes", self.half == Some(Half::Changes), cx).on_click(cx.listener(|desk, _, _, cx| desk.flip(Half::Changes, cx))))
@@ -360,6 +397,7 @@ impl Render for Desk {
         let half: Option<AnyView> = match self.half {
             Some(Half::Steps) => Some(self.steps.clone().into()),
             Some(Half::Changes) => self.changes.clone().map(Into::into),
+            Some(Half::Terminal) => self.terminal.clone().map(Into::into),
             None => None,
         };
         let half_width = if one_screen { page_width } else { page_width - CHAT };
@@ -387,9 +425,13 @@ impl Render for Desk {
         div()
             .h_flex()
             .size_full()
-            // the half's keys, as the web app's: Ctrl Shift S its steps, Ctrl Shift G its Changes
-            .on_key_down(cx.listener(|desk, e: &KeyDownEvent, _, cx| {
+            // the half's keys, as the web app's: Ctrl ` its terminal, Ctrl Shift S its steps, Ctrl Shift G its Changes
+            .on_key_down(cx.listener(|desk, e: &KeyDownEvent, window, cx| {
                 let k = &e.keystroke;
+                if k.modifiers.control && !k.modifiers.shift && !k.modifiers.alt && k.key == "`" && desk.chat.is_some() && desk.page == Page::Issue {
+                    desk.flip_terminal(window, cx);
+                    return cx.stop_propagation();
+                }
                 if !(k.modifiers.control && k.modifiers.shift) || k.modifiers.alt || desk.chat.is_none() { return }
                 match k.key.to_lowercase().as_str() {
                     "s" => desk.flip(Half::Steps, cx),

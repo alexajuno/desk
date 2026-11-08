@@ -55,6 +55,8 @@ pub enum Event {
     Inbox { id: String, row: Option<InboxRow> },
     // the issue shown, as its page draws it (pages.ts, issuePageJson)
     Page { slug: String, page: Value },
+    // Claude opened a chat's terminal: the window shows it beside that chat (the server's sync.ts, showTerminal)
+    Terminal(String),
 }
 
 fn issue(row: &Value) -> Option<Issue> {
@@ -147,6 +149,9 @@ fn follow(events: &Sender<Event>, shows: &Receiver<String>, shown: &mut Option<S
                         events.send_blocking(Event::Named(name(table, &key, &change["row"])))?;
                     }
                 }
+            }
+            Some("terminal") => {
+                events.send_blocking(Event::Terminal(message["session"].as_str().unwrap_or("").to_string()))?;
             }
             Some("page") => {
                 let slug = message["slug"].as_str().unwrap_or("").to_string();
