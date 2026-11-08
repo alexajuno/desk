@@ -71,3 +71,12 @@ export function toggleHalf(view: View): boolean {
   if (open && inside) document.querySelector<HTMLTextAreaElement>(".dock .composer textarea")?.focus();
   return true;
 }
+
+// Ctrl ⇧ L, the head's Chat button: hides the half, so that the chat shows again and the reply box takes the cursor.
+// False where no half is open, so that the key goes on to your browser.
+export function showChat(): boolean {
+  if (!dock.center || !dock.session || !dock.halves[dock.session]) return false;
+  dock.setHalf(dock.session, null, true);
+  document.querySelector<HTMLTextAreaElement>(".dock .composer textarea")?.focus();
+  return true;
+}

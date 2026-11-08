@@ -26,7 +26,7 @@ import { closeViewer, openNearest, openPicture, stepViewer, viewerOpen } from ".
 import { commentKey, dropPick } from "../sessions/Changes";
 import { arrange, detailsKey, Dock, focusComposer, newSession, openSession } from "../sessions/Dock";
 import { ease, glide, jump, letGo, LINE } from "../sessions/glide";
-import { toggleHalf } from "../sessions/Half";
+import { showChat, toggleHalf } from "../sessions/Half";
 import { Catcher } from "../search/catcher";
 import { openSearch, search, SearchHost } from "../search/SearchBox";
 import { deleteReadKey, deleteRow, markAllKey, toggleRead } from "../inbox/actions";
@@ -140,6 +140,7 @@ function onKeyDown(e: KeyboardEvent) {
   if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === "KeyB" && toggleHalf("browser")) { e.preventDefault(); return; }
   if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === "KeyS" && toggleHalf("steps")) { e.preventDefault(); return; }
   if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === "KeyG" && toggleHalf("changes")) { e.preventDefault(); return; }
+  if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === "KeyL" && showChat()) { e.preventDefault(); return; }
   // Ctrl End and Ctrl Home, as in Claude Code: the chat to its end or its start, from its composer too. At the end it
   // follows the reply again, as the chat does while you stay at its bottom (Dock).
   const view = e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && (e.key === "End" || e.key === "Home") && chatView();

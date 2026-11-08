@@ -1495,7 +1495,7 @@ const HALF_BUTTONS = {
 const ChatButton = observer(function ChatButton({ id }: { id: string }) {
   const on = !dock.halves[id];
   return (
-    <button className={`dock-btn half-btn half-chat${on ? " on" : ""}`} type="button" title="Chat" aria-pressed={on}
+    <button className={`dock-btn half-btn half-chat${on ? " on" : ""}`} type="button" title="Chat  Ctrl ⇧ L" aria-pressed={on}
       onClick={() => dock.setHalf(id, null, true)}>{GLYPH.chat}</button>
   );
 });
