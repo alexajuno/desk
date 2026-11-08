@@ -1061,7 +1061,7 @@ export async function create(): Promise<FastifyInstance> {
   });
   app.post("/api/tabs/:target/close", async (req: Req) => {
     mustBePage(req);
-    if (!(await tabs.close(req.params.target).catch(() => { throw new HttpError(503, "desk's app is not running."); }))) throw new HttpError(404, "That tab is not open.");
+    if (!(await tabs.close(req.params.target).catch(() => { throw new HttpError(503, "desk's Chrome is not running."); }))) throw new HttpError(404, "That tab is not open.");
     return {};
   });
   // What Chrome draws outside the tab's page, for the chat's Browser in desk's app, which shows the tab itself (cast.ts).

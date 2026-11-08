@@ -42,7 +42,7 @@ const DESK = option("--desk"); // desk, which the host tells what each session d
 const RELAY = Number(option("--relay")) || 0; // the first port the browser relay tries (relay.ts), or 0 for none
 // desk compares this with its own copy of the files, and starts a host of the new code beside this one when they differ;
 // this one then drains, taking no new session, and desk asks it to quit once it holds none (hosted.ts).
-const VERSION = ["./host.ts", "./relay.ts"].reduce((h, f) => h.update(readFileSync(fileURLToPath(new URL(f, import.meta.url)))), createHash("sha1"))
+const VERSION = ["./host.ts", "./relay.ts", "./chrome.ts"].reduce((h, f) => h.update(readFileSync(fileURLToPath(new URL(f, import.meta.url)))), createHash("sha1"))
   .digest("hex").slice(0, 12);
 // The user's own Claude Code, the one their terminal runs, rather than the copy the SDK's package carries.
 const CLAUDE = execFileSync("sh", ["-c", "command -v claude"], { encoding: "utf8" }).trim();
@@ -245,8 +245,8 @@ function start(o: StartOptions): Session {
       hooks: { Stop: [{ hooks: [(input) => listBehind(s, input)] }] },
       pathToClaudeCodeExecutable: CLAUDE,
       env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "desk", BASH_MAX_TIMEOUT_MS: LONGEST_COMMAND },
-      // desk-browser: the session's own logged-out browser, its tabs in desk's app and shown in its chat's Browser, which
-      // it reaches through the relay; the user's chrome server, for logged-in work in the agents' Chrome, stays as it is
+      // desk-browser: the session's own logged-out browser, its tabs in desk's headless Chrome and shown in its chat's
+      // Browser, which it reaches through the relay; the user's chrome server, for logged-in work in the agents' Chrome, stays as it is
       // ("probably it's mostly used for non login stuff. like, testing", the user, 2 Nov).
       ...(relayPort ? { mcpServers: { "desk-browser": { type: "stdio" as const, command: "playwright-mcp",
         args: ["--cdp-endpoint", `ws://127.0.0.1:${relayPort}/cdp/${id}`] } } } : {}),

@@ -7,7 +7,7 @@
 //
 //     {"type": "hello", "version": "<v>", "sessions": [<state>, ...]}    first, on every connect: each session the host holds
 //     {"type": "session", ...<state>}                  one changed; "open": false once its process ended
-//     {"type": "tab", ...}, "tab-closed" or "tab-used"   a session's tab in desk's app (tabs.ts)
+//     {"type": "tab", ...}, "tab-closed" or "tab-used"   a session's tab in desk's Chrome (tabs.ts)
 //
 // Its hello also says the version of its code (none from a host before 2 Nov), whether its browser relay runs and the
 // tabs it noted, which desk answers (tabs.ts).

@@ -11,6 +11,7 @@
 // still open, and says the others closed, a draining host's sessions' too, which keep them once they move to it. A host
 // with no relay leaves no tab known, and the table empties, unless another host's relay runs.
 import type { WebSocket } from "ws";
+import * as chrome from "./chrome.ts";
 import * as db from "./db.ts";
 import type { Tab } from "./relay.ts";
 
@@ -58,10 +59,10 @@ export async function closed(target: string) {
 }
 
 // Close a tab for the × on its pill in the chat's Browser ("i'll manually close that tab", the user, 5 Nov). Only one of
-// the sessions' tabs: desk's own window is a page of the same Chrome. The relay hears it go and says so (closed, above).
+// the sessions' tabs. The relay hears it go and says so (closed, above).
 export async function close(target: string) {
   if (!(await db.sql().query("select 1 from tabs where target = $1", [target])).rows.length) return false;
-  const res = await fetch(`http://127.0.0.1:${process.env.DESK_CHROME_PORT || 9337}/json/close/${target}`, { signal: AbortSignal.timeout(5000) });
+  const res = await fetch(`${chrome.BASE}/json/close/${target}`, { signal: AbortSignal.timeout(5000) });
   return res.ok;
 }
 

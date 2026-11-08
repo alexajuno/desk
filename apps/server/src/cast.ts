@@ -35,9 +35,10 @@ import { basename, join } from "node:path";
 import { WebSocket, type RawData } from "ws";
 import { HOME } from "./config.ts";
 import * as db from "./db.ts";
-import { call } from "./relay.ts";
+import { PORT } from "./chrome.ts";
 
-const CHROME = `ws://127.0.0.1:${process.env.DESK_CHROME_PORT || 9337}`; // desk's app, as the header says; a second desk for testing points at another app with DESK_CHROME_PORT
+const CHROME = `ws://127.0.0.1:${PORT}`; // desk's Chrome (chrome.ts); a second desk for testing points at another with DESK_CHROME_PORT
+const YOURS = 10_000; // ms after your last click or key in the tab in which what the page opens is yours
 const WAIT = 3000; // ms an answer from the tab is waited for, after which it is let go: a dialog open in the page holds them
 const HELD = 2000; // ms the page may take to answer Page.enable before desk takes it for held by a box it cannot read
 const UPLOADS = join(HOME, ".cache", "desk", "uploads"); // the files you gave a page, a folder each time, kept a day
@@ -69,8 +70,9 @@ export async function watch(browser: WebSocket, target: string) {
     if (ms) setTimeout(() => waiting.delete(id) && done(undefined), ms);
   });
   const tell = (said: object) => browser.readyState === WebSocket.OPEN && browser.send(JSON.stringify(said));
-  // Whether what the page opens now is yours: your keys are in the tab, as the app says (the header says why)
-  const yours = async () => Boolean((await call<{ focused?: boolean }>("GET", `/tabs/${target}`).catch(() => null))?.focused);
+  let touched = 0; // when your last click or key reached the tab
+  // Whether what the page opens now is yours: you clicked or typed in the tab just before (the header says why)
+  const yours = async () => Date.now() - touched < YOURS;
 
   // Whether the tab can go back and forward, told the Browser when it changed.
   const moved = async () => {
