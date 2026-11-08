@@ -245,10 +245,18 @@ impl Chat {
         self.close_picks(cx);
         let at = put.caret.min(put.text.len());
         self.composer.update(cx, |c, cx| {
-            c.set_value(put.text, window, cx);
+            c.set_value(put.text.clone(), window, cx);
             c.set_selected_range(at..at, cx);
             c.focus(window, cx);
         });
+        self.keep_draft(put.text, cx);
+    }
+
+    // set_value raises no change of the box, so what the box holds is kept for the chat here: otherwise a message sent
+    // comes back in the box when you leave the chat and return.
+    fn keep_draft(&self, text: String, cx: &mut Context<Self>) {
+        let Some(session) = self.session.clone() else { return };
+        cx.background_spawn(async move { keep(DRAFTS, &session, &text) }).detach();
     }
 
     fn keep_stash(&self, cx: &mut Context<Self>) {
@@ -287,6 +295,7 @@ impl Chat {
                 self.attached.clear();
                 self.close_picks(cx);
                 self.composer.update(cx, |c, cx| c.set_value("", window, cx));
+                self.keep_draft(String::new(), cx);
             }
         }
     }

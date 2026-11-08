@@ -25,6 +25,8 @@ pub fn init(window: &mut Window, cx: &mut App) {
         if dark { theme.dark_theme = Rc::new(config) } else { theme.light_theme = Rc::new(config) }
     }
     sync(window, cx);
+    // Scrollbars stay on show, as the web app's do: by default they fade out when idle, and a list looks as if it had none.
+    Theme::set_scrollbar_mode(gpui_kit::component::scroll::ScrollbarMode::Always, cx);
 }
 
 // The system's light or dark, as the web app follows it, unless Settings keeps the window light or dark, or DESK_THEME

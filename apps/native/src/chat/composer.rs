@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use base64::Engine;
 use gpui_kit::base::StyledExt;
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Copy, Enter, Escape, IndentInline, MoveDown, MoveUp, OutdentInline, Textarea};
+use gpui_kit::component::input::{Copy, Enter, Escape, IndentInline, MoveDown, MoveUp, OutdentInline, Paste, Textarea};
 use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 use gpui_kit::component::ActiveTheme;
 use gpui_kit::prelude::FluentBuilder;
@@ -179,6 +179,32 @@ impl Chat {
             });
         })
         .detach();
+    }
+
+    // Ctrl V with an image on the clipboard, such as a screenshot: attached as an image Claude takes inline, as the web's
+    // composer takes one (Dock.tsx, onPaste), kept in a file for its thumbnail; text pastes as it did.
+    fn paste_image(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(item) = cx.read_from_clipboard() else { return false };
+        let Some(image) = item.entries().iter().find_map(|e| if let ClipboardEntry::Image(i) = e { Some(i.clone()) } else { None }) else { return false };
+        let (ext, media) = match image.format {
+            ImageFormat::Png => ("png", "image/png"),
+            ImageFormat::Jpeg => ("jpg", "image/jpeg"),
+            ImageFormat::Webp => ("webp", "image/webp"),
+            ImageFormat::Gif => ("gif", "image/gif"),
+            _ => return false,
+        };
+        let path = std::env::temp_dir().join(format!("desk-pasted-{}.{ext}", image.id));
+        match std::fs::write(&path, &image.bytes) {
+            Ok(()) => self.attached.push(Attachment {
+                name: format!("Pasted image.{ext}"),
+                media_type: Some(media),
+                data: base64::engine::general_purpose::STANDARD.encode(&image.bytes),
+                path,
+            }),
+            Err(e) => self.error = Some(format!("The pasted image could not be kept: {e}")),
+        }
+        cx.notify();
+        true
     }
 
     // A round button of the foot.
@@ -389,6 +415,7 @@ impl Chat {
                     cx.stop_propagation();
                 }
             }))
+            .capture_action(cx.listener(|chat, _: &Paste, _, cx| if chat.paste_image(cx) { cx.stop_propagation() }))
             .capture_action(cx.listener(|chat, _: &OutdentInline, _, cx| {
                 if chat.fresh() {
                     let bare = !chat.start_as_chat;
