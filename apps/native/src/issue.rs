@@ -12,9 +12,7 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 use gpui_kit::base::StyledExt;
-use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Escape, InputEvent, Textarea, TextareaState};
-use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 use gpui_kit::component::text::TextView;
 use gpui_kit::component::{ActiveTheme, Sizable, Size as InputSize};
 use gpui_kit::prelude::FluentBuilder;
@@ -128,6 +126,24 @@ pub(crate) fn choices(field: &'static str, team: Option<String>, project: Option
 }
 
 // Set parent…: the open issues desk offers to sit under, without `exclude` and its own sub-issues, No parent first.
+// The status's or priority's menu: every choice with its icon and a tick on the one it is now.
+pub(crate) fn field_choices(field: &str, current: &str) -> Menu {
+    let picks = if field == "state" {
+        STATES.iter().map(|v| Pick { icon: theme::state_glyph(v), label: state_name(v).into(), value: v.to_string(), current: *v == current }).collect()
+    } else {
+        let glyph = |v: &str| match v { "urgent" => "prio-urgent", "high" => "prio-high", "medium" => "prio-medium", "low" => "prio-low", _ => "prio-none" };
+        PRIORITIES.iter().map(|v| Pick { icon: glyph(v), label: priority_name(v).into(), value: v.to_string(), current: *v == current }).collect()
+    };
+    Menu {
+        source: Source::Fixed(picks),
+        placeholder: if field == "state" { "Change status…" } else { "Set priority…" },
+        empty: "No match",
+        width: 220.,
+        takes_typed: false,
+        start: String::new(),
+    }
+}
+
 pub(crate) fn parents(exclude: &str, current: &str) -> Result<Menu, String> {
     let found = net::get(&format!("/api/parents?exclude={}", picker::encode(exclude)))?;
     let mut picks = vec![Pick { icon: "none", label: "No parent".into(), value: String::new(), current: current.is_empty() }];
@@ -343,6 +359,17 @@ impl IssuePage {
     }
 
     // A property's menu, under the row or chip named; the same one again closes it.
+    // S or P: the status's or priority's menu, under the row or chip that shows it.
+    pub fn open_field(&mut self, field: &'static str, window: &mut Window, cx: &mut Context<Self>) {
+        let id = match (field, self.width >= WIDE) {
+            ("state", true) => "prop-state",
+            ("state", false) => "chip-state",
+            (_, true) => "prop-priority",
+            (_, false) => "chip-priority",
+        };
+        self.open_menu(field, id, window, cx);
+    }
+
     fn open_menu(&mut self, field: &'static str, anchor: &str, window: &mut Window, cx: &mut Context<Self>) {
         if self.opened.as_ref().is_some_and(|o| o.anchor == anchor) {
             return self.close_menu(cx);
@@ -353,6 +380,10 @@ impl IssuePage {
         let anchor = anchor.to_string();
         let now = |name: &str| issue[name].as_str().filter(|v| !v.is_empty()).map(str::to_string);
         match field {
+            "state" | "priority" => {
+                let menu = field_choices(field, &self.field(&page, field));
+                self.show_menu(if field == "state" { "state" } else { "priority" }, anchor, menu, bounds, window, cx);
+            }
             "due" => {
                 let date = cx.new(|cx| DatePick::new(issue["due"].as_str(), bounds, window, cx));
                 let events = cx.subscribe(&date, move |page, _, event: &PickerEvent, cx| page.picked("due", event, cx));
@@ -577,28 +608,6 @@ impl IssuePage {
             .children(self.step_button(page, cx))
     }
 
-    // The status's or priority's menu, on the row or chip that shows it.
-    fn menu(&self, button: Button, field: &'static str, current: String, cx: &mut Context<Self>) -> impl IntoElement {
-        let this = cx.entity().downgrade();
-        button.dropdown_menu_with_anchor(Anchor::TopLeft, move |mut menu, _, _| {
-            let values: &[&'static str] = if field == "state" { &STATES } else { &PRIORITIES };
-            for value in values {
-                let value: &'static str = value;
-                let this = this.clone();
-                let item = PopupMenuItem::element(move |_, cx| {
-                    let icon = if field == "state" { theme::state_icon(value, cx).into_any_element() } else { priority_icon(value, cx).size(px(14.)).into_any_element() };
-                    div().h_flex().gap_2().child(icon).child(if field == "state" { state_name(value) } else { priority_name(value) })
-                })
-                .checked(value == current)
-                .on_click(move |_, _, cx| {
-                    let _ = this.update(cx, |p, cx| p.set_field(field, value.to_string(), cx));
-                });
-                menu = menu.item(item);
-            }
-            menu
-        })
-    }
-
     // A row of Properties: 32px, its icon and its words.
     fn prop(icon: impl IntoElement, words: impl IntoElement) -> Div {
         div().h_flex().w_full().h(px(32.)).gap_2().text_size(px(13.)).font_normal().child(icon).child(div().flex_1().min_w_0().truncate().child(words))
@@ -618,9 +627,8 @@ impl IssuePage {
         let row = |page: &Self, id: &'static str, field: &'static str, icon: AnyElement, words: String, set: bool, cx: &mut Context<Self>| {
             page.opener(id, field, cx).h(px(32.)).px(px(8.)).ml(px(-8.)).rounded(px(6.)).child(fixed(icon, words, set))
         };
-        let pick = |id: &'static str| Button::new(id).ghost().w_full().h(px(32.)).px(px(8.)).ml(px(-8.)).text_size(px(13.)).font_normal().text_color(strong);
-        let status = pick("prop-state").child(Self::prop(theme::state_icon(&state, cx), state_name(&state)));
-        let prio = pick("prop-priority").child(Self::prop(priority_icon(&priority, cx).size(px(14.)), priority_name(&priority)));
+        let status = row(self, "prop-state", "state", theme::state_icon(&state, cx).into_any_element(), state_name(&state).into(), true, cx);
+        let prio = row(self, "prop-priority", "priority", priority_icon(&priority, cx).size(px(14.)).into_any_element(), priority_name(&priority).into(), true, cx);
         let team = page["team"]["title"].as_str().map(str::to_string);
         let project = page["project"]["title"].as_str().map(str::to_string).or_else(|| issue["project"].as_str().map(str::to_string));
         let milestone = page["milestone"].as_str().map(str::to_string);
@@ -639,9 +647,9 @@ impl IssuePage {
             .v_flex()
             .text_size(px(13.))
             .child(div().mb(px(8.)).font_medium().text_color(muted).child("Properties"))
-            .child(self.menu(status, "state", state.clone(), cx))
+            .child(status)
             .child(row(self, "prop-team", "team", glyph("team"), team.clone().unwrap_or_else(|| "Add to team".into()), team.is_some(), cx))
-            .child(self.menu(prio, "priority", priority.clone(), cx))
+            .child(prio)
             .when(state == "waiting", |p| {
                 let on = text(&issue["waiting_on"]);
                 let waited = text(&issue["waited"]);
@@ -692,24 +700,21 @@ impl IssuePage {
                 .child(icon)
                 .child(div().min_w_0().truncate().child(words))
         };
-        let pick = |id: &'static str, icon: AnyElement, words: &'static str| {
-            Button::new(id).ghost().h(px(24.)).pl(px(6.)).pr(px(8.)).rounded_full().bg(raised).text_size(px(12.)).font_medium().text_color(fg).child(div().h_flex().gap(px(4.)).text_size(px(12.)).font_medium().child(icon).child(words))
-        };
         let glyph = |name: &str| theme::glyph(name, muted).size(px(14.)).into_any_element();
         let team = page["team"]["title"].as_str().map(str::to_string);
         let project = page["project"]["title"].as_str().map(str::to_string).or_else(|| issue["project"].as_str().map(str::to_string));
         let milestone = page["milestone"].as_str().map(str::to_string);
-        let status = pick("chip-state", theme::state_icon(&state, cx).into_any_element(), state_name(&state));
-        let prio = pick("chip-priority", priority_icon(&priority, cx).size(px(14.)).into_any_element(), if priority == "none" { "Priority" } else { priority_name(&priority) });
+        let status = chip(self, "chip-state", "state", theme::state_icon(&state, cx).into_any_element(), state_name(&state).into(), true, cx);
+        let prio = chip(self, "chip-priority", "priority", priority_icon(&priority, cx).size(px(14.)).into_any_element(), (if priority == "none" { "Priority" } else { priority_name(&priority) }).into(), true, cx);
         let folder = issue["folder"].as_str().filter(|f| !f.is_empty()).map(str::to_string);
         div()
             .h_flex()
             .flex_wrap()
             .gap(px(6.))
             .mb(px(24.))
-            .child(self.menu(status, "state", state.clone(), cx))
+            .child(status)
             .child(chip(self, "chip-team", "team", glyph("team"), team.clone().unwrap_or_else(|| "Team".into()), team.is_some(), cx))
-            .child(self.menu(prio, "priority", priority.clone(), cx))
+            .child(prio)
             .when(state == "waiting", |c| {
                 let on = text(&issue["waiting_on"]);
                 c.child(chip(self, "chip-waiting", "waiting_on", glyph("clock"), if on.is_empty() { "Waiting on".into() } else { on.clone() }, !on.is_empty(), cx))

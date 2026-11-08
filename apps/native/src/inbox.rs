@@ -244,6 +244,8 @@ impl Desk {
             match (k.key.as_str(), m.control, m.alt || m.shift || m.platform) {
                 ("enter", true, false) => page.update(cx, |p, cx| p.press_step(cx)),
                 ("i", false, false) => page.update(cx, |p, cx| p.open_chat(cx)),
+                ("s", false, false) => page.update(cx, |p, cx| p.open_field("state", window, cx)),
+                ("p", false, false) => page.update(cx, |p, cx| p.open_field("priority", window, cx)),
                 _ => {}
             }
         }

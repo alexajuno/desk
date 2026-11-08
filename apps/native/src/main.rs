@@ -124,6 +124,7 @@ struct Desk {
     list: Option<(Entity<lists::IssueList>, Subscription)>, // the issue list shown last, My issues' or a team's
     creator: Option<(Entity<creator::Creator>, Option<FocusHandle>, Subscription)>, // New issue, and what had the keys
     command: Option<(Entity<command::Command>, Option<FocusHandle>, Subscription)>, // O then T, P or I
+    field_pick: Option<(Entity<picker::Picker>, &'static str, Option<FocusHandle>, Subscription)>, // S or P on a chat's issue: the status's or priority's menu
     o_pressed: Option<std::time::Instant>,
     _appearance: Subscription,
 }
@@ -182,7 +183,7 @@ impl Desk {
             notice: None,
             inbox_focus: cx.focus_handle(),
             inbox_scroll: UniformListScrollHandle::new(),
-            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, notes: notify::Notes::start(window, cx), titled: String::new(), seat: None, tips: tip::install(cx), list: None, creator: None, command: None, o_pressed: None, _appearance: appearance }
+            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, notes: notify::Notes::start(window, cx), titled: String::new(), seat: None, tips: tip::install(cx), list: None, creator: None, command: None, field_pick: None, o_pressed: None, _appearance: appearance }
     }
 
     fn apply(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
@@ -333,6 +334,30 @@ impl Desk {
             cx.notify();
         });
         self.command = Some((open, back, events));
+        cx.notify();
+    }
+
+    // S or P in an issue's chat: its status's or priority's menu under the head, as the issue page's.
+    pub(crate) fn open_field(&mut self, field: &'static str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.field_pick.is_some() || self.page != Page::Issue || self.current.slug.is_empty() { return }
+        let current = if field == "state" { self.current.state.clone() } else { self.current.priority.clone() };
+        let back = window.focused(cx);
+        let at = Bounds::new(point(px(self.side_width() + 16.), px(44.)), size(px(1.), px(1.)));
+        let open = cx.new(|cx| picker::Picker::new(issue::field_choices(field, &current), at, window, cx));
+        let slug = self.current.slug.clone();
+        let events = cx.subscribe_in(&open, window, move |desk, _, event: &picker::PickerEvent, window, cx| {
+            if let Some((_, _, back, _)) = desk.field_pick.take() {
+                if let Some(back) = back { window.focus(&back, cx) } else { window.focus(&desk.focus, cx) }
+            }
+            if let picker::PickerEvent::Picked(value) = event {
+                if value != &current {
+                    let (path, body) = (format!("/issue/{slug}/set"), serde_json::json!({"field": field, "value": value}));
+                    cx.background_spawn(async move { let _ = net::post(&path, body); }).detach();
+                }
+            }
+            cx.notify();
+        });
+        self.field_pick = Some((open, field, back, events));
         cx.notify();
     }
 
@@ -580,7 +605,12 @@ impl Desk {
             .gap_2()
             .border_b_1()
             .border_color(divider)
-            .when(self.page != Page::Session, |head| head.child(theme::state_icon(&issue.state, cx)))
+            .when(self.page != Page::Session, |head| {
+                head.child(
+                    div().id("head-state").cursor_pointer().child(theme::state_icon(&issue.state, cx))
+                        .on_click(cx.listener(|desk, _, window, cx| desk.open_field("state", window, cx))),
+                )
+            })
             .child(
                 div().h_flex().flex_1().min_w_0().gap_2()
                     .child(
@@ -588,6 +618,11 @@ impl Desk {
                             // a chat with no issue is renamed in its title, as the web's
                             .when_some(self.session_shown.clone().filter(|_| self.page == Page::Session), |t, session| {
                                 t.cursor(CursorStyle::IBeam).on_click(cx.listener(move |desk, _, window, cx| desk.rename_chat(&session, window, cx)))
+                            })
+                            // an issue's chat: its title opens the issue's page, which the window shows in the browser
+                            .when(self.page == Page::Issue && !issue.slug.is_empty(), |t| {
+                                let slug = issue.slug.clone();
+                                t.cursor_pointer().on_click(cx.listener(move |desk, _, _, cx| desk.open_web(&format!("issue/{slug}"), cx)))
                             }),
                     )
                     .when_some(folder, |row, folder| row.child(div().flex_none().max_w(relative(0.4)).truncate().text_xs().text_color(muted).child(folder))),
@@ -713,6 +748,11 @@ impl Render for Desk {
                         return cx.stop_propagation();
                     }
                     if desk.chat_key(e, window, cx) { return cx.stop_propagation() }
+                    // S or P in an issue's chat: its status or priority
+                    if bare && !k.modifiers.shift && desk.page == Page::Issue && (k.key == "s" || k.key == "p") {
+                        desk.open_field(if k.key == "s" { "state" } else { "priority" }, window, cx);
+                        return cx.stop_propagation();
+                    }
                     // C, a new issue, in the team whose list this is, as Linear's C does in a team's views
                     if bare && !k.modifiers.shift && k.key == "c" {
                         let team = desk.list.as_ref().filter(|_| desk.page == Page::List).and_then(|(l, _)| l.read(cx).team.clone());
@@ -769,6 +809,7 @@ impl Render for Desk {
             .child(self.status_bar(cx))
             .child(self.tips.clone())
             .children(self.creator.as_ref().map(|(open, _, _)| deferred(open.clone()).with_priority(4)))
+            .children(self.field_pick.as_ref().map(|(open, _, _, _)| deferred(div().absolute().top(px(44.)).left(px(self.side_width() + 16.)).child(open.clone())).with_priority(3)))
             .children(self.command.as_ref().map(|(open, _, _)| {
                 let top = window.viewport_size().height * 0.13;
                 deferred(div().absolute().top_0().left_0().size_full().flex().justify_center().pt(top).child(open.clone())).with_priority(3)
