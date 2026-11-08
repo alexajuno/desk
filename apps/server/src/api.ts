@@ -182,6 +182,24 @@ async function apply(i: Issue, fields: Record<string, string | null>) {
   for (const [name, value] of Object.entries(fields)) target[name] = ["parent", "team", "project", "milestone", "due", "folder", "waiting_on", "landed"].includes(name) ? value || null : value;
 }
 
+// A result is the last report, which Approve answers, so every step is done by then. A step still todo is usually one
+// the session listed for the approval itself, which is the user's button, not a step: without this the turn would end
+// on a reply, and the issue would show no Approve ("there is no button... the last step in the plan is approval
+// itself", the user, 8 Nov).
+function unfinished(list: unknown[], reviewOf: string | null) {
+  if (reviewOf !== "result") return;
+  const open: string[] = [];
+  const walk = (steps: unknown[]) => {
+    for (const s of steps as { title?: string; state?: string; kids?: unknown[] }[]) {
+      if (s?.state !== "done") open.push(`"${s?.title ?? "?"}" (${s?.state ?? "todo"})`);
+      if (Array.isArray(s?.kids)) walk(s.kids);
+    }
+  };
+  walk(list);
+  if (open.length)
+    throw new HttpError(422, `A result is your last step's report, so every step must be done first. Still open: ${open.join(", ")}. Tick each done, or take it out of the list if it is not work: Approve is the user's button, not a step. Send the whole list again with this call.`);
+}
+
 // Every issue lists its steps from its chat's first reply, one step or twenty, so a turn that hands the user anything
 // holds them: the list it sends, or the one desk keeps. A question can come at any point. Triage has no work yet, which
 // apply says by leaving review_of out, and the page's status menu goes through its own route (app.ts, checked).
@@ -189,7 +207,7 @@ function mustList(i: Issue, fields: Record<string, string | null>, body: unknown
   if (!fields.review_of || fields.review_of === "question") return;
   const sent = (body as { plan_steps?: unknown } | null)?.plan_steps;
   const list: unknown = sent === undefined ? JSON.parse(i.plan_steps ?? "null") : sent;
-  if (Array.isArray(list) && list.length) return;
+  if (Array.isArray(list) && list.length) return unfinished(list, fields.review_of);
   throw new HttpError(422, `Every issue lists its steps before a turn ends on ${fields.review_of}: send them with this call, as "plan_steps": [{"title": "<a few words>", "state": "done"}], one step or twenty. Only "review_of": "question" goes without them.`);
 }
 
