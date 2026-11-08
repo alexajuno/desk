@@ -15,6 +15,7 @@ import { sql, type Db } from "./db.ts";
 import * as projects from "./projects.ts";
 import * as settings from "./settings.ts";
 import { slugify } from "./slug.ts";
+import * as steps from "./steps.ts";
 
 // Where a session keeps its drafts of the document's sections, which it sends through the API: scratch, not the record.
 export const drafts = (slug: string) => join(tmpdir(), "desk-drafts", slug);
@@ -48,7 +49,7 @@ export interface Issue {
   landing: string | null; // in landing, when Approve told the session to land its work
   landed: string | null; // in done, where its session said the work landed: the commit, or the pull request's link
   lands: string | null; // while open, how its session said the work lands, which Approve runs: JSON, as Lands (land.ts)
-  plan_steps: string | null; // JSON: its steps, which its session sets and ticks (api.ts, PlanStep)
+  plan_steps: string | null; // its steps as JSON, with no drawings: the steps table's rows, which save writes back (steps.ts)
   waiting_on: string | null; // in waiting, who or what it waits on, such as "QA on #570"
   waiting_since: string | null;
   review_of: string | null; // in review, one of REVIEWS; none in a review from before 19 Oct, which held a result
@@ -61,7 +62,7 @@ export interface Issue {
 
 // The issues table's columns besides the slug and the body.
 const FIELDS = ["title", "priority", "state", "parent", "team", "project", "milestone", "due", "folder", "link", "landing", "landed",
-  "lands", "plan_steps", "waiting_on", "waiting_since", "review_of", "review_since", "updated", "created", "deleted_at"] as const;
+  "lands", "waiting_on", "waiting_since", "review_of", "review_since", "updated", "created", "deleted_at"] as const;
 
 export const now = (d = new Date()) => {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -122,7 +123,7 @@ const textOf = (p: Part) => (p.name ? p.raw.replace(/^.*\n?/, "") : p.raw).trim(
 const named = (list: Part[], name: string) => list.find((p) => p.name.toLowerCase() === name.toLowerCase());
 
 // The text of a "## <name>" section, without its heading.
-export function section(i: Issue, name: string): string {
+export function section(i: Pick<Issue, "body">, name: string): string {
   const p = named(parts(i.body), name);
   return p ? textOf(p) : "";
 }
@@ -140,7 +141,7 @@ function joined(list: Part[]): string {
 }
 
 // Set one section's text, adding it in its place, or with no text taking it out.
-export function setSection(i: Issue, name: string, text: string) {
+export function setSection(i: Pick<Issue, "body">, name: string, text: string) {
   const list = parts(i.body), was = named(list, name);
   const canonical = ORDER.find((n) => n.toLowerCase() === name.toLowerCase()) ?? was?.name ?? name;
   const part = { name: canonical, raw: `## ${canonical}\n\n${text.trim()}\n` };
@@ -197,8 +198,8 @@ export function merged(current: string, sent: string, base: string): string {
 export const folder = (slug: string) => join(ISSUES_DIR, slug);
 export const validSlug = (slug: string) => /^[\w-]+$/.test(slug);
 
-type Row = Issue;
-const fromRow = (r: Row): Issue => r;
+type Row = Omit<Issue, "plan_steps">;
+const fromRow = (r: Row, plan_steps: string | null): Issue => ({ ...r, plan_steps });
 
 // Each name in the folder with its place in the folder's own listing, unsorted, as os.scandir gives it (Node's readdir
 // sorts its answer).
@@ -220,7 +221,8 @@ export async function loadAll(q: Db = sql()): Promise<Map<string, Issue>> {
   // In the order the folder lists them, as the Python's glob read them: issues filed in the same second keep their order.
   const at = listingOrder(ISSUES_DIR);
   rows.sort((a, b) => (at.get(a.slug) ?? Infinity) - (at.get(b.slug) ?? Infinity));
-  return new Map(rows.map((r) => [r.slug, fromRow(r)]));
+  const lists = await steps.listsOf(q);
+  return new Map(rows.map((r) => [r.slug, fromRow(r, lists.get(r.slug) ?? null)]));
 }
 
 export async function exists(slug: string, q: Db = sql()): Promise<boolean> {
@@ -234,10 +236,10 @@ const taken = async (slug: string, q: Db) => (await q.query("select 1 from issue
 export async function load(slug: string, q: Db = sql()): Promise<Issue> {
   const row = (await q.query<Row>("select * from issues where slug = $1 and deleted_at is null", [slug])).rows[0];
   if (!row) throw new Error(`No issue ${slug}`);
-  return fromRow(row);
+  return fromRow(row, await steps.listOf(slug, q));
 }
 
-async function upsert(tx: Db, i: Issue) {
+async function upsert(tx: Db, i: Row) {
   const cols = ["slug", ...FIELDS, "body"];
   const values = [i.slug, ...FIELDS.map((f) => i[f]), i.body];
   await tx.query(
@@ -247,7 +249,7 @@ async function upsert(tx: Db, i: Issue) {
   );
 }
 
-async function put(tx: Db, i: Issue) {
+async function put(tx: Db, i: Row) {
   // The wait's note belongs to the wait: one that ends drops it, so a later wait starts afresh. So do the review's,
   // Landing's, and Done's word on where the work landed, which a parent waiting on its sub-issues keeps (landedState).
   if (i.state !== "waiting") i.waiting_on = i.waiting_since = null;
@@ -303,6 +305,7 @@ export async function saveIn(tx: Db, i: Issue): Promise<string[]> {
   const had = (await tx.query<{ state: string; title: string }>("select state, title from issues where slug = $1", [i.slug])).rows[0];
   const moved = had && had.title !== i.title && (await follow(tx, i));
   await put(tx, i);
+  await steps.put(tx, i.slug, i.plan_steps);
   const closed = await autoClose(tx, i, had?.state);
   if (had && !CLOSED.has(had.state) && CLOSED.has(i.state)) {
     for (const told of closing) told([i.slug, ...closed]);
@@ -399,17 +402,17 @@ async function follow(tx: Db, i: Issue): Promise<boolean> {
   const link = new RegExp(`/issue/${escapeRe(from)}(?![\\w-])`, "g"), relink = (text: string) => text.replace(link, `/issue/${to}`);
   if (existsSync(folder(from))) renameSync(folder(from), folder(to));
   await tx.query("delete from issues where slug = $1", [from]);
-  // A link sits in a document, in a duplicate's pointer to the issue it duplicates, or in a step's diagram or decisions.
-  const linked = (r: Pick<Issue, "body" | "link" | "plan_steps">) =>
-    ({ body: relink(r.body), link: r.link && relink(r.link), plan_steps: r.plan_steps && relink(r.plan_steps) });
-  Object.assign(i, { slug: to, ...linked(i) });
+  // A link sits in a document, in a duplicate's pointer to the issue it duplicates, or in a step's note or drawing.
+  Object.assign(i, { slug: to, body: relink(i.body), link: i.link && relink(i.link), plan_steps: i.plan_steps && relink(i.plan_steps) });
   await tx.query("update issues set parent = $2 where parent = $1", [from, to]);
+  await tx.query("update steps set issue = $2 where issue = $1", [from, to]);
   const linking = (table: string) => tx.query<Issue>(
-    `select * from ${table} where body like $1${table === "issues" ? " or link like $1 or plan_steps like $1" : ""}`, [`%/issue/${from}%`]);
-  for (const r of (await linking("issues")).rows) {
-    const { body, link, plan_steps } = linked(r);
-    await tx.query("update issues set body = $2, link = $3, plan_steps = $4 where slug = $1", [r.slug, body, link, plan_steps]);
-  }
+    `select * from ${table} where body like $1${table === "issues" ? " or link like $1" : ""}`, [`%/issue/${from}%`]);
+  for (const r of (await linking("issues")).rows)
+    await tx.query("update issues set body = $2, link = $3 where slug = $1", [r.slug, relink(r.body), r.link && relink(r.link)]);
+  for (const r of (await tx.query<{ id: number; note: string | null; body: string | null }>(
+    "select id, note, body from steps where note like $1 or body like $1", [`%/issue/${from}%`])).rows)
+    await tx.query("update steps set note = $2, body = $3 where id = $1", [r.id, r.note && relink(r.note), r.body && relink(r.body)]);
   for (const r of (await linking("projects")).rows) await tx.query("update projects set body = $2 where slug = $1", [r.slug, relink(r.body)]);
   for (const told of renamed) await told(tx, from, to);
   await tx.query("update tests set slug = $2 where slug = $1", [from, to]);
@@ -469,7 +472,7 @@ export class Missing extends Error {}
 // issue first.
 export async function restore(slug: string): Promise<string[]> {
   return db.write(async (tx) => {
-    const all = new Map((await tx.query<Row>("select * from issues")).rows.map((r) => [r.slug, fromRow(r)]));
+    const all = new Map((await tx.query<Row>("select * from issues")).rows.map((r) => [r.slug, fromRow(r, null)]));
     const at = all.get(slug)?.deleted_at;
     if (!validSlug(slug) || !at) throw new Missing(slug);
     const names = [slug, ...descendants(all, slug).filter((name) => all.get(name)!.deleted_at === at)];

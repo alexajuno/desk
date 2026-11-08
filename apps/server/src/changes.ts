@@ -2,7 +2,7 @@
 // commit), read from git in the issue's folder. The user, 28 Oct: "we have diff show while coding, allowing user to
 // catches the problem early", and "we might not even create pr in the first place", so no pull request is read.
 import * as agents from "./agents.ts";
-import type { PlanStep } from "./api.ts";
+import type { PlanStep } from "./steps.ts";
 import type { Issue } from "./issues.ts";
 import { run } from "./proc.ts";
 

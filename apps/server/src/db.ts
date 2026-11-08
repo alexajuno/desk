@@ -59,7 +59,6 @@ create table if not exists issues (
   landing text,
   landed text,
   lands text, -- JSON: the steps Approve runs to land the work, which its session gave with its last report (land.ts, Lands)
-  plan_steps text, -- JSON: its steps, which its session sets and ticks as it goes (api.ts, PlanStep)
   session text, -- unread since 29 Oct: an issue's chat holds its session (chats.issue)
   waiting_on text,
   waiting_since text,
@@ -69,6 +68,18 @@ create table if not exists issues (
   body text not null default '',
   updated text -- when it was last saved, in epoch seconds
 );
+create table if not exists steps ( -- an issue's steps, one row each, which its session sets and ticks as it goes (steps.ts)
+  id serial primary key,
+  issue text not null,
+  place text not null, -- its address in the list: 1.2, the first step's second
+  title text not null,
+  state text not null, -- todo, running or done
+  note text,
+  "commit" text, -- for a step that changes code, the commit that ends it
+  base text, -- on the first step with a commit: where its branch left main
+  body text -- what its session drew on it, its diagram and words, as Markdown
+);
+create index if not exists steps_issue on steps (issue);
 create table if not exists teams ( -- teams.ts: desk's projects until 20 Oct
   slug text primary key,
   title text not null,
@@ -322,7 +333,7 @@ export async function open(): Promise<PGlite> {
   await opened.exec(["issues", "teams", "projects"].map((t) => `alter table ${t} drop column if exists written;`).join(" ")); // the copy of issue.md, out since 8 Nov
   // Since 20 Oct, an issue's project is Linear's (projects.ts), as its team is what its project was before. An issue's
   // delete marks it, deleted_at, since 8 Nov (issues.ts, trash).
-  await opened.exec(["review_of", "review_since", "landed", "project", "milestone", "due", "lands", "plan_steps", "deleted_at"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
+  await opened.exec(["review_of", "review_since", "landed", "project", "milestone", "due", "lands", "deleted_at"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
   // The Inbox's delete and its mark as unread (inbox.ts), from 19 Oct.
   await opened.exec(["gone", "marked"].map((c) => `alter table inbox add column if not exists ${c} double precision;`).join(" "));
   // A Slack thread's or a mail thread's row (notices.ts): where it came from and who wrote last, from 2 Nov.

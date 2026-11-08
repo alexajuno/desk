@@ -21,7 +21,8 @@ import * as periods from "./periods.ts";
 import * as pins from "./pins.ts";
 import * as projects from "./projects.ts";
 import type { Project } from "./projects.ts";
-import { picturesText, toHtml, toHtmlWithToc, type StepPart, type StepPicture } from "./render.ts";
+import { picturesText, toHtml, toHtmlWithToc } from "./render.ts";
+import * as steps from "./steps.ts";
 import * as roster from "./roster.ts";
 import { findScored, findThings, markRanges, type Found } from "./search.ts";
 import * as sessions from "./sessions.ts";
@@ -491,24 +492,26 @@ export async function issuePageJson(all: Map<string, Issue>, slug: string) {
     session_kind: session.kind ?? null, live: talkOf(i),
     step: step(i, await asking()), landed: i.landed,
     lands: reviewing ? land.landsOf(i) : null, // the steps Approve runs, which the review lists to untick
-    plan_steps: i.plan_steps ? drawnSteps(JSON.parse(i.plan_steps), `/issue/${slug}/f/`) : null, // its steps (api.ts, PlanStep)
+    plan_steps: i.plan_steps ? drawnSteps(JSON.parse(i.plan_steps), `/issue/${slug}/f/`, await steps.drawings(slug)) : null, // its steps (steps.ts)
   };
 }
 
 // An issue's steps for its page and its chat, each one's diagram and decisions drawn, as its session sent them
-// with PUT /steps/<place>.
-// Its pictures, such as Today and After, draw as a row; a step drawn before 31 Oct has its one diagram's source instead.
-// A step written as parts gives each its title, its text and its own diagram, which the chat shows beside the text.
-type Step = { title: string; state: string; note?: string; kids?: Step[]; pictures?: StepPicture[]; parts?: StepPart[]; diagram?: string; said?: string };
-function drawnSteps(steps: Step[], base: string): unknown[] {
-  return steps.map(({ pictures, parts, diagram, said, kids, ...step }) => ({
-    ...step,
-    ...(pictures || diagram ? { diagram_html: toHtml(picturesText(pictures ?? [{ d2: diagram! }]), base) } : {}),
-    ...(parts ? { parts: parts.map((p) => ({ title: p.title, ...(p.text ? { text_html: toHtml(p.text, base) } : {}),
-      ...(p.pictures ? { diagram_html: toHtml(picturesText(p.pictures), base) } : {}) })) } : {}),
-    ...(said ? { said_html: toHtml(said, base) } : {}),
-    ...(kids ? { kids: drawnSteps(kids, base) } : {}),
-  }));
+// with PUT /steps/<place>, which desk keeps by the step's place (steps.ts, drawings).
+// Its pictures, such as Today and After, draw as a row. A step written as parts gives each its title, its text and its
+// own diagram, which the chat shows beside the text.
+function drawnSteps(list: steps.PlanStep[], base: string, drawn: Map<string, steps.Drawing>, at = ""): unknown[] {
+  return list.map(({ kids, drawn: _, base: __, ...step }, n) => {
+    const place = at ? `${at}.${n + 1}` : `${n + 1}`, { pictures, parts, said } = drawn.get(place) ?? {};
+    return {
+      ...step,
+      ...(pictures ? { diagram_html: toHtml(picturesText(pictures), base) } : {}),
+      ...(parts ? { parts: parts.map((p) => ({ title: p.title, ...(p.text ? { text_html: toHtml(p.text, base) } : {}),
+        ...(p.pictures ? { diagram_html: toHtml(picturesText(p.pictures), base) } : {}) })) } : {}),
+      ...(said ? { said_html: toHtml(said, base) } : {}),
+      ...(kids ? { kids: drawnSteps(kids, base, drawn, place) } : {}),
+    };
+  });
 }
 
 // --- the pages ---------------------------------------------------------------------------------------------------------
