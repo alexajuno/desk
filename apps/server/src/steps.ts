@@ -5,9 +5,8 @@
 //
 // The issue keeps its list in memory as JSON, with no drawings (issues.ts, plan_steps): load fills it from the rows, and
 // save writes back only the rows that changed. A step's place, 1.2 for the first step's second, is its address in the list.
-import * as db from "./db.ts";
 import { sql, type Db } from "./db.ts";
-import { DECISIONS, partsText, picturesText, takeParts, takePictures, type StepPart, type StepPicture } from "./render.ts";
+import { takeParts, takePictures, type StepPart, type StepPicture } from "./render.ts";
 
 // A step as the session sends it and the issue holds it: drawn when its row holds a drawing, base desk's own, on the first
 // step with a commit: where its branch left main (api.ts, firstBase).
@@ -103,49 +102,4 @@ function split(body: string): Drawing {
   if (written) return { ...(written.parts.length ? { parts: written.parts } : {}), ...(written.said ? { said: written.said } : {}) };
   const { pictures, rest } = takePictures(body);
   return { ...(pictures.length ? { pictures } : {}), ...(rest ? { said: rest } : {}) };
-}
-
-// Once: each issue's list moves from the JSON on its row into rows, each step's drawing back to the Markdown its session
-// sent, and the column goes. Postgres keeps the old copies of a row until a vacuum, which PGlite never runs on its own,
-// so the issues table's are cleared with them: 104 MB of 110 on 8 Nov, mostly lists written back whole on each tick.
-// A step drawn before 31 Oct held its one diagram's source; from 3 Nov one could be written as parts.
-// A step with no parts whose decisions held a ### heading, written before parts were (one, on 8 Nov), keeps its heading
-// a level down, so that it still reads as its diagram and decisions rather than parts.
-type Old = PlanStep & { pictures?: StepPicture[]; parts?: StepPart[]; diagram?: string; said?: string; kids?: Old[] };
-const oldText = (s: Old) => s.parts
-  ? [partsText(s.parts), s.said ? `### ${DECISIONS}\n\n${s.said}` : ""].filter(Boolean).join("\n\n")
-  : [picturesText(s.pictures ?? (s.diagram ? [{ d2: s.diagram }] : [])), down(s.said ?? "")].filter(Boolean).join("\n\n");
-function down(text: string): string {
-  let fence = "";
-  return text.split("\n").map((line) => {
-    const mark = /^[ \t]*(`{3,}|~{3,})/.exec(line)?.[1];
-    if (mark && (!fence || (mark[0] === fence[0] && mark.length >= fence.length))) fence = fence ? "" : mark;
-    else if (!fence && /^###[ \t]+\S/.test(line)) return `#${line}`;
-    return line;
-  }).join("\n");
-}
-export async function moveIn(): Promise<number> {
-  const has = await sql().query("select 1 from information_schema.columns where table_name = 'issues' and column_name = 'plan_steps'");
-  if (!has.rows.length) return 0;
-  const moved = await db.write(async (tx) => {
-    const rows = (await tx.query<{ slug: string; plan_steps: string }>("select slug, plan_steps from issues where plan_steps is not null")).rows;
-    let n = 0;
-    for (const r of rows) {
-      let list: unknown;
-      try {
-        list = JSON.parse(r.plan_steps);
-      } catch {
-        continue;
-      }
-      if (!Array.isArray(list) || !list.length) continue;
-      for (const s of flat(list as Old[]) as (Old & { place: string })[])
-        await tx.query(`insert into steps (issue, place, title, state, note, "commit", base, body) values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [r.slug, s.place, s.title, s.state, s.note ?? null, s.commit ?? null, s.base ?? null, oldText(s) || null]);
-      n++;
-    }
-    await tx.query("alter table issues drop column plan_steps");
-    return n;
-  });
-  await sql().exec("vacuum full issues");
-  return moved;
 }

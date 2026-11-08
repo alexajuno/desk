@@ -18,7 +18,7 @@ export const all = (): string[] => kept;
 export async function set(session: string, pinned: boolean) {
   await db.write(async (tx) => {
     await tx.query("delete from pins where session = $1", [session]);
-    if (pinned) await tx.query("insert into pins (session) values ($1)", [session]);
+    if (pinned) await tx.query("insert into pins (session, seq) values ($1, (select coalesce(max(seq), 0) + 1 from pins))", [session]);
   });
   kept = [...kept.filter((s) => s !== session), ...(pinned ? [session] : [])];
 }

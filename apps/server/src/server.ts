@@ -22,7 +22,6 @@ import * as projects from "./projects.ts";
 import * as sessions from "./sessions.ts";
 import * as settings from "./settings.ts";
 import * as slack from "./slack.ts";
-import * as steps from "./steps.ts";
 import * as sync from "./sync.ts";
 import * as teams from "./teams.ts";
 import * as threads from "./threads.ts";
@@ -31,8 +30,6 @@ import * as wakes from "./wakes.ts";
 import * as web from "./web.ts";
 
 await db.open();
-const listed = await steps.moveIn(); // once: each issue's list of steps, from the JSON on its row into the steps table
-if (listed) console.log(`desk moved ${listed} issues' steps into their table`);
 // Postgres is the record, with no file written out beside it: once, the old issue.md, team.md, project.md, plan.md and result.md go.
 const gone = await store.leaveFiles();
 if (gone) console.log(`desk removed ${gone} files its database now holds`);

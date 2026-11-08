@@ -1,7 +1,12 @@
-// desk's database: Postgres, run inside this process by PGlite (PostgreSQL compiled to WebAssembly), so desk stays one
-// process with no service of its own to start (the plan of "desk on Linear's stack": "Postgres holds the issues", and
-// "One process, as now; no new services"). Its data lives in DB_DIR. A server Postgres can take its place later: the
-// queries here are plain SQL.
+// desk's database: SQLite, built into Node (node:sqlite), in one file beside the data it holds, DB_FILE. Until 8 Nov it
+// was Postgres, run in this process by PGlite (Postgres compiled to WebAssembly), which kept 128 MB of its own and took
+// 210–390 MB more as it opened; SQLite, on the same reads, about 270 MB less (desk issue "Cut the desk server’s memory:
+// PGlite alone takes about 470 MB", the user, 8 Nov: "proced"). PGlite's folder, DB_DIR, is read into the file once
+// (fromPglite) and kept as it was.
+//
+// The code queries as it did on Postgres: query(text, params) with $1, $2, a list given for = any($1), true and false,
+// and rows back with their lists and true or false. Here each is put as SQLite has it: $1 as ?1, = any($1) as in a JSON
+// list's values, a list or an object as JSON text, true as 1; and a row's column declared json or boolean, back again.
 //
 // The center of desk's data ("what to be the center of data. which should be api and db", the user, 19 Oct): every
 // write to a table the app holds goes through write() here, one at a time and in one transaction, and a trigger notes
@@ -13,23 +18,26 @@
 // Oct): issues, teams and projects, the Inbox, the trash, pins, each session's model, settings and the test desks.
 // An issue, a team and a project live in their rows alone: no file holds a copy of them ("issue.md and team.md and
 // whatever markdown files. to db", the user, 8 Nov).
-import { PGlite, type Transaction } from "@electric-sql/pglite";
-import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
-import { unaccent } from "@electric-sql/pglite/contrib/unaccent";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, openSync, readSync, closeSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { dirname, join } from "node:path";
-import { DB_DIR } from "./config.ts";
+import { DB_DIR, DB_FILE } from "./config.ts";
 
-let db: PGlite | null = null;
+let db: DatabaseSync | null = null;
 
+// What a query gives back: its rows, and how many rows a write without returning changed.
+export interface Results<T> { rows: T[]; affectedRows: number }
 // What a query can run on: the database, or a write's transaction, which every query of the write must use.
-export type Db = Pick<Transaction, "query">;
+export interface Db {
+  query<T = { [key: string]: any }>(text: string, params?: unknown[]): Promise<Results<T>>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  exec(text: string): Promise<void>;
+}
 
 // The tables the app holds, each with its key, the columns it is not sent (a description stays on the server) and which
 // rows it holds, when not all: a deleted issue is not the app's.
 const HELD: Record<string, { key: string; hidden: string[]; live?: string }> = {
-  issues: { key: "slug", hidden: ["body", "updated", "session", "deleted_at"], live: "deleted_at is null" }, // session: unread since 29 Oct (chats.issue)
+  issues: { key: "slug", hidden: ["body", "updated", "deleted_at"], live: "deleted_at is null" },
   teams: { key: "slug", hidden: ["body"] },
   projects: { key: "slug", hidden: ["body"] },
   milestones: { key: "id", hidden: [] },
@@ -40,9 +48,8 @@ const HELD: Record<string, { key: string; hidden: string[]; live?: string }> = {
   replies: { key: "id", hidden: [] },
 };
 
-// The row as the app holds it, in SQL, from a row named t.
-const shown = (table: string) => `to_jsonb(t)${HELD[table].hidden.map((c) => ` - '${c}'`).join("")}`;
-
+// A column declared json holds JSON text, given back parsed; one declared boolean holds 1 or 0, given back as true or
+// false.
 const SCHEMA = `
 create table if not exists issues (
   slug text primary key,
@@ -51,7 +58,7 @@ create table if not exists issues (
   state text not null default 'backlog',
   parent text,
   team text,
-  project text,
+  project text, -- Linear's, since 20 Oct (projects.ts), as its team is what its project was before
   milestone text,
   due text, -- a day, 2026-11-08: its due date, Linear's
   folder text,
@@ -59,17 +66,17 @@ create table if not exists issues (
   landing text,
   landed text,
   lands text, -- JSON: the steps Approve runs to land the work, which its session gave with its last report (land.ts, Lands)
-  session text, -- unread since 29 Oct: an issue's chat holds its session (chats.issue)
   waiting_on text,
   waiting_since text,
   review_of text,
   review_since text,
   created text not null,
   body text not null default '',
-  updated text -- when it was last saved, in epoch seconds
+  updated text, -- when it was last saved, in epoch seconds
+  deleted_at text -- when its delete took it out of sight, as Laravel's soft delete (issues.ts, trash)
 );
 create table if not exists steps ( -- an issue's steps, one row each, which its session sets and ticks as it goes (steps.ts)
-  id serial primary key,
+  id integer primary key,
   issue text not null,
   place text not null, -- its address in the list: 1.2, the first step's second
   title text not null,
@@ -135,8 +142,8 @@ create table if not exists chats ( -- desk's chats (chats.ts): each a session, a
   named text,
   "from" text,
   automation text,
-  threads text[], -- the Slack threads, DMs and mail threads it follows (chats.ts, follow)
-  unsubscribed text[], -- those whose new messages wait rather than wake it (chats.ts, setSubscribed)
+  threads json, -- the Slack threads, DMs and mail threads it follows (chats.ts, follow)
+  unsubscribed json, -- those whose new messages wait rather than wake it (chats.ts, setSubscribed)
   seen double precision,
   deleted text -- when the user deleted it: out of sight, its row and transcript kept
 );
@@ -157,14 +164,14 @@ create table if not exists automations ( -- what happened to each of automations
 );
 create table if not exists pins ( -- the sessions pinned to the sidebar's Pinned (pins.ts)
   session text primary key,
-  seq bigint generated always as identity -- the order they were pinned in
+  seq integer not null -- the order they were pinned in
 );
 create table if not exists session_models ( -- the model and effort picked for a session (models.ts)
   session text primary key,
   model text,
   effort text
 );
-create table if not exists settings (name text primary key, value jsonb not null); -- each one set (settings.ts)
+create table if not exists settings (name text primary key, value json not null); -- each one set (settings.ts)
 -- The pool of test desks (pool.ts): each issue whose session asked for one, in the order it asked, with the port of
 -- its slot once it has one (null while it waits in line), and when it was told so (null until then).
 create table if not exists tests (
@@ -189,25 +196,13 @@ create table if not exists sessions ( -- what each session does, as the session 
   context_at double precision, -- when it counted, in seconds
   updated double precision not null -- when desk last wrote it
 );
--- The Sessions menu's search (sessiontext.ts). desk_words reads a text as simple does, its words whole and lowercased,
--- and folds their accents first, so that "cam giac" finds "cảm giác".
-create extension if not exists pg_trgm;
-create extension if not exists unaccent;
-do $$ begin
-  if not exists (select 1 from pg_ts_config where cfgname = 'desk_words') then
-    create text search configuration desk_words (copy = simple);
-    alter text search configuration desk_words alter mapping for asciiword, word, numword, asciihword, hword, numhword,
-      hword_asciipart, hword_part, hword_numpart with unaccent, simple;
-  end if;
-end $$;
 create table if not exists session_text ( -- what a search finds a session by: what the menu shows of it, and every prompt
   session text primary key,
   title text not null default '', -- its title, its issue's slug and title, and its folder, as the menu shows them
   prompts text not null default '', -- every prompt typed in it, one a line
-  read_to bigint not null default 0, -- how far its transcript was read for them
-  words tsvector generated always as (to_tsvector('desk_words', title || ' ' || prompts)) stored
+  read_to integer not null default 0 -- how far its transcript was read for them
 );
-create index if not exists session_text_words on session_text using gin (words);
+create table if not exists session_words (word text primary key); -- each word of session_text once, for a typo's near words
 create table if not exists search_log ( -- each time the search's box opened: what was typed and what it opened (searchlog.ts)
   at double precision not null, -- in seconds
   tab text not null default '', -- the kind it ended on, '' for All
@@ -216,13 +211,11 @@ create table if not exists search_log ( -- each time the search's box opened: wh
   picked text, -- its key
   picked_title text,
   picked_from text, -- browser, a title found on the key, or server, found later
-  rank int, -- its place in the list, from 0
-  took_ms int not null, -- from the box opening to that
-  keys int not null default 0, -- changes to what was typed
-  server_ms int -- how long the server took on the last search it answered
+  rank integer, -- its place in the list, from 0
+  took_ms integer not null, -- from the box opening to that
+  keys integer not null default 0, -- changes to what was typed
+  server_ms integer -- how long the server took on the last search it answered
 );
-create table if not exists session_words (word text primary key); -- each word of session_text once, for a typo's near words
-create index if not exists session_words_near on session_words using gin (word gin_trgm_ops);
 create table if not exists notices ( -- each Slack message and mail that came in, and the firewall's verdict (notices.ts)
   id text primary key, -- slack:<channel>:<ts>, or mail:<Gmail's id>
   source text not null, -- slack or mail
@@ -233,7 +226,9 @@ create table if not exists notices ( -- each Slack message and mail that came in
   link text not null default '', -- opens it in Slack or Gmail
   at double precision not null, -- when it was sent, in seconds
   verdict text, -- now, later or dropped, or noted by a chat; null until the firewall, or the chat following it, judged it
-  why text not null default '' -- the firewall's line, the chat's, or a mail's topic
+  why text not null default '', -- the firewall's line, the chat's, or a mail's topic
+  chat text, -- the chat it went to rather than the firewall
+  wake text -- the wake that carried it to the chat (wakes.ts)
 );
 create index if not exists notices_thread on notices (thread, at);
 create table if not exists chat_picks ( -- what Haiku picked as each chat started (pick.ts)
@@ -292,112 +287,189 @@ create table if not exists inbox ( -- the Inbox's rows (inbox.ts): what each ses
   kind text not null, -- review: Go or Approve decides it; needs: anything else
   waits boolean not null, -- it stays listed, read or not, until answered: a question, a landing stuck, an issue to settle
   at double precision not null, -- when it happened, in seconds
-  read double precision -- when you read it, in seconds; null while unread
+  read double precision, -- when you read it, in seconds; null while unread
+  gone double precision, -- when you deleted it
+  marked double precision, -- when you marked it unread
+  source text, -- a Slack thread's or a mail thread's row (notices.ts): where it came from
+  who text -- and who wrote last
 );
 create table if not exists meta (name text primary key, value text not null); -- what desk notes of itself, by name
 -- The rows a write changed, each by its table and key, noted by the triggers below in the write's transaction and taken
 -- out again before it commits (write): the push then sends those rows as they stand. Empty between writes.
 create table if not exists changed (kind text not null, key text not null, primary key (kind, key));
--- Notes the row a write changed, under its key, the trigger's one argument; a row whose key changed, under both.
-create or replace function noted() returns trigger language plpgsql as $$
-begin
-  if tg_op <> 'INSERT' then
-    insert into changed values (tg_table_name, to_jsonb(old) ->> tg_argv[0]) on conflict do nothing;
-  end if;
-  if tg_op <> 'DELETE' then
-    insert into changed values (tg_table_name, to_jsonb(new) ->> tg_argv[0]) on conflict do nothing;
-  end if;
-  return null;
-end $$;
-${Object.entries(HELD).map(([table, { key }]) => {
-  // An update that changes nothing, as a save of what the row already holds, notes nothing.
-  return `drop trigger if exists ${table}_logged on ${table}; drop trigger if exists ${table}_updated on ${table};
-create or replace trigger ${table}_noted after insert or delete on ${table} for each row execute function noted('${key}');
-create or replace trigger ${table}_changed after update on ${table} for each row when (old is distinct from new) execute function noted('${key}');`;
-}).join("\n")}`;
+`;
 
-export async function open(): Promise<PGlite> {
-  if (db) return db;
-  mkdirSync(DB_DIR, { recursive: true });
+// Each table the app holds notes the rows a write changes, by their key: a row whose key changed, under both. An update
+// that changes nothing, as a save of what the row already holds, notes nothing.
+function triggers(d: DatabaseSync): string {
+  return Object.entries(HELD).map(([table, { key }]) => {
+    const columns = d.prepare(`select name from pragma_table_info('${table}')`).all().map((c) => `"${c.name as string}"`);
+    // Not insert or ignore: in a trigger, the conflict rule of the statement that fired it overrides the trigger's own.
+    const note = (row: "old" | "new") =>
+      `insert into changed select '${table}', ${row}.${key} where not exists (select 1 from changed where kind = '${table}' and key = ${row}.${key});`;
+    return `drop trigger if exists ${table}_noted; drop trigger if exists ${table}_gone; drop trigger if exists ${table}_changed;
+create trigger ${table}_noted after insert on ${table} begin ${note("new")} end;
+create trigger ${table}_gone after delete on ${table} begin ${note("old")} end;
+create trigger ${table}_changed after update on ${table} when ${columns.map((c) => `old.${c} is not new.${c}`).join(" or ")}
+  begin ${note("old")} ${note("new")} end;`;
+  }).join("\n");
+}
+
+export async function open(): Promise<Db> {
+  if (db) return outside;
+  mkdirSync(dirname(DB_FILE), { recursive: true });
   // The data folder is a git repo of its own, for the issues: the database stays out of it.
-  const ignore = join(dirname(DB_DIR), ".gitignore");
-  if (!process.env.DESK_DB && !existsSync(ignore)) writeFileSync(ignore, "*\n");
-  // A test desk starts on a dump of 8790's database (pool.ts, copy), loaded once into its new folder.
-  const from = process.env.DESK_DB_FROM && !existsSync(join(DB_DIR, "PG_VERSION")) ? process.env.DESK_DB_FROM : null;
-  const opened = await PGlite.create(DB_DIR, {
-    extensions: { pg_trgm, unaccent }, ...(from ? { loadDataDir: new Blob([readFileSync(from)]) } : {}),
-  });
-  await toTeams(opened);
-  await opened.exec(SCHEMA);
-  await opened.exec("alter table issues add column if not exists updated text;"); // from 8 Nov, in place of issue.md's mtime
-  await opened.exec(["issues", "teams", "projects"].map((t) => `alter table ${t} drop column if exists written;`).join(" ")); // the copy of issue.md, out since 8 Nov
-  // Since 20 Oct, an issue's project is Linear's (projects.ts), as its team is what its project was before. An issue's
-  // delete marks it, deleted_at, since 8 Nov (issues.ts, trash).
-  await opened.exec(["review_of", "review_since", "landed", "project", "milestone", "due", "lands", "deleted_at"].map((c) => `alter table issues add column if not exists ${c} text;`).join(" "));
-  // The Inbox's delete and its mark as unread (inbox.ts), from 19 Oct.
-  await opened.exec(["gone", "marked"].map((c) => `alter table inbox add column if not exists ${c} double precision;`).join(" "));
-  // A Slack thread's or a mail thread's row (notices.ts): where it came from and who wrote last, from 2 Nov.
-  await opened.exec(["source", "who"].map((c) => `alter table inbox add column if not exists ${c} text;`).join(" "));
-  await opened.exec("alter table chats add column if not exists deleted text;"); // a chat's Delete (chats.ts, remove), from 25 Oct
-  await opened.exec("alter table chats add column if not exists auto boolean not null default false;"); // its composer's Auto (chats.ts, setAuto), from 29 Oct
-  // A chat's fields with no column of their own went into extra until 8 Nov, as JSON, what its file held before the
-  // table (19 Oct) among them: the copies of its messages, all left unread. Its Delete's Undo learns from the delete
-  // which Triage issue to take back (chats.ts, remove), rather than from extra.
-  await opened.exec("alter table chats drop column if exists extra;");
-  // What each session has spent so far, as its host hears it (turns.ts), from 3 Nov
-  await opened.exec(["cost", "tokens"].map((c) => `alter table sessions add column if not exists ${c} double precision;`).join(" "));
-  await opened.exec("alter table chats add column if not exists threads text[];"); // the threads it follows (chats.ts, follow), from 3 Nov
-  await opened.exec("alter table chats add column if not exists unsubscribed text[];"); // those that wake nothing (chats.ts, setSubscribed), from 5 Nov
-  // The chat a notice went to rather than the firewall, and the wake that carried it to the chat (wakes.ts), from 3 Nov
-  await opened.exec(["chat", "wake"].map((c) => `alter table notices add column if not exists ${c} text;`).join(" "));
-  await opened.exec("alter table teams add column if not exists aliases text not null default '';"); // a team's rename (teams.ts), from 25 Oct
-  await opened.exec("drop table if exists slack_filed; drop table if exists slack_threads;"); // Slack's tags, out since 22 Oct
-  // Try's line for desk's own checkout and the copies of the files from before 19 Oct, out since 2 Nov: a branch is
-  // tested on a test desk of its own (pool.ts, tests).
-  await opened.exec("drop table if exists line; drop table if exists tries; drop table if exists trying; drop table if exists copies;");
-  // How full each session's context is, as Claude Code last counted it (models.ts), from 8 Nov: kept until then, with
-  // Claude Code's list of models, in a table of its own, heard, as JSON by name. The list is meta's 'claude models' since.
-  // The sessions' times and the search log's are seconds since 8 Nov, as SQLite keeps them, rather than Postgres's
-  // timestamptz read back with extract (desk issue "Cut the desk server’s memory": the move to SQLite).
-  for (const [table, columns] of [["sessions", ["prompted", "replied", "ended", "updated"]], ["search_log", ["at"]]] as const)
-    for (const c of columns)
-      if ((await opened.query("select 1 from information_schema.columns where table_name = $1 and column_name = $2 and data_type = 'timestamp with time zone'", [table, c])).rows.length)
-        await opened.exec(`alter table ${table} alter column ${c} drop default, alter column ${c} type double precision using extract(epoch from ${c});`);
-  await opened.exec(["context_tokens", "context_max", "context_at"].map((c) => `alter table sessions add column if not exists ${c} double precision;`).join(" "));
-  if ((await opened.query("select 1 from information_schema.tables where table_name = 'heard'")).rows.length)
-    await opened.exec(`insert into meta select 'claude models', value::text from heard where name = 'models' on conflict do nothing;
-      update sessions s set context_tokens = (h.value->>'tokens')::float8, context_max = (h.value->>'max')::float8, context_at = h.at
-        from heard h where h.name = 'context:' || s.id;
-      drop table heard;`);
-  // The log of changes, a copy of each row a write changed, numbered, which an app back from a drop caught up from, out
-  // since 8 Nov: such an app takes every row again (3.3 MB on 8 Nov), and the changed rows go out as they stand.
-  await opened.exec("drop table if exists changes; drop function if exists logged(); delete from meta where name in ('log', 'pruned');");
-  await opened.exec("delete from changed;"); // what a write cut short by a crash noted
-  await opened.exec("alter table issues drop column if exists protocol;"); // an issue's protocol, out since 4 Nov
-  // desk's database is a few MB: Postgres's default 128 MB of shared buffers only holds memory, about 50 MB of it. Set
-  // once in postgresql.auto.conf, it applies from the next start.
-  if ((await opened.query<{ shared_buffers: string }>("show shared_buffers")).rows[0]?.shared_buffers !== "16MB")
-    await opened.exec("alter system set shared_buffers = '16MB'");
+  const ignore = join(dirname(DB_FILE), ".gitignore");
+  if (!existsSync(ignore)) writeFileSync(ignore, "*\n");
+  if (!existsSync(DB_FILE)) await made();
+  const opened = new DatabaseSync(DB_FILE);
+  // A write waits on the disk only at checkpoints, and a read never waits on a write; like matches case, as Postgres's.
+  opened.exec("pragma journal_mode = wal; pragma synchronous = normal; pragma busy_timeout = 5000; pragma case_sensitive_like = true;");
+  opened.exec(SCHEMA);
+  opened.exec(triggers(opened));
+  opened.exec("delete from changed;"); // what a write cut short by a crash noted
   db = opened;
-  return opened;
+  return outside;
 }
 
-// desk's projects became teams on 20 Oct (teams.ts), so that a project can be Linear's, one that finishes: their table,
-// each issue's project and each trashed issue's, move over once, before the schema makes the tables it lacks.
-async function toTeams(pg: PGlite) {
-  const has = async (table: string) => (await pg.query("select 1 from information_schema.tables where table_name = $1", [table])).rows.length > 0;
-  if (!(await has("projects")) || (await has("teams"))) return;
-  await pg.transaction(async (tx) => {
-    await tx.exec(`drop trigger if exists projects_logged on projects;
-      drop trigger if exists projects_updated on projects;
-      alter table projects rename to teams;
-      alter table issues rename column project to team;`);
+// The file, made whole before it takes its name, so that a start cut short makes it again: a test desk's from the copy
+// its pool made (pool.ts, copy), else 8790's from PGlite's folder, or empty.
+async function made() {
+  const from = process.env.DESK_DB_FROM;
+  if (from && isSqlite(from)) return copyFileSync(from, DB_FILE);
+  const next = `${DB_FILE}.new`;
+  rmSync(next, { force: true });
+  const d = new DatabaseSync(next);
+  d.exec(SCHEMA);
+  const moved = from ? await fromPglite(d, { dump: from }) : existsSync(join(DB_DIR, "PG_VERSION")) ? await fromPglite(d, { dir: DB_DIR }) : 0;
+  d.close();
+  renameSync(next, DB_FILE);
+  if (moved) console.log(`desk moved ${moved} rows from PGlite into ${DB_FILE}`);
+}
+
+const isSqlite = (path: string) => {
+  const head = Buffer.alloc(16), fd = openSync(path, "r");
+  try {
+    readSync(fd, head, 0, 16, 0);
+  } finally {
+    closeSync(fd);
+  }
+  return head.toString("latin1") === "SQLite format 3\0";
+};
+
+// Every row of every table both have, from PGlite's folder, or from a dump of it that a test desk's pool made before
+// 8 Nov, in one transaction. Postgres's lists and JSON come as JSON text, its true and false as 1 and 0.
+async function fromPglite(d: DatabaseSync, source: { dir: string } | { dump: string }): Promise<number> {
+  const { PGlite } = await import("@electric-sql/pglite");
+  const { pg_trgm } = await import("@electric-sql/pglite/contrib/pg_trgm");
+  const { unaccent } = await import("@electric-sql/pglite/contrib/unaccent");
+  const { readFileSync } = await import("node:fs");
+  const pg = "dir" in source
+    ? await PGlite.create(source.dir, { extensions: { pg_trgm, unaccent } })
+    : await PGlite.create({ extensions: { pg_trgm, unaccent }, loadDataDir: new Blob([readFileSync(source.dump)]) });
+  let n = 0;
+  d.exec("begin");
+  for (const { name: table } of d.prepare("select name from sqlite_master where type = 'table'").all() as { name: string }[]) {
+    const mine = d.prepare(`select name from pragma_table_info('${table}')`).all().map((c) => c.name as string);
+    const theirs = new Set((await pg.query<{ column_name: string }>("select column_name from information_schema.columns where table_name = $1", [table])).rows.map((r) => r.column_name));
+    const both = mine.filter((c) => theirs.has(c));
+    if (!both.length) continue;
+    const insert = d.prepare(`insert into ${table} (${both.map((c) => `"${c}"`).join(", ")}) values (${both.map(() => "?").join(", ")})`);
+    const order = table === "pins" ? " order by seq" : "";
+    for (const row of (await pg.query<Record<string, unknown>>(`select ${both.map((c) => `"${c}"`).join(", ")} from ${table}${order}`)).rows) {
+      insert.run(...both.map((c) => bind(row[c])));
+      n++;
+    }
+  }
+  d.exec("commit");
+  await pg.close();
+  return n;
+}
+
+// --- querying ----------------------------------------------------------------------------------------------------------
+
+// A value as SQLite takes it: a list or an object as JSON text, true and false as 1 and 0, a date as ISO text.
+function bind(v: unknown): null | number | bigint | string | NodeJS.ArrayBufferView {
+  if (v === undefined || v === null) return null;
+  if (typeof v === "boolean") return v ? 1 : 0;
+  if (typeof v === "number" || typeof v === "bigint" || typeof v === "string") return v;
+  if (v instanceof Date) return v.toISOString();
+  if (ArrayBuffer.isView(v)) return v as NodeJS.ArrayBufferView;
+  return JSON.stringify(v);
+}
+
+// A statement as desk wrote it for Postgres, put as SQLite reads it, prepared once: $1 as ?1, and = any($1), which
+// Postgres reads with a list, as in that list's values, which come as JSON text.
+interface Prepared { statement: StatementSync; reads: boolean; kinds: [string, "json" | "boolean"][] }
+const prepared = new Map<string, Prepared>();
+function prepare(text: string): Prepared {
+  let p = prepared.get(text);
+  if (!p) {
+    const statement = database().prepare(text.replace(/=\s*any\(\$(\d+)\)/gi, "in (select value from json_each(?$1))").replace(/\$(\d+)/g, "?$1"));
+    const columns = statement.columns();
+    const kinds = columns.flatMap((c): [string, "json" | "boolean"][] => {
+      const type = c.type?.toLowerCase();
+      return type === "json" || type === "boolean" ? [[c.name, type]] : [];
+    });
+    p = { statement, reads: columns.length > 0, kinds };
+    prepared.set(text, p);
+  }
+  return p;
+}
+
+function run<T>(text: string, params: unknown[] = []): Results<T> {
+  const { statement, reads, kinds } = prepare(text);
+  const values = params.map(bind);
+  if (!reads) return { rows: [], affectedRows: Number(statement.run(...values).changes) };
+  const rows = statement.all(...values).map((r) => {
+    const row: Record<string, unknown> = { ...r };
+    for (const [name, kind] of kinds) {
+      const v = row[name];
+      if (v === null || v === undefined) continue;
+      if (kind === "boolean") row[name] = v === 1 || v === 1n || v === true;
+      else if (typeof v === "string") {
+        try {
+          row[name] = JSON.parse(v);
+        } catch {
+          // left as the text it is
+        }
+      }
+    }
+    return row as T;
   });
+  return { rows, affectedRows: rows.length };
 }
 
-export function sql(): PGlite {
+function database(): DatabaseSync {
   if (!db) throw new Error("The database is not open yet.");
   return db;
+}
+
+// A write's transaction, while one is open: a query from outside it waits for it to end, as on PGlite, so that no read
+// sees a write half done and no write joins one that may yet roll back.
+let busy: Promise<void> | null = null;
+const waited = async () => {
+  while (busy) await busy;
+};
+const outside: Db = {
+  query: async (text, params) => (await waited(), run(text, params)),
+  exec: async (text) => (await waited(), database().exec(text)),
+};
+const inside: Db = {
+  query: async (text, params) => run(text, params),
+  exec: async (text) => database().exec(text),
+};
+
+export function sql(): Db {
+  database();
+  return outside;
+}
+
+// A whole copy of the database, consistent as of now, for a test desk's pool (pool.ts, copy).
+export async function copyTo(path: string) {
+  await waited();
+  rmSync(path, { force: true });
+  database().prepare("vacuum into ?").run(path);
 }
 
 // --- writing ---------------------------------------------------------------------------------------------------------
@@ -424,22 +496,37 @@ export function locked<T>(fn: () => Promise<T>): Promise<T> {
 // The one way to write a row: fn's queries run in one transaction, which every query of it must use, never sql(),
 // whose query would wait for this transaction to end. Once it commits, the rows it noted are told (onWrite), and that it
 // changed a row, of any table (onCommit). A write must not start another.
-export function write<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+export function write<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
   return locked(async () => {
-    const [done, changed, rows] = await sql().transaction(async (tx) => {
-      const done = await fn(tx);
-      // Postgres gives a transaction its id at its first write: none, and it changed nothing.
-      const changed = (await tx.query<{ id: unknown }>("select txid_current_if_assigned() as id")).rows[0].id !== null;
-      return [done, changed, changed ? await taken(tx) : []] as const;
-    });
-    if (rows.length) {
-      const after = pushed;
-      tell(rows.map((c) => ({ ...c, seq: ++pushed })), after);
+    await waited();
+    const d = database();
+    let end = () => {};
+    busy = new Promise<void>((done) => (end = done));
+    try {
+      d.exec("begin immediate");
+      const before = changes(d);
+      const done = await fn(inside);
+      const changed = changes(d) !== before;
+      const rows = changed ? taken() : [];
+      d.exec("commit");
+      if (rows.length) {
+        const after = pushed;
+        tell(rows.map((c) => ({ ...c, seq: ++pushed })), after);
+      }
+      if (changed) wrote();
+      return done;
+    } catch (error) {
+      if (d.isTransaction) d.exec("rollback");
+      throw error;
+    } finally {
+      busy = null;
+      end();
     }
-    if (changed) wrote();
-    return done;
   });
 }
+
+// How many rows this connection's statements have changed since it opened.
+const changes = (d: DatabaseSync) => Number((d.prepare("select total_changes() as n").get() as { n: number }).n);
 
 // sync.ts hears here of each write's changes, with the change told before them.
 export const onWrite = (fn: typeof tell) => { tell = fn; };
@@ -448,17 +535,21 @@ export const onWrite = (fn: typeof tell) => { tell = fn; };
 // the frame and the open chats show may have moved.
 export const onCommit = (fn: () => void) => { wrote = fn; };
 
+// The columns of the table the app is sent, and its rows as the app holds them.
+const shown = (table: string) =>
+  database().prepare(`select name from pragma_table_info('${table}')`).all().map((c) => c.name as string)
+    .filter((c) => !HELD[table].hidden.includes(c)).map((c) => `"${c}"`).join(", ");
+
 // The rows a write noted (changed, above), as they stand at its end, in its transaction: each table's own, or null for
 // a row it deleted. Taken out, so that the table is empty again once the write commits.
-async function taken(tx: Db): Promise<Omit<Change, "seq">[]> {
-  const noted = (await tx.query<{ kind: string; key: string }>("delete from changed returning kind, key")).rows;
+function taken(): Omit<Change, "seq">[] {
+  const noted = run<{ kind: string; key: string }>("delete from changed returning kind, key").rows;
   const rows: Omit<Change, "seq">[] = [];
   for (const [table, { key, live }] of Object.entries(HELD)) {
     const keys = noted.filter((n) => n.kind === table).map((n) => n.key);
     if (!keys.length) continue;
-    const found = await tx.query<{ key: string; row: Record<string, unknown> }>(
-      `select ${key} as key, ${shown(table)} as row from ${table} t where ${key} = any($1)${live ? ` and ${live}` : ""}`, [keys]);
-    const by = new Map(found.rows.map((r) => [r.key, r.row]));
+    const found = run<Record<string, unknown>>(`select ${shown(table)} from ${table} where ${key} = any($1)${live ? ` and ${live}` : ""}`, [keys]);
+    const by = new Map(found.rows.map((r) => [String(r[key]), r]));
     for (const k of keys) rows.push({ kind: table, key: k, row: by.get(k) ?? null });
   }
   return rows;
@@ -473,9 +564,10 @@ const LOG = randomUUID();
 // Every row the app holds, by table, with the run's name and the newest change in them. Under locked, so no write
 // lands between it and the changes told after it.
 export async function snapshot(): Promise<{ log: string; seq: number; rows: Record<string, Record<string, unknown>[]> }> {
+  await waited();
   const rows: Record<string, Record<string, unknown>[]> = {};
   for (const [table, { key, live }] of Object.entries(HELD))
-    rows[table] = (await sql().query<{ row: Record<string, unknown> }>(`select ${shown(table)} as row from ${table} t${live ? ` where ${live}` : ""} order by ${key}`)).rows.map((r) => r.row);
+    rows[table] = run<Record<string, unknown>>(`select ${shown(table)} from ${table}${live ? ` where ${live}` : ""} order by ${key}`).rows;
   return { log: LOG, seq: pushed, rows };
 }
 
@@ -487,6 +579,7 @@ export async function since(log: string, seq: number): Promise<Change[] | null> 
 }
 
 export async function close() {
-  await db?.close();
+  db?.close();
   db = null;
+  prepared.clear();
 }

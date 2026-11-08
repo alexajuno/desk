@@ -19,7 +19,7 @@
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { DB_DIR, HOME, TEST } from "./config.ts";
+import { DB_FILE, HOME, TEST } from "./config.ts";
 import * as uploads from "./uploads.ts";
 
 export const PROJECTS = join(HOME, ".claude", "projects");
@@ -105,7 +105,7 @@ export function pathOf(session: string): string | null {
 let copy: string | null = null;
 
 export function forkOf(session: string): string {
-  copy ??= `${DB_DIR}:${statSync(DB_DIR).birthtimeMs}`; // read once the database is open, which makes its folder
+  copy ??= `${DB_FILE}:${statSync(DB_FILE).birthtimeMs}`; // read once the database is open, which makes its file
   const h = createHash("sha1").update(`${copy}:${session}`).digest("hex");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${((parseInt(h[16], 16) & 3) | 8).toString(16)}${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }

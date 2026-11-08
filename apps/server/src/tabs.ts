@@ -10,12 +10,11 @@
 // answers with the rest it keeps, {"type": "owners", "tabs": [{target, session}, ...]}: the relay takes back each one
 // still open, and says the others closed, a draining host's sessions' too, which keep them once they move to it. A host
 // with no relay leaves no tab known, and the table empties, unless another host's relay runs.
-import type { Transaction } from "@electric-sql/pglite";
 import type { WebSocket } from "ws";
 import * as db from "./db.ts";
 import type { Tab } from "./relay.ts";
 
-const keep = (tx: Transaction, t: Tab) =>
+const keep = (tx: db.Db, t: Tab) =>
   tx.query<{ fresh: boolean }>(`insert into tabs (target, session, url, title, opened) values ($1, $2, $3, $4, $5)
     on conflict (target) do update set url = excluded.url, title = excluded.title returning (xmax = 0) as fresh`,
     [t.target, t.session, t.url ?? "", t.title ?? "", new Date().toISOString()]);

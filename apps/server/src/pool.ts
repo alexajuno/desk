@@ -30,8 +30,8 @@ const RECHECK = 60; // seconds between looks while one waits on memory
 
 // Where a slot's copy lives, in the cache, out of the data repo and out of the user's way.
 export const dataOf = (port: number) => join(HOME, ".cache", "desk", `test-${port}`);
-// The dump of 8790's database the slot's desk loads on its first start (db.ts, DESK_DB_FROM).
-export const dumpOf = (port: number) => join(dataOf(port), ".db", "pg.tar");
+// The copy of 8790's database the slot's desk starts on (db.ts, DESK_DB_FROM).
+export const dumpOf = (port: number) => join(dataOf(port), ".db", "copy.sqlite");
 const unitOf = (port: number) => `desk-test-${port}`;
 
 const WAKE = "A test desk is yours: desk runs {branch} from {worktree} on http://127.0.0.1:{port}, on a fresh copy of the user’s data. Wait until http://127.0.0.1:{port}/version answers (its log: `journalctl --user -u desk-test-{port}`), then carry on where you stopped: test the path you changed there and screenshot it. Give it back once you have your screenshots: `curl -s -X DELETE http://127.0.0.1:{desk}/api/issues/{slug}/test`. desk takes it back on its own once your turn ends.";
@@ -88,9 +88,8 @@ export async function copy(port: number): Promise<string> {
   const dir = dataOf(port);
   await drop(port);
   await cp(DATA_DIR, dir, { recursive: true, filter: (src) => !LEFT.has(relative(DATA_DIR, src)) });
-  const dump = await db.sql().dumpDataDir("none");
   await mkdir(join(dir, ".db"), { recursive: true });
-  await writeFile(dumpOf(port), Buffer.from(await dump.arrayBuffer()));
+  await db.copyTo(dumpOf(port));
   return dir;
 }
 
