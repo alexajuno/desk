@@ -197,11 +197,15 @@ create table if not exists sessions ( -- what each session does, as the session 
   updated double precision not null -- when desk last wrote it
 );
 create table if not exists session_text ( -- what a search finds a session by: what the menu shows of it, and every prompt
-  session text primary key,
+  id integer primary key, -- its row in session_find
+  session text not null unique,
   title text not null default '', -- its title, its issue's slug and title, and its folder, as the menu shows them
   prompts text not null default '', -- every prompt typed in it, one a line
   read_to integer not null default 0 -- how far its transcript was read for them
 );
+-- The full-text index over each session's title and prompts, folded (sessiontext.ts, fold), under session_text's id. It
+-- holds no copy of the text, only the index, from which a row can be deleted.
+create virtual table if not exists session_find using fts5(words, content = '', contentless_delete = 1, tokenize = 'unicode61 remove_diacritics 2');
 create table if not exists session_words (word text primary key); -- each word of session_text once, for a typo's near words
 create table if not exists search_log ( -- each time the search's box opened: what was typed and what it opened (searchlog.ts)
   at double precision not null, -- in seconds
@@ -496,7 +500,12 @@ export function locked<T>(fn: () => Promise<T>): Promise<T> {
 // The one way to write a row: fn's queries run in one transaction, which every query of it must use, never sql(),
 // whose query would wait for this transaction to end. Once it commits, the rows it noted are told (onWrite), and that it
 // changed a row, of any table (onCommit). A write must not start another.
-export function write<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
+export const write = <T>(fn: (tx: Db) => Promise<T>): Promise<T> => transaction(fn, true);
+
+// A write to tables no app holds and no frame shows, as the session search's: one transaction, as write's, telling no one.
+export const quietly = <T>(fn: (tx: Db) => Promise<T>): Promise<T> => transaction(fn, false);
+
+function transaction<T>(fn: (tx: Db) => Promise<T>, told: boolean): Promise<T> {
   return locked(async () => {
     await waited();
     const d = database();
@@ -506,7 +515,7 @@ export function write<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
       d.exec("begin immediate");
       const before = changes(d);
       const done = await fn(inside);
-      const changed = changes(d) !== before;
+      const changed = told && changes(d) !== before;
       const rows = changed ? taken() : [];
       d.exec("commit");
       if (rows.length) {

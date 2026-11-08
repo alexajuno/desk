@@ -1,11 +1,13 @@
-// The Sessions menu's search: what a search finds each session by, kept in Postgres (session_text, db.ts), which are the
-// title, issue and folder the menu shows for it and every prompt typed in it, and the search over them.
+// The Sessions menu's search: what a search finds each session by, kept in session_text (db.ts), which are the title,
+// issue and folder the menu shows for it and every prompt typed in it, and the search over them, by SQLite's full-text
+// index, session_find, since 8 Nov (Postgres's until then).
 //
 // The prompts come from the transcripts, read on from where the last look stopped, as sessions.ts reads its table: the
 // first look on a new database reads them all (on 29 Oct, 1,718 sessions with prompts, 7.8 MB of them, in 12 s), and
 // after it only what was written since.
 import { closeSync, openSync, readSync } from "node:fs";
-import { sql } from "./db.ts";
+import * as db from "./db.ts";
+import { sql, type Db } from "./db.ts";
 import { promptOf } from "./sessions.ts";
 
 interface Transcript {
@@ -21,6 +23,7 @@ let queue: Promise<unknown> = Promise.resolve();
 
 async function load() {
   if (held) return held;
+  await built();
   const { rows } = await sql().query<{ session: string; read_to: number; title: string }>("select session, read_to, title from session_text");
   return (held = new Map<string, Held>(rows.map((r) => [r.session, { read_to: Number(r.read_to), title: r.title }])));
 }
@@ -30,7 +33,29 @@ function queued(fn: () => Promise<void>): Promise<unknown> {
   return (queue = queue.then(fn).catch((error) => console.error("session search", error)));
 }
 
-// Bring the prompts up to date with the transcripts.
+// A text as the search keeps it: lowercased, its accents folded, đ as d (SQLite's own folding keeps đ), so that "cam
+// giac" finds "cảm giác" and "dang" finds "đang".
+export const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+
+// The session's title and prompts, folded, in session_find, the full-text index over them (db.ts), under its row's id.
+async function reindex(q: Db, sessions: string[]) {
+  for (const session of sessions) {
+    const r = (await q.query<{ id: number; title: string; prompts: string }>("select id, title, prompts from session_text where session = $1", [session])).rows[0];
+    if (!r) continue;
+    await q.query("delete from session_find where rowid = $1", [r.id]);
+    await q.query("insert into session_find (rowid, words) values ($1, $2)", [r.id, fold(`${r.title} ${r.prompts}`)]);
+  }
+}
+
+// The index, made once from what session_text holds, as when desk moved to SQLite on 8 Nov.
+async function built() {
+  if ((await sql().query("select 1 from session_find limit 1")).rows.length) return;
+  await db.quietly(async (tx) => {
+    const all = (await tx.query<{ id: number; title: string; prompts: string }>("select id, title, prompts from session_text")).rows;
+    for (const r of all) await tx.query("insert into session_find (rowid, words) values ($1, $2)", [r.id, fold(`${r.title} ${r.prompts}`)]);
+  });
+}
+
 export const readIn = (transcripts: Transcript[]) => queued(async () => {
   const known = await load();
   for (const t of transcripts) {
@@ -39,18 +64,22 @@ export const readIn = (transcripts: Transcript[]) => queued(async () => {
     const fresh = !had || had.read_to > t.read_to || (had.path !== undefined && had.path !== t.path);
     const from = fresh ? 0 : had.read_to;
     if (!fresh && from === t.read_to) continue;
-    const text = promptsIn(t.path, from, t.read_to).join("\n").replaceAll("\u0000", ""); // Postgres takes no NUL in text
+    const text = promptsIn(t.path, from, t.read_to).join("\n").replaceAll("\u0000", "");
     try {
-      await sql().query(
-        `insert into session_text (session, prompts, read_to) values ($1, $2, $3)
-         on conflict (session) do update set read_to = excluded.read_to, prompts = case
-           when $4 or session_text.prompts = '' then excluded.prompts
-           when excluded.prompts = '' then session_text.prompts
-           else session_text.prompts || chr(10) || excluded.prompts end`,
-        [t.id, text, t.read_to, fresh],
-      );
-      // Each word once, for the near words of a typo; not a path or an address, which a typo never means.
-      if (text) await sql().query("insert into session_words select lexeme from unnest(to_tsvector('desk_words', $1)) where lexeme !~ '[[:punct:]]' on conflict do nothing", [text]);
+      await db.quietly(async (tx) => {
+        await tx.query(
+          `insert into session_text (session, prompts, read_to) values ($1, $2, $3)
+           on conflict (session) do update set read_to = excluded.read_to, prompts = case
+             when $4 or session_text.prompts = '' then excluded.prompts
+             when excluded.prompts = '' then session_text.prompts
+             else session_text.prompts || $5 || excluded.prompts end`,
+          [t.id, text, t.read_to, fresh, "\n"],
+        );
+        if (!text) return;
+        await reindex(tx, [t.id]);
+        // Each word once, for the near words of a typo.
+        await tx.query("insert or ignore into session_words select value from json_each($1)", [[...new Set(fold(text).match(WORD) ?? [])]]);
+      });
     } catch (error) {
       console.error(`session search: the prompts of ${t.id}`, error);
     }
@@ -63,11 +92,11 @@ export const titled = (titles: [string, string][]) => queued(async () => {
   const known = await load();
   const changed = titles.filter(([id, title]) => known.get(id)?.title !== title);
   if (!changed.length) return;
-  await sql().query(
-    `insert into session_text (session, title) select * from unnest($1::text[], $2::text[])
-     on conflict (session) do update set title = excluded.title`,
-    [changed.map(([id]) => id), changed.map(([, title]) => title)],
-  );
+  await db.quietly(async (tx) => {
+    for (const [id, title] of changed)
+      await tx.query("insert into session_text (session, title) values ($1, $2) on conflict (session) do update set title = excluded.title", [id, title]);
+    await reindex(tx, changed.map(([id]) => id));
+  });
   for (const [id, title] of changed) known.set(id, { read_to: 0, ...known.get(id), title });
 });
 
@@ -110,33 +139,49 @@ function promptsIn(path: string, from: number, to: number): string[] {
 
 // --- the search ------------------------------------------------------------------------------------------------------
 
-// A word the way it is kept: one lexeme of desk_words, lowercased with its accents folded.
+// A word the way it is kept: letters and digits, folded.
 const WORD = /[\p{L}\p{N}]+/gu;
 
-// Each word of the query, as a tsquery that finds it: where a word starts, in that form or another (searching finds
-// search, as its English stem search finds searched); one of 4 letters or more that finds nothing so also finds its near
-// words (serch finds search), from pg_trgm's similarity of 0.3 or more, its default.
+// What a word of the query finds, as wordsOf gives it: a word that starts with it, or one of its near words, written
+// "typed|near|near" (a folded word holds no |).
+interface Found { start: string; near: string[] }
+const parse = (word: string): Found => {
+  const [start, ...near] = word.split("|");
+  return { start, near };
+};
+const matches = (token: string, f: Found) => token.startsWith(f.start) || f.near.includes(token);
+// As SQLite's full-text search reads it: the word's start, or a near word whole.
+const asMatch = (f: Found) => `(${[`"${f.start}"*`, ...f.near.map((w) => `"${w}"`)].join(" OR ")})`;
+
+// pg_trgm's similarity, which the search used on Postgres: the share of three-letter pieces two words have in common, each
+// word with two spaces before it and one after.
+function trigrams(word: string): Set<string> {
+  const padded = `  ${word} `, out = new Set<string>();
+  for (let i = 0; i + 3 <= padded.length; i++) out.add(padded.slice(i, i + 3));
+  return out;
+}
+function similarity(a: Set<string>, b: Set<string>): number {
+  let shared = 0;
+  for (const t of a) if (b.has(t)) shared++;
+  return shared / (a.size + b.size - shared);
+}
+
+// Each word of the query, as what finds it: where a word starts; one of 4 letters or more that finds nothing also finds
+// its near words (serch finds search), those of a similarity of 0.3 or more, pg_trgm's default, the closest 3.
 async function wordsOf(query: string): Promise<string[]> {
   const found: string[] = [];
-  for (const word of query.toLowerCase().match(WORD) ?? []) {
-    const { rows } = await sql().query<{ typed: string; simple: string }>(
-      `select (to_tsquery('simple', quote_literal(simple) || ':*') || to_tsquery('simple', quote_literal(coalesce(stem, simple)) || ':*'))::text as typed, simple
-       from (select simple, (ts_lexize('english_stem', simple))[1] as stem
-             from (select (select lexeme from unnest(to_tsvector('desk_words', $1)) limit 1) as simple) w) s
-       where simple is not null`,
-      [word],
-    );
-    if (!rows.length) continue;
-    const { typed, simple } = rows[0];
-    if ([...simple].length < 4 || (await sql().query("select 1 from session_text where words @@ $1::tsquery limit 1", [typed])).rows.length) {
-      found.push(typed);
+  for (const word of fold(query).match(WORD) ?? []) {
+    if ([...word].length < 4 || (await sql().query("select 1 from session_find where session_find match $1 limit 1", [asMatch({ start: word, near: [] })])).rows.length) {
+      found.push(word);
       continue;
     }
-    const near = await sql().query<{ word: string }>(
-      "select word from session_words where word % $1 and length(word) >= 4 order by similarity(word, $1) desc, word limit 3",
-      [simple],
-    );
-    found.push([typed, ...near.rows.map((r) => `'${r.word.replaceAll("'", "''")}'`)].join(" | "));
+    const mine = trigrams(word);
+    const near = (await sql().query<{ word: string }>("select word from session_words where length(word) >= 4")).rows
+      .map((r) => ({ word: r.word, score: similarity(mine, trigrams(r.word)) }))
+      .filter((r) => r.score >= 0.3)
+      .sort((a, b) => b.score - a.score || (a.word < b.word ? -1 : 1))
+      .slice(0, 3);
+    found.push([word, ...near.map((r) => r.word)].join("|"));
   }
   return found;
 }
@@ -146,25 +191,30 @@ export async function find(query: string): Promise<{ sessions: Set<string>; word
   await queue; // the prompts and titles asked for before
   const words = await wordsOf(query);
   if (!words.length) return null;
-  const { rows } = await sql().query<{ session: string }>("select session from session_text where words @@ $1::tsquery", [words.map((w) => `(${w})`).join(" & ")]);
+  const { rows } = await sql().query<{ session: string }>(
+    "select s.session from session_find f join session_text s on s.id = f.rowid where session_find match $1",
+    [words.map((w) => asMatch(parse(w))).join(" AND ")]);
   return { sessions: new Set(rows.map((r) => r.session)), words };
+}
+
+// The words of a text, folded, each with where it stands in the text as it is.
+function tokens(text: string): { word: string; at: number; end: number }[] {
+  return [...text.matchAll(/[\p{L}\p{N}\p{M}]+/gu)].map((m) => ({ word: fold(m[0]), at: m.index, end: m.index + m[0].length }));
 }
 
 // Of the sessions, those whose title as the menu shows it holds every word a search found.
 export async function inTitle(words: string[], sessions: [string, string][]): Promise<Set<string>> {
-  if (!sessions.length) return new Set();
-  const { rows } = await sql().query<{ id: string }>(
-    "select t.id from unnest($1::text[], $2::text[]) as t(id, title) where to_tsvector('desk_words', t.title) @@ $3::tsquery",
-    [sessions.map(([id]) => id), sessions.map(([, title]) => title), words.map((w) => `(${w})`).join(" & ")],
-  );
-  return new Set(rows.map((r) => r.id));
+  const wanted = words.map(parse);
+  return new Set(sessions.filter(([, title]) => {
+    const all = tokens(title);
+    return wanted.every((f) => all.some((t) => matches(t.word, f)));
+  }).map(([id]) => id));
 }
 
 // --- the words marked ------------------------------------------------------------------------------------------------
 
-// What Postgres puts around a word it marks: two characters of Unicode's private use, which no title or prompt holds.
-const OPEN = "", CLOSE = "";
-const MARKS = `StartSel="${OPEN}", StopSel="${CLOSE}"`;
+// What marks a word found, in a line made here: two characters of Unicode's private use, which no title or prompt holds.
+const OPEN = "\ue000", CLOSE = "\ue001";
 
 export interface Marked {
   marks?: [number, number][]; // the title's words the query found, as ranges of it
@@ -172,7 +222,7 @@ export interface Marked {
   subMarks?: [number, number][];
 }
 
-// The text Postgres marked, without the marks, and where they were.
+// The text marked, without the marks, and where they were.
 function unmarked(text: string): { text: string; marks: [number, number][] } {
   let plain = "", start = -1;
   const marks: [number, number][] = [];
@@ -187,31 +237,40 @@ function unmarked(text: string): { text: string; marks: [number, number][] } {
 }
 
 // The words a search found, marked in each session's title as the menu shows it; for a session whose title lacks one of
-// them, a line from its prompts around the words it lacks.
+// them, a line from its prompts around the words it lacks: up to 14 words, from 4 before the first.
 export async function marked(words: string[], sessions: [string, string][]): Promise<Map<string, Marked>> {
   const found = new Map<string, Marked>();
   if (!sessions.length) return found;
-  const all = words.map((w) => `(${w})`).join(" & ");
-  const titles = await sql().query<{ id: string; title: string; has: boolean[] }>(
-    `select t.id, ts_headline('desk_words', t.title, $3::tsquery, 'HighlightAll=true, ${MARKS}') as title,
-       array(select to_tsvector('desk_words', t.title) @@ w.q from unnest($4::tsquery[]) with ordinality as w(q, n) order by w.n) as has
-     from unnest($1::text[], $2::text[]) as t(id, title)`,
-    [sessions.map(([id]) => id), sessions.map(([, title]) => title), all, words],
-  );
-  const lacking: [string, string][] = [];
-  for (const [n, row] of titles.rows.entries()) {
-    const { text, marks } = unmarked(row.title);
-    found.set(row.id, text === sessions[n][1] && marks.length ? { marks } : {});
-    const missing = words.filter((_, i) => !row.has[i]);
-    if (missing.length) lacking.push([row.id, missing.map((w) => `(${w})`).join(" | ")]);
+  const wanted = words.map(parse);
+  const lacking: [string, Found[]][] = [];
+  for (const [id, title] of sessions) {
+    const all = tokens(title);
+    const marks = all.filter((t) => wanted.some((f) => matches(t.word, f))).map((t): [number, number] => [t.at, t.end]);
+    found.set(id, marks.length ? { marks } : {});
+    const missing = wanted.filter((f) => !all.some((t) => matches(t.word, f)));
+    if (missing.length) lacking.push([id, missing]);
   }
   if (!lacking.length) return found;
-  const lines = await sql().query<{ id: string; line: string }>(
-    `select m.id, ts_headline('desk_words', s.prompts, m.q, 'MaxFragments=1, MaxWords=14, MinWords=6, ${MARKS}') as line
-     from unnest($1::text[], $2::tsquery[]) as m(id, q) join session_text s on s.session = m.id`,
-    [lacking.map(([id]) => id), lacking.map(([, q]) => q)],
-  );
-  for (const { id, line } of lines.rows) {
+  const prompts = new Map((await sql().query<{ session: string; prompts: string }>("select session, prompts from session_text where session = any($1)",
+    [lacking.map(([id]) => id)])).rows.map((r) => [r.session, r.prompts]));
+  const lines: { id: string; line: string }[] = [];
+  for (const [id, missing] of lacking) {
+    const pieces = (prompts.get(id) ?? "").split(/\s+/).filter(Boolean);
+    const hit = (piece: string) => tokens(piece).some((t) => missing.some((f) => matches(t.word, f)));
+    const first = pieces.findIndex(hit);
+    if (first < 0) continue;
+    const line = pieces.slice(Math.max(0, first - 4), Math.max(0, first - 4) + 14).map((piece) => {
+      let out = "", at = 0;
+      for (const t of tokens(piece)) {
+        if (!missing.some((f) => matches(t.word, f))) continue;
+        out += `${piece.slice(at, t.at)}${OPEN}${piece.slice(t.at, t.end)}${CLOSE}`;
+        at = t.end;
+      }
+      return out + piece.slice(at);
+    }).join(" ");
+    lines.push({ id, line });
+  }
+  for (const { id, line } of lines) {
     const { text, marks } = unmarked(line.split(/\s+/).filter(Boolean).join(" "));
     if (!marks.length) continue;
     // The menu shows the line's first 40 or so characters: it starts three words before the first word found.
