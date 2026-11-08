@@ -1,8 +1,7 @@
 // The edges you drag to resize (desk issue "Native window: the bars can't be resized"): the sidebar's right edge, and
 // the line between the chat and its right half, as the web's half-grip (Half.tsx). The widths stay between runs in
 // ~/.local/state/desk/native-widths.json, as the web keeps the chat's in localStorage.
-use crate::Desk;
-use gpui_kit::component::ActiveTheme;
+use crate::{Desk, theme};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
@@ -64,7 +63,7 @@ impl Desk {
     // An edge's grip, 8px wide around the line at x, from top down: a 2px line shows while the mouse is on it or drags it.
     pub(crate) fn grip(&self, edge: Edge, x: f32, top: f32, cx: &mut Context<Self>) -> Stateful<Div> {
         let id: &'static str = if edge == Edge::Side { "grip-side" } else { "grip-chat" };
-        let line = cx.theme().border;
+        let line = theme::text(cx).edge; // the web's --border-3, as its half-grip
         let held = self.widths.dragging == Some(edge);
         div()
             .id(id)
