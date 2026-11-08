@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=desk (Electron)
+Comment=desk's web page in an Electron window, beside the native one until it is complete
+Exec=/home/ajuno/.cache/desk/electron/electron /home/ajuno/projects/desk/apps/desktop --ozone-platform=wayland
+Icon=desk
+Terminal=false
+Categories=Office;
+StartupWMClass=desk-electron
