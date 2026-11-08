@@ -58,7 +58,6 @@ pub(crate) enum Page {
     Inbox,
     Settings,
     List, // My issues, or a team's Issues (lists.rs)
-    Soon,
 }
 
 // What the right half shows.
@@ -88,7 +87,6 @@ struct Desk {
     hovered_chat: Option<String>,      // the sidebar's chat under the mouse, which P, R and Delete act on
     renaming: Option<(Entity<picker::Picker>, Point<Pixels>, Subscription)>,
     session_shown: Option<String>,     // the chat shown before its issue
-    soon: String,                      // which page a later step builds
     focus: FocusHandle,                // the window's own, which holds the keys while nothing types
     teams: HashMap<String, String>,    // a team's name by its slug, for the Inbox's filters
     projects: HashMap<String, String>, // a project's name by its slug
@@ -171,7 +169,6 @@ impl Desk {
             hovered_chat: None,
             renaming: None,
             session_shown: None,
-            soon: String::new(),
             focus: cx.focus_handle(),
             teams: HashMap::new(),
             projects: HashMap::new(),
@@ -324,7 +321,7 @@ impl Desk {
             match event {
                 command::CommandEvent::Open(row) => match row.kind {
                     command::Kind::Team => desk.open_list("", Some(row.slug.clone()), window, cx),
-                    command::Kind::Project => desk.show_soon(&format!("project/{}", row.slug), cx),
+                    command::Kind::Project => desk.open_web(&format!("project/{}", row.slug), cx),
                     command::Kind::Issue => {
                         let issue = desk.all.get(&row.slug).cloned().unwrap_or_else(|| Issue { slug: row.slug.clone(), ..Default::default() });
                         desk.open(&issue, window, cx);
@@ -448,9 +445,9 @@ impl Desk {
             "chat" if hit["issue"]["slug"].is_string() => { let i = issue(self, at(&hit["issue"], "slug")); self.open(&i, window, cx) }
             "chat" => self.open_session(&at(hit, "session"), window, cx),
             "issue" => { let i = issue(self, at(&hit["issue"], "slug")); self.open(&i, window, cx) }
-            "project" => self.show_soon(&format!("project/{}", at(&hit["project"], "slug")), cx),
-            "team" => self.show_soon(&format!("team/{}", at(&hit["team"], "slug")), cx),
-            "milestone" => self.show_soon(&format!("project/{}/issues", at(&hit["project"], "slug")), cx),
+            "project" => self.open_web(&format!("project/{}", at(&hit["project"], "slug")), cx),
+            "team" => self.open_web(&format!("team/{}", at(&hit["team"], "slug")), cx),
+            "milestone" => self.open_web(&format!("project/{}/issues", at(&hit["project"], "slug")), cx),
             _ => self.open_settings(if at(hit, "page") == "workflow" { settings::Section::Workflow } else { settings::Section::Preferences }, cx),
         }
     }
@@ -620,7 +617,6 @@ impl Desk {
             Page::Inbox => Some("Inbox".into()),
             Page::Settings => self.settings.as_ref().map(|s| s.read(cx).section.title().into()),
             Page::List => self.list.as_ref().map(|(l, _)| l.read(cx).title()),
-            Page::Soon => None,
         };
         name.filter(|n| !n.is_empty()).map_or_else(|| "desk".into(), |n| format!("{n} · desk"))
     }
@@ -653,7 +649,6 @@ impl Render for Desk {
             _ if self.page == Page::Inbox => self.inbox_page(page_width, cx),
             _ if self.page == Page::Settings => div().size_full().children(self.settings.clone()),
             _ if self.page == Page::List => div().size_full().children(self.list.as_ref().map(|(l, _)| l.clone())),
-            _ if self.page == Page::Soon => div().size_full().flex().items_center().justify_center().text_color(muted).child(format!("{}: a later step of this issue builds it", self.soon)),
             Some(chat) => div()
                 .v_flex()
                 .size_full()

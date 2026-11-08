@@ -253,20 +253,19 @@ impl Desk {
         let row = row.context_menu(move |menu, _, _| {
             let (settings, all, slug) = (settings.clone(), all.clone(), team_slug.clone());
             menu.item(menu_row("sliders", "Team settings", None).on_click(move |_, _, cx| {
-                let _ = settings.update(cx, |desk, cx| desk.show_soon(&format!("team/{slug}"), cx));
+                let _ = settings.update(cx, |desk, cx| desk.open_web(&format!("team/{slug}"), cx));
             }))
             .item(menu_row("team", "All teams", None).on_click(move |_, _, cx| {
-                let _ = all.update(cx, |desk, cx| desk.show_soon("teams", cx));
+                let _ = all.update(cx, |desk, cx| desk.open_web("teams", cx));
             }))
         });
-        let here = |page: &str| self.page == Page::Soon && self.soon == format!("team/{slug}/{page}");
         div().v_flex().flex_none().child(row).when(open, |group| {
             let (issues, projects) = (slug.clone(), slug.clone());
             group
                 .child(div().ml(px(19.)).child(self.nav_item(SharedString::from(format!("team-issues-{slug}")), "issues", "Issues".into(), self.list_here(Some(&slug), cx), cx)
                     .on_click(cx.listener(move |desk, _, window, cx| desk.open_list("", Some(issues.clone()), window, cx)))))
-                .child(div().ml(px(19.)).child(self.nav_item(SharedString::from(format!("team-projects-{slug}")), "project", "Projects".into(), here("projects"), cx)
-                    .on_click(cx.listener(move |desk, _, _, cx| desk.show_soon(&format!("team/{projects}/projects"), cx)))))
+                .child(div().ml(px(19.)).child(self.nav_item(SharedString::from(format!("team-projects-{slug}")), "project", "Projects".into(), false, cx)
+                    .on_click(cx.listener(move |desk, _, _, cx| desk.open_web(&format!("team/{projects}/projects"), cx)))))
         })
     }
 
@@ -519,11 +518,16 @@ impl Desk {
         cx.notify();
     }
 
-    // A page this issue builds in a later step.
-    pub(crate) fn show_soon(&mut self, what: &str, cx: &mut Context<Self>) {
-        self.page = Page::Soon;
-        self.soon = what.to_string();
-        cx.notify();
+    // A page the native window does not have yet (Teams, a team's settings and Projects, a project, Automations) opens
+    // in your browser at desk's address, as the web app's, until its own issue builds it ("build the final pieces and
+    // create issues to be done later", the user, 8 Nov). DESK_OPEN names another command to open it with.
+    pub(crate) fn open_web(&mut self, path: &str, cx: &mut Context<Self>) {
+        let url = format!("http://{}/{path}", net::host());
+        match std::env::var("DESK_OPEN") {
+            Ok(command) => { let _ = std::process::Command::new(command).arg(&url).spawn(); }
+            Err(_) => cx.open_url(&url),
+        }
+        toast::say("Opened in your browser: the native window has no such page yet", cx);
     }
 }
 

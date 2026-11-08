@@ -123,8 +123,8 @@ pub(crate) struct Colours {
     // the command menu's (.menu.command): its row in focus and its text, the hint and the keys' edge
     pub cmd_on: Hsla, pub cmd_on_text: Hsla, pub cmd_hint: Hsla, pub key_edge: Hsla,
     // the issue lists' (lists.rs): the open view tab, a ring under the mouse, the group's triangle, a date passed, a
-    // selected row and under the mouse, a round button under the mouse
-    pub tab_on: Hsla, pub ring_hover: Hsla, pub group_toggle: Hsla, pub late: Hsla, pub selected: Hsla, pub selected_hover: Hsla, pub btn_hover: Hsla,
+    // round button under the mouse
+    pub tab_on: Hsla, pub ring_hover: Hsla, pub group_toggle: Hsla, pub late: Hsla, pub btn_hover: Hsla,
     // a list's filter chip (bg-panel), and Display's Layout button under the mouse and picked (bg-dp-layout-hover, bg-dp-on)
     pub panel: Hsla, pub layout_hover: Hsla, pub layout_on: Hsla,
     // a board's card (bg-card) and its ring (--shadow-card's)
@@ -146,7 +146,7 @@ pub(crate) fn colours(cx: &App) -> Colours {
             select_ring: alpha(0xffffff, 0.148), select_ring_strong: alpha(0xffffff, 0.247), select_on: c(0xffffff),
             edge_3: c(0x28282b), accent: t.accent,
             cmd_on: c(0x313234), cmd_on_text: c(0xffffff), cmd_hint: c(0x626365), key_edge: c(0x303134),
-            tab_on: c(0x29292b), ring_hover: alpha(0xffffff, 0.229), group_toggle: c(0x2c313b), late: c(0xff6364), selected: c(0x1f2029), selected_hover: c(0x242531),
+            tab_on: c(0x29292b), ring_hover: alpha(0xffffff, 0.229), group_toggle: c(0x2c313b), late: c(0xff6364),
             btn_hover: c(0x252527), panel: c(0x121213), layout_hover: c(0x323334), layout_on: c(0x38393b), card: c(0x1a1a1b), card_ring: alpha(0xffffff, 0.083), dark: true,
         }
     } else {
@@ -159,7 +159,7 @@ pub(crate) fn colours(cx: &App) -> Colours {
             select_ring: alpha(0x000000, 0.088), select_ring_strong: alpha(0x000000, 0.147), select_on: c(0x1b1b1b),
             edge_3: c(0xd3d3d3), accent: t.accent,
             cmd_on: c(0xf1f1f1), cmd_on_text: c(0x1b1b1b), cmd_hint: c(0xa0a0a2), key_edge: c(0xe8e8e8),
-            tab_on: c(0xececed), ring_hover: alpha(0x000000, 0.15), group_toggle: c(0xc4c8df), late: c(0xe2253b), selected: c(0xeaeaf4), selected_hover: c(0xe2e3f1),
+            tab_on: c(0xececed), ring_hover: alpha(0x000000, 0.15), group_toggle: c(0xc4c8df), late: c(0xe2253b),
             btn_hover: c(0xf3f3f3), panel: c(0xf9f9fa), layout_hover: c(0xf6f6f6), layout_on: c(0xf2f2f2), card: c(0xffffff), card_ring: alpha(0x000000, 0.088), dark: false,
         }
     }

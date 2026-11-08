@@ -116,7 +116,8 @@ impl Desk {
         let text = theme::text(cx);
         let strong = text.strong;
         let icon_hover = if theme.mode.is_dark() { rgb(0x1b1c1d).into() } else { hsla(0., 0., 0., 0.06) };
-        // Linear's Help menu, cut to the keyboard shortcuts, and Settings, which Linear opens from its workspace menu
+        // Linear's Help menu, cut to Settings, which Linear opens from its workspace menu; its Keyboard shortcuts waits for
+        // the native window's keys panel (desk issue "Native window: the keyboard shortcuts panel (Ctrl /)")
         let this = cx.entity().downgrade();
         let help = Button::new("help-open")
             .ghost()
@@ -124,11 +125,9 @@ impl Desk {
             .rounded_full()
             .child(theme::glyph("help", muted))
             .dropdown_menu_with_anchor(Anchor::BottomLeft, move |menu, _, _| {
-                let (keys, settings) = (this.clone(), this.clone());
-                menu.item(menu_row("keys", "Keyboard shortcuts", Some("Ctrl /")).on_click(move |_, _, cx| {
-                    let _ = keys.update(cx, |desk, cx| desk.show_soon("keyboard shortcuts", cx));
-                }))
-                .item(menu_row("sliders", "Settings", Some("Ctrl ,")).on_click(move |_, _, cx| {
+                // the keyboard shortcuts' panel, which has no address to open in the browser, waits for its own issue
+                let settings = this.clone();
+                menu.item(menu_row("sliders", "Settings", Some("Ctrl ,")).on_click(move |_, _, cx| {
                     let _ = settings.update(cx, |desk, cx| desk.open_settings(crate::settings::Section::Preferences, cx));
                 }))
             });
