@@ -889,7 +889,7 @@ impl Render for Search {
             over.push(
                 anchored().position(point(x, input.bottom() + px(8.))).snap_to_window_with_margin(px(8.)).child(
                     div().id("search-menu").occlude().relative().w(px(350.)).py(px(4.)).rounded(px(10.)).border(px(0.5)).border_color(c.tip_edge).bg(c.tip)
-                        .shadow(crate::filters::panel_shadow(c.dark)).text_size(px(13.)).font_weight(FontWeight(450.)).text_color(c.cmd_on_text)
+                        .shadow(crate::filters::keys_shadow(c.dark)).text_size(px(13.)).font_weight(FontWeight(450.)).text_color(c.cmd_on_text)
                         .child(div().h_flex().h(px(28.)).px(px(14.)).pb(px(2.)).text_size(px(12.)).font_medium().text_color(c.tip_key).child(menu.heading.clone()))
                         .child(rows)
                         .child(canvas(move |bounds, _, _| at.set(Some(bounds)), |_, _, _, _| {}).absolute().top_0().left_0().size_full()),

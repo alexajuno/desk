@@ -4,7 +4,9 @@
 // parent on a thin line. My issues lists every issue, and a team's Issues its own. desk's server draws each list from
 // the view in its words (views.ts): what is filtered, how it is grouped and ordered. The window keeps each page's last
 // view, and which groups are folded, between runs, as the web keeps them in the browser. J and K, or ↓ and ↑, move the
-// focus, as the mouse does; Enter or O opens the issue in focus, and T folds its group.
+// focus, as the mouse does; Enter or O opens the issue in focus, and T folds its group. Filter (F) and Display options
+// (Shift V) are at the tabs' right end, as filters.rs draws them; a change to the view is a change to its words, which
+// desk reads again (views.ts), as the web's setView.
 use std::time::Duration;
 
 use chrono::{Datelike, Local, NaiveDate};
@@ -13,7 +15,8 @@ use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use serde_json::Value;
 
-use crate::filters::{colours, ring, Colours};
+use crate::filters::{colours, ring, ringed, Anchors, ChipsLook, Colours, Filtering, Panel, Popups, Select};
+use crate::listing::{quote, Chip, Choice, Field, Icon};
 use crate::tip::Tipped;
 use crate::{net, theme};
 
@@ -74,6 +77,8 @@ pub(crate) struct IssueList {
     pub focus: FocusHandle,
     focused: Option<String>, // the row in focus, by its slug
     scroll: ScrollHandle,
+    popups: Popups,
+    anchors: Anchors,
     _again: Option<Task<()>>,
 }
 
@@ -89,6 +94,8 @@ impl IssueList {
             focus: cx.focus_handle(),
             focused: None,
             scroll: ScrollHandle::new(),
+            popups: Popups::default(),
+            anchors: Anchors::default(),
             _again: None,
         };
         list.query = list.last_view();
@@ -119,6 +126,7 @@ impl IssueList {
         self.tab = tab.into();
         self.query = self.last_view();
         self.focused = None;
+        self.popups = Popups::default();
         self.ask(cx);
     }
 
@@ -148,6 +156,29 @@ impl IssueList {
             });
         })
         .detach();
+    }
+
+    fn view(&self) -> &Value {
+        self.data.as_ref().map_or(&Value::Null, |d| &d["view"])
+    }
+
+    // Words of the view changed, as the web's setView: None, or the page's default, drops a word; then desk draws the
+    // list for the new view.
+    fn set_view(&mut self, changes: Vec<(String, Option<String>)>, cx: &mut Context<Self>) {
+        let defaults = self.view()["defaults"].clone();
+        let mut words: Vec<(String, String)> =
+            self.query.split('&').filter_map(|w| w.split_once('=')).map(|(k, v)| (k.to_string(), v.to_string())).collect();
+        for (name, value) in changes {
+            match value.filter(|v| defaults[name.as_str()].as_str() != Some(v.as_str())) {
+                None => words.retain(|(k, _)| *k != name),
+                Some(v) => match words.iter_mut().find(|(k, _)| *k == name) {
+                    Some(word) => word.1 = quote(&v),
+                    None => words.push((name, quote(&v))),
+                },
+            }
+        }
+        self.query = words.into_iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("&");
+        self.ask(cx);
     }
 
     // An issue changed: the list is drawn again once the changes stop for a moment.
@@ -227,10 +258,18 @@ impl IssueList {
         cx.notify();
     }
 
-    fn key(&mut self, e: &KeyDownEvent, cx: &mut Context<Self>) {
+    fn key(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let k = &e.keystroke;
         if k.modifiers.control || k.modifiers.alt || k.modifiers.platform { return }
+        if k.modifiers.shift {
+            if k.key != "v" || self.data.is_none() { return }
+            self.toggle_display(cx);
+            cx.stop_propagation();
+            return;
+        }
         match k.key.as_str() {
+            "f" if self.data.is_some() => self.open_filter(None, "filter", window, cx),
+            "escape" if self.popups.display => self.close_popups(window, cx),
             "j" | "down" => self.walk(1, cx),
             "k" | "up" => self.walk(-1, cx),
             "enter" | "o" => match self.focused.clone() {
@@ -249,8 +288,8 @@ impl IssueList {
     // A tab, as Linear's view tabs: a 28px pill, ringed, the open one filled brighter.
     fn tab_pill(&self, n: usize, tab: &'static str, name: &'static str, c: &Colours, cx: &mut Context<Self>) -> Stateful<Div> {
         let here = self.tab == tab;
-        let (ring_hover, hover) = (c.ring_hover, c.ghost_hover);
-        let shadow = |edge: Hsla| vec![ring(edge, 0.5), panel_shadow(c.dark)];
+        let (ring_hover, hover, dark) = (c.ring_hover, c.ghost_hover, c.dark);
+        let shadow = move |edge: Hsla| ringed(edge, dark);
         div()
             .id(("tab", n))
             .h_flex()
@@ -268,6 +307,30 @@ impl IssueList {
             })
             .child(name)
             .on_click(cx.listener(move |list, _, _, cx| list.set_tab(tab, cx)))
+    }
+
+    // Filter and Display options at the tabs' right end, as Linear's: 28px round buttons, filled and ringed as the tabs,
+    // Display with a dot while the list's display is not its default.
+    fn tools(&self, c: &Colours, cx: &mut Context<Self>) -> Option<Div> {
+        let view = self.data.as_ref().map(|d| &d["view"])?;
+        let (hover, ring_hover, text_2, dark) = (c.btn_hover, c.ring_hover, c.text_2, c.dark);
+        let tool = |id: &'static str| {
+            div().id(id).group(id).relative().flex().flex_none().items_center().justify_center().size(px(28.)).rounded_full().cursor_pointer()
+                .bg(c.chip).shadow(ringed(c.ring, dark))
+                .hover(move |s| s.bg(hover).shadow(ringed(ring_hover, dark)))
+                .child(theme::glyph(id, c.text_3).group_hover(id, move |s| s.text_color(text_2)))
+                .child(self.anchors.probe(id))
+        };
+        let filter = tool("filter")
+            .on_click(cx.listener(|list, _, window, cx| {
+                if list.popups.menu_at() == Some("filter") { list.close_popups(window, cx) } else { list.open_filter(None, "filter", window, cx) }
+            }))
+            .tip("Filter  F");
+        let display = tool("display")
+            .when(view["default"] == false, |b| b.child(div().absolute().top_0().right_0().size(px(7.)).rounded_full().bg(c.accent)))
+            .on_click(cx.listener(|list, _, _, cx| list.toggle_display(cx)))
+            .tip("Display options  Shift V");
+        Some(div().h_flex().ml_auto().gap(px(6.)).child(filter).child(display))
     }
 
     // A group's header: its triangle, its icon, its name and count, and the + of a new issue that starts in it.
@@ -410,12 +473,6 @@ pub(crate) fn icon_of(key: Option<&str>, c: &Colours, cx: &App) -> Option<AnyEle
     })
 }
 
-fn panel_shadow(dark: bool) -> BoxShadow {
-    let mut black: Hsla = rgb(0x000000).into();
-    black.a = if dark { 0.3 } else { 0.04 };
-    BoxShadow { color: black, offset: point(px(0.), px(if dark { 0.5 } else { 1. })), blur_radius: px(1.), spread_radius: px(if dark { 1. } else { 0. }), inset: false }
-}
-
 impl Focusable for IssueList {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus.clone()
@@ -434,13 +491,14 @@ impl Render for IssueList {
         };
         let bar = div().h_flex().flex_none().h(px(44.)).px(px(16.)).gap(px(8.)).border_b_1().border_color(divider).text_color(c.text_1).child(crumb);
         let tabs: Vec<_> = TABS.iter().enumerate().map(|(n, (tab, name, _))| self.tab_pill(n, tab, name, &c, cx)).collect();
-        let view_bar = div().h_flex().flex_none().h(px(43.)).pl(px(8.)).pr(px(10.)).gap(px(4.)).children(tabs);
+        let view_bar = div().h_flex().flex_none().h(px(43.)).pl(px(8.)).pr(px(10.)).gap(px(4.)).children(tabs).children(self.tools(&c, cx));
         let mut page = div().v_flex().pt(px(12.)).px(px(8.)).pb(px(120.));
         match &self.data {
             None => {
                 if let Some(e) = &self.failed { page = page.child(div().p(px(16.)).text_color(c.text_3).child(e.clone())) }
             }
             Some(data) => {
+                page = page.children(self.filter_chips(ChipsLook::List, cx));
                 let grouped = data["grouped"] == true;
                 let shut = self.folded();
                 let groups = self.groups();
@@ -458,7 +516,14 @@ impl Render for IssueList {
                     page = page.child(
                         div().h_flex().justify_center().gap(px(8.)).my(px(24.)).text_color(c.text_3)
                             .child(div().text_color(c.text_1).font_medium().child(format!("{hidden} issue{}", if hidden == 1 { "" } else { "s" })))
-                            .child("hidden by filters"),
+                            .child("hidden by filters")
+                            .child(
+                                div().id("clear-filters").h_flex().h(px(24.)).px(px(8.)).gap(px(6.)).rounded_full().text_color(c.text_1).font_medium()
+                                    .cursor_pointer().hover(|s| s.bg(c.active))
+                                    .child("Clear filters")
+                                    .child(theme::glyph("close", c.text_1).size(px(12.)))
+                                    .on_click(cx.listener(|list, _, _, cx| list.clear_filters(cx))),
+                            ),
                     );
                 }
             }
@@ -467,9 +532,114 @@ impl Render for IssueList {
             .v_flex()
             .size_full()
             .track_focus(&self.focus)
-            .on_key_down(cx.listener(|list, e: &KeyDownEvent, _, cx| list.key(e, cx)))
+            .on_key_down(cx.listener(|list, e: &KeyDownEvent, window, cx| list.key(e, window, cx)))
             .child(bar)
             .child(view_bar)
             .child(div().id("list-scroll").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).child(page))
+            .children(self.filter_layers(cx))
+    }
+}
+
+// The list's view is desk's server's: it says what Filter and Display offer, with the list it draws (views.ts).
+impl Filtering for IssueList {
+    fn popups(&mut self) -> &mut Popups {
+        &mut self.popups
+    }
+
+    fn popped(&self) -> &Popups {
+        &self.popups
+    }
+
+    fn anchors(&self) -> &Anchors {
+        &self.anchors
+    }
+
+    fn home(&self) -> FocusHandle {
+        self.focus.clone()
+    }
+
+    fn fields(&self, _: &App) -> Vec<Field> {
+        let text = |v: &Value| v.as_str().unwrap_or("").to_string();
+        let icon = |v: &Value| v.as_str().and_then(Icon::from_key);
+        self.view()["fields"].as_array().into_iter().flatten().map(|f| Field {
+            name: text(&f["name"]),
+            label: text(&f["label"]),
+            icon: icon(&f["icon"]),
+            values: f["values"].as_array().into_iter().flatten().map(|v| Choice {
+                value: text(&v["value"]),
+                label: text(&v["label"]),
+                icon: icon(&v["icon"]),
+                count: v["count"].as_u64().unwrap_or(0) as usize,
+            }).collect(),
+        }).collect()
+    }
+
+    fn noun(&self) -> String {
+        self.view()["noun"].as_str().unwrap_or("issue").into()
+    }
+
+    fn chips(&self, _: &App) -> Vec<Chip> {
+        let text = |v: &Value| v.as_str().unwrap_or("").to_string();
+        let chips = self.data.as_ref().and_then(|d| d["chips"].as_array().cloned()).unwrap_or_default();
+        chips.iter().map(|c| Chip {
+            name: text(&c["name"]),
+            label: text(&c["label"]),
+            not: c["not"] == true,
+            values: c["values"].as_array().into_iter().flatten().map(|v| (text(&v[0]), text(&v[1]), v[2].as_str().and_then(Icon::from_key))).collect(),
+        }).collect()
+    }
+
+    // From the view's words, which a change sets at once, before desk answers.
+    fn filter(&self, name: &str) -> (bool, Vec<String>) {
+        let Some(word) = self.query.split('&').filter_map(|w| w.split_once('=')).find(|(k, _)| *k == name).map(|(_, v)| net::decode(v)) else {
+            return Default::default();
+        };
+        let not = word.starts_with("not:");
+        (not, word.trim_start_matches("not:").split(',').filter(|v| !v.is_empty()).map(str::to_string).collect())
+    }
+
+    fn set_filters(&mut self, changes: Vec<(String, Option<(bool, Vec<String>)>)>, cx: &mut Context<Self>) {
+        let words = changes.into_iter().map(|(name, f)| (name, f.map(|(not, values)| format!("{}{}", if not { "not:" } else { "" }, values.join(","))))).collect();
+        self.set_view(words, cx);
+    }
+
+    fn panel(&self) -> Panel {
+        let view = self.view();
+        let select = |d: &Value| {
+            let key = d["key"].as_str().unwrap_or("").to_string();
+            Select {
+                label: d["label"].as_str().unwrap_or("").into(),
+                options: d["options"].as_object().into_iter().flatten().map(|(v, l)| (v.clone(), l.as_str().unwrap_or("").to_string())).collect(),
+                current: view[key.as_str()].as_str().unwrap_or("").into(),
+                key,
+            }
+        };
+        let display = view["display"].as_array().cloned().unwrap_or_default();
+        let is = |d: &Value, keys: &[&str]| keys.iter().any(|k| d["key"] == *k);
+        Panel {
+            layout: display.iter().find(|d| is(d, &["layout"])).map(select),
+            first: display.iter().filter(|d| is(d, &["group", "order"])).map(select).collect(),
+            rest: display.iter().filter(|d| !is(d, &["layout", "group", "order"])).map(select).collect(),
+            switches: view["switches"].as_array().into_iter().flatten().map(|s| {
+                let key = s["key"].as_str().unwrap_or("").to_string();
+                let on = view[key.as_str()] == true;
+                (key, s["label"].as_str().unwrap_or("").to_string(), on)
+            }).collect(),
+            reverse: (view["reversible"] == true).then(|| view["reverse"] == true),
+        }
+    }
+
+    fn set_display(&mut self, changes: Vec<(String, Option<String>)>, cx: &mut Context<Self>) {
+        self.set_view(changes, cx);
+    }
+
+    // The page's defaults again, the order not reversed and every switch off.
+    fn reset_display(&mut self, cx: &mut Context<Self>) {
+        let view = self.view();
+        let mut changes: Vec<(String, Option<String>)> =
+            view["defaults"].as_object().into_iter().flatten().map(|(k, v)| (k.clone(), v.as_str().map(str::to_string))).collect();
+        changes.push(("reverse".into(), None));
+        changes.extend(view["switches"].as_array().into_iter().flatten().filter_map(|s| s["key"].as_str()).map(|k| (k.to_string(), None)));
+        self.set_view(changes, cx);
     }
 }

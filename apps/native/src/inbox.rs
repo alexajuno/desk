@@ -20,6 +20,7 @@ use gpui_kit::*;
 use serde_json::json;
 
 use crate::chat::Chat;
+use crate::filters::{ChipsLook, Filtering};
 use crate::issue::{IssueEvent, IssuePage};
 use crate::thread::{ThreadEvent, ThreadPage};
 use crate::sync::InboxRow;
@@ -251,7 +252,7 @@ impl Desk {
             ("u", true, false) => self.inbox_call("/api/inbox/read", json!({}), cx),
             ("f", false, false) => self.open_filter(None, "filter", window, cx),
             ("v", false, true) => self.toggle_display(cx),
-            ("escape", false, false) if self.display_open => self.close_popups(window, cx),
+            ("escape", false, false) if self.inbox_popups.display => self.close_popups(window, cx),
             ("backspace", false, true) => self.delete_all(true, window, cx),
             ("u", false, false) => self.toggle_read(window, cx),
             ("backspace" | "delete", false, false) => self.delete_row(window, cx),
@@ -474,14 +475,12 @@ impl Desk {
                             .border_color(divider)
                             .on_mouse_down(MouseButton::Left, cx.listener(|desk, _, window, cx| window.focus(&desk.inbox_focus, cx)))
                             .when_some(self.notice.clone(), |l, (notice, wrong)| l.child(div().px(px(18.)).pb(px(8.)).text_xs().text_color(if wrong { waiting } else { muted }).child(notice)))
-                            .children(self.filter_box(cx))
+                            .children(self.filter_chips(ChipsLook::Inbox, cx))
                             .child(list_rows),
                     )
                     .child(div().flex_1().min_w_0().h_full().child(pane)),
             ))
-            .children(self.filter_popup(cx))
-            .children(self.display_popup(cx))
-            .children(self.order_popup(cx))
+            .children(self.filter_layers(cx))
     }
 
     // The sidebar's Inbox, over the issues, with how many rows are unread.

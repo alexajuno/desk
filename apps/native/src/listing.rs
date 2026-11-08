@@ -41,7 +41,7 @@ impl Default for View {
 }
 
 // What stays as is in a view's words, as the server's views.ts writes them (Python's quote, safe "/~,:").
-fn quote(value: &str) -> String {
+pub(crate) fn quote(value: &str) -> String {
     value.bytes().map(|b| if b.is_ascii_alphanumeric() || b"_.-~/,:".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
 }
 
@@ -92,24 +92,11 @@ impl View {
         self.filters.sort_by_key(|f| rank(&f.name));
     }
 
-    // A value picked or taken back; a property with none left has no filter.
-    pub fn toggle(&mut self, name: &str, value: &str) {
-        match self.filters.iter_mut().find(|f| f.name == name) {
-            Some(f) => {
-                if let Some(at) = f.values.iter().position(|v| v == value) { f.values.remove(at); } else { f.values.push(value.into()) }
-            }
-            None => self.filters.push(Filter { name: name.into(), not: false, values: vec![value.into()] }),
-        }
-        self.filters.retain(|f| !f.values.is_empty());
-        self.sort();
-    }
-
-    pub fn flip(&mut self, name: &str) {
-        if let Some(f) = self.filters.iter_mut().find(|f| f.name == name) { f.not = !f.not }
-    }
-
-    pub fn remove(&mut self, name: &str) {
+    // A filter set, or taken out with None.
+    pub fn set(&mut self, name: String, filter: Option<(bool, Vec<String>)>) {
         self.filters.retain(|f| f.name != name);
+        if let Some((not, values)) = filter.filter(|(_, values)| !values.is_empty()) { self.filters.push(Filter { name, not, values }) }
+        self.sort();
     }
 
     fn file() -> Option<std::path::PathBuf> {
@@ -164,25 +151,40 @@ fn folder_name(path: Option<&str>) -> String {
 pub enum Icon {
     State(String),
     Priority(String),
-    Glyph(&'static str),
+    Project(String), // a project's status
+    Glyph(String),
+}
+
+impl Icon {
+    // An icon by the key desk's server gives it (views.ts): state-running, priority-high, project-started, glyph-folder.
+    pub fn from_key(key: &str) -> Option<Icon> {
+        let (kind, value) = key.split_once('-')?;
+        Some(match kind {
+            "state" => Icon::State(value.into()),
+            "priority" => Icon::Priority(value.into()),
+            "project" => Icon::Project(value.into()),
+            "glyph" => Icon::Glyph(value.into()),
+            _ => return None,
+        })
+    }
 }
 
 // A value's icon, or the property's own when v is None. Notification type and From have none.
 pub fn icon_of(name: &str, v: Option<&str>) -> Option<Icon> {
     match (name, v) {
         ("type" | "from", _) => None,
-        ("status", Some("none")) => Some(Icon::Glyph("none")),
+        ("status", Some("none")) => Some(Icon::Glyph("none".into())),
         ("status", v) => Some(Icon::State(v.unwrap_or("backlog").into())),
         ("priority", v) => Some(Icon::Priority(v.unwrap_or("high").into())),
-        ("team", _) => Some(Icon::Glyph("team")),
-        ("project", _) => Some(Icon::Glyph("project")),
-        _ => Some(Icon::Glyph("folder")),
+        ("team", _) => Some(Icon::Glyph("team".into())),
+        ("project", _) => Some(Icon::Glyph("project".into())),
+        _ => Some(Icon::Glyph("folder".into())),
     }
 }
 
 pub struct Chip {
     pub name: String,
-    pub label: &'static str,
+    pub label: String,
     pub not: bool,
     pub values: Vec<(String, String, Option<Icon>)>, // value, label, icon
 }
@@ -195,8 +197,8 @@ pub struct Choice {
 }
 
 pub struct Field {
-    pub name: &'static str,
-    pub label: &'static str,
+    pub name: String,
+    pub label: String,
     pub icon: Option<Icon>,
     pub values: Vec<Choice>,
 }
@@ -268,7 +270,7 @@ impl Store<'_> {
     pub fn chips(&self, view: &View) -> Vec<Chip> {
         view.filters.iter().map(|f| Chip {
             name: f.name.clone(),
-            label: FILTERS.iter().find(|(n, _)| *n == f.name).map(|(_, l)| *l).unwrap_or(""),
+            label: FILTERS.iter().find(|(n, _)| *n == f.name).map(|(_, l)| l.to_string()).unwrap_or_default(),
             not: f.not,
             values: f.values.iter().map(|v| (v.clone(), self.label(&f.name, v), icon_of(&f.name, Some(v)))).collect(),
         }).collect()
@@ -299,8 +301,8 @@ impl Store<'_> {
             };
             for v in view.filter(name).map(|f| f.values.clone()).unwrap_or_default() { if !values.contains(&v) { values.push(v) } }
             Field {
-                name,
-                label,
+                name: name.to_string(),
+                label: label.to_string(),
                 icon: icon_of(name, None),
                 values: values.into_iter().map(|v| Choice {
                     label: self.label(name, &v),

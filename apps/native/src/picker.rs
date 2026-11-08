@@ -10,7 +10,7 @@ use gpui_kit::component::input::{Enter, Escape, IndentInline, Input, InputEvent,
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
-use crate::filters::{colours, panel_shadow, pop_shadow};
+use crate::filters::{colours, keys_shadow, pop_shadow};
 use crate::{net, theme};
 
 #[derive(Clone)]
@@ -318,7 +318,7 @@ impl Render for DatePick {
             .border(px(0.5))
             .border_color(c.tip_edge)
             .bg(c.tip)
-            .shadow(panel_shadow(dark))
+            .shadow(keys_shadow(dark))
             .capture_action(cx.listener(|pick, _: &Enter, _, cx| {
                 let typed = pick.typed.read(cx).value().trim().to_string();
                 if !typed.is_empty() { cx.emit(PickerEvent::Typed(typed)) }

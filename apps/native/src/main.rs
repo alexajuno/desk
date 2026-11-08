@@ -91,10 +91,7 @@ struct Desk {
     teams: HashMap<String, String>,    // a team's name by its slug, for the Inbox's filters
     projects: HashMap<String, String>, // a project's name by its slug
     inbox_view: listing::View,         // Filter, Display options and Show unreads only
-    filter_menu: Option<filters::FilterMenu>,
-    _filter_typed: Option<Subscription>,
-    display_open: bool,
-    order_open: bool,
+    inbox_popups: filters::Popups,
     anchors: filters::Anchors,
     stay: inbox::Stay,
     hovered_row: Option<String>,
@@ -174,10 +171,7 @@ impl Desk {
             teams: HashMap::new(),
             projects: HashMap::new(),
             inbox_view: listing::View::load(),
-            filter_menu: None,
-            _filter_typed: None,
-            display_open: false,
-            order_open: false,
+            inbox_popups: Default::default(),
             anchors: Default::default(),
             stay: inbox::Stay::new(),
             hovered_row: None,
