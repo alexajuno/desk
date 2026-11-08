@@ -6,7 +6,10 @@
 // view, and which groups are folded, between runs, as the web keeps them in the browser. J and K, or ↓ and ↑, move the
 // focus, as the mouse does; Enter or O opens the issue in focus, and T folds its group. Filter (F) and Display options
 // (Shift V) are at the tabs' right end, as filters.rs draws them; a change to the view is a change to its words, which
-// desk reads again (views.ts), as the web's setView.
+// desk reads again (views.ts), as the web's setView. Its Layout may be Board instead (board.rs, Ctrl B switches).
+mod board;
+
+use std::collections::HashMap;
 use std::time::Duration;
 
 use chrono::{Datelike, Local, NaiveDate};
@@ -17,6 +20,7 @@ use serde_json::Value;
 
 use crate::filters::{colours, ring, ringed, Anchors, ChipsLook, Colours, Filtering, Panel, Popups, Select};
 use crate::listing::{quote, Chip, Choice, Field, Icon};
+use crate::picker::Picker;
 use crate::tip::Tipped;
 use crate::{net, theme};
 
@@ -79,6 +83,9 @@ pub(crate) struct IssueList {
     scroll: ScrollHandle,
     popups: Popups,
     anchors: Anchors,
+    dragging: Option<board::DraggedCard>,
+    painted: HashMap<String, (String, String)>, // a status or priority just set, by the issue's slug, until desk draws it
+    asking: Option<(Entity<Picker>, Point<Pixels>, Subscription)>, // a card dropped on Waiting: on whom
     _again: Option<Task<()>>,
 }
 
@@ -96,6 +103,9 @@ impl IssueList {
             scroll: ScrollHandle::new(),
             popups: Popups::default(),
             anchors: Anchors::default(),
+            dragging: None,
+            painted: HashMap::new(),
+            asking: None,
             _again: None,
         };
         list.query = list.last_view();
@@ -149,6 +159,7 @@ impl IssueList {
                         keep(VIEWS, &views);
                         list.data = Some(data);
                         list.failed = None;
+                        list.painted.clear();
                     }
                     Err(e) => list.failed = Some(e),
                 }
@@ -219,8 +230,16 @@ impl IssueList {
         self.data.as_ref().and_then(|d| d["groups"].as_array().cloned()).unwrap_or_default()
     }
 
-    // The rows on screen, in order, by slug: the open groups' rows and their sub-issues.
+    fn empty_text(&self) -> &'static str {
+        TABS.iter().find(|(t, _, _)| *t == self.tab).map(|(_, _, e)| *e).unwrap_or("")
+    }
+
+    // The rows on screen, in order, by slug: the open groups' rows and their sub-issues, or the board's cards, column
+    // by column.
     fn shown(&self) -> Vec<String> {
+        if self.is_board() {
+            return self.columns().into_iter().flat_map(|(_, cards)| cards).filter_map(|p| p["slug"].as_str().map(str::to_string)).collect();
+        }
         fn walk(items: &[Value], out: &mut Vec<String>) {
             for p in items {
                 if let Some(slug) = p["slug"].as_str() { out.push(slug.into()) }
@@ -259,7 +278,17 @@ impl IssueList {
     }
 
     fn key(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        // a box drawn inside the list, such as Filter's or the question on whom, keeps its own keys
+        if !self.focus.is_focused(window) { return }
         let k = &e.keystroke;
+        if k.modifiers.control && k.key == "b" && !(k.modifiers.alt || k.modifiers.shift || k.modifiers.platform) {
+            if let Some(layout) = self.view()["layout"].as_str() {
+                let other = if layout == "board" { "list" } else { "board" };
+                self.set_view(vec![("layout".into(), Some(other.into()))], cx);
+                cx.stop_propagation();
+            }
+            return;
+        }
         if k.modifiers.control || k.modifiers.alt || k.modifiers.platform { return }
         if k.modifiers.shift {
             if k.key != "v" || self.data.is_none() { return }
@@ -276,7 +305,7 @@ impl IssueList {
                 Some(slug) => cx.emit(ListEvent::Open(slug)),
                 None => return,
             },
-            "t" => match self.focused.clone().and_then(|f| self.group_of(&f)) {
+            "t" => match self.focused.clone().filter(|_| !self.is_board()).and_then(|f| self.group_of(&f)) {
                 Some(group) => self.fold(&group, false, cx),
                 None => return,
             },
@@ -481,6 +510,8 @@ impl Focusable for IssueList {
 
 impl Render for IssueList {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // a card let go of outside every column
+        if self.dragging.is_some() && !cx.has_active_drag() { self.dragging = None }
         let c = colours(cx);
         let divider = theme::text(cx).divider;
         let crumb = match &self.team {
@@ -493,7 +524,14 @@ impl Render for IssueList {
         let tabs: Vec<_> = TABS.iter().enumerate().map(|(n, (tab, name, _))| self.tab_pill(n, tab, name, &c, cx)).collect();
         let view_bar = div().h_flex().flex_none().h(px(43.)).pl(px(8.)).pr(px(10.)).gap(px(4.)).children(tabs).children(self.tools(&c, cx));
         let mut page = div().v_flex().pt(px(12.)).px(px(8.)).pb(px(120.));
+        let board = match &self.data {
+            Some(data) if self.is_board() => Some(
+                div().flex_1().min_h_0().v_flex().pt(px(12.)).px(px(8.)).children(self.filter_chips(ChipsLook::List, cx)).child(self.board(data, &c, cx)),
+            ),
+            _ => None,
+        };
         match &self.data {
+            _ if board.is_some() => {}
             None => {
                 if let Some(e) = &self.failed { page = page.child(div().p(px(16.)).text_color(c.text_3).child(e.clone())) }
             }
@@ -509,8 +547,7 @@ impl Render for IssueList {
                 }
                 let hidden = data["hidden"].as_u64().unwrap_or(0);
                 if groups.is_empty() && hidden == 0 {
-                    let empty = TABS.iter().find(|(t, _, _)| *t == self.tab).map(|(_, _, e)| *e).unwrap_or("");
-                    page = page.child(div().p(px(16.)).text_color(c.text_3).child(empty));
+                    page = page.child(div().p(px(16.)).text_color(c.text_3).child(self.empty_text()));
                 }
                 if hidden > 0 {
                     page = page.child(
@@ -535,8 +572,12 @@ impl Render for IssueList {
             .on_key_down(cx.listener(|list, e: &KeyDownEvent, window, cx| list.key(e, window, cx)))
             .child(bar)
             .child(view_bar)
-            .child(div().id("list-scroll").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).child(page))
+            .map(|root| match board {
+                Some(board) => root.child(board),
+                None => root.child(div().id("list-scroll").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).child(page)),
+            })
             .children(self.filter_layers(cx))
+            .children(self.asking_layer())
     }
 }
 

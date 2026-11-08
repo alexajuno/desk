@@ -127,6 +127,8 @@ pub(crate) struct Colours {
     pub tab_on: Hsla, pub ring_hover: Hsla, pub group_toggle: Hsla, pub late: Hsla, pub selected: Hsla, pub selected_hover: Hsla, pub btn_hover: Hsla,
     // a list's filter chip (bg-panel), and Display's Layout button under the mouse and picked (bg-dp-layout-hover, bg-dp-on)
     pub panel: Hsla, pub layout_hover: Hsla, pub layout_on: Hsla,
+    // a board's card (bg-card) and its ring (--shadow-card's)
+    pub card: Hsla, pub card_ring: Hsla,
     pub dark: bool,
 }
 
@@ -145,7 +147,7 @@ pub(crate) fn colours(cx: &App) -> Colours {
             edge_3: c(0x28282b), accent: t.accent,
             cmd_on: c(0x313234), cmd_on_text: c(0xffffff), cmd_hint: c(0x626365), key_edge: c(0x303134),
             tab_on: c(0x29292b), ring_hover: alpha(0xffffff, 0.229), group_toggle: c(0x2c313b), late: c(0xff6364), selected: c(0x1f2029), selected_hover: c(0x242531),
-            btn_hover: c(0x252527), panel: c(0x121213), layout_hover: c(0x323334), layout_on: c(0x38393b), dark: true,
+            btn_hover: c(0x252527), panel: c(0x121213), layout_hover: c(0x323334), layout_on: c(0x38393b), card: c(0x1a1a1b), card_ring: alpha(0xffffff, 0.083), dark: true,
         }
     } else {
         Colours {
@@ -158,7 +160,7 @@ pub(crate) fn colours(cx: &App) -> Colours {
             edge_3: c(0xd3d3d3), accent: t.accent,
             cmd_on: c(0xf1f1f1), cmd_on_text: c(0x1b1b1b), cmd_hint: c(0xa0a0a2), key_edge: c(0xe8e8e8),
             tab_on: c(0xececed), ring_hover: alpha(0x000000, 0.15), group_toggle: c(0xc4c8df), late: c(0xe2253b), selected: c(0xeaeaf4), selected_hover: c(0xe2e3f1),
-            btn_hover: c(0xf3f3f3), panel: c(0xf9f9fa), layout_hover: c(0xf6f6f6), layout_on: c(0xf2f2f2), dark: false,
+            btn_hover: c(0xf3f3f3), panel: c(0xf9f9fa), layout_hover: c(0xf6f6f6), layout_on: c(0xf2f2f2), card: c(0xffffff), card_ring: alpha(0x000000, 0.088), dark: false,
         }
     }
 }
