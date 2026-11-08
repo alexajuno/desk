@@ -1,13 +1,14 @@
 // The composer, as the web app's (Dock.tsx, Composer): a raised box where you type, Enter sends, or queues while Claude
-// works, Ctrl C stops it, Shift Tab flips Manual and Auto, and Esc leaves it; under the text its foot, with + to attach
-// files (Ctrl U), a new chat's chips for what it becomes and where it runs (Ctrl D), the context's gauge, the chat's
-// mode, its model and effort, Stop while it works, and Send.
+// works, Ctrl Enter sends now, Ctrl C stops it, Shift Tab flips Manual and Auto, ↑ takes back what waits, Ctrl S
+// stashes, and Esc leaves it; / and @ complete from a list over it (typing.rs). Under the text its foot, with + to
+// attach files (Ctrl U), a new chat's chips for what it becomes and where it runs (Ctrl D), the stash, the context's
+// gauge, the chat's mode, its model and effort, Stop while it works, and Send.
 use std::path::PathBuf;
 
 use base64::Engine;
 use gpui_kit::base::StyledExt;
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Copy, Escape, OutdentInline, Textarea};
+use gpui_kit::component::input::{Copy, Enter, Escape, IndentInline, MoveDown, MoveUp, OutdentInline, Textarea};
 use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 use gpui_kit::component::ActiveTheme;
 use gpui_kit::prelude::FluentBuilder;
@@ -142,7 +143,13 @@ impl Chat {
     }
 
     // A model or an effort picked: the chip shows it at once.
-    fn pick_runs(&mut self, model: Option<(String, String)>, effort: Option<String>, cx: &mut Context<Self>) {
+    pub(super) fn pick_runs(&mut self, model: Option<(String, String)>, effort: Option<String>, cx: &mut Context<Self>) {
+        let set = self.show_runs(model, effort, cx);
+        self.call(cx, move |session| live::pick(session, set));
+    }
+
+    // The chip on the model and effort picked, before the server has them; what to send it.
+    pub(super) fn show_runs(&mut self, model: Option<(String, String)>, effort: Option<String>, cx: &mut Context<Self>) -> serde_json::Value {
         let mut set = json!({});
         if let Some((value, name)) = model {
             self.meta["runs"]["name"] = json!(name);
@@ -154,7 +161,7 @@ impl Chat {
             set["effort"] = json!(effort);
         }
         cx.notify();
-        self.call(cx, move |session| live::pick(session, set));
+        set
     }
 
     // + or Ctrl U: the system's file picker, then the files read for the message.
@@ -198,6 +205,7 @@ impl Chat {
             let wanted = if self.working { "Queue a message for when it's ready…" } else { "Reply…" };
             self.composer.update(cx, |c, cx| c.set_placeholder(wanted, window, cx));
         }
+        let (stash_chip, picks) = (self.stash_chip(cx), self.picks_list(cx));
         let theme = cx.theme();
         let text = theme::text(cx);
         let focused = self.composer.read(cx).focus_handle(cx).is_focused(window);
@@ -348,6 +356,7 @@ impl Chat {
             )
             .children(start_as)
             .children(start_in)
+            .children(stash_chip)
             .child(div().flex_1())
             .children(used)
             .children(mode)
@@ -358,7 +367,7 @@ impl Chat {
             .child(
                 Self::round("send", primary, theme::glyph("send", text.on_primary).size(px(14.)))
                     .when(empty, |b| b.opacity(0.35))
-                    .on_click(cx.listener(|chat, _, window, cx| chat.submit(window, cx))),
+                    .on_click(cx.listener(|chat, _, window, cx| chat.submit(false, window, cx))),
             );
 
         div()
@@ -391,8 +400,36 @@ impl Chat {
                     cx.stop_propagation();
                 }
             }))
-            .capture_action(cx.listener(|_, _: &Escape, window, cx| {
-                window.blur(cx);
+            // While the list over the box shows, ↑ and ↓ walk it, Tab takes the row lit or the first, Enter the row
+            // lit, and Esc closes it; ↑ on the first line takes back the messages that wait.
+            .capture_action(cx.listener(|chat, _: &MoveDown, _, cx| {
+                if chat.picks.is_empty() { return }
+                chat.move_pick(1, cx);
+                cx.stop_propagation();
+            }))
+            .capture_action(cx.listener(|chat, _: &MoveUp, window, cx| {
+                if !chat.picks.is_empty() {
+                    chat.move_pick(-1, cx);
+                    return cx.stop_propagation();
+                }
+                let first_line = { let c = chat.composer.read(cx); !c.value()[..c.cursor().min(c.value().len())].contains('\n') };
+                if chat.queued() && first_line {
+                    chat.take_back(window, cx);
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|chat, _: &IndentInline, window, cx| {
+                if chat.picks.is_empty() { return }
+                chat.choose(chat.pick_at.unwrap_or(0), window, cx);
+                cx.stop_propagation();
+            }))
+            .capture_action(cx.listener(|chat, e: &Enter, window, cx| {
+                let Some(at) = chat.pick_at.filter(|_| !chat.picks.is_empty() && !e.secondary && !e.shift) else { return };
+                chat.choose(at, window, cx);
+                cx.stop_propagation();
+            }))
+            .capture_action(cx.listener(|chat, _: &Escape, window, cx| {
+                if chat.picks.is_empty() { window.blur(cx) } else { chat.close_picks(cx) }
                 cx.stop_propagation();
             }))
             .on_key_down(cx.listener(|chat, e: &KeyDownEvent, window, cx| {
@@ -401,10 +438,12 @@ impl Chat {
                 match k.key.as_str() {
                     "u" => chat.attach(cx),
                     "d" => chat.open_folders(window, cx),
+                    "s" => chat.swap_stash(window, cx),
                     _ => return,
                 }
                 cx.stop_propagation();
             }))
+            .children(picks)
             .children(attached)
             .child(Textarea::new(&self.composer).appearance(false).text_size(px(14.)))
             .child(foot)

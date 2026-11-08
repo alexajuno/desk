@@ -61,7 +61,7 @@ fn words(text: &str) -> Vec<String> {
     text.to_lowercase().split_whitespace().map(str::to_string).collect()
 }
 
-fn encode(text: &str) -> String {
+pub(crate) fn encode(text: &str) -> String {
     text.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~/".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
 }
 

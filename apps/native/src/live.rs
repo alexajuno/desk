@@ -183,13 +183,15 @@ pub struct Attachment {
     pub data: String,                      // base64
 }
 
-// A message; a new chat's first, its chip on Chat, makes it a bare Claude (`as`, the server's live.ts).
-pub fn send(session: &str, uuid: &str, text: &str, attached: &[Attachment], as_chat: bool) -> Result<Value, String> {
+// A message; a new chat's first, its chip on Chat, makes it a bare Claude (`as`, the server's live.ts), and one sent now
+// goes in at once while Claude works, rather than waiting for its turn to end.
+pub fn send(session: &str, uuid: &str, text: &str, attached: &[Attachment], as_chat: bool, now: bool) -> Result<Value, String> {
     let images: Vec<Value> = attached.iter().filter_map(|a| a.media_type.map(|m| json!({"media_type": m, "data": a.data}))).collect();
     let files: Vec<Value> = attached.iter().filter(|a| a.media_type.is_none()).map(|a| json!({"name": a.name, "data": a.data})).collect();
     let mut body = json!({"text": text, "images": images, "uuid": uuid});
     if !files.is_empty() { body["files"] = json!(files) }
     if as_chat { body["as"] = json!("chat") }
+    if now { body["now"] = json!(true) }
     net::post(&format!("/api/live/{session}/send"), body)
 }
 

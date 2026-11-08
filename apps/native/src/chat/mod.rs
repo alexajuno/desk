@@ -7,6 +7,7 @@
 mod ask;
 mod composer;
 mod turn;
+mod typing;
 
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -31,11 +32,14 @@ const COLUMN: f32 = 760.;
 const DOCUMENT: f32 = 15.;
 
 // A message sent and not yet in the transcript: drawn at once, and gone once Claude Code writes it down. One sent
-// while Claude works waits in its queue.
+// while Claude works waits in its queue, and ↑ takes it back; one still not there well after its turn ended was lost.
 struct Pending {
     text: String,
-    files: usize,
+    attached: Vec<Attachment>,
     mid: bool,
+    uuid: String,
+    at: u64,
+    lost: bool,
 }
 
 #[derive(Clone, PartialEq, Hash)]
@@ -97,6 +101,20 @@ pub struct Chat {
     focus_now: bool,
     folder_menu: Option<(Entity<Picker>, Subscription)>, // the folder chip's menu, open
     folder_chip: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
+    // what is typed (typing.rs): the list completing the word at the cursor, the lists it comes from, the stash, and
+    // what goes into the box at the next draw, which a change of its text needs the window for
+    picks: Vec<typing::Pick>,
+    pick_at: Option<usize>,
+    token: Option<typing::Token>,
+    asked: u64,
+    picks_scroll: ScrollHandle,
+    commands: Option<Vec<typing::Pick>>,
+    agents: Option<Vec<typing::Pick>>,
+    stash: Option<typing::Boxed>,
+    stash_back: bool, // Settings: the stash comes back with the next message entered
+    draft: Option<String>,
+    failed: Option<typing::Boxed>,
+    losing: bool,
     _subscriptions: Vec<Subscription>,
     // Following its session: dropped with the chat, which closes the session's socket. Detached, it outlived the chat
     // and kept its thread, its socket and desk's note that the chat is shown, until the session said something more.
@@ -153,7 +171,10 @@ impl Chat {
     async fn follow(this: WeakEntity<Self>, session: String, cx: &mut AsyncApp) {
         let (send, events) = smol::channel::unbounded();
         live::follow(session.clone(), send);
-        if this.update(cx, |chat, _| chat.session = Some(session)).is_err() { return }
+        if this.update(cx, |chat, _| {
+            chat.bring_back(&session);
+            chat.session = Some(session);
+        }).is_err() { return }
         while let Ok(event) = events.recv().await {
             if this.update(cx, |chat, cx| chat.apply(event, cx)).is_err() { break }
         }
@@ -163,14 +184,17 @@ impl Chat {
         let scroller = cx.new(|cx| MessageScrollerState::new(0, cx));
         let composer = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, 10).submit_on_enter(true).placeholder("Reply…"));
         let subscriptions = vec![cx.subscribe_in(&composer, window, |chat, _, event: &InputEvent, window, cx| match event {
-            InputEvent::PressEnter { shift: false, .. } => chat.submit(window, cx),
-            InputEvent::Change => cx.notify(), // Send lights up once there is something to send
+            InputEvent::PressEnter { shift: false, secondary } => chat.submit(*secondary, window, cx),
+            InputEvent::Change => chat.typed(cx), // Send lights up once there is something to send
             _ => {}
         })];
         // Claude Code's models change only with Claude Code: asked once, for the model chip's menu.
         cx.spawn(async move |this, cx| {
             if let Ok(models) = cx.background_spawn(async { live::models() }).await {
                 let _ = this.update(cx, |chat, _| chat.models = models);
+            }
+            if let Ok(settings) = cx.background_spawn(async { net::get("/api/settings") }).await {
+                let _ = this.update(cx, |chat, _| chat.stash_back = settings["stash_back_on_send"].as_bool().unwrap_or(true));
             }
         })
         .detach();
@@ -207,12 +231,25 @@ impl Chat {
             focus_now: false,
             folder_menu: None,
             folder_chip: Default::default(),
+            picks: Vec::new(),
+            pick_at: None,
+            token: None,
+            asked: 0,
+            picks_scroll: ScrollHandle::new(),
+            commands: None,
+            agents: None,
+            stash: None,
+            stash_back: true,
+            draft: None,
+            failed: None,
+            losing: false,
             _subscriptions: subscriptions,
             _follow: None,
         }
     }
 
     fn apply(&mut self, event: Event, cx: &mut Context<Self>) {
+        let (was_working, was_in) = (self.working, self.meta["cwd"].clone());
         match event {
             Event::Hello { items, working, asks, partial, meta } => {
                 self.items.clear();
@@ -247,6 +284,10 @@ impl Chat {
             Event::Status(status) => self.status = status,
             Event::Meta(meta) => self.meta = meta,
         }
+        // A turn starting means the host holds the session, which lists Claude Code's own commands too, and a new chat
+        // started again in another folder has that folder's: the next / asks again.
+        if (self.working && !was_working) || self.meta["cwd"] != was_in { self.commands = None }
+        self.watch_lost(cx);
         self.asks_changed();
         self.tick(cx);
         self.relayout(cx);
@@ -372,7 +413,10 @@ impl Chat {
             }
             Kind::LiveSteps => self.live_steps().hash(&mut h),
             Kind::Streaming(n) => self.streaming(*n).len().hash(&mut h),
-            Kind::Pending(n) => (self.pending[*n].mid && self.working).hash(&mut h),
+            Kind::Pending(n) => {
+                let p = &self.pending[*n];
+                (p.mid && self.working, p.lost, self.last_queued() == Some(*n)).hash(&mut h)
+            }
             Kind::Sent(n, _) => self.results.contains_key(&self.items[*n].id).hash(&mut h),
             _ => {}
         }
@@ -410,12 +454,10 @@ impl Chat {
         cx.notify();
     }
 
-    fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let text = self.composer.read(cx).value().trim().to_string();
-        if self.session.is_none() || (text.is_empty() && self.attached.is_empty()) { return }
-        let attached = std::mem::take(&mut self.attached);
-        self.composer.update(cx, |c, cx| c.set_value("", window, cx));
-        self.say(text, attached, cx);
+    // The last message queued while Claude works, which Send now goes under.
+    fn last_queued(&self) -> Option<usize> {
+        if !self.working { return None }
+        self.pending.iter().rposition(|p| p.mid && !p.lost)
     }
 
     // Nothing said in it yet, by you or Claude.
@@ -466,29 +508,9 @@ impl Chat {
         self.composer.update(cx, |c, cx| c.focus(window, cx));
     }
 
-    // A message to the session, from the composer or from a comment on lines in Changes: drawn at once as pending, and
-    // dropped again with what went wrong if desk refuses it.
+    // A comment on lines in Changes, sent as a message from the composer is (typing.rs, say_now).
     pub fn say(&mut self, text: String, attached: Vec<live::Attachment>, cx: &mut Context<Self>) {
-        let Some(session) = self.session.clone() else { return };
-        let as_chat = self.start_as_chat && self.fresh(); // a new chat's first message, its chip on Chat
-        self.pending.push(Pending { text: text.clone(), files: attached.len(), mid: self.working });
-        if !self.working { self.set_working(true, None) } // drawn at once; the server's word follows
-        self.tick(cx);
-        self.relayout(cx);
-        cx.notify();
-        let uuid = uuid::Uuid::new_v4().to_string();
-        cx.spawn(async move |this, cx| {
-            let sent = cx.background_spawn(async move { live::send(&session, &uuid, &text, &attached, as_chat) }).await;
-            let _ = this.update(cx, |chat, cx| {
-                if let Err(error) = sent {
-                    chat.pending.pop();
-                    chat.error = Some(error);
-                    chat.relayout(cx);
-                }
-                cx.notify()
-            });
-        })
-        .detach();
+        self.say_now(text, attached, false, None, cx);
     }
 
     // A call to the session in the background; what goes wrong shows under the conversation.
@@ -510,8 +532,26 @@ impl Chat {
         let theme = cx.theme();
         let column = |child: AnyElement| div().w_full().flex().justify_center().px_6().child(div().w_full().max_w(px(COLUMN)).child(child));
         let Some(row) = self.rows.get(i) else { return div().into_any_element() };
-        let you = |text: String, files: usize, queued: bool| {
-            let shown = if files == 0 { text } else if text.is_empty() { format!("{files} attached") } else { format!("{text}\n{files} attached") };
+        let text = theme::text(cx);
+        // Under a message that waits, as the web's .you-queued: Queued, with Send now under the last one, or Not sent,
+        // with Send.
+        let waits = |glyph: &'static str, said: &'static str, button: Option<(&'static str, Box<dyn Fn(&mut Chat, &mut Window, &mut Context<Chat>)>)>| {
+            let muted = theme.muted_foreground;
+            div().h_flex().gap(px(4.)).text_xs().font_weight(FontWeight::MEDIUM).text_color(muted)
+                .child(theme::glyph(glyph, muted).size(px(13.)))
+                .child(said)
+                .when_some(button, |line, (label, act)| {
+                    let this = this.clone();
+                    line.child(
+                        div().id("you-more").h(px(22.)).px(px(8.)).flex().items_center().rounded(px(6.)).cursor_pointer()
+                            .hover(move |s| s.bg(text.hover).text_color(theme.foreground))
+                            .child(label)
+                            .on_click(move |_, window, cx| { let _ = this.update(cx, |chat, cx| act(chat, window, cx)); }),
+                    )
+                })
+        };
+        let you = |words: String, files: usize, waiting: bool, under: Option<Div>| {
+            let shown = if files == 0 { words } else if words.is_empty() { format!("{files} attached") } else { format!("{words}\n{files} attached") };
             div()
                 .v_flex()
                 .items_end()
@@ -523,20 +563,29 @@ impl Chat {
                         .px_4()
                         .py_2()
                         .rounded(px(12.))
-                        .bg(theme.muted)
                         .text_size(px(DOCUMENT))
-                        .text_color(theme::text(cx).strong)
-                        .when(queued, |b| b.opacity(0.6))
+                        .when(!waiting, |b| b.bg(theme.muted).text_color(text.strong))
+                        .when(waiting, |b| b.border_1().border_dashed().border_color(text.edge).text_color(theme.muted_foreground))
                         .child(shown),
                 )
-                .when(queued, |b| b.child(div().text_xs().text_color(theme::text(cx).dim).child("Queued")))
+                .children(under)
                 .into_any_element()
         };
         let inner = match &row.kind {
-            Kind::You(n) => you(self.items[*n].text.clone(), 0, false),
+            Kind::You(n) => you(self.items[*n].text.clone(), 0, false, None),
             Kind::Pending(n) => {
                 let p = &self.pending[*n];
-                you(p.text.clone(), p.files, p.mid && self.working)
+                let queued = p.mid && self.working && !p.lost;
+                let under = if p.lost {
+                    let uuid = p.uuid.clone();
+                    Some(waits("none", "Not sent", Some(("Send", Box::new(move |chat: &mut Chat, _: &mut Window, cx: &mut Context<Chat>| chat.resend(&uuid, cx))))))
+                } else if queued {
+                    let now = self.last_queued() == Some(*n);
+                    Some(waits("clock", "Queued", now.then(|| ("Send now", Box::new(|chat: &mut Chat, window: &mut Window, cx: &mut Context<Chat>| chat.send_now(String::new(), false, window, cx)) as Box<dyn Fn(&mut Chat, &mut Window, &mut Context<Chat>)>))))
+                } else {
+                    None
+                };
+                you(p.text.clone(), p.attached.len(), queued || p.lost, under)
             }
             Kind::Text(n) => div()
                 .py_2()
@@ -584,6 +633,13 @@ impl Render for Chat {
         let muted = theme.muted_foreground;
         if std::mem::take(&mut self.focus_now) {
             cx.defer_in(window, |chat, window, cx| chat.focus_composer(window, cx));
+        }
+        // what was typed in the chat before, back in an empty box; a message desk refused, back in the box
+        if let Some(draft) = self.draft.take() {
+            if self.composer.read(cx).value().is_empty() { self.composer.update(cx, |c, cx| c.set_value(draft, window, cx)) }
+        }
+        if let Some(failed) = self.failed.take() {
+            cx.defer_in(window, move |chat, window, cx| chat.put_back(failed, window, cx));
         }
         let empty = self.empty_line().map(|line| {
             div().absolute().top(px(48.)).left_0().right_0().px(px(36.)).flex().justify_center()
