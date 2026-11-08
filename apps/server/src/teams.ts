@@ -55,9 +55,8 @@ export const save = (t: Team): Promise<void> => db.write((tx) => saveIn(tx, t));
 // Null when none does.
 export async function resolve(slug: string, q: Db = sql()): Promise<string | null> {
   if (!/^[\w-]+$/.test(slug)) return null;
-  const rows = (await q.query<{ slug: string }>(
-    "select slug from teams where slug = $1 or $1 = any(string_to_array(aliases, ' ')) order by slug = $1 desc limit 1", [slug])).rows;
-  return rows[0]?.slug ?? null;
+  const rows = (await q.query<{ slug: string; aliases: string }>("select slug, aliases from teams")).rows;
+  return (rows.find((r) => r.slug === slug) ?? rows.find((r) => r.aliases.split(" ").includes(slug)))?.slug ?? null;
 }
 
 // What a team's identifier may be: lowercase letters, digits and hyphens, as newSlug makes them.
@@ -77,7 +76,7 @@ export function rename(from: string, to: string): Promise<Team> {
       throw new Refused("An identifier is up to 50 lowercase letters, digits and hyphens, such as site or desk-2.");
     if ((await tx.query("select 1 from teams where slug = $1", [to])).rows.length) throw new Refused(`Another team already has the identifier ${to}.`);
     const t = fromRow(row);
-    for (const other of (await tx.query<Row>("select * from teams where $1 = any(string_to_array(aliases, ' '))", [to])).rows)
+    for (const other of (await tx.query<Row>("select * from teams")).rows.filter((r) => r.aliases.split(" ").includes(to)))
       await saveIn(tx, { ...fromRow(other), aliases: other.aliases.split(" ").filter((a) => a !== to).join(" ") });
     const moved: Team = { ...t, slug: to, aliases: [...t.aliases.split(" ").filter((a) => a && a !== to), from].join(" ") };
     await tx.query("delete from teams where slug = $1", [from]);

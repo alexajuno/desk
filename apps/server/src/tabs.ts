@@ -14,9 +14,10 @@ import type { WebSocket } from "ws";
 import * as db from "./db.ts";
 import type { Tab } from "./relay.ts";
 
+// Whether the row is new: one desk had keeps the time it was first heard of, not this one.
 const keep = (tx: db.Db, t: Tab) =>
-  tx.query<{ fresh: boolean }>(`insert into tabs (target, session, url, title, opened) values ($1, $2, $3, $4, $5)
-    on conflict (target) do update set url = excluded.url, title = excluded.title returning (xmax = 0) as fresh`,
+  tx.query<{ fresh: number | boolean }>(`insert into tabs (target, session, url, title, opened) values ($1, $2, $3, $4, $5)
+    on conflict (target) do update set url = excluded.url, title = excluded.title returning (opened = $5) as fresh`,
     [t.target, t.session, t.url ?? "", t.title ?? "", new Date().toISOString()]);
 
 // A tab the session opened, or one that moved. One just opened, and one the session works in, is told to those
