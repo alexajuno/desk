@@ -124,10 +124,17 @@ export function working(session: string): boolean {
   return Date.now() - statSync(t.path).mtimeMs < QUIET;
 }
 
-// The table as the last look found it, while the code that asked still runs. The frame asks for every chat's title in
-// one go, and those asks share one look at the transcripts rather than taking one each: on 25 Oct a frame took about 90
-// looks of 5 ms, 0.45 s that held up every page load.
+// The table as the last look found it, for a second. The frame asks for every chat's title in one go, and those asks
+// share one look at the transcripts rather than taking one each: on 25 Oct a frame took about 90 looks of 5 ms, 0.45 s
+// that held up every page load. A second rather than while the code that asked still runs, since the frame asks again
+// past an await, and each look lists the 1,800 transcripts, 3 MB of memory (8 Nov).
+const LOOK_FOR = 1000;
 let looked: Map<string, TableRow> | null = null;
+
+// The table goes to CACHE at most once a minute: a live chat's transcript grows at every look, and writing 1 MB at each
+// took the frame 6 MB of memory twice over (8 Nov). A start after a stop reads again at most the minute it missed.
+const SAVE_EVERY = 60_000;
+let unsaved = false, savedAt = 0;
 
 // The session table, brought up to date with the transcripts.
 export function refresh(): Map<string, TableRow> {
@@ -173,14 +180,16 @@ export function refresh(): Map<string, TableRow> {
     }
   }
   for (const sid of [...table.keys()]) if (!seen.has(sid)) { table.delete(sid); changed = true; }
-  if (changed) {
+  unsaved ||= changed;
+  if (unsaved && Date.now() - savedAt > SAVE_EVERY) {
     mkdirSync(dirname(CACHE), { recursive: true });
     const temp = CACHE.replace(/\.json$/, ".tmp");
     writeFileSync(temp, JSON.stringify(Object.fromEntries(table)), "utf8");
     renameSync(temp, CACHE);
+    [unsaved, savedAt] = [false, Date.now()];
   }
   looked = new Map(table);
-  queueMicrotask(() => { looked = null; });
+  setTimeout(() => { looked = null; }, LOOK_FOR).unref();
   return looked;
 }
 
