@@ -125,6 +125,7 @@ impl Desk {
     // carrying a thread's news, its chat; a thread no chat follows yet its messages.
     pub(crate) fn open_row(&mut self, slug: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         if self.open_row == slug { return }
+        crate::give_back(cx); // what the row left open held
         self.open_row = slug.clone();
         self.inbox_chat = None;
         self.inbox_issue = None;

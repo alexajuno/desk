@@ -85,6 +85,9 @@ pub struct Chat {
     scroller: Entity<MessageScrollerState>,
     composer: Entity<TextareaState>,
     _subscriptions: Vec<Subscription>,
+    // Following its session: dropped with the chat, which closes the session's socket. Detached, it outlived the chat
+    // and kept its thread, its socket and desk's note that the chat is shown, until the session said something more.
+    _follow: Option<Task<()>>,
 }
 
 pub fn now() -> u64 {
@@ -105,7 +108,7 @@ impl Chat {
     // An issue's chat, by its slug: its page says which session it is.
     pub fn new(slug: String, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let page = format!("/api/page/issue/{slug}");
-        cx.spawn(async move |this, cx| {
+        let follow = cx.spawn(async move |this, cx| {
             let found = cx.background_spawn(async move { net::get(&page) }).await;
             let session = match found {
                 Ok(page) => page["issue"]["session"].as_str().map(str::to_string),
@@ -119,9 +122,8 @@ impl Chat {
                 return;
             };
             Self::follow(this, session, cx).await;
-        })
-        .detach();
-        Self::empty(window, cx)
+        });
+        Self { _follow: Some(follow), ..Self::empty(window, cx) }
     }
 
     // Its session, once desk named it: the Inbox follows it to whichever row holds it now.
@@ -131,8 +133,8 @@ impl Chat {
 
     // A chat by its session, as an Inbox row names one with no issue.
     pub fn of_session(session: String, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        cx.spawn(async move |this, cx| Self::follow(this, session, cx).await).detach();
-        Self::empty(window, cx)
+        let follow = cx.spawn(async move |this, cx| Self::follow(this, session, cx).await);
+        Self { _follow: Some(follow), ..Self::empty(window, cx) }
     }
 
     async fn follow(this: WeakEntity<Self>, session: String, cx: &mut AsyncApp) {
@@ -187,6 +189,7 @@ impl Chat {
             scroller,
             composer,
             _subscriptions: subscriptions,
+            _follow: None,
         }
     }
 

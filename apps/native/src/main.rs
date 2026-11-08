@@ -188,6 +188,7 @@ impl Desk {
                 self.issues = issues;
                 self.inbox = inbox.into_iter().map(|r| (r.id.clone(), r)).collect();
                 self.inbox_changed(window, cx);
+                give_back(cx); // what reading the snapshot took
             }
             Event::Inbox { id, row } => {
                 match row {
@@ -252,6 +253,7 @@ impl Desk {
         self.commits = None;
         let half = self.half.filter(|h| *h != Half::Terminal); // the terminal was the other chat's
         self.set_half(half, cx);
+        give_back(cx); // what the chat left held
         cx.notify();
     }
 
@@ -467,7 +469,24 @@ impl Render for Desk {
     }
 }
 
+// glibc keeps what a thread frees in that thread's own arena, a block of up to 64 MB, for that thread to take again:
+// with GPUI's workers and a thread per socket, the window held 20 MB freed at start and more with each chat opened
+// (step 5.10). Two arenas keep what is freed where any thread takes it again, and a trim a moment after a big change
+// gives the rest back to the system.
+fn arenas() {
+    unsafe { libc::mallopt(libc::M_ARENA_MAX, 2) };
+}
+
+pub(crate) fn give_back(cx: &mut App) {
+    cx.background_spawn(async {
+        smol::Timer::after(std::time::Duration::from_secs(2)).await;
+        unsafe { libc::malloc_trim(0) };
+    })
+    .detach();
+}
+
 fn main() {
+    arenas();
     gpui_kit::application().with_assets(theme::Assets).run(move |cx| {
         gpui_kit::init(cx);
         let options = WindowOptions { app_id: Some("desk-native".into()), ..Default::default() };
