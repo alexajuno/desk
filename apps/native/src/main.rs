@@ -12,6 +12,7 @@ mod emoji;
 mod filters;
 mod listing;
 mod picker;
+mod search;
 mod settings;
 mod sidebar;
 mod toast;
@@ -112,6 +113,7 @@ struct Desk {
     shows: smol::channel::Sender<String>,
     settings: Option<Entity<settings::SettingsPage>>, // while Settings shows
     back_to: Page, // the page Back to app returns to
+    search: Option<(Entity<search::Search>, Option<FocusHandle>, Subscription)>, // the search box while open, what had the keys before it
     _appearance: Subscription,
 }
 
@@ -133,6 +135,7 @@ impl Desk {
         .detach();
         // The system's light or dark, as the web app follows it.
         let appearance = cx.observe_window_appearance(window, |_, window, cx| theme::sync(window, cx));
+        search::load(cx); // the chats' titles, so that the first / finds them at once
         let half = match std::env::var("DESK_HALF").as_deref() {
             Ok("steps") => Some(Half::Steps),
             Ok("changes") => Some(Half::Changes),
@@ -171,7 +174,7 @@ impl Desk {
             notice: None,
             inbox_focus: cx.focus_handle(),
             inbox_scroll: UniformListScrollHandle::new(),
-            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, _appearance: appearance }
+            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, _appearance: appearance }
     }
 
     fn apply(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
@@ -325,6 +328,54 @@ impl Desk {
         self.set_half(half, cx);
         give_back(cx); // what the chat left held
         cx.notify();
+    }
+
+    // The search box, over the page you are on: / and the sidebar's Search open it on Chats with nothing typed.
+    pub(crate) fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some((open, _, _)) = &self.search {
+            let open = open.clone();
+            return open.update(cx, |s, cx| s.focus(window, cx));
+        }
+        let back = window.focused(cx);
+        let states = self.all.iter().map(|(slug, i)| (slug.clone(), i.state.clone())).collect();
+        let open = cx.new(|cx| search::Search::new(states, window, cx));
+        let events = cx.subscribe_in(&open, window, |desk, _, event: &search::SearchEvent, window, cx| match event {
+            search::SearchEvent::Open(hit) => {
+                let hit = hit.clone();
+                desk.close_search(false, window, cx);
+                desk.open_hit(&hit, window, cx);
+            }
+            search::SearchEvent::Closed => desk.close_search(true, window, cx),
+        });
+        self.search = Some((open, back, events));
+        cx.notify();
+    }
+
+    // Esc or a click outside leaves you where you were; a hit opened takes you where it lives.
+    fn close_search(&mut self, back: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((open, had, _)) = self.search.take() else { return };
+        open.read(cx).tell(cx);
+        match had.filter(|_| back) {
+            Some(had) => window.focus(&had, cx),
+            None => window.focus(&self.focus, cx),
+        }
+        cx.notify();
+    }
+
+    // Where a hit opens: a chat in its issue's place, or its own; an issue's chat; a setting's page. Projects, teams and
+    // milestones have pages of their own in a later step.
+    fn open_hit(&mut self, hit: &serde_json::Value, window: &mut Window, cx: &mut Context<Self>) {
+        let at = |v: &serde_json::Value, key: &str| v[key].as_str().unwrap_or("").to_string();
+        let issue = |desk: &Desk, slug: String| desk.all.get(&slug).cloned().unwrap_or(Issue { slug, ..Issue::default() });
+        match hit["kind"].as_str().unwrap_or("") {
+            "chat" if hit["issue"]["slug"].is_string() => { let i = issue(self, at(&hit["issue"], "slug")); self.open(&i, window, cx) }
+            "chat" => self.open_session(&at(hit, "session"), window, cx),
+            "issue" => { let i = issue(self, at(&hit["issue"], "slug")); self.open(&i, window, cx) }
+            "project" => self.show_soon(&format!("project/{}", at(&hit["project"], "slug")), cx),
+            "team" => self.show_soon(&format!("team/{}", at(&hit["team"], "slug")), cx),
+            "milestone" => self.show_soon(&format!("project/{}/issues", at(&hit["project"], "slug")), cx),
+            _ => self.open_settings(if at(hit, "page") == "workflow" { settings::Section::Workflow } else { settings::Section::Preferences }, cx),
+        }
     }
 
     // The half shown, or none: Changes reads its diffs only while it shows them, and the terminal stays attached only
@@ -548,6 +599,10 @@ impl Render for Desk {
                         desk.toggle_side(cx);
                         return cx.stop_propagation();
                     }
+                    if bare && k.key == "/" {
+                        desk.open_search(window, cx);
+                        return cx.stop_propagation();
+                    }
                     if desk.chat_key(e, window, cx) { return cx.stop_propagation() }
                     // Enter, or I as vim's insert, in a chat opened to read: into its composer
                     if bare && chat_page && !k.modifiers.shift && (k.key == "enter" || k.key == "i") {
@@ -588,6 +643,10 @@ impl Render for Desk {
                     .when(self.side.hidden && self.page != Page::Settings, |p| p.pl_2())
                     .child(div().size_full().rounded(px(8.)).border_1().border_color(border).bg(page_bg).overflow_hidden().child(page)),
             )
+            .children(self.search.as_ref().map(|(open, _, _)| {
+                let top = window.viewport_size().height * 0.13;
+                deferred(div().absolute().top_0().left_0().size_full().flex().justify_center().pt(top).child(open.clone())).with_priority(3)
+            }))
             .children({
                 let composer = self.chat.as_ref().filter(|_| chat_page).and_then(|c| c.read(cx).composer_at.get());
                 toast::render(composer, window, cx)

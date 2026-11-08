@@ -34,8 +34,21 @@ impl Section {
 // The sidebar's pages, under their group's label.
 const PAGES: [(&str, Section, &str); 2] = [("Personal", Section::Preferences, "sliders"), ("Issues", Section::Workflow, "parent")];
 
+// Every setting, by its page and its card's heading, as the web's SETTINGS, by which search finds them (search.rs).
+pub(crate) const SETTINGS: [(Section, &str, &str); 9] = [
+    (Section::Preferences, "Interface and theme", "theme"),
+    (Section::Preferences, "Composer", "stash_back_on_send"),
+    (Section::Preferences, "Sessions", "chat_pick"),
+    (Section::Preferences, "Sessions", "chat_model"),
+    (Section::Preferences, "Sessions", "chat_effort"),
+    (Section::Preferences, "Sessions", "test_slots"),
+    (Section::Preferences, "Sessions", "compact_over"),
+    (Section::Workflow, "Auto-close automations", "parent_auto_close"),
+    (Section::Workflow, "Auto-close automations", "sub_issue_auto_close"),
+];
+
 // Each setting's name and what it does, in the web's words (SETTINGS).
-fn about(id: &str) -> (&'static str, &'static str) {
+pub(crate) fn about(id: &str) -> (&'static str, &'static str) {
     match id {
         "theme" => ("Interface theme", "Follow the system, or keep desk light or dark"),
         "stash_back_on_send" => ("Bring the stash back on send",

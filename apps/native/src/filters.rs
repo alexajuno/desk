@@ -72,6 +72,8 @@ pub(crate) struct Colours {
     pub box_fill: Hsla, pub box_edge: Hsla, pub chip: Hsla, pub ring: Hsla, pub hover: Hsla, pub active: Hsla, pub ghost_hover: Hsla, pub ghost_on: Hsla,
     pub tip: Hsla, pub tip_edge: Hsla, pub tip_key: Hsla, pub tip_text: Hsla, pub select: Hsla, pub select_hover: Hsla, pub select_ring: Hsla, pub select_ring_strong: Hsla, pub select_on: Hsla,
     pub edge_3: Hsla, pub accent: Hsla,
+    // the command menu's (.menu.command): its row in focus and its text, the hint and the keys' edge
+    pub cmd_on: Hsla, pub cmd_on_text: Hsla, pub cmd_hint: Hsla, pub key_edge: Hsla,
     pub dark: bool,
 }
 
@@ -87,7 +89,8 @@ pub(crate) fn colours(cx: &App) -> Colours {
             ghost_hover: c(0x232424), ghost_on: c(0x2d2d2f),
             tip: c(0x212122), tip_edge: c(0x3c3d40), tip_key: c(0x9c9d9f), tip_text: c(0xe5e6e8), select: c(0x2a2b2c), select_hover: c(0x343537),
             select_ring: alpha(0xffffff, 0.148), select_ring_strong: alpha(0xffffff, 0.247), select_on: c(0xffffff),
-            edge_3: c(0x28282b), accent: t.accent, dark: true,
+            edge_3: c(0x28282b), accent: t.accent,
+            cmd_on: c(0x313234), cmd_on_text: c(0xffffff), cmd_hint: c(0x626365), key_edge: c(0x303134), dark: true,
         }
     } else {
         Colours {
@@ -97,7 +100,8 @@ pub(crate) fn colours(cx: &App) -> Colours {
             ghost_hover: c(0xf0f0f1), ghost_on: c(0xf0f0f0),
             tip: c(0xffffff), tip_edge: c(0xe8e8e8), tip_key: c(0x5e5e60), tip_text: c(0x303032), select: c(0xffffff), select_hover: c(0xf3f3f3),
             select_ring: alpha(0x000000, 0.088), select_ring_strong: alpha(0x000000, 0.147), select_on: c(0x1b1b1b),
-            edge_3: c(0xd3d3d3), accent: t.accent, dark: false,
+            edge_3: c(0xd3d3d3), accent: t.accent,
+            cmd_on: c(0xf1f1f1), cmd_on_text: c(0x1b1b1b), cmd_hint: c(0xa0a0a2), key_edge: c(0xe8e8e8), dark: false,
         }
     }
 }
@@ -111,6 +115,11 @@ fn shadow(blur: f32, y: f32, a: f32) -> BoxShadow {
 // A menu's shadow (--shadow-pop), and the Display panel's (--shadow-keys in dark, --shadow-pop in light).
 pub(crate) fn pop_shadow(dark: bool) -> Vec<BoxShadow> {
     if dark { vec![shadow(32., 7., 0.4)] } else { vec![shadow(48., 9., 0.08), shadow(24., 6., 0.1), shadow(1., 1., 0.04)] }
+}
+
+// A modal's, the command menu's and the search's (--shadow-modal): five in dark, the menus' in light.
+pub(crate) fn modal_shadow(dark: bool) -> Vec<BoxShadow> {
+    if dark { vec![shadow(40., 4., 0.1), shadow(20., 3., 0.125), shadow(12., 3., 0.125), shadow(8., 2., 0.125), shadow(1., 1., 0.125)] } else { pop_shadow(false) }
 }
 
 pub(crate) fn panel_shadow(dark: bool) -> Vec<BoxShadow> {

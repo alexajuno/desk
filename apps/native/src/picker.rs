@@ -193,7 +193,8 @@ impl Render for Picker {
             .capture_action(cx.listener(|picker, _: &MoveDown, _, cx| picker.move_on(1, cx)))
             .capture_action(cx.listener(|picker, _: &MoveUp, _, cx| picker.move_on(-1, cx)))
             .capture_action(cx.listener(|picker, _: &Enter, _, cx| picker.enter(cx)))
-            .capture_action(cx.listener(|picker, _: &IndentInline, window, cx| picker.complete(window, cx)))
+            // stopped, or the window's Tab goes on to move the keys to the next box
+            .capture_action(cx.listener(|picker, _: &IndentInline, window, cx| { cx.stop_propagation(); picker.complete(window, cx) }))
             .capture_action(cx.listener(|_, _: &Escape, _, cx| cx.emit(PickerEvent::Closed)))
             .on_mouse_down_out(cx.listener(move |_, e: &MouseDownEvent, _, cx| if !anchor.contains(&e.position) { cx.emit(PickerEvent::Closed) }))
             .child(div().h_flex().h(px(38.)).px(px(12.)).mb(px(4.)).border_b(px(0.5)).border_color(c.pop_edge).child(Input::new(&self.query).appearance(false).text_size(px(13.))))

@@ -159,7 +159,7 @@ impl Desk {
             .child(div().flex_1())
             .child(round("side-search").hover(move |s| s.bg(icon_hover))
                 .child(theme::glyph("search", muted).size(px(14.)))
-                .on_click(cx.listener(|desk, _, _, cx| desk.show_soon("search", cx))))
+                .on_click(cx.listener(|desk, _, window, cx| desk.open_search(window, cx))))
             .child(round("side-new-issue").bg(button).shadow(vec![crate::filters::ring(ring, 0.5)]).hover(move |s| s.bg(button_hover))
                 .child(theme::glyph("new-issue", fg).size(px(14.)))
                 .on_click(cx.listener(|desk, _, _, cx| desk.show_soon("new issue", cx))))

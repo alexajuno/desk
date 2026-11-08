@@ -260,6 +260,51 @@ pub fn ring(percent: u32, colour: Hsla, track: Hsla) -> Div {
         .when(percent > 0, |r| r.child(layer(format!("desk/ring/{percent}.svg"), colour, 14.)))
 }
 
+// Linear's project status icon (ui/icons.tsx, ProjectStatusIcon): a hexagon, dashed for Backlog, with a pie of how far
+// along it is inside, which Completed fills with a tick and Canceled with a cross; In Progress shows the project's
+// progress. Coloured by its status (desk.css's --project-*).
+const HEX: &str = "M2.95778 3.02069L5.70777 1.36023C6.50244 0.88041 7.49756 0.88041 8.29223 1.36024L11.0422 3.02074C11.7918 3.47336 12.25 4.2852 12.25 5.16086V8.84803C12.25 9.7251 11.7904 10.5381 11.0388 10.9902L8.29114 12.6433C7.49693 13.1211 6.50355 13.1203 5.71011 12.6412L2.95775 10.9792C2.20815 10.5266 1.75 9.7148 1.75 8.83911V5.16082C1.75 4.28516 2.20816 3.47332 2.95778 3.02069Z";
+const HEX_INNER: &str = "M8.3779 4.74233C8.14438 4.60607 7.85562 4.60607 7.6221 4.74233L5.37209 6.05513C5.14168 6.18957 5 6.4363 5 6.70311V9.34216C5 9.60897 5.14168 9.85573 5.37209 9.99016L7.6221 11.303C7.85562 11.4392 8.14438 11.4392 8.3779 11.303L10.6279 9.99016C10.8583 9.85573 11 9.60897 11 9.34216V6.70311C11 6.4363 10.8583 6.18957 10.6279 6.05513L8.3779 4.74233Z";
+const HEX_MARK_DONE: &str = "M10.7803 5.28033C11.0732 4.98744 11.0732 4.51256 10.7803 4.21967C10.4874 3.92678 10.0126 3.92678 9.7197 4.21967L5.75 8.18934L4.28033 6.71967C3.98744 6.42678 3.51256 6.42678 3.21967 6.71967C2.92678 7.01256 2.92678 7.48744 3.21967 7.78033L5.21967 9.7803C5.51256 10.0732 5.98744 10.0732 6.28033 9.7803L10.7803 5.28033Z";
+const HEX_MARK_CANCELED: &str = "M3.73657 3.73657C4.05199 3.42114 4.56339 3.42114 4.87881 3.73657L5.93941 4.79716L7 5.85775L9.12117 3.73657C9.4366 3.42114 9.94801 3.42114 10.2634 3.73657C10.5789 4.05199 10.5789 4.56339 10.2634 4.87881L8.14225 7L10.2634 9.12118C10.5789 9.4366 10.5789 9.94801 10.2634 10.2634C9.94801 10.5789 9.4366 10.5789 9.12117 10.2634L7 8.14225L4.87881 10.2634C4.56339 10.5789 4.05199 10.5789 3.73657 10.2634C3.42114 9.94801 3.42114 9.4366 3.73657 9.12118L4.79716 8.06059L5.85775 7L3.73657 4.87881C3.42114 4.56339 3.42114 4.05199 3.73657 3.73657Z";
+
+fn project_svg(status: &str, percent: u32) -> String {
+    let full = status == "completed" || status == "canceled";
+    let f = if full { 1. } else if status == "started" { percent.min(100) as f32 / 100. } else { 0. };
+    let dash = if status == "backlog" { r#"stroke-dasharray="1.65 1.35" stroke-dashoffset="2.3""# } else { r#"stroke-dasharray="3.14 0" stroke-dashoffset="1""# };
+    let inner = if full { "translate(-7.5, -7.5) scale(1.8)" } else { "translate(-1, -1)" };
+    let mark = match status { "completed" => format!(r##"<path d="{HEX_MARK_DONE}" fill="black"/>"##), "canceled" => format!(r##"<path d="{HEX_MARK_CANCELED}" fill="black"/>"##), _ => String::new() };
+    format!(r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="-1 -1 16 16" fill="none"><path d="{HEX}" stroke="#000" stroke-width="1.5" stroke-linejoin="bevel" fill="none" {dash}/><mask id="m" maskUnits="userSpaceOnUse"><path transform="{inner}" d="{HEX_INNER}" fill="white"/>{mark}</mask><g mask="url(#m)"><circle r="4" cx="7" cy="7" stroke="#000" fill="none" stroke-width="8" stroke-dasharray="{:.2} 25.12" transform="rotate(-90) translate(-14, 0)"/></g></svg>"##, 25.12 * f)
+}
+
+pub fn project_icon(status: &str, progress: u32, cx: &App) -> Svg {
+    let dark = cx.theme().mode.is_dark();
+    let colour = match status { "backlog" => 0xf2994a, "planned" if dark => 0xd7d8db, "planned" => 0xa2a6ac, "started" => 0xf0bf00, "completed" => 0x5e6ad2, _ => 0x8a8f98 };
+    let status = if ["backlog", "planned", "started", "completed", "canceled"].contains(&status) { status } else { "planned" };
+    svg().path(SharedString::from(format!("desk/project/{status}/{}.svg", progress.min(100)))).flex_none().size(px(16.)).text_color(rgb(colour))
+}
+
+// Linear's milestone icon (ui/icons.tsx, MilestoneIcon): a diamond, filled once done, a piece of it filled while under
+// way; in the done blue, the started yellow for the project's current one, or the third grey.
+const MILESTONE_FULL: &str = "M6.679 1.122a1.715 1.715 0 0 1 2.642 0L14.104 6.9a1.726 1.726 0 0 1 0 2.2l-4.783 5.778a1.715 1.715 0 0 1-2.642 0L1.896 9.1a1.726 1.726 0 0 1 0-2.2z";
+const MILESTONE_OUTLINE: &str = "M6.679 1.122a1.715 1.715 0 0 1 2.642 0L14.104 6.9a1.726 1.726 0 0 1 0 2.2l-4.783 5.778a1.715 1.715 0 0 1-2.642 0L1.896 9.1a1.726 1.726 0 0 1 0-2.2zm1.706 2.006a.5.5 0 0 0-.77 0L3.845 7.68a.5.5 0 0 0 0 .638l3.77 4.553a.5.5 0 0 0 .77 0l3.77-4.553a.5.5 0 0 0 0-.638z";
+
+fn milestone_svg(kind: &str) -> String {
+    let body = match kind {
+        "full" => format!(r##"<path fill-rule="evenodd" clip-rule="evenodd" d="{MILESTONE_FULL}"/>"##),
+        "part" => format!(r##"<path fill-rule="evenodd" clip-rule="evenodd" d="{MILESTONE_OUTLINE}" opacity=".3"/><path d="M8 .5c.512 0 .996.23 1.321.622l2.516 3.04-1.42 1.42-2.032-2.454A.5.5 0 0 0 8 2.946z"/>"##),
+        _ => format!(r##"<path fill-rule="evenodd" clip-rule="evenodd" d="{MILESTONE_OUTLINE}"/>"##),
+    };
+    format!(r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="#000">{body}</svg>"##)
+}
+
+pub fn milestone_icon(progress: u32, current: bool, cx: &App) -> Svg {
+    let dark = cx.theme().mode.is_dark();
+    let colour = if progress >= 100 { 0x5e6ad2 } else if current { 0xf0bf00 } else if dark { 0x959597 } else { 0x5c5c5e };
+    let kind = if progress >= 100 { "full" } else if progress > 0 { "part" } else { "none" };
+    svg().path(SharedString::from(format!("desk/milestone/{kind}.svg"))).flex_none().size(px(16.)).text_color(rgb(colour))
+}
+
 // Slack's mark, in its four colours: a layer each.
 const SLACK: [(&str, u32); 4] = [
     ("M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z", 0xe01e5a),
@@ -301,6 +346,11 @@ fn drawn(path: &str) -> Option<String> {
             (14, format!(r##"<circle cx="7" cy="7" r="5.25" fill="none" stroke="#000" stroke-width="1.75" stroke-linecap="round" transform="rotate(-90 7 7)" stroke-dasharray="{:.3} {round:.3}"/>"##, round * percent / 100.))
         }
         "slack" => (24, format!(r##"<path fill="#000" d="{}"/>"##, SLACK.get(rest.parse::<usize>().ok()?)?.0)),
+        "project" => {
+            let (status, percent) = rest.split_once('/')?;
+            return Some(project_svg(status, percent.parse().ok()?));
+        }
+        "milestone" => return Some(milestone_svg(rest)),
         "empty" => {
             let d = EMPTY.get(rest.parse::<usize>().ok()?)?;
             return Some(format!(r##"<svg xmlns="http://www.w3.org/2000/svg" width="78" height="80" viewBox="0 0 78 80"><path d="{d}" fill="none" stroke="#000" stroke-width="1.5"/></svg>"##));
