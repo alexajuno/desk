@@ -96,15 +96,6 @@ export interface InboxRow {
   who?: string | null; // who wrote the thread's newest message
 }
 
-// A tab a desk session has open in the agents' Chrome (the server's tabs.ts), which its chat's Browser shows.
-export interface Tab {
-  target: string; // Chrome's id for it
-  session: string; // the session that opened it, or whose tab opened it
-  url: string;
-  title: string;
-  opened: string; // when desk first heard of it
-}
-
 // A reply to a Slack thread, DM or mail thread, as the user (the server's replies.ts): Claude's draft on the card above
 // the thread's composer, then what the user's Send posted.
 export interface Reply {
@@ -124,7 +115,7 @@ export interface Reply {
 interface Change { seq: number; kind: string; key: string; row: Record<string, unknown> | null }
 
 export type SyncMessage =
-  | { type: "snapshot"; log: string; seq: number; rows: { issues: Issue[]; teams?: Team[]; projects?: Project[]; milestones?: Milestone[]; chats?: Chat[]; inbox?: InboxRow[]; tabs?: Tab[]; replies?: Reply[] } }
+  | { type: "snapshot"; log: string; seq: number; rows: { issues: Issue[]; teams?: Team[]; projects?: Project[]; milestones?: Milestone[]; chats?: Chat[]; inbox?: InboxRow[]; replies?: Reply[] } }
   | { type: "changes"; after: number; changes: Change[] }
   | { type: "files"; slugs: string[] };
 
@@ -138,7 +129,6 @@ export class IssueStore {
   milestones = observable.map<string, Milestone>();
   chats = observable.map<string, Chat>(); // by id
   inbox = observable.map<string, InboxRow>(); // by id
-  tabs = observable.map<string, Tab>(); // by target
   replies = observable.map<string, Reply>(); // by id
   files = observable.map<string, number>(); // slug: how many times its other files changed (a plan, a result)
   connected = false;
@@ -163,14 +153,13 @@ export class IssueStore {
       this.milestones.replace((message.rows.milestones ?? []).map((m) => [m.id, m]));
       this.chats.replace((message.rows.chats ?? []).map((c) => [c.id, c])); // none from a desk before the table
       this.inbox.replace((message.rows.inbox ?? []).map((r) => [r.id, r]));
-      this.tabs.replace((message.rows.tabs ?? []).map((t) => [t.target, t]));
       this.replies.replace((message.rows.replies ?? []).map((r) => [r.id, r]));
       this.log = message.log;
       this.seq = message.seq;
       return true;
     }
     if (message.after !== this.seq) return false;
-    const tables: Record<string, Map<string, unknown>> = { issues: this.bySlug, teams: this.teams, projects: this.projects, milestones: this.milestones, chats: this.chats, inbox: this.inbox, tabs: this.tabs, replies: this.replies };
+    const tables: Record<string, Map<string, unknown>> = { issues: this.bySlug, teams: this.teams, projects: this.projects, milestones: this.milestones, chats: this.chats, inbox: this.inbox, replies: this.replies };
     for (const c of message.changes) {
       const table = tables[c.kind]; // a table this app does not hold yet is a newer desk's
       if (table && c.row) table.set(c.key, c.row);
@@ -205,11 +194,6 @@ export class IssueStore {
   issueOf(session: string): string | null {
     for (const [slug, chat] of this.chatOfIssue) if (chat.session === session) return slug;
     return null;
-  }
-
-  // The tabs the session has open in the agents' Chrome, the first opened first, as a browser's strip lists them.
-  tabsOf(session: string): Tab[] {
-    return [...this.tabs.values()].filter((t) => t.session === session).sort((a, b) => (a.opened < b.opened ? -1 : a.opened > b.opened ? 1 : 0));
   }
 
   // The Inbox's unread rows, which the sidebar counts and the Inbox marks with a dot.

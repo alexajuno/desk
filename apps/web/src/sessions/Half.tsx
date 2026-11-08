@@ -7,8 +7,7 @@
 // terminal and browser icons and then, on right sidebar, we have terminal and browser chips", the user, 1 Nov, then
 // "yeah A" on two mockups, over the half's tabs with one button in the head). Hiding leaves the terminal's session
 // running. Where the dock can't give the chat 480px and the half 780px, and on a phone, it takes the chat's place, under
-// the chat's head, and the head's Chat button brings the chat back (frame/oneScreen.ts). Claude's tabs, the Browser, are
-// the native window's alone (apps/native), as they were Electron's until 8 Nov.
+// the chat's head, and the head's Chat button brings the chat back (frame/oneScreen.ts).
 import { observer } from "mobx-react-lite";
 import { useCallback, type PointerEvent, type ReactNode } from "react";
 import { dock, type Half as View } from "../store/dock";

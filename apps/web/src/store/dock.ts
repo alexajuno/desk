@@ -11,7 +11,7 @@
 //
 // Beside it, the chat in the middle may open its right half ("i want terminal on the right half side similar to claude
 // code. i'm imagining later on claude will drive both my chrome instance and terminal in the sidebar", the user, 31
-// Oct): its terminal or its browser, which Claude drives, its issue's steps, or its issue's Changes, each step's diff,
+// Oct): its terminal, which Claude drives, its issue's steps, or its issue's Changes, each step's diff,
 // each a view of the half (sessions/Half.tsx). Which chats have it open, on which view, and how wide it is, are remembered
 // in this browser. A step's diagram shows there, under its row in the list, the diagram of the part being read beside its
 // text when it is written as parts ("text equals to voice on the left and diagrams equals to video on the right", the
@@ -21,7 +21,7 @@ import { action, computed, makeObservable, observable } from "mobx";
 import { oneScreen } from "../frame/oneScreen";
 
 export type Layout = "page" | "chat";
-// What the right half beside it shows: the chat's terminal, or its browser, the tabs its session has open, its issue's
+// What the right half beside it shows: the chat's terminal, its issue's
 // steps (sessions/StepsHalf.tsx), or its issue's changes, each step's diff (sessions/Changes.tsx).
 export type Half = "terminal" | "steps" | "changes";
 // The step part being read in a chat: the step, by its title, and the part's place in it, from 0.

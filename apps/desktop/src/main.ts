@@ -3,7 +3,7 @@
 // same page a browser shows from the server on 8790, so a change to the page needs no new app. Run it from the launcher's
 // "desk (Electron)" (desk-electron.desktop), or with DESK_URL=<another desk> for a second one.
 //
-// It is only a window: the native window keeps Claude's tabs, the Inbox's pop-ups and running hidden, so this one asks
+// It is only a window: the native window keeps the Inbox's pop-ups and running hidden, so this one asks
 // for no notifications, which would come twice, and quits when closed.
 import { app, BrowserWindow, session, shell, type WebContents } from "electron";
 import { rightClick, shortcut } from "./keys.ts";

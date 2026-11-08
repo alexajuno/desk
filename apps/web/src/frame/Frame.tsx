@@ -134,8 +134,8 @@ function onKeyDown(e: KeyboardEvent) {
   // Ctrl+/ works from a text box too, and Esc closes the shortcuts from their own search box.
   if ((e.ctrlKey || e.metaKey) && e.key === "/") { ui.setKeys(!ui.keysOpen); e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyO") { newSession(); e.preventDefault(); return; }
-  // Ctrl `, as VS Code's: the chat's terminal, beside it, from its reply box and from the terminal itself too; Ctrl ⇧ B
-  // its browser, Ctrl ⇧ S its issue's steps, and Ctrl ⇧ G, VS Code's for its changes, its issue's Changes.
+  // Ctrl `, as VS Code's: the chat's terminal, beside it, from its reply box and from the terminal itself too;
+  // Ctrl ⇧ S its issue's steps, and Ctrl ⇧ G, VS Code's for its changes, its issue's Changes.
   if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.code === "Backquote" && toggleHalf("terminal")) { e.preventDefault(); return; }
   if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === "KeyS" && toggleHalf("steps")) { e.preventDefault(); return; }
   if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === "KeyG" && toggleHalf("changes")) { e.preventDefault(); return; }

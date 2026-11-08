@@ -538,11 +538,10 @@ button.cmd-more:hover { background: none; color: var(--text-2); }
 .corner .dock-pill .dock-pill-x { flex: none; width: 24px; padding: 0; justify-content: center; opacity: 0; transition: opacity 0.1s; }
 .dock-pill:hover .dock-pill-x { opacity: 1; }
 
-/* The chat's right half (sessions/Half.tsx), beside it at the window's full height: what Claude drives, its terminal
-   or its browser, or what you read beside the chat, the issue's steps, a step's diagram or its Changes. It takes all the room the chat leaves, the chat a column of --chat-w, 480px until its edge is
+/* The chat's right half (sessions/Half.tsx), beside it at the window's full height: what Claude drives, its terminal,
+   or what you read beside the chat, the issue's steps, a step's diagram or its Changes. It takes all the room the chat leaves, the chat a column of --chat-w, 480px until its edge is
    dragged ("ok. A", 2 Nov), so a wider window widens only the half. Its left edge is a hairline, which drags. It has
-   no head: the chat's head picks and hides its view ("yeah A", 1 Nov), and the browser's tabs stand level with that
-   head. */
+   no head: the chat's head picks and hides its view ("yeah A", 1 Nov). */
 .session-split { display: flex; height: 100%; min-height: 0; }
 .session-split > .session-view { flex: 1; min-width: 0; }
 .session-split:has(> .half) > .session-view { flex: 0 1 var(--chat-w, 480px); min-width: 360px; } /* the chat gives way to 360 on a narrow window */
