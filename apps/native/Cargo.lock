@@ -1229,6 +1229,7 @@ name = "desk-native"
 version = "0.1.0"
 dependencies = [
  "gpui-kit",
+ "regex",
  "serde_json",
  "smol",
  "tungstenite",

@@ -1,5 +1,7 @@
-// An issue's chat in the middle of the window: its conversation, live over the session's socket (live.rs), the reply
-// streaming in as it comes, and the composer, whose Enter sends (Shift+Enter breaks the line).
+// An issue's chat in the page, under its head (main.rs): its conversation, live over the session's socket (live.rs),
+// the reply streaming in as it comes, and the composer, whose Enter sends (Shift+Enter breaks the line). Like the web
+// app's, the conversation is a column a document's width, at a document's text size, with the user's own messages in
+// a soft bubble on the right.
 use gpui_kit::base::StyledExt;
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::message_scroller::{MessageScroller, MessageScrollerState};
@@ -9,6 +11,11 @@ use gpui_kit::*;
 
 use crate::live::{self, Event, Item};
 use crate::net;
+use crate::theme;
+
+// The web app's chat column and text (desk.css).
+const COLUMN: f32 = 760.;
+const DOCUMENT: f32 = 15.;
 
 struct Block {
     msg: String,
@@ -18,7 +25,6 @@ struct Block {
 }
 
 pub struct Chat {
-    title: String,
     session: Option<String>,
     items: Vec<Item>,
     partial: Vec<Block>,
@@ -31,7 +37,7 @@ pub struct Chat {
 }
 
 impl Chat {
-    pub fn new(slug: String, title: String, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(slug: String, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let scroller = cx.new(|cx| MessageScrollerState::new(0, cx));
         let composer = cx.new(|cx| {
             TextareaState::new(window, cx).auto_grow(1, 10).submit_on_enter(true).placeholder("Message the chat")
@@ -46,11 +52,7 @@ impl Chat {
         cx.spawn(async move |this, cx| {
             let found = cx.background_spawn(async move { net::get(&page) }).await;
             let session = match found {
-                Ok(page) => {
-                    let title = page["issue"]["title"].as_str().unwrap_or("").to_string();
-                    let _ = this.update(cx, |chat, cx| { if !title.is_empty() { chat.title = title } cx.notify() });
-                    page["issue"]["session"].as_str().map(str::to_string)
-                }
+                Ok(page) => page["issue"]["session"].as_str().map(str::to_string),
                 Err(error) => {
                     let _ = this.update(cx, |chat, cx| { chat.error = Some(error); cx.notify() });
                     return;
@@ -68,7 +70,7 @@ impl Chat {
             }
         })
         .detach();
-        Self { title, session: None, items: Vec::new(), partial: Vec::new(), working: false, error: None, rows: 0, scroller, composer, _subscription: subscription }
+        Self { session: None, items: Vec::new(), partial: Vec::new(), working: false, error: None, rows: 0, scroller, composer, _subscription: subscription }
     }
 
     fn streaming(&self) -> String {
@@ -131,29 +133,44 @@ impl Chat {
         .detach();
     }
 
+    // One row of the conversation, in the column.
     fn row(items: &[Item], streaming: &str, i: usize, cx: &App) -> AnyElement {
         let theme = cx.theme();
+        let column = |child: AnyElement| div().w_full().flex().justify_center().px_6().child(div().w_full().max_w(px(COLUMN)).child(child));
         let Some(item) = items.get(i) else {
-            return div().px_6().py_2().child(TextView::markdown("streaming", streaming.to_string()).selectable(true)).into_any_element();
+            return column(div().py_2().text_size(px(DOCUMENT)).child(TextView::markdown("streaming", streaming.to_string()).selectable(true)).into_any_element()).into_any_element();
         };
-        match item.kind.as_str() {
+        let inner = match item.kind.as_str() {
             "you" => div()
                 .h_flex()
                 .justify_end()
-                .px_6()
-                .py_2()
-                .child(div().max_w(relative(0.8)).px_3().py_2().rounded_lg().bg(theme.secondary).child(item.text.clone()))
+                .py_3()
+                .child(
+                    div()
+                        .max_w(relative(0.8))
+                        .px_4()
+                        .py_2()
+                        .rounded(px(12.))
+                        .bg(theme.muted)
+                        .text_size(px(DOCUMENT))
+                        .text_color(theme::text(cx).strong)
+                        .child(item.text.clone()),
+                )
                 .into_any_element(),
-            "text" => div().px_6().py_2().child(TextView::markdown(("md", i), item.text.clone()).selectable(true)).into_any_element(),
+            "text" => div()
+                .py_2()
+                .text_size(px(DOCUMENT))
+                .line_height(relative(1.6))
+                .child(TextView::markdown(("md", i), item.text.clone()).selectable(true))
+                .into_any_element(),
             _ => div()
-                .px_6()
-                .py_0p5()
-                .text_sm()
+                .py_1()
                 .text_color(theme.muted_foreground)
                 .truncate()
                 .child(item.text.lines().next().unwrap_or("").to_string())
                 .into_any_element(),
-        }
+        };
+        column(inner).into_any_element()
     }
 }
 
@@ -167,16 +184,16 @@ impl Render for Chat {
             (None, true) => "Working…".into(),
             (None, false) => String::new(),
         };
+        let column = |child: Div| div().w_full().flex().justify_center().px_6().child(child.w_full().max_w(px(COLUMN)));
         div()
             .v_flex()
             .size_full()
-            .child(div().px_6().py_3().border_b_1().border_color(theme.border).font_semibold().truncate().child(self.title.clone()))
             .child(
                 div().flex_1().min_h_0().child(
                     MessageScroller::new("chat", self.scroller.clone(), move |i, _, cx| Self::row(&items, &streaming, i, cx)).size_full(),
                 ),
             )
-            .child(div().px_6().h(px(20.)).text_xs().text_color(theme.muted_foreground).child(status))
-            .child(div().px_4().pb_4().child(Textarea::new(&self.composer)))
+            .child(column(div().h(px(24.)).text_color(theme.muted_foreground).child(status)))
+            .child(column(div().pb_4().child(Textarea::new(&self.composer).rounded(px(12.)).text_size(px(DOCUMENT)))))
     }
 }
