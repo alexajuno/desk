@@ -28,10 +28,8 @@ struct Step {
     kids: Vec<Step>,
 }
 
-// The right half's width (main.rs).
-pub const HALF: f32 = 420.;
-
 pub struct Steps {
+    pub width: f32, // the half's, which the window sets as it lays it out (main.rs)
     steps: Vec<Step>,
     toggled: HashSet<String>,
     scroll: ScrollHandle,
@@ -103,7 +101,7 @@ fn steps(list: &Value, prefix: &str) -> Vec<Step> {
 
 impl Steps {
     pub fn new() -> Self {
-        Self { steps: Vec::new(), toggled: HashSet::new(), scroll: ScrollHandle::new() }
+        Self { width: 420., steps: Vec::new(), toggled: HashSet::new(), scroll: ScrollHandle::new() }
     }
 
     pub fn set(&mut self, page: &Value, cx: &mut Context<Self>) {
@@ -146,7 +144,7 @@ impl Steps {
             );
         let mut column = div().v_flex().child(head);
         if open && drawn {
-            let room = HALF - 32. - 18. * depth as f32 - 16.;
+            let room = self.width - 32. - 18. * depth as f32 - 16.;
             let mut body = div().v_flex().gap_2().pl(px(32. + 18. * depth as f32)).pr_3().pb_3();
             for (n, picture) in pictures.iter().enumerate() {
                 let scale = (room / picture.size.0).min(1.);

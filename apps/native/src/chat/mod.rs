@@ -368,10 +368,16 @@ impl Chat {
 
     fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let text = self.composer.read(cx).value().trim().to_string();
-        let Some(session) = self.session.clone() else { return };
-        if text.is_empty() && self.attached.is_empty() { return }
+        if self.session.is_none() || (text.is_empty() && self.attached.is_empty()) { return }
         let attached = std::mem::take(&mut self.attached);
         self.composer.update(cx, |c, cx| c.set_value("", window, cx));
+        self.say(text, attached, cx);
+    }
+
+    // A message to the session, from the composer or from a comment on lines in Changes: drawn at once as pending, and
+    // dropped again with what went wrong if desk refuses it.
+    pub fn say(&mut self, text: String, attached: Vec<live::Attachment>, cx: &mut Context<Self>) {
+        let Some(session) = self.session.clone() else { return };
         self.pending.push(Pending { text: text.clone(), files: attached.len(), mid: self.working });
         if !self.working { self.set_working(true, None) } // drawn at once; the server's word follows
         self.tick(cx);
