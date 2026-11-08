@@ -77,8 +77,7 @@ let stopping = false;
 const listeners = new Set<Listener>();
 const waiters = new Set<() => void>(); // settled's, each looking again at every change
 
-const COLUMNS = `id, open, working, asks, extract(epoch from prompted)::float8 as prompted, extract(epoch from replied)::float8 as replied,
-  extract(epoch from ended)::float8 as ended, cost, tokens, extract(epoch from updated)::float8 as updated`;
+const COLUMNS = "id, open, working, asks, prompted, replied, ended, cost, tokens, updated";
 
 // The sessions that changed, or null when every one may have, as when the host first says hello; and those of them
 // whose turn ended, so that what they wrote beside their issue is read again.
@@ -173,14 +172,14 @@ const seconds = (ms: number | null) => (ms === null ? null : ms / 1000);
 // as one that just resumed it, leaves the table's. What it spent is taken as said, since a /clear starts it again, and
 // left as it was by a host that has seen no turn of it end.
 async function upsert(tx: db.Db, s: State): Promise<Row> {
-  return (await tx.query<Row>(`insert into sessions (id, open, working, asks, prompted, replied, ended, cost, tokens)
-    values ($1, $2, $3, $4, to_timestamp($5), to_timestamp($6), to_timestamp($7), $8, $9)
+  return (await tx.query<Row>(`insert into sessions (id, open, working, asks, prompted, replied, ended, cost, tokens, updated)
+    values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     on conflict (id) do update set open = excluded.open, working = excluded.working, asks = excluded.asks,
       prompted = greatest(sessions.prompted, excluded.prompted), replied = greatest(sessions.replied, excluded.replied),
       ended = greatest(sessions.ended, excluded.ended), cost = coalesce(excluded.cost, sessions.cost),
-      tokens = coalesce(excluded.tokens, sessions.tokens), updated = now()
+      tokens = coalesce(excluded.tokens, sessions.tokens), updated = excluded.updated
     returning ${COLUMNS}`, [s.id, s.open, s.open && s.working, s.open ? s.asks : 0, seconds(s.prompted), seconds(s.replied), seconds(s.ended),
-    s.cost ?? null, s.tokens ?? null])).rows[0];
+    s.cost ?? null, s.tokens ?? null, Date.now() / 1000])).rows[0];
 }
 
 async function upsertAll(tx: db.Db, states: State[]): Promise<Row[]> {
@@ -190,9 +189,9 @@ async function upsertAll(tx: db.Db, states: State[]): Promise<Row[]> {
 }
 
 // Those whose process is gone: a turn that ran ended with it. Every open one but those excepted, or only those named.
-const CLOSE = "update sessions set open = false, working = false, asks = 0, ended = case when working then now() else ended end, updated = now() where open and";
-const closeAll = (tx: db.Db, except: string[] = []) => tx.query<Row>(`${CLOSE} not (id = any($1)) returning ${COLUMNS}`, [except]);
-const closeOnly = (tx: db.Db, ids: string[]) => tx.query<Row>(`${CLOSE} id = any($1) returning ${COLUMNS}`, [ids]);
+const CLOSE = "update sessions set open = false, working = false, asks = 0, ended = case when working then $2 else ended end, updated = $2 where open and";
+const closeAll = (tx: db.Db, except: string[] = []) => tx.query<Row>(`${CLOSE} not (id = any($1)) returning ${COLUMNS}`, [except, Date.now() / 1000]);
+const closeOnly = (tx: db.Db, ids: string[]) => tx.query<Row>(`${CLOSE} id = any($1) returning ${COLUMNS}`, [ids, Date.now() / 1000]);
 
 // Keep what a write returned; a chat whose turn started or ended moved now (chats.ts), and the listeners are told.
 function kept(written: Row[]) {

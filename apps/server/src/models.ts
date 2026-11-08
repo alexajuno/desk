@@ -138,7 +138,7 @@ async function keepCount(session: string, value: Context) {
   const at = Date.now();
   counted.set(session, { value, at });
   for (const fn of counters) fn(session);
-  await db.write((tx) => tx.query(`insert into sessions (id, context_tokens, context_max, context_at) values ($1, $2, $3, $4)
+  await db.write((tx) => tx.query(`insert into sessions (id, context_tokens, context_max, context_at, updated) values ($1, $2, $3, $4, $4)
     on conflict (id) do update set context_tokens = excluded.context_tokens, context_max = excluded.context_max, context_at = excluded.context_at`,
     [session, value.tokens, value.max, at / 1000]));
 }

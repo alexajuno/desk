@@ -179,15 +179,15 @@ create table if not exists sessions ( -- what each session does, as the session 
   open boolean not null default false, -- the host holds its process
   working boolean not null default false, -- a turn runs
   asks integer not null default 0, -- the questions waiting on the user: a tool to allow, AskUserQuestion's
-  prompted timestamptz, -- when the user last wrote to it, or desk for them
-  replied timestamptz, -- when its last turn ended with its reply
-  ended timestamptz, -- when its last turn ended, however: its reply, Stop, an error, or its process going
+  prompted double precision, -- when the user last wrote to it, or desk for them, in seconds
+  replied double precision, -- when its last turn ended with its reply
+  ended double precision, -- when its last turn ended, however: its reply, Stop, an error, or its process going
   cost double precision, -- the dollars it has spent so far, as Claude Code counts them on each turn's result
   tokens double precision, -- the tokens its model calls read so far, fresh or from the cache
   context_tokens double precision, -- how full its context is, as Claude Code last counted it (models.ts)
   context_max double precision, -- out of how many
   context_at double precision, -- when it counted, in seconds
-  updated timestamptz not null default now()
+  updated double precision not null -- when desk last wrote it
 );
 -- The Sessions menu's search (sessiontext.ts). desk_words reads a text as simple does, its words whole and lowercased,
 -- and folds their accents first, so that "cam giac" finds "cảm giác".
@@ -209,7 +209,7 @@ create table if not exists session_text ( -- what a search finds a session by: w
 );
 create index if not exists session_text_words on session_text using gin (words);
 create table if not exists search_log ( -- each time the search's box opened: what was typed and what it opened (searchlog.ts)
-  at timestamptz not null default now(),
+  at double precision not null, -- in seconds
   tab text not null default '', -- the kind it ended on, '' for All
   query text not null default '',
   picked_kind text, -- chat, issue, ...: null when it closed with nothing opened
@@ -357,6 +357,12 @@ export async function open(): Promise<PGlite> {
   await opened.exec("drop table if exists line; drop table if exists tries; drop table if exists trying; drop table if exists copies;");
   // How full each session's context is, as Claude Code last counted it (models.ts), from 8 Nov: kept until then, with
   // Claude Code's list of models, in a table of its own, heard, as JSON by name. The list is meta's 'claude models' since.
+  // The sessions' times and the search log's are seconds since 8 Nov, as SQLite keeps them, rather than Postgres's
+  // timestamptz read back with extract (desk issue "Cut the desk server’s memory": the move to SQLite).
+  for (const [table, columns] of [["sessions", ["prompted", "replied", "ended", "updated"]], ["search_log", ["at"]]] as const)
+    for (const c of columns)
+      if ((await opened.query("select 1 from information_schema.columns where table_name = $1 and column_name = $2 and data_type = 'timestamp with time zone'", [table, c])).rows.length)
+        await opened.exec(`alter table ${table} alter column ${c} drop default, alter column ${c} type double precision using extract(epoch from ${c});`);
   await opened.exec(["context_tokens", "context_max", "context_at"].map((c) => `alter table sessions add column if not exists ${c} double precision;`).join(" "));
   if ((await opened.query("select 1 from information_schema.tables where table_name = 'heard'")).rows.length)
     await opened.exec(`insert into meta select 'claude models', value::text from heard where name = 'models' on conflict do nothing;
