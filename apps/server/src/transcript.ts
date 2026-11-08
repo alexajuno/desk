@@ -495,6 +495,24 @@ export function subagentItems(session: string, tool: string, limit = 300): Item[
 }
 
 // A tool's result whole, as the chat opens a command's long output, from the session's transcript or a subagent's.
+// The nth image of the message with this uuid, for the chat's thumbnail and its enlarged view.
+export function imageOf(session: string, uuid: string, n: number): { media_type: string; data: string } | null {
+  for (const path of listed(session)) {
+    for (const line of readFileSync(path, "utf8").split("\n")) {
+      if (!line.includes(uuid) || !line.includes('"image"')) continue;
+      try {
+        const e: Entry = JSON.parse(line);
+        if (e.uuid !== uuid || !Array.isArray(e.message?.content)) continue;
+        const b = e.message.content.filter((b: Entry) => b.type === "image")[n];
+        if (b?.source?.data) return { media_type: String(b.source.media_type ?? "image/png"), data: String(b.source.data) };
+      } catch {
+        // a line cut short
+      }
+    }
+  }
+  return null;
+}
+
 export function resultOf(session: string, tool: string): string | null {
   const paths = listed(session).flatMap((path) => {
     const dir = join(path.slice(0, -".jsonl".length), "subagents");

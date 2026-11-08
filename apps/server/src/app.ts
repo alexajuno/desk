@@ -1016,6 +1016,11 @@ export async function create(): Promise<FastifyInstance> {
     if (text === null) throw new HttpError(404, "No such result in the chat's transcript.");
     return { text };
   });
+  app.get("/api/live/:id/image/:uuid/:n", async (req: Req, reply) => {
+    const img = transcript.imageOf(sessionOf(req), String(req.params.uuid ?? ""), Number(req.params.n));
+    if (!img) throw new HttpError(404, "No such image in the chat's transcript.");
+    return reply.header("cache-control", "private, max-age=86400").type(img.media_type).send(Buffer.from(img.data, "base64"));
+  });
   app.get("/api/live/:id/context", async (req: Req) => models.context(sessionOf(req)));
   // The chat's terminal (terminal.ts): the page starts it, and draws it over the WebSocket, ?cols=&rows= its size.
   app.post("/api/live/:id/terminal", async (req: Req) => {
