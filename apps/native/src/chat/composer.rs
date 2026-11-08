@@ -90,7 +90,7 @@ impl Chat {
     }
 
     // A round button of the foot.
-    fn round(id: &'static str, fill: Hsla, glyph: Img) -> Stateful<Div> {
+    fn round(id: &'static str, fill: Hsla, glyph: Svg) -> Stateful<Div> {
         div().id(id).flex_none().flex().items_center().justify_center().size(px(28.)).rounded_full().bg(fill).cursor_pointer().child(glyph)
     }
 

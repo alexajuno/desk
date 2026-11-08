@@ -38,8 +38,9 @@ pub struct Steps {
 }
 
 // Each picture in a step's diagram_html in one theme ("for-dark" or "for-light"), with the caption over it (Today,
-// After) if any, and the size d2 drew it at, from its outer viewBox. It is drawn at twice that size, so it stays sharp
-// on a 2x screen, and shown at the size d2 drew it.
+// After) if any, and the size d2 drew it at, from its outer viewBox. It is given that size, which GPUI renders at twice
+// (SMOOTH_SVG_SCALE_FACTOR), sharp on a 2x screen; at four times, as before, shrinking it to the half left its lines
+// and words jagged.
 fn pictures(html: &str, version: &str) -> Vec<Picture> {
     let mut found = Vec::new();
     let mut rest = html;
@@ -62,7 +63,7 @@ fn pictures(html: &str, version: &str) -> Vec<Picture> {
             .filter(|n| n.len() == 4)
             .map(|n| (n[2], n[3]))
             .unwrap_or((400., 300.));
-        let sharp = svg.replacen("<svg ", &format!("<svg width=\"{}\" height=\"{}\" ", size.0 * 2., size.1 * 2.), 1);
+        let sharp = svg.replacen("<svg ", &format!("<svg width=\"{}\" height=\"{}\" ", size.0, size.1), 1);
         let sharp = with_our_fonts(&sharp);
         found.push(Picture { caption, image: Arc::new(Image::from_bytes(ImageFormat::Svg, sharp.into_bytes())), size });
         rest = &body[close..];
