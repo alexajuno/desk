@@ -1228,6 +1228,7 @@ dependencies = [
 name = "desk-native"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "gpui-kit",
  "regex",
  "serde_json",

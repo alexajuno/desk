@@ -22,6 +22,7 @@ const OPEN: [&str; 5] = ["triage", "running", "review", "waiting", "backlog"];
 struct Desk {
     issues: Vec<Issue>,
     picked: Option<String>,
+    current: Issue, // the picked issue as last heard, open or closed, for the chat's head
     chat: Option<Entity<Chat>>,
     steps: Entity<Steps>,
     steps_open: bool,
@@ -42,7 +43,7 @@ impl Desk {
         .detach();
         // The system's light or dark, as the web app follows it.
         let appearance = cx.observe_window_appearance(window, |_, window, cx| theme::sync(window, cx));
-        Self { issues: Vec::new(), picked: None, chat: None, steps: cx.new(|_| Steps::new()), steps_open: std::env::var("DESK_HALF").as_deref() == Ok("steps"), shows, _appearance: appearance }
+        Self { issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), steps_open: std::env::var("DESK_HALF").as_deref() == Ok("steps"), shows, _appearance: appearance }
     }
 
     fn apply(&mut self, event: Event, cx: &mut Context<Self>) {
@@ -54,11 +55,17 @@ impl Desk {
                 return;
             }
             Event::Snapshot(issues) => self.issues = issues,
+            Event::Issue { slug, row } if self.picked.as_deref() == Some(&slug) => {
+                if let Some(row) = &row { self.current = row.clone() }
+                self.issues.retain(|issue| issue.slug != slug);
+                self.issues.extend(row);
+            }
             Event::Issue { slug, row } => {
                 self.issues.retain(|issue| issue.slug != slug);
                 self.issues.extend(row);
             }
         }
+        if let Some(found) = self.issues.iter().find(|i| Some(&i.slug) == self.picked.as_ref()) { self.current = found.clone() }
         self.issues.retain(|issue| OPEN.contains(&issue.state.as_str()));
         let rank = |s: &str| OPEN.iter().position(|o| *o == s).unwrap_or(OPEN.len());
         self.issues.sort_by(|a, b| rank(&a.state).cmp(&rank(&b.state)).then_with(|| a.title.cmp(&b.title)));
@@ -67,6 +74,7 @@ impl Desk {
     fn open(&mut self, issue: &Issue, window: &mut Window, cx: &mut Context<Self>) {
         if self.picked.as_deref() == Some(&issue.slug) { return }
         self.picked = Some(issue.slug.clone());
+        self.current = self.issues.iter().find(|i| i.slug == issue.slug).cloned().unwrap_or_else(|| issue.clone());
         let slug = issue.slug.clone();
         let _ = self.shows.try_send(slug.clone());
         self.steps = cx.new(|_| Steps::new());
@@ -140,7 +148,7 @@ impl Desk {
 
     // The chat's head: the issue's status and title, then the buttons that open the right half (desk-ui, The chat).
     fn head(&self, cx: &mut Context<Self>) -> Div {
-        let issue = self.issues.iter().find(|i| Some(&i.slug) == self.picked.as_ref()).cloned().unwrap_or_default();
+        let issue = self.current.clone();
         let strong = theme::text(cx).strong;
         let divider = theme::text(cx).divider;
         div()
