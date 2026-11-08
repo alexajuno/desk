@@ -215,7 +215,7 @@ impl Desk {
             }))
     }
 
-    fn active_teams(&self) -> Vec<Value> {
+    pub(crate) fn active_teams(&self) -> Vec<Value> {
         let mut teams: Vec<Value> = self.rows.get("teams").into_iter().flat_map(|t| t.values()).filter(|t| t["state"] == "active").cloned().collect();
         teams.sort_by(|a, b| a["created"].as_str().cmp(&b["created"].as_str()));
         teams

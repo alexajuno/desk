@@ -18,6 +18,8 @@ pub struct Issue {
     pub team: Option<String>,
     pub project: Option<String>,
     pub folder: Option<String>,
+    pub parent: Option<String>,
+    pub created: String,
 }
 
 // A row of the Inbox (the server's inbox.ts): what a session last did for you, a chat with no issue, an issue to
@@ -79,7 +81,7 @@ fn issue(row: &Value) -> Option<Issue> {
     let text = |k: &str| row.get(k).and_then(Value::as_str).unwrap_or("").to_string();
     let some = |k: &str| row.get(k).and_then(Value::as_str).filter(|v| !v.is_empty()).map(str::to_string);
     row.is_object().then(|| Issue { slug: text("slug"), title: text("title"), state: text("state"), priority: text("priority"),
-        team: some("team"), project: some("project"), folder: some("folder") })
+        team: some("team"), project: some("project"), folder: some("folder"), parent: some("parent"), created: text("created") })
 }
 
 // A key as text, a number's too (milestones and activity are keyed by their id).

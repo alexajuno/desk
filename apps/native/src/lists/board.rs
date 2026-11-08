@@ -2,7 +2,7 @@
 // group, each issue a card. A card dragged to another column sets what the board is grouped by, as Linear's does: its
 // status, priority, team, project or folder. Landing takes no drop, since only Approve lands an issue, nor Triage, which
 // only a chat files, and a column that takes none says why while a card is dragged; a drop on Waiting asks on whom, as
-// the S menu does. A card is a row as well: the mouse, or J and K, puts it in focus, and Enter or O opens it.
+// the S menu does. A card is a row as well: the mouse, or J and K, puts it in focus, and Enter opens it.
 use std::collections::HashMap;
 
 use gpui_kit::base::StyledExt;

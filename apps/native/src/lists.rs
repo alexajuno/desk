@@ -4,7 +4,7 @@
 // parent on a thin line. My issues lists every issue, and a team's Issues its own. desk's server draws each list from
 // the view in its words (views.ts): what is filtered, how it is grouped and ordered. The window keeps each page's last
 // view, and which groups are folded, between runs, as the web keeps them in the browser. J and K, or ↓ and ↑, move the
-// focus, as the mouse does; Enter or O opens the issue in focus, and T folds its group. Filter (F) and Display options
+// focus, as the mouse does; Enter opens the issue in focus, and T folds its group. Filter (F) and Display options
 // (Shift V) are at the tabs' right end, as filters.rs draws them; a change to the view is a change to its words, which
 // desk reads again (views.ts), as the web's setView. Its Layout may be Board instead (board.rs, Ctrl B switches). S,
 // P and a right-click open a row's menus (menus.rs).
@@ -323,7 +323,7 @@ impl IssueList {
             "escape" if self.popups.display => self.close_popups(window, cx),
             "j" | "down" => self.walk(1, cx),
             "k" | "up" => self.walk(-1, cx),
-            "enter" | "o" => match self.focused.clone() {
+            "enter" => match self.focused.clone() {
                 Some(slug) => cx.emit(ListEvent::Open(slug)),
                 None => return,
             },

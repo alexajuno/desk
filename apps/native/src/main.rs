@@ -6,6 +6,7 @@
 mod browser;
 mod changes;
 mod chat;
+mod command;
 mod creator;
 mod inbox;
 mod issue;
@@ -123,6 +124,8 @@ struct Desk {
     tips: Entity<gpui_kit::base::TooltipOverlay>, // the one tip shown, over everything (tip.rs)
     list: Option<(Entity<lists::IssueList>, Subscription)>, // the issue list shown last, My issues' or a team's
     creator: Option<(Entity<creator::Creator>, Option<FocusHandle>, Subscription)>, // New issue, and what had the keys
+    command: Option<(Entity<command::Command>, Option<FocusHandle>, Subscription)>, // O then T, P or I
+    o_pressed: Option<std::time::Instant>,
     _appearance: Subscription,
 }
 
@@ -181,7 +184,7 @@ impl Desk {
             notice: None,
             inbox_focus: cx.focus_handle(),
             inbox_scroll: UniformListScrollHandle::new(),
-            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, notes: notify::Notes::start(window, cx), titled: String::new(), seat: None, tips: tip::install(cx), list: None, creator: None, _appearance: appearance }
+            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, terminal: None, _terminal_events: None, tabs: Vec::new(), browser: None, tab_of: HashMap::new(), _browser_events: None, commits: None, shows, settings: None, back_to: Page::Issue, search: None, notes: notify::Notes::start(window, cx), titled: String::new(), seat: None, tips: tip::install(cx), list: None, creator: None, command: None, o_pressed: None, _appearance: appearance }
     }
 
     fn apply(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
@@ -297,13 +300,42 @@ impl Desk {
         }
     }
 
-    // Whether something other than the window or the Inbox's list holds the keys: a box typed in, the terminal, the
-    // Browser's page; the window's own keys then leave them alone, as the web's do while typing.
-    // Keys go to a box being typed in, rather than to the window: anything focused but the window, the Inbox's list
-    // and an issue list.
+    // Whether something other than the window, the Inbox's list or an issue list holds the keys: a box typed in, the
+    // terminal, the Browser's page; the window's own keys then leave them alone, as the web's do while typing.
     fn typing(&self, window: &Window, cx: &App) -> bool {
         let list = self.list.as_ref().map(|(l, _)| l.read(cx).focus.clone());
         window.focused(cx).is_some_and(|f| f != self.focus && f != self.inbox_focus && Some(&f) != list.as_ref())
+    }
+
+    // Linear's O then T, P or I: a team, a project or an issue, from its command menu.
+    pub(crate) fn open_command(&mut self, kind: command::Kind, window: &mut Window, cx: &mut Context<Self>) {
+        if self.command.is_some() || self.search.is_some() { return }
+        let text = |r: &serde_json::Value, k: &str| r[k].as_str().unwrap_or("").to_string();
+        let sources = command::Sources {
+            teams: self.active_teams().iter().map(|t| (text(t, "slug"), text(t, "title"))).collect(),
+            projects: self.rows.get("projects").into_iter().flatten().map(|(k, p)| (k.clone(), text(p, "title"), text(p, "status"))).collect(),
+            issues: self.issues.clone(),
+            here: (self.page == Page::Issue).then(|| self.current.clone()),
+        };
+        let back = window.focused(cx);
+        let open = cx.new(|cx| command::Command::new(kind, sources, window, cx));
+        let events = cx.subscribe_in(&open, window, |desk, _, event: &command::CommandEvent, window, cx| {
+            let Some((_, back, _)) = desk.command.take() else { return };
+            match event {
+                command::CommandEvent::Open(row) => match row.kind {
+                    command::Kind::Team => desk.open_list("", Some(row.slug.clone()), window, cx),
+                    command::Kind::Project => desk.show_soon(&format!("project/{}", row.slug), cx),
+                    command::Kind::Issue => {
+                        let issue = desk.all.get(&row.slug).cloned().unwrap_or_else(|| Issue { slug: row.slug.clone(), ..Default::default() });
+                        desk.open(&issue, window, cx);
+                    }
+                },
+                command::CommandEvent::Closed => if let Some(back) = back { window.focus(&back, cx) } else { window.focus(&desk.focus, cx) },
+            }
+            cx.notify();
+        });
+        self.command = Some((open, back, events));
+        cx.notify();
     }
 
     // New issue, with what its opener says: a team, a group's status or priority, or the parent of a sub-issue.
@@ -355,6 +387,7 @@ impl Desk {
             return cx.notify();
         }
         self.picked = Some(issue.slug.clone());
+        command::note_visit("issue", &issue.slug);
         self.current = self.issues.iter().find(|i| i.slug == issue.slug).cloned().unwrap_or_else(|| issue.clone());
         let slug = issue.slug.clone();
         self.tell_shown(cx);
@@ -670,6 +703,19 @@ impl Render for Desk {
                         desk.open_search(window, cx);
                         return cx.stop_propagation();
                     }
+                    // O then T, P or I, within a second and a half
+                    let then = desk.o_pressed.take().filter(|at| at.elapsed() < std::time::Duration::from_millis(1500));
+                    if then.is_some() && bare && !k.modifiers.shift {
+                        let kind = match k.key.as_str() { "t" => Some(command::Kind::Team), "p" => Some(command::Kind::Project), "i" => Some(command::Kind::Issue), _ => None };
+                        if let Some(kind) = kind {
+                            desk.open_command(kind, window, cx);
+                            return cx.stop_propagation();
+                        }
+                    }
+                    if bare && !k.modifiers.shift && k.key == "o" {
+                        desk.o_pressed = Some(std::time::Instant::now());
+                        return cx.stop_propagation();
+                    }
                     if desk.chat_key(e, window, cx) { return cx.stop_propagation() }
                     // C, a new issue, in the team whose list this is, as Linear's C does in a team's views
                     if bare && !k.modifiers.shift && k.key == "c" {
@@ -727,6 +773,10 @@ impl Render for Desk {
             .child(self.status_bar(cx))
             .child(self.tips.clone())
             .children(self.creator.as_ref().map(|(open, _, _)| deferred(open.clone()).with_priority(4)))
+            .children(self.command.as_ref().map(|(open, _, _)| {
+                let top = window.viewport_size().height * 0.13;
+                deferred(div().absolute().top_0().left_0().size_full().flex().justify_center().pt(top).child(open.clone())).with_priority(3)
+            }))
             .children(self.search.as_ref().map(|(open, _, _)| {
                 let top = window.viewport_size().height * 0.13;
                 deferred(div().absolute().top_0().left_0().size_full().flex().justify_center().pt(top).child(open.clone())).with_priority(3)
