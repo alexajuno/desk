@@ -11,14 +11,15 @@ pub fn host() -> String {
 
 pub type Socket = WebSocket<MaybeTlsStream<TcpStream>>;
 
-// A socket whose reads give up every few seconds, so its thread can see that nobody listens any more.
-pub fn socket(path: &str) -> Result<Socket, Box<dyn std::error::Error>> {
+// A socket whose reads give up after `wait`, so its thread can see that nobody listens any more, or that it has
+// something to say.
+pub fn socket(path: &str, wait: Duration) -> Result<Socket, Box<dyn std::error::Error>> {
     let host = host();
     let mut request = format!("ws://{host}{path}").into_client_request()?;
     request.headers_mut().insert("Origin", format!("http://{host}").parse()?);
     let (socket, _) = tungstenite::connect(request)?;
     if let MaybeTlsStream::Plain(stream) = socket.get_ref() {
-        stream.set_read_timeout(Some(Duration::from_secs(3)))?;
+        stream.set_read_timeout(Some(wait))?;
     }
     Ok(socket)
 }

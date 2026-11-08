@@ -4,9 +4,11 @@
 mod chat;
 mod live;
 mod net;
+mod steps;
 mod sync;
 
 use chat::Chat;
+use steps::Steps;
 use gpui_kit::base::StyledExt;
 use gpui_kit::component::ActiveTheme;
 use gpui_kit::*;
@@ -19,23 +21,32 @@ struct Desk {
     issues: Vec<Issue>,
     picked: Option<String>,
     chat: Option<Entity<Chat>>,
+    steps: Entity<Steps>,
+    shows: smol::channel::Sender<String>,
 }
 
 impl Desk {
     fn new(cx: &mut Context<Self>) -> Self {
         let (send, events) = smol::channel::unbounded();
-        sync::start(send);
+        let (shows, shown) = smol::channel::unbounded();
+        sync::start(send, shown);
         cx.spawn(async move |this, cx| {
             while let Ok(event) = events.recv().await {
-                if this.update(cx, |desk, cx| { desk.apply(event); cx.notify() }).is_err() { break }
+                if this.update(cx, |desk, cx| { desk.apply(event, cx); cx.notify() }).is_err() { break }
             }
         })
         .detach();
-        Self { issues: Vec::new(), picked: None, chat: None }
+        Self { issues: Vec::new(), picked: None, chat: None, steps: cx.new(|_| Steps::new()), shows }
     }
 
-    fn apply(&mut self, event: Event) {
+    fn apply(&mut self, event: Event, cx: &mut Context<Self>) {
         match event {
+            Event::Page { slug, page } => {
+                if self.picked.as_deref() == Some(&slug) {
+                    self.steps.update(cx, |steps, cx| steps.set(&page, cx));
+                }
+                return;
+            }
             Event::Snapshot(issues) => self.issues = issues,
             Event::Issue { slug, row } => {
                 self.issues.retain(|issue| issue.slug != slug);
@@ -51,6 +62,8 @@ impl Desk {
         if self.picked.as_deref() == Some(&issue.slug) { return }
         self.picked = Some(issue.slug.clone());
         let (slug, title) = (issue.slug.clone(), issue.title.clone());
+        let _ = self.shows.try_send(slug.clone());
+        self.steps = cx.new(|_| Steps::new());
         self.chat = Some(cx.new(|cx| Chat::new(slug, title, window, cx)));
         cx.notify();
     }
@@ -100,7 +113,10 @@ impl Render for Desk {
             Some(chat) => div().flex_1().min_w_0().h_full().child(chat.clone()),
             None => div().flex_1().h_full().flex().items_center().justify_center().text_color(muted).child("Pick an issue"),
         };
-        div().h_flex().size_full().bg(theme.background).text_color(theme.foreground).child(sidebar).child(middle)
+        let right = self.chat.is_some().then(|| {
+            div().flex_none().w(px(440.)).h_full().border_l_1().border_color(theme.border).child(self.steps.clone())
+        });
+        div().h_flex().size_full().bg(theme.background).text_color(theme.foreground).child(sidebar).child(middle).children(right)
     }
 }
 

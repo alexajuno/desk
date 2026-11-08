@@ -50,7 +50,7 @@ pub fn follow(session: String, events: Sender<Event>) {
 }
 
 fn read(session: &str, events: &Sender<Event>) -> Result<(), Box<dyn std::error::Error>> {
-    let mut socket = net::socket(&format!("/api/live/{session}"))?;
+    let mut socket = net::socket(&format!("/api/live/{session}"), Duration::from_secs(3))?;
     socket.send(Message::text(json!({"type": "visible", "visible": true}).to_string()))?;
     loop {
         let text = match socket.read() {

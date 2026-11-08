@@ -15,6 +15,12 @@ tungstenite = "0.27"
 ureq = { version = "3", default-features = false, features = ["json"] }
 uuid = { version = "1", features = ["v4"] }
 
+# Building while the user works: no debug info, so each change links fast (a 770 MB debug binary took most of a rebuild),
+# and at most 6 of the 20 cores (.cargo/config.toml), under nice, so the machine stays quiet. Release, with thin LTO,
+# is built once per landing.
+[profile.dev]
+debug = false
+
 [profile.release]
 lto = "thin"
 strip = true
