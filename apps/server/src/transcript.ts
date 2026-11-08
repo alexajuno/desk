@@ -171,25 +171,49 @@ export function saved(session: string): { cost: number; tokens: number } | null 
   return null;
 }
 
+// A transcript runs to 90 MB, and read in one go each was a buffer as big, and a string and a list of lines as big again;
+// on 8 Nov 8790 rose to 700 MB as it started, reading four at once. So its lines are read a megabyte at a time.
+const CHUNK = 1 << 20;
+
+// Each whole line of the file from byte `from` up to `to`, given to fn; a line Claude Code is still writing, past the
+// last newline, waits for the next read. Returns where the whole lines end.
+export function eachLine(path: string, from: number, to: number, fn: (line: Buffer) => void): number {
+  const fd = openSync(path, "r");
+  try {
+    let rest = Buffer.alloc(0), end = from;
+    for (let at = from; at < to; ) {
+      const chunk = Buffer.allocUnsafe(Math.min(CHUNK, to - at));
+      const got = readSync(fd, chunk, 0, chunk.length, at);
+      if (!got) break;
+      at += got;
+      const buf = rest.length ? Buffer.concat([rest, chunk.subarray(0, got)]) : chunk.subarray(0, got);
+      let start = 0;
+      for (let nl = buf.indexOf(10); nl >= 0; nl = buf.indexOf(10, start)) {
+        fn(buf.subarray(start, nl));
+        start = nl + 1;
+      }
+      end += start;
+      rest = buf.subarray(start);
+    }
+    return end;
+  } finally {
+    closeSync(fd);
+  }
+}
+
 // The whole lines from byte `from` on, and where the next read starts; a line Claude Code is still writing waits.
 export function read(path: string, from: number): [Entry[], number] {
   const size = statSync(path).size;
   if (size <= from) return [[], size < from ? 0 : from];
-  const fd = openSync(path, "r");
-  const buf = Buffer.alloc(size - from);
-  readSync(fd, buf, 0, buf.length, from);
-  closeSync(fd);
-  const end = buf.lastIndexOf(10) + 1;
   const entries: Entry[] = [];
-  for (const line of buf.subarray(0, end).toString("utf8").split("\n")) {
-    if (!line.trim()) continue;
+  const end = eachLine(path, from, size, (line) => {
     try {
-      entries.push(JSON.parse(line));
+      entries.push(JSON.parse(line.toString("utf8")));
     } catch {
-      // a line cut short when its process was killed mid-write
+      // a blank line, or one cut short when its process was killed mid-write
     }
-  }
-  return [entries, from + end];
+  });
+  return [entries, end];
 }
 
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);

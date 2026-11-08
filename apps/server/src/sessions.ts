@@ -5,7 +5,7 @@
 // one JSON event per line, written as it runs. desk keeps one row per transcript with only what the list shows, saved
 // in CACHE, and reads each file again only from where it stopped (on 15 Oct the first scan read 1,662 transcripts in
 // 4.0 s into 1 MB of cache, and after it a load took 10 ms). The cache has the same shape as the Python's.
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import * as agents from "./agents.ts";
 import * as chats from "./chats.ts";
@@ -52,27 +52,16 @@ const textOf = (event: { message?: { content?: unknown } }) => [...promptOf(even
 // Read the transcript from where the row stopped, up to its last whole line; a line Claude Code is still writing is
 // read next time.
 function readRow(row: TableRow) {
-  const fd = openSync(row.path, "r");
-  const size = statSync(row.path).size;
-  const buf = Buffer.alloc(Math.max(0, size - row.read_to));
-  readSync(fd, buf, 0, buf.length, row.read_to);
-  closeSync(fd);
-  const end = buf.lastIndexOf(10) + 1;
-  row.read_to += end;
-  let at = 0;
-  while (at < end) {
-    const nl = buf.indexOf(10, at);
-    const line = buf.subarray(at, nl);
-    at = nl + 1;
+  row.read_to = transcripts.eachLine(row.path, row.read_to, statSync(row.path).size, (line) => {
     // Most lines are tool calls and replies; parse only those that may carry what a row keeps.
     if (line.includes('"type":"user"')) {
-      if ("first_prompt" in row && "cwd" in row) continue;
-    } else if (!['-title"', '"agent-name"', '"last-prompt"'].some((mark) => line.includes(mark))) continue;
+      if ("first_prompt" in row && "cwd" in row) return;
+    } else if (!['-title"', '"agent-name"', '"last-prompt"'].some((mark) => line.includes(mark))) return;
     let event;
     try {
       event = JSON.parse(line.toString("utf8"));
     } catch {
-      continue; // a line cut short when its session was killed mid-write
+      return; // a line cut short when its session was killed mid-write
     }
     const kind = event.type;
     if (kind === "user") {
@@ -86,7 +75,7 @@ function readRow(row: TableRow) {
     else if (kind === "agent-name") row.agent_name = event.agentName;
     else if (kind === "ai-title") row.ai_title = event.aiTitle;
     else if (kind === "last-prompt") row.last_prompt = [...String(event.lastPrompt ?? "").split(/\s+/).filter(Boolean).join(" ")].slice(0, 300).join("");
-  }
+  });
 }
 
 // Where a session's talk stands, from its transcript alone, open or closed: when the user last wrote, a message typed
@@ -99,34 +88,23 @@ const talks = new Map<string, Talk>();
 function talk(session: string): Talk | null {
   const path = transcripts.pathOf(session);
   if (!path) return null;
-  let t = talks.get(session);
-  if (!t) talks.set(session, (t = { path, read: 0, prompted: null, replied: null }));
+  const t = talks.get(session) ?? { path, read: 0, prompted: null, replied: null };
+  talks.set(session, t);
   if (t.path !== path || statSync(path).size < t.read) [t.path, t.read] = [path, 0];
-  const fd = openSync(path, "r");
-  const size = statSync(path).size;
-  const buf = Buffer.alloc(Math.max(0, size - t.read));
-  readSync(fd, buf, 0, buf.length, t.read);
-  closeSync(fd);
-  const end = buf.lastIndexOf(10) + 1;
-  t.read += end;
-  let at = 0;
-  while (at < end) {
-    const nl = buf.indexOf(10, at);
-    const line = buf.subarray(at, nl);
-    at = nl + 1;
+  t.read = transcripts.eachLine(path, t.read, statSync(path).size, (line) => {
     const human = line.includes('"origin":{"kind":"human"}');
-    if (!human && !line.includes('"stop_reason":"end_turn"')) continue;
+    if (!human && !line.includes('"stop_reason":"end_turn"')) return;
     let event;
     try {
       event = JSON.parse(line.toString("utf8"));
     } catch {
-      continue;
+      return;
     }
-    if (!event.timestamp) continue;
+    if (!event.timestamp) return;
     const when = new Date(event.timestamp).getTime() / 1000;
     if (human && event.type === "user" && !event.isMeta && textOf(event)) t.prompted = when;
     else if (event.type === "assistant" && event.message?.stop_reason === "end_turn") t.replied = when;
-  }
+  });
   return t;
 }
 

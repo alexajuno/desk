@@ -5,10 +5,10 @@
 // The prompts come from the transcripts, read on from where the last look stopped, as sessions.ts reads its table: the
 // first look on a new database reads them all (on 29 Oct, 1,718 sessions with prompts, 7.8 MB of them, in 12 s), and
 // after it only what was written since.
-import { closeSync, openSync, readSync } from "node:fs";
 import * as db from "./db.ts";
 import { sql, type Db } from "./db.ts";
 import { promptOf } from "./sessions.ts";
+import * as transcripts from "./transcript.ts";
 
 interface Transcript {
   id: string;
@@ -102,37 +102,24 @@ export const titled = (titles: [string, string][]) => queued(async () => {
 
 // The prompts in a transcript's bytes from..to, each on one line.
 function promptsIn(path: string, from: number, to: number): string[] {
-  const buf = Buffer.alloc(Math.max(0, to - from));
-  let read = 0;
+  const found: string[] = [];
   try {
-    const fd = openSync(path, "r");
-    try {
-      read = readSync(fd, buf, 0, buf.length, from);
-    } finally {
-      closeSync(fd);
-    }
+    transcripts.eachLine(path, from, to, (line) => {
+      // Most lines are tool calls, results and replies: parse only a user's line that is no tool's result.
+      if (!line.includes('"type":"user"') || line.includes('"type":"tool_result"')) return;
+      let event;
+      try {
+        event = JSON.parse(line.toString("utf8"));
+      } catch {
+        return;
+      }
+      // Nor Claude Code's summary of the talk before, which it writes as the user's when it compacts a session.
+      if (event.type !== "user" || event.isMeta || event.isCompactSummary) return;
+      const text = promptOf(event);
+      if (text) found.push(text);
+    });
   } catch {
     return []; // gone since sessions.ts looked
-  }
-  const found: string[] = [];
-  let at = 0;
-  while (at < read) {
-    let nl = buf.indexOf(10, at);
-    if (nl < 0 || nl > read) nl = read;
-    const line = buf.subarray(at, nl);
-    at = nl + 1;
-    // Most lines are tool calls, results and replies: parse only a user's line that is no tool's result.
-    if (!line.includes('"type":"user"') || line.includes('"type":"tool_result"')) continue;
-    let event;
-    try {
-      event = JSON.parse(line.toString("utf8"));
-    } catch {
-      continue;
-    }
-    // Nor Claude Code's summary of the talk before, which it writes as the user's when it compacts a session.
-    if (event.type !== "user" || event.isMeta || event.isCompactSummary) continue;
-    const text = promptOf(event);
-    if (text) found.push(text);
   }
   return found;
 }
