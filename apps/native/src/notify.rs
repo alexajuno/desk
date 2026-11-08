@@ -5,18 +5,17 @@
 //
 // They go to the desktop's notification server (org.freedesktop.Notifications) over one D-Bus connection, kept for the
 // window's life: a newer one for the same row takes the older's place, as the web's tag does, and a click opens the
-// row in the Inbox and asks desk to bring the window forward, since Hyprland leaves a window's own request unanswered
-// (the server's window.ts).
+// row in the Inbox and brings the window back, from its hidden workspace too, through Hyprland itself (hyprland.rs),
+// since Hyprland leaves a window's own request to come forward unanswered.
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use gpui_kit::*;
-use serde_json::json;
 use smol::stream::StreamExt;
 use zbus::zvariant::Value;
 
 use crate::sync::InboxRow;
-use crate::{net, Desk};
+use crate::Desk;
 
 const FRESH: f64 = 15. * 60.;
 const NAME: &str = "org.freedesktop.Notifications";
@@ -80,12 +79,11 @@ impl Desk {
         }
     }
 
-    // A note clicked: its row opens in the Inbox, and desk brings forward the window, which by then says it shows the
-    // Inbox (window_title).
+    // A note clicked: its row opens in the Inbox, and the window comes back to the workspace you are on.
     fn open_note(&mut self, slug: String, window: &mut Window, cx: &mut Context<Self>) {
         self.show_inbox(window, cx);
         if self.inbox.values().any(|r| r.slug == slug) { self.open_row(Some(slug), window, cx) } else { self.pending_row = Some(slug) }
-        cx.background_spawn(async { net::post("/raise", json!({"title": "Inbox · desk"})) }).detach();
+        cx.background_spawn(async { crate::hyprland::show() }).detach();
         cx.notify();
     }
 }

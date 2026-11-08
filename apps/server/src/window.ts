@@ -1,5 +1,5 @@
 // Hyprland, for what desk does with windows: bring forward the browser window showing a page, when one of desk's
-// desktop notifications is clicked. Sessions open in desk's panel; until 17 Oct they opened in floating kitty windows
+// desktop notifications is clicked, and tell where desk's own window is (native.ts). Sessions open in desk's panel; until 17 Oct they opened in floating kitty windows
 // this module made.
 import * as agents from "./agents.ts";
 import { run, sleep, which } from "./proc.ts";
@@ -17,7 +17,7 @@ async function dispatch(lua: string) {
   if (said !== "ok") throw new Error(`Hyprland said: ${said}`);
 }
 
-interface Client { class: string; title: string; address: string; workspace: { id: number } }
+interface Client { class: string; title: string; address: string; pid: number; workspace: { id: number; name: string } }
 const clients = async (): Promise<Client[]> => JSON.parse(await hyprctl("clients", "-j"));
 
 // Go to the window whose title starts with the page's ("Inbox · desk - Google Chrome"), on its own workspace, and focus
@@ -34,4 +34,9 @@ export async function raiseTitled(title: string): Promise<boolean> {
     await sleep(100);
   }
   return false;
+}
+
+// The workspace a process's window is on, by name, or null while Hyprland has none of its.
+export async function workspaceOf(pid: number): Promise<string | null> {
+  return (await clients()).find((c) => c.pid === pid)?.workspace.name ?? null;
 }

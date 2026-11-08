@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
-# desk's own window, the Electron app in apps/desktop, which the launcher's desk entry (apps/desktop/desk.desktop) runs.
-# The app runs all the time as desk-app.service, which Hyprland starts at login with no window, so that Claude's tabs
-# work with desk's window closed: this starts it if it is not running and asks it for its window, on its socket. With no
-# such service it runs the app itself, as before 2 Nov, Wayland where there is one and X11 otherwise, from
-# Electron's copy outside node_modules (apps/desktop/fuses.ts).
-top=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
-if systemctl --user cat desk-app.service >/dev/null 2>&1; then
-	systemctl --user start desk-app.service
-	for _ in $(seq 50); do # the app answers a second or two after it starts
-		curl -sf --unix-socket "${XDG_RUNTIME_DIR:-/tmp}/desk-app.sock" -X POST http://desk/window >/dev/null && exit 0
-		sleep 0.2
-	done
-	echo "desk-app: the app did not answer; see journalctl --user -u desk-app" >&2
-	exit 1
+# desk's own window, the native app in apps/native, which the launcher's desk entry (apps/native/desk.desktop) runs.
+# The window runs all the time as desk-app.service, which Hyprland starts at login hidden, so that the Inbox's pop-ups
+# come with it closed: this starts it if it is not running and brings it to the workspace you are on, from the
+# workspace it hides on, special:desk (apps/native/src/hyprland.rs). With no such service it runs the window itself.
+bin=~/.cache/desk/native-target/release/desk
+if ! systemctl --user cat desk-app.service >/dev/null 2>&1; then exec "$bin" "$@"; fi
+systemctl --user start desk-app.service
+pid=$(systemctl --user show -p MainPID --value desk-app.service)
+# Hyprland has the window a moment after it starts
+for _ in $(seq 50); do
+	at=$(hyprctl clients -j | jq -r --argjson p "$pid" 'map(select(.pid == $p))[0].workspace.name // empty')
+	[ -n "$at" ] && break
+	sleep 0.1
+done
+if [ -z "$at" ]; then echo "desk-app: the window did not come; see journalctl --user -u desk-app" >&2; exit 1; fi
+# Hyprland 0.56 takes Lua after `dispatch`
+if [ "$at" = "special:desk" ]; then
+	name=$(hyprctl activeworkspace -j | jq -r .name)
+	case $name in ''|*[!0-9]*) to="name:$name" ;; *) to=$name ;; esac
+	hyprctl dispatch "hl.dsp.window.move({ workspace = \"$to\", window = \"pid:$pid\", follow = false })" >/dev/null
 fi
-exec ~/.cache/desk/electron/electron "$top/apps/desktop" --ozone-platform-hint=auto "$@"
+hyprctl dispatch "hl.dsp.focus({ window = \"pid:$pid\" })" >/dev/null

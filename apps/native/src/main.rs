@@ -6,6 +6,7 @@
 mod browser;
 mod changes;
 mod chat;
+mod hyprland;
 mod command;
 mod creator;
 mod inbox;
@@ -810,18 +811,28 @@ fn main() {
     arenas();
     gpui_kit::application().with_assets(theme::Assets).run(move |cx| {
         gpui_kit::init(cx);
-        let options = WindowOptions { app_id: Some("desk-native".into()), ..Default::default() };
+        // `desk --hidden`, as desk-app.service starts it at login, opens hidden, with no focus taken
+        let hidden = std::env::args().any(|a| a == "--hidden");
+        let args: Vec<String> = std::env::args().skip(1).filter(|a| !a.starts_with("--")).collect();
+        let options = WindowOptions { app_id: Some("desk-native".into()), focus: !hidden, ..Default::default() };
         // `desk <slug>` opens on that issue's chat.
-        let slug = std::env::args().nth(1);
+        let slug = args.first().cloned();
         gpui_kit::open_window(options, cx, |window, cx| {
             theme::init(window, cx);
+            // closing hides it, as Electron's did, so that the Inbox's pop-ups keep coming; it quits only with its
+            // service (systemctl --user stop desk-app)
+            window.on_window_should_close(cx, |_, cx| {
+                cx.background_spawn(async { hyprland::hide() }).detach();
+                false
+            });
+            if hidden { cx.background_spawn(async { hyprland::start_hidden() }).detach(); }
             cx.new(|cx| {
                 let mut desk = Desk::new(window, cx);
                 // `desk inbox [row]` opens on the Inbox, and on one of its rows
                 match slug.as_deref() {
                     Some("inbox") => {
                         desk.show_inbox(window, cx);
-                        desk.pending_row = std::env::args().nth(2);
+                        desk.pending_row = args.get(1).cloned();
                     }
                     Some(slug) => desk.open(&Issue { slug: slug.to_string(), ..Issue::default() }, window, cx),
                     None => {}

@@ -18,6 +18,7 @@ import * as store from "./issues.ts";
 import * as models from "./models.ts";
 import * as notices from "./notices.ts";
 import * as replies from "./replies.ts";
+import * as native from "./native.ts";
 import * as pins from "./pins.ts";
 import * as pool from "./pool.ts";
 import * as projects from "./projects.ts";
@@ -45,6 +46,7 @@ await models.open();
 await turns.load(); // what each session does, as the session host last told desk
 await inbox.load();
 await web.build();
+void native.build(); // the window takes minutes, so desk does not wait for it
 const app = await create();
 await sync.start();
 auto.start(); // Auto says next for the user as a turn ends

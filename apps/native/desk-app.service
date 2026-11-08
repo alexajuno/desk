@@ -1,0 +1,16 @@
+# desk's window, the native app in apps/native, run all the time so that the Inbox's pop-ups come with its window
+# closed, as Electron's app was until 8 Nov ("hide", the user, 8 Nov). It starts hidden: bin/desk-app, the launcher's
+# desk, shows it, and closing it hides it again. Hyprland starts it at login, once the screen's address is in systemd's
+# environment (~/.config/hypr/hyprland.lua, "desk's app"), since nothing starts graphical-session.target in this
+# session. desk's server builds the window into ~/.cache/desk/native-target after each landing (native.ts).
+#
+#   ~/projects/desk/apps/native/install.sh
+[Unit]
+Description=desk's window
+ConditionEnvironment=WAYLAND_DISPLAY
+
+[Service]
+Type=simple
+ExecStart=%h/.cache/desk/native-target/release/desk --hidden
+Restart=on-failure
+RestartSec=2
