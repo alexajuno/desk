@@ -102,15 +102,8 @@ fn words(text: &str) -> String {
 }
 
 impl Chat {
+    // An issue's chat, by its slug: its page says which session it is.
     pub fn new(slug: String, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let scroller = cx.new(|cx| MessageScrollerState::new(0, cx));
-        let composer = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, 10).submit_on_enter(true).placeholder("Reply…"));
-        let subscriptions = vec![cx.subscribe_in(&composer, window, |chat, _, event: &InputEvent, window, cx| match event {
-            InputEvent::PressEnter { shift: false, .. } => chat.submit(window, cx),
-            InputEvent::Change => cx.notify(), // Send lights up once there is something to send
-            _ => {}
-        })];
-        composer.update(cx, |c, cx| c.focus(window, cx));
         let page = format!("/api/page/issue/{slug}");
         cx.spawn(async move |this, cx| {
             let found = cx.background_spawn(async move { net::get(&page) }).await;
@@ -125,14 +118,36 @@ impl Chat {
                 let _ = this.update(cx, |chat, cx| { chat.error = Some("This issue has no chat yet.".into()); cx.notify() });
                 return;
             };
-            let (send, events) = smol::channel::unbounded();
-            live::follow(session.clone(), send);
-            if this.update(cx, |chat, _| chat.session = Some(session)).is_err() { return }
-            while let Ok(event) = events.recv().await {
-                if this.update(cx, |chat, cx| chat.apply(event, cx)).is_err() { break }
-            }
+            Self::follow(this, session, cx).await;
         })
         .detach();
+        Self::empty(window, cx)
+    }
+
+    // A chat by its session, as an Inbox row names one with no issue.
+    pub fn of_session(session: String, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        cx.spawn(async move |this, cx| Self::follow(this, session, cx).await).detach();
+        Self::empty(window, cx)
+    }
+
+    async fn follow(this: WeakEntity<Self>, session: String, cx: &mut AsyncApp) {
+        let (send, events) = smol::channel::unbounded();
+        live::follow(session.clone(), send);
+        if this.update(cx, |chat, _| chat.session = Some(session)).is_err() { return }
+        while let Ok(event) = events.recv().await {
+            if this.update(cx, |chat, cx| chat.apply(event, cx)).is_err() { break }
+        }
+    }
+
+    fn empty(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let scroller = cx.new(|cx| MessageScrollerState::new(0, cx));
+        let composer = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, 10).submit_on_enter(true).placeholder("Reply…"));
+        let subscriptions = vec![cx.subscribe_in(&composer, window, |chat, _, event: &InputEvent, window, cx| match event {
+            InputEvent::PressEnter { shift: false, .. } => chat.submit(window, cx),
+            InputEvent::Change => cx.notify(), // Send lights up once there is something to send
+            _ => {}
+        })];
+        composer.update(cx, |c, cx| c.focus(window, cx));
         // Claude Code's models change only with Claude Code: asked once, for the model chip's menu.
         cx.spawn(async move |this, cx| {
             if let Ok(models) = cx.background_spawn(async { live::models() }).await {
@@ -372,6 +387,10 @@ impl Chat {
         let attached = std::mem::take(&mut self.attached);
         self.composer.update(cx, |c, cx| c.set_value("", window, cx));
         self.say(text, attached, cx);
+    }
+
+    pub fn focus_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.composer.update(cx, |c, cx| c.focus(window, cx));
     }
 
     // A message to the session, from the composer or from a comment on lines in Changes: drawn at once as pending, and

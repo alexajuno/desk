@@ -5,6 +5,7 @@
 // steps or its Changes.
 mod changes;
 mod chat;
+mod inbox;
 mod live;
 mod net;
 mod steps;
@@ -18,7 +19,9 @@ use gpui_kit::component::ActiveTheme;
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 use steps::Steps;
-use sync::{Event, Issue};
+use std::collections::HashMap;
+
+use sync::{Event, InboxRow, Issue};
 
 const OPEN: [&str; 5] = ["triage", "running", "review", "waiting", "backlog"];
 
@@ -29,6 +32,13 @@ const CHAT: f32 = 480.;
 const HALF: f32 = 780.;
 const SIDE: f32 = 248.;
 
+// What the page shows: an issue's chat, or the Inbox.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Page {
+    Issue,
+    Inbox,
+}
+
 // What the right half shows.
 #[derive(Clone, Copy, PartialEq)]
 enum Half {
@@ -37,7 +47,20 @@ enum Half {
 }
 
 struct Desk {
+    page: Page,
     issues: Vec<Issue>,
+    all: HashMap<String, Issue>, // every issue, open or not, by slug, for the Inbox's rows
+    inbox: HashMap<String, InboxRow>, // by id
+    open_row: Option<String>,        // the Inbox's row open, by what it opens
+    pending_row: Option<String>,     // the row to open once the rows came (`desk inbox <row>`)
+    inbox_chat: Option<Entity<Chat>>,
+    unreads_only: bool,
+    stay: inbox::Stay,
+    hovered_row: Option<String>,
+    reading: std::collections::HashSet<String>,
+    notice: Option<String>,
+    inbox_focus: FocusHandle,
+    inbox_scroll: UniformListScrollHandle,
     picked: Option<String>,
     current: Issue, // the picked issue as last heard, open or closed, for the chat's head
     chat: Option<Entity<Chat>>,
@@ -72,7 +95,21 @@ impl Desk {
             Ok("changes") => Some(Half::Changes),
             _ => None,
         };
-        Self { issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, commits: None, shows, _appearance: appearance }
+        Self {
+            page: Page::Issue,
+            all: HashMap::new(),
+            inbox: HashMap::new(),
+            open_row: None,
+            pending_row: None,
+            inbox_chat: None,
+            unreads_only: false,
+            stay: inbox::Stay::new(),
+            hovered_row: None,
+            reading: Default::default(),
+            notice: None,
+            inbox_focus: cx.focus_handle(),
+            inbox_scroll: UniformListScrollHandle::new(),
+            issues: Vec::new(), picked: None, current: Issue::default(), chat: None, steps: cx.new(|_| Steps::new()), changes: None, half, commits: None, shows, _appearance: appearance }
     }
 
     fn apply(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
@@ -91,13 +128,28 @@ impl Desk {
                 }
                 return;
             }
-            Event::Snapshot(issues) => self.issues = issues,
+            Event::Snapshot(issues, inbox) => {
+                self.all = issues.iter().map(|i| (i.slug.clone(), i.clone())).collect();
+                self.issues = issues;
+                self.inbox = inbox.into_iter().map(|r| (r.id.clone(), r)).collect();
+                self.inbox_changed(window, cx);
+            }
+            Event::Inbox { id, row } => {
+                match row {
+                    Some(row) => { self.inbox.insert(id, row); }
+                    None => { self.inbox.remove(&id); }
+                }
+                self.inbox_changed(window, cx);
+                return;
+            }
             Event::Issue { slug, row } if self.picked.as_deref() == Some(&slug) => {
+                match &row { Some(r) => { self.all.insert(slug.clone(), r.clone()); } None => { self.all.remove(&slug); } }
                 if let Some(row) = &row { self.current = row.clone() }
                 self.issues.retain(|issue| issue.slug != slug);
                 self.issues.extend(row);
             }
             Event::Issue { slug, row } => {
+                match &row { Some(r) => { self.all.insert(slug.clone(), r.clone()); } None => { self.all.remove(&slug); } }
                 self.issues.retain(|issue| issue.slug != slug);
                 self.issues.extend(row);
             }
@@ -109,7 +161,8 @@ impl Desk {
     }
 
     fn open(&mut self, issue: &Issue, window: &mut Window, cx: &mut Context<Self>) {
-        if self.picked.as_deref() == Some(&issue.slug) { return }
+        self.page = Page::Issue;
+        if self.picked.as_deref() == Some(&issue.slug) { return cx.notify() }
         self.picked = Some(issue.slug.clone());
         self.current = self.issues.iter().find(|i| i.slug == issue.slug).cloned().unwrap_or_else(|| issue.clone());
         let slug = issue.slug.clone();
@@ -144,7 +197,7 @@ impl Desk {
 
     fn sidebar(&self, cx: &mut Context<Self>) -> Div {
         let issues = self.issues.clone();
-        let picked = self.picked.clone();
+        let picked = self.picked.clone().filter(|_| self.page == Page::Issue);
         let this = cx.entity().downgrade();
         let theme = cx.theme();
         let (hover, active, muted) = (theme.list_hover, theme.list_active, theme.muted_foreground);
@@ -184,6 +237,7 @@ impl Desk {
             .w(px(240.))
             .h_full()
             .pt_3()
+            .child(div().pb_3().child(self.inbox_item(cx)))
             .child(div().px_4().pb_1().text_xs().font_medium().text_color(muted).child(format!("Issues · {}", self.issues.len())))
             .child(rows)
     }
@@ -250,6 +304,7 @@ impl Render for Desk {
         let half_width = if one_screen { page_width } else { page_width - CHAT };
         self.steps.update(cx, |steps, _| steps.width = half_width);
         let page = match &self.chat {
+            _ if self.page == Page::Inbox => self.inbox_page(page_width, cx),
             Some(chat) => div()
                 .v_flex()
                 .size_full()
@@ -309,8 +364,14 @@ fn main() {
             theme::init(window, cx);
             cx.new(|cx| {
                 let mut desk = Desk::new(window, cx);
-                if let Some(slug) = slug {
-                    desk.open(&Issue { slug, ..Issue::default() }, window, cx);
+                // `desk inbox [row]` opens on the Inbox, and on one of its rows
+                match slug.as_deref() {
+                    Some("inbox") => {
+                        desk.show_inbox(window, cx);
+                        desk.pending_row = std::env::args().nth(2);
+                    }
+                    Some(slug) => desk.open(&Issue { slug: slug.to_string(), ..Issue::default() }, window, cx),
+                    None => {}
                 }
                 desk
             })
