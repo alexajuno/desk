@@ -151,6 +151,20 @@ fn layer(path: String, colour: Hsla, size: f32) -> Svg {
     svg().path(SharedString::from(path)).absolute().top_0().left_0().size(px(size)).text_color(colour)
 }
 
+// A status as a picker's icon name, which it draws as the status's icon (picker.rs).
+pub fn state_glyph(state: &str) -> &'static str {
+    match state {
+        "triage" => "state-triage",
+        "running" => "state-running",
+        "waiting" => "state-waiting",
+        "review" => "state-review",
+        "landing" => "state-landing",
+        "done" => "state-done",
+        "dropped" => "state-dropped",
+        _ => "state-backlog",
+    }
+}
+
 pub fn state_icon(state: &str, cx: &App) -> Div {
     state_icon_sized(state, 14., cx)
 }
@@ -235,6 +249,7 @@ fn glyph_path(name: &str) -> &'static str {
         // the status bar's Help (frame/help.tsx) and the profile's chevron (frame/StatusBar.tsx)
         "help" => r##"<path fill="#000" stroke="none" d="M7.569 9.75c-.332 0-.614-.27-.578-.6.021-.188.061-.372.136-.62q.158-.51.447-.82a3.4 3.4 0 0 1 .703-.577q.284-.182.507-.396.229-.219.358-.486a1.4 1.4 0 0 0 .13-.606 1.2 1.2 0 0 0-.171-.653 1.2 1.2 0 0 0-.466-.429 1.360 1.360 0 0 0-.647-.152q-.33 0-.628.148a1.23 1.23 0 0 0-.587.622c-.123.295-.367.555-.686.555h-.472c-.337 0-.616-.28-.55-.611q.103-.513.363-.905a2.55 2.55 0 0 1 1.080-.915A3.6 3.6 0 0 1 7.998 3q.888 0 1.563.32.680.319 1.057.91.382.586.382 1.392 0 .543-.172.972a2.4 2.4 0 0 1-.48.763 3.5 3.5 0 0 1-.74.595 3.2 3.2 0 0 0-.62.496 1.7 1.7 0 0 0-.353.605l-.034.106c-.1.316-.35.591-.682.591zM8.75 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0"/>"##,
         "chevron-down" => r##"<path d="M4.5 6.5L8 10l3.5-3.5" stroke-width="1.5"/>"##,
+        "id" => r##"<path d="M6.5 2.5l-1 11M10.5 2.5l-1 11M3 6h10.5M2.5 10H13"/>"##,
         "parent" => r##"<path d="M4.5 2.5v6a2 2 0 0 0 2 2h6M10 8l2.5 2.5L10 13"/>"##,
         "system" => r##"<rect x="2" y="3" width="12" height="8.5" rx="1.5"/><path d="M6 14h4M8 11.5V14"/>"##,
         "light" => r##"<circle cx="8" cy="8" r="2.75"/><path d="M8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1.05 1.05M11.35 11.35l1.05 1.05M3.6 12.4l1.05-1.05M11.35 4.65l1.05-1.05"/>"##,

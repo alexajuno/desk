@@ -6,8 +6,10 @@
 // view, and which groups are folded, between runs, as the web keeps them in the browser. J and K, or ↓ and ↑, move the
 // focus, as the mouse does; Enter or O opens the issue in focus, and T folds its group. Filter (F) and Display options
 // (Shift V) are at the tabs' right end, as filters.rs draws them; a change to the view is a change to its words, which
-// desk reads again (views.ts), as the web's setView. Its Layout may be Board instead (board.rs, Ctrl B switches).
+// desk reads again (views.ts), as the web's setView. Its Layout may be Board instead (board.rs, Ctrl B switches). S,
+// P and a right-click open a row's menus (menus.rs).
 mod board;
+mod menus;
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -21,6 +23,7 @@ use serde_json::Value;
 use crate::filters::{colours, ring, ringed, Anchors, ChipsLook, Colours, Filtering, Panel, Popups, Select};
 use crate::listing::{quote, Chip, Choice, Field, Icon};
 use crate::picker::Picker;
+use gpui_kit::component::menu::PopupMenu;
 use crate::tip::Tipped;
 use crate::{net, theme};
 
@@ -85,7 +88,8 @@ pub(crate) struct IssueList {
     anchors: Anchors,
     dragging: Option<board::DraggedCard>,
     painted: HashMap<String, (String, String)>, // a status or priority just set, by the issue's slug, until desk draws it
-    asking: Option<(Entity<Picker>, Point<Pixels>, Subscription)>, // a card dropped on Waiting: on whom
+    asking: Option<(Entity<Picker>, Point<Pixels>, Subscription)>, // on whom it waits, or its parent
+    menu: Option<(Entity<PopupMenu>, Point<Pixels>, Subscription)>, // a row's status, priority or actions
     _again: Option<Task<()>>,
 }
 
@@ -106,6 +110,7 @@ impl IssueList {
             dragging: None,
             painted: HashMap::new(),
             asking: None,
+            menu: None,
             _again: None,
         };
         list.query = list.last_view();
@@ -289,6 +294,11 @@ impl IssueList {
             }
             return;
         }
+        // Ctrl ⌫: the issue in focus, to the trash
+        if k.modifiers.control && ["backspace", "delete"].contains(&k.key.as_str()) && !(k.modifiers.alt || k.modifiers.shift) {
+            if let Some(slug) = self.focused.clone() { self.delete(&slug, cx); cx.stop_propagation() }
+            return;
+        }
         if k.modifiers.control || k.modifiers.alt || k.modifiers.platform { return }
         if k.modifiers.shift {
             if k.key != "v" || self.data.is_none() { return }
@@ -298,6 +308,18 @@ impl IssueList {
         }
         match k.key.as_str() {
             "f" if self.data.is_some() => self.open_filter(None, "filter", window, cx),
+            "s" | "p" => match self.focused.clone() {
+                Some(slug) => {
+                    let at = self.under_row(&slug);
+                    self.field_menu(slug, if k.key == "s" { "state" } else { "priority" }, at, window, cx);
+                }
+                None => return,
+            },
+            // I, as the web's: the issue's chat, which its page is here
+            "i" => match self.focused.clone() {
+                Some(slug) => cx.emit(ListEvent::Open(slug)),
+                None => return,
+            },
             "escape" if self.popups.display => self.close_popups(window, cx),
             "j" | "down" => self.walk(1, cx),
             "k" | "up" => self.walk(-1, cx),
@@ -449,9 +471,10 @@ impl IssueList {
                 .child(theme::glyph("calendar", tone.unwrap_or(c.text_3)).size(px(14.)))
                 .child(due_label(day))
         });
-        let (raised, open_slug) = (c.box_fill, slug.clone());
+        let (raised, open_slug, menu_slug) = (c.box_fill, slug.clone(), slug.clone());
         div()
             .id(SharedString::from(format!("row-{slug}")))
+            .relative()
             .h_flex()
             .flex_none()
             .h(px(44.))
@@ -474,7 +497,15 @@ impl IssueList {
             .on_mouse_move(cx.listener(move |list, _, _, cx| {
                 if list.focused.as_deref() != Some(slug.as_str()) { list.focused = Some(slug.clone()); cx.notify() }
             }))
+            .child(self.anchors.probe(format!("row-{menu_slug}")))
             .on_click(cx.listener(move |_, _, _, cx| cx.emit(ListEvent::Open(open_slug.clone()))))
+            .on_mouse_down(MouseButton::Right, cx.listener(move |list, e: &MouseDownEvent, window, cx| {
+                // the list's own focus on a press would take the keys from the menu
+                cx.stop_propagation();
+                window.prevent_default();
+                list.focused = Some(menu_slug.clone());
+                list.actions_menu(menu_slug.clone(), e.position, window, cx);
+            }))
     }
 
     // A row and, under it on a thin line, its sub-issues.
@@ -577,6 +608,7 @@ impl Render for IssueList {
                 None => root.child(div().id("list-scroll").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).child(page)),
             })
             .children(self.filter_layers(cx))
+            .children(self.menu_layer())
             .children(self.asking_layer())
     }
 }

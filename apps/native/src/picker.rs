@@ -168,7 +168,10 @@ impl Render for Picker {
             list = list.child(
                 div().id(("pick", n)).h_flex().flex_none().h(px(32.)).px(px(8.)).gap(px(10.)).rounded(px(6.)).cursor_pointer().text_color(c.text_1)
                     .when(n == self.on, |r| r.bg(c.pop_on))
-                    .child(theme::glyph(item.icon, c.text_3).size(px(16.)))
+                    .child(match item.icon.strip_prefix("state-") {
+                        Some(state) => div().flex().flex_none().w(px(16.)).justify_center().child(theme::state_icon(state, cx)).into_any_element(),
+                        None => theme::glyph(item.icon, c.text_3).size(px(16.)).into_any_element(),
+                    })
                     .child(div().flex_1().min_w_0().truncate().child(item.label.clone()))
                     .when(item.current, |r| r.child(theme::glyph("tick", c.text_1).size(px(14.))))
                     .on_hover(cx.listener(move |picker, on: &bool, _, cx| if *on && picker.on != n { picker.on = n; cx.notify() }))

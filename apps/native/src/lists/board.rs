@@ -220,9 +220,10 @@ impl IssueList {
         let subs = p["subs"].as_array().filter(|s| s.len() == 2).map(|s| chip(format!("{}/{}", s[0].as_u64().unwrap_or(0), s[1].as_u64().unwrap_or(0))));
         let dragged = DraggedCard { slug: slug.clone(), title: title.clone(), state: state.clone(), priority: priority.clone(), from: column.into() };
         let this = cx.entity().downgrade();
-        let (hover, open_slug) = (c.hover, slug.clone());
+        let (hover, open_slug, menu_slug) = (c.hover, slug.clone(), slug.clone());
         div()
             .id(SharedString::from(format!("card-{slug}")))
+            .relative()
             .v_flex()
             .flex_none()
             .gap(px(8.))
@@ -246,7 +247,15 @@ impl IssueList {
             .on_mouse_move(cx.listener(move |list, _, _, cx| {
                 if list.focused.as_deref() != Some(slug.as_str()) { list.focused = Some(slug.clone()); cx.notify() }
             }))
+            .child(self.anchors.probe(format!("row-{menu_slug}")))
             .on_click(cx.listener(move |_, _, _, cx| cx.emit(ListEvent::Open(open_slug.clone()))))
+            .on_mouse_down(MouseButton::Right, cx.listener(move |list, e: &MouseDownEvent, window, cx| {
+                // the list's own focus on a press would take the keys from the menu
+                cx.stop_propagation();
+                window.prevent_default();
+                list.focused = Some(menu_slug.clone());
+                list.actions_menu(menu_slug.clone(), e.position, window, cx);
+            }))
             .on_drag(dragged, move |card, _, _, cx| {
                 let _ = this.update(cx, |list, cx| { list.dragging = Some(card.clone()); cx.notify() });
                 cx.new(|_| card.clone())
@@ -262,7 +271,7 @@ impl IssueList {
         match drop_of(&group, value) {
             Ok(Drop::Set(field, to)) => {
                 self.set_field(&card.slug, field, to, cx);
-                if field == "state" && value == "waiting" { self.ask_waiting(&card.slug, window, cx) }
+                if field == "state" && value == "waiting" { self.ask_waiting(&card.slug, window.mouse_position(), window, cx) }
             }
             Ok(Drop::Folder(path)) => {
                 let url = format!("/issue/{}/folder", card.slug);
@@ -280,7 +289,7 @@ impl IssueList {
     }
 
     // A field of an issue set: its status or priority shows at once, and the list is drawn again once desk has it.
-    fn set_field(&mut self, slug: &str, field: &'static str, value: String, cx: &mut Context<Self>) {
+    pub(super) fn set_field(&mut self, slug: &str, field: &'static str, value: String, cx: &mut Context<Self>) {
         if field == "state" || field == "priority" { self.painted.insert(slug.into(), (field.into(), value.clone())); }
         let (slug, path) = (slug.to_string(), format!("/issue/{slug}/set"));
         cx.spawn(async move |this, cx| {
@@ -304,8 +313,7 @@ impl IssueList {
     }
 
     // Waiting on whom, for what: typed where the card was dropped, as the S menu asks it.
-    fn ask_waiting(&mut self, slug: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let at = window.mouse_position();
+    pub(super) fn ask_waiting(&mut self, slug: &str, at: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
         let menu = Menu { source: Source::Fixed(Vec::new()), placeholder: "Waiting on whom, for what…", empty: "Enter saves it, such as QA on #570", width: 360., takes_typed: true, start: String::new() };
         let picker = cx.new(|cx| Picker::new(menu, Bounds::new(at, size(px(0.), px(0.))), window, cx));
         let slug = slug.to_string();

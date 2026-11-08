@@ -32,8 +32,8 @@ const GAP: f32 = 48.;
 const MOST: f32 = 1040.;
 
 // The statuses its menu offers: not Triage, which only a chat files, nor Landing, which only Approve sets.
-const STATES: [&str; 6] = ["backlog", "running", "waiting", "review", "done", "dropped"];
-const PRIORITIES: [&str; 5] = ["none", "urgent", "high", "medium", "low"];
+pub(crate) const STATES: [&str; 6] = ["backlog", "running", "waiting", "review", "done", "dropped"];
+pub(crate) const PRIORITIES: [&str; 5] = ["none", "urgent", "high", "medium", "low"];
 
 pub fn state_name(state: &str) -> &'static str {
     match state {
@@ -49,7 +49,7 @@ pub fn state_name(state: &str) -> &'static str {
     }
 }
 
-fn priority_name(level: &str) -> &'static str {
+pub(crate) fn priority_name(level: &str) -> &'static str {
     match level {
         "urgent" => "Urgent",
         "high" => "High",
