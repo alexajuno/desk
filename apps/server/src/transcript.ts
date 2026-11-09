@@ -49,7 +49,7 @@ export interface Item {
 // the chat opens. It is what Claude read, and it lasts as the chat does, where desk's own copy of a message goes after
 // 14 days (notices.ts, KEEP_DAYS).
 export interface Came {
-  source: "slack" | "mail" | "automation";
+  source: "slack" | "mail" | "jira" | "automation";
   name: string; // a channel, a DM's sender, a group DM's people, a mail's subject, an automation's title
   kind: string; // Slack thread, Slack DM, Slack group DM, Mail thread, Automation
   link?: string; // the thread in Slack or Gmail, or the automation's slug; none on a thread's chat from before 3 Nov
@@ -276,7 +276,7 @@ export const PUSH = /^<desk-push from="([^"]*)"[^>]*>/;
 export const THREAD = /\s*<desk-thread id="[^"]*"[^>]*>[\s\S]*<\/desk-thread>\s*$/;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const BLOCK = /<desk-thread id="((slack|mail):[^"]*)"( wake="[^"]*")?>\n([\s\S]*)\n<\/desk-thread>\s*$/;
+const BLOCK = /<desk-thread id="((slack|mail|jira):[^"]*)"( wake="[^"]*")?>\n([\s\S]*)\n<\/desk-thread>\s*$/;
 // Each message of the thread as threads.ts' asText writes it: "minhnt, Nov 3 08:40:" on a line, then its text.
 const SAID = new RegExp(`(?:^|\\n\\n)([^\\n]+), (${MONTHS.join("|")}) (\\d{1,2}) (\\d\\d):(\\d\\d):\\n`, "g");
 
@@ -285,10 +285,10 @@ const SAID = new RegExp(`(?:^|\\n\\n)([^\\n]+), (${MONTHS.join("|")}) (\\d{1,2})
 function threadCame(content: string, sent: number): Came | null {
   const block = BLOCK.exec(content);
   if (!block) return null;
-  const thread = block[1], source = block[2] as "slack" | "mail", fresh = Boolean(block[3]), body = block[4];
+  const thread = block[1], source = block[2] as "slack" | "mail" | "jira", fresh = Boolean(block[3]), body = block[4];
   const what = (fresh ? /^(?:A new message|\d+ new messages) in (.+?), which this chat follows\. / : /^desk's firewall let (.+?) through to the user/).exec(body)?.[1] ?? "";
   const [kind, name] = namedBy(what, source);
-  const link = / Its link in (?:Slack|Gmail): (\S+?)\. /.exec(body)?.[1];
+  const link = / Its link in (?:Slack|Gmail|Jira): (\S+?)\. /.exec(body)?.[1];
   const START = fresh ? "The new messages, oldest first:\n\n" : " holds it now:\n\n", start = body.indexOf(START);
   const messages = start < 0 ? "" : body.slice(start + START.length);
   const heads = [...messages.matchAll(SAID)];
@@ -305,15 +305,17 @@ function threadCame(content: string, sent: number): Came | null {
 }
 
 // What the thread is and its name, from how threads.ts' kindOf said it.
-function namedBy(what: string, source: "slack" | "mail"): [string, string] {
+function namedBy(what: string, source: "slack" | "mail" | "jira"): [string, string] {
   const m = (re: RegExp) => re.exec(what)?.[1];
   const channel = m(/^the Slack thread in (.+)$/), dm = m(/^(.+)'s Slack DM to the user$/), group = m(/^the Slack group DM with (.+)$/);
   const subject = m(/^the mail thread “(.*?)”/);
   if (channel) return ["Slack thread", channel];
   if (dm) return ["Slack DM", dm];
   if (group) return ["Slack group DM", group];
+  const ticket = m(/^the Jira ticket (.+)$/);
+  if (ticket) return ["Jira ticket", ticket];
   if (subject !== undefined) return ["Mail thread", subject || "(no subject)"];
-  return [source === "mail" ? "Mail thread" : "Slack", what];
+  return [source === "mail" ? "Mail thread" : source === "jira" ? "Jira ticket" : "Slack", what];
 }
 
 // A run of an automation with no agent, which starts desk's agent chat (automations.ts, runMessage, which names its

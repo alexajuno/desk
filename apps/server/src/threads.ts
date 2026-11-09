@@ -10,6 +10,7 @@
 // hold only what the door let in; the chat reads it again on GET /api/threads/<id> as the talk goes on. A desk that
 // connects to nothing, a test desk, gives the notices.
 import * as chats from "./chats.ts";
+import * as jira from "./jira.ts";
 import { CONNECT, PORT } from "./config.ts";
 import { HttpError } from "./httperror.ts";
 import type * as inbox from "./inbox.ts";
@@ -26,17 +27,19 @@ export interface Said {
 }
 
 const BASE = `http://127.0.0.1:${PORT}`;
-export const IS = /^(slack|mail):[\w.:-]+$/;
+export const IS = /^(slack|mail|jira):[\w.:-]+$/;
 
 // A thread's row's title, as the Inbox lists it: a channel by its name, a DM by its sender, a group DM by who is in
 // it, a mail by its subject.
 export function titleOf(n: notices.Notice) {
   if (n.source === "mail") return n.text.split("\n")[0] || "(no subject)";
+  if (n.source === "jira") return n.place;
   return n.place === "DM" ? n.who : n.place.replace(/^group DM with /, "");
 }
 
 // What the thread is, for Claude: "the Slack thread in #imagenhub", "chinhdt's Slack DM", "the mail thread “Interview”".
 export function kindOf(n: notices.Notice) {
+  if (n.source === "jira") return `the Jira ticket ${n.place}`;
   if (n.source === "mail") return `the mail thread “${titleOf(n)}”${n.place === "mail" ? "" : n.place.slice(4)}`;
   if (n.place === "DM") return `${n.who}'s Slack DM to the user`;
   return n.place.startsWith("group DM") ? `the Slack ${n.place}` : `the Slack thread in ${n.place}`;
@@ -46,7 +49,7 @@ export function kindOf(n: notices.Notice) {
 export async function whole(thread: string): Promise<Said[]> {
   if (CONNECT) {
     try {
-      return thread.startsWith("slack:") ? await slack.thread(thread) : await mail.thread(thread);
+      return thread.startsWith("slack:") ? await slack.thread(thread) : thread.startsWith("jira:") ? await jira.thread(thread) : await mail.thread(thread);
     } catch (e) {
       console.error(`threads: reading a ${thread.split(":")[0]} thread, ${(e as Error).message}`); // its name and text stay out of the log
     }
@@ -169,6 +172,7 @@ export async function react(message: string, name: string, on: boolean) {
 // single way through the chat is enough. the model will handle call to api endpoint", the user, 3 Nov).
 
 const SLACK_LINK = /^https:\/\/[\w-]+\.slack\.com\/archives\/([A-Z0-9]+)\/p(\d{10})(\d{6})(?:\?(\S*))?$/;
+const JIRA_LINK = /^https:\/\/[\w-]+\.atlassian\.net\/browse\/([A-Za-z][A-Za-z0-9]+-\d+)(?:[?#]\S*)?$/; // a ticket's page
 const GMAIL_LINK = /^https:\/\/mail\.google\.com\/mail\/u\/\d+\/#[\w-]+\/([0-9a-f]{16})$/; // as desk writes one (mail.ts, notice)
 
 export class Refused extends Error {}
@@ -192,7 +196,12 @@ async function channelKind(channel: string): Promise<{ kind: string; member: boo
 // whole DM, slack:<channel>, and a mail thread mail:<Gmail's thread id>. Attaching refuses a Slack channel the user is
 // not in, whose messages desk never hears.
 export async function idOf(given: string, attaching: boolean): Promise<string> {
-  const text = given.trim(), slackLink = text.match(SLACK_LINK), mailLink = text.match(GMAIL_LINK);
+  const text = given.trim(), jiraKey = (text.match(JIRA_LINK)?.[1] ?? text.replace(/^jira:/, "")).toUpperCase();
+  if (jira.KEY.test(jiraKey) && !SLACK_LINK.test(text)) {
+    if (attaching && CONNECT && !(await jira.exists(jiraKey))) throw new Refused(`Jira has no ticket ${jiraKey} that desk’s login can read: check the key.`);
+    return `jira:${jiraKey}`;
+  }
+  const slackLink = text.match(SLACK_LINK), mailLink = text.match(GMAIL_LINK);
   if (mailLink) {
     const id = `mail:${mailLink[1]}`;
     if (CONNECT) {
@@ -208,7 +217,7 @@ export async function idOf(given: string, attaching: boolean): Promise<string> {
   let channel = "", ts = "";
   if (slackLink) [channel, ts] = [slackLink[1], new URLSearchParams(slackLink[4] ?? "").get("thread_ts") ?? `${slackLink[2]}.${slackLink[3]}`];
   else if (text.startsWith("slack:") && IS.test(text)) [, channel, ts = ""] = text.split(":");
-  else throw new Refused("Give the thread’s Slack link, desk’s Gmail link to one of its mails, or desk’s id for it: slack:<channel>:<ts> for a channel’s thread, slack:<channel> for a DM, mail:<thread id>.");
+  else throw new Refused("Give the thread’s Slack link, desk’s Gmail link to one of its mails, a Jira ticket’s browse link or key, or desk’s id for it: slack:<channel>:<ts> for a channel’s thread, slack:<channel> for a DM, mail:<thread id>, jira:<KEY>.");
   const { kind, member } = await channelKind(channel);
   if (attaching && !member) throw new Refused("The user is not in that Slack channel, and desk hears only theirs: ask them to join it in Slack, then attach the thread again.");
   if (kind !== "channel") return `slack:${channel}`;

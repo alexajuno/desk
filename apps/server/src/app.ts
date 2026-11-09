@@ -415,6 +415,7 @@ export async function create(): Promise<FastifyInstance> {
     raw.put("/api/threads/:id/draft", async (req: Req) => {
       const id = req.params.id;
       if (!threads.IS.test(id)) throw new HttpError(404, "No such thread.");
+      if (id.startsWith("jira:")) throw new HttpError(422, "desk posts nothing to Jira: a comment on a ticket is yours to write, or the chat’s with your word through the jira skill.");
       const chat = await chats.follower(id);
       if (!chat) throw new HttpError(404, "No chat follows this thread, so no box would show your draft: follow it from this chat first, as “A chat's threads” says.");
       if (wakes.inWake(chat.session)) throw new HttpError(409, "This turn is the thread's: its new message started it, not the user, who asked for no reply. desk takes a draft only in a turn the user started. Say in your line what you would answer, if anything: they ask for a draft when they want one.");
@@ -435,6 +436,7 @@ export async function create(): Promise<FastifyInstance> {
     if (!fromPage(req)) throw new HttpError(403, "Only your box in desk sends a reply.");
     const id = req.params.id;
     if (!threads.IS.test(id) || (!(await notices.ofThread(id)).length && !(await chats.follower(id)))) throw new HttpError(404, "No such thread.");
+    if (id.startsWith("jira:")) throw new HttpError(422, "desk posts nothing to Jira.");
     const { text, whom } = (req.body ?? {}) as { text?: unknown; whom?: unknown };
     const r = await replies.yours(id, String(text ?? ""), typeof whom === "string" ? whom : "");
     return { state: r.state, link: r.link };

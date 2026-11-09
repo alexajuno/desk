@@ -334,8 +334,8 @@ export async function issueThreads(slug: string) {
   const all = await store.loadAll();
   return { threads: await Promise.all(chats.allOfIssue(slug).flatMap((chat) => chats.follows(chat, all).map(async (id) => {
     const said = await notices.ofThread(id), first = said[0];
-    const kind = !first ? "" : first.source === "mail" ? "mail" : first.place === "DM" ? "DM" : first.place.startsWith("group DM") ? "group DM" : `${first.who}’s thread`;
-    return { id, chat: chat.id, source: id.startsWith("mail:") ? "mail" : "slack", name: first ? threads.titleOf(first) : "A thread", kind,
+    const kind = id.startsWith("jira:") ? "ticket" : !first ? "" : first.source === "mail" ? "mail" : first.place === "DM" ? "DM" : first.place.startsWith("group DM") ? "group DM" : `${first.who}’s thread`;
+    return { id, chat: chat.id, source: id.startsWith("mail:") ? "mail" : id.startsWith("jira:") ? "jira" : "slack", name: id.startsWith("jira:") ? id.slice(5) : first ? threads.titleOf(first) : "A thread", kind,
       on: !chat.unsubscribed?.includes(id), waiting: said.filter((n) => n.chat === chat.id && !n.wake && !n.verdict).length };
   }))) };
 }

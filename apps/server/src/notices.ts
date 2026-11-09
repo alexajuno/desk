@@ -107,7 +107,8 @@ export async function carried(ids: string[], wake: string) {
 
 // The notices back to the firewall, as their chat no longer follows their thread.
 export async function toFirewall(ids: string[]) {
-  await sql().query("update notices set chat = null where id = any($1) and wake is null", [ids]);
+  // A Jira notice has no Inbox row to go to (desk reads only the tickets a chat follows): it is dropped
+  await sql().query("update notices set chat = null, verdict = case when source = 'jira' then 'dropped' else verdict end where id = any($1) and wake is null", [ids]);
 }
 
 // The chat's verdict on the notices a wake carried, again each time it changes its mind.

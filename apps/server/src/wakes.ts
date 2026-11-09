@@ -171,7 +171,8 @@ async function wake(chat: chats.Chat, carried: notices.Notice[]) {
   const shown = carried.slice(-LAST), left = carried.length - shown.length;
   const message = fill(WAKE, {
     id: thread, wake: id, count: carried.length === 1 ? "A new message" : `${carried.length} new messages`, kind: threads.kindOf(newest),
-    where: newest.source === "mail" ? "Gmail" : "Slack", link: newest.link || "none kept",
+    where: newest.source === "mail" ? "Gmail" : newest.source === "jira" ? "Jira" : "Slack", link: newest.link || "none kept",
+    design: newest.source === "jira" ? " The exception is this ticket, the design this issue's work is built from: when a change to its description, summary or a comment changes what the work should do, update the code and the issue's steps to match at once, as the repo's rules allow, and say what you changed; a status move, or a comment that changes nothing, is noted." : "",
     call: `curl -s "${BASE}/api/wakes/${id}" --json '{"verdict": "now", "why": "<one line>"}'`,
     read: `curl -s "${BASE}/api/threads/${encodeURIComponent(thread)}"`,
     thread: (left ? `(${left} earlier ones left out: read the thread whole for them)\n\n` : "") + threads.asText(shown),

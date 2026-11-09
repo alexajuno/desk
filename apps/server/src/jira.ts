@@ -106,6 +106,32 @@ export function changesOf(key: string, ticket: Record<string, any>, since: numbe
   return out.sort((x, y) => x.at - y.at);
 }
 
+// ---- A ticket, whole
+
+// Whether a ticket exists and the token can read it, for attaching it to a chat (threads.ts, idOf).
+export async function exists(key: string): Promise<boolean> {
+  try {
+    await call(`issue/${key}`, { fields: "summary" });
+    return true;
+  } catch (e) {
+    if (/answered 40[04]/.test((e as Error).message)) return false;
+    throw e;
+  }
+}
+
+// A ticket as it stands, for a chat on it (threads.ts, whole): its title, status and description as the first message,
+// from its reporter, then each comment, oldest first, cut at LONG characters.
+export async function thread(id: string): Promise<{ who: string; at: number; text: string }[]> {
+  const key = id.slice("jira:".length);
+  const t = await call(`issue/${key}`, { fields: "summary,status,description,comment,reporter,created" });
+  const f = t.fields;
+  return [
+    { who: f.reporter?.displayName ?? "someone", at: seconds(f.created),
+      text: `${key} ${f.summary} (${f.status?.name ?? "no status"})\n${clip(String(f.description ?? "(no description)").trim())}` },
+    ...((f.comment?.comments ?? []) as Record<string, any>[]).map((c) => ({ who: c.author?.displayName ?? "someone", at: seconds(c.updated), text: clip(String(c.body ?? "").trim()) })),
+  ];
+}
+
 // ---- A poll
 
 const meta = (key: string) => `jira since ${key}`;
