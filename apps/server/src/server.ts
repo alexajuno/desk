@@ -22,6 +22,7 @@ import * as replies from "./replies.ts";
 import * as native from "./native.ts";
 import * as pins from "./pins.ts";
 import * as pool from "./pool.ts";
+import * as stacks from "./stacks.ts";
 import * as projects from "./projects.ts";
 import * as sessions from "./sessions.ts";
 import * as settings from "./settings.ts";
@@ -64,6 +65,7 @@ await replies.recover(); // a reply a stop caught on its way says so on its card
 await logins.load(); // a Slack or Gmail login that ended keeps its one row (pages.ts, loginRow)
 logins.onChange(sync.frameChanged);
 setInterval(() => void notices.prune().catch((error) => console.error("pruning the notices", error)), 3600_000);
+await stacks.start(); // a check desk's restart cut short runs again; a test desk's line starts empty
 if (!TEST) {
   automations.startClock(); // each automation whose time came fires
   pool.start(); // the test desks' line moves on its own

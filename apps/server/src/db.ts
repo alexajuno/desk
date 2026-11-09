@@ -174,6 +174,17 @@ create table if not exists tests (
   port integer,
   told double precision -- seconds
 );
+-- The lines for repos' stacks (stacks.ts): each issue whose session asked for a check of its worktree, in the order it
+-- asked, with the main checkout whose stack runs it, when its run started (null while it waits), and the port of the
+-- desk it asked, so that a test desk drops the rows its copy brought from 8790's and keeps its own across a restart.
+create table if not exists checks (
+  slug text primary key,
+  desk integer not null,
+  main text not null,
+  worktree text not null,
+  asked double precision not null, -- seconds
+  started double precision -- seconds
+);
 create table if not exists sessions ( -- what each session does, as the session host tells desk (turns.ts)
   id text primary key,
   open boolean not null default false, -- the host holds its process

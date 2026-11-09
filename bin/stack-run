@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# Run a repo's checks on a worktree's code, in the repo's main checkout, on its one stack: what desk's line for that
+# stack (apps/server/src/stacks.ts) runs when a session asks for a check. Agents code in worktrees with no installed
+# packages; the checks run only in main, which has them, one at a time ("code, i think it can move to worktrees. but
+# for running tests and lint stuff. it goes to main only", "no composer download on worktree whatsoever", the user,
+# 5 Nov; muse's bin/api-run until 9 Nov).
+#
+#   stack-run <main> <worktree>
+#
+# Reads <main>/.claude/desk-stack.json (name, container, up, install, refresh, checks). Takes the stack's lock, starts
+# the stack if it is down, checks out in main a commit of the worktree as it stands, uncommitted and new files
+# included, installs when the lock file moved, runs every check in the container, applies what they wrote in main back
+# to the worktree (Pint's fixes), and puts main back on its branch. Each check's lines start with "== <name>", and it
+# ends on "== <name>: passed" or "failed". Exits 0 when all passed, 1 when one failed, 75 when the lock stayed taken.
+#
+# Main is only ever a place to run: whatever is left in it is cleared ("so likely just clear is fine", the user,
+# 5 Nov). Ignored and excluded files stay: .env, vendor, .claude. The lock and the state files keep api-run's names, so
+# that the two take turns while muse's hook still calls api-run.
+#
+# The code goes onto the branch stack-run in main, never a detached HEAD: Pest's test impact analysis keeps no record
+# on a detached HEAD (its Tia.php, saveGraph), so every check ran the whole suite until 9 Nov. On the branch, each
+# snapshot a child of the last, it runs the tests the code differing from the last check touches.
+#
+# Stopped (SIGTERM, as desk's DELETE stops its scope), it stops the check in the container too, so no orphan test run
+# drops another's tables, and gives main back. With STACK_RUN_STATUS set, it writes its exit code there as it ends, for
+# a desk that restarted meanwhile.
+set -uo pipefail
+
+say() { echo "stack-run: $*" >&2; }
+
+holding= aborted=
+finish() {
+  local rc=$?
+  if [[ -n $holding ]]; then
+    [[ -n $aborted ]] && stop_box
+    give_back
+  fi
+  [[ -n ${STACK_RUN_STATUS:-} ]] && echo "$rc" > "$STACK_RUN_STATUS"
+  exit "$rc"
+}
+trap finish EXIT
+trap 'aborted=1; exit 143' TERM INT HUP
+
+[[ $# -eq 2 ]] || { say "usage: stack-run <main> <worktree>"; exit 64; }
+MAIN=$1 worktree=$2
+STACK="$MAIN/.claude/desk-stack.json"
+[[ -f $STACK ]] || { say "no $STACK"; exit 64; }
+git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1 || { say "$worktree is not a git worktree"; exit 64; }
+field() { jq -r "$1 // empty" "$STACK"; }
+NAME=$(field .name) CONTAINER=$(field .container)
+[[ -n $NAME && -n $CONTAINER ]] || { say "$STACK names no name or container"; exit 64; }
+WAIT=${STACK_RUN_WAIT:-1800}
+ORIGIN="$MAIN/.git/api-run-origin"   # the branch to go back to, while a run has main; a kill leaves it
+VENDOR_FOR="$MAIN/.git/api-run-lock" # the lock file's hash the packages were installed from
+TREE_FOR="$MAIN/.git/api-run-tree"   # the tree the install was last refreshed for
+
+exec 8>>"${XDG_RUNTIME_DIR:-/tmp}/$NAME-main.lock"
+if ! flock -n 8; then
+  say "another run has main; waiting up to ${WAIT}s."
+  flock -w "$WAIT" 8 || { say "gave up after ${WAIT}s."; exit 75; }
+fi
+holding=1
+
+in_box() { docker exec -i "$CONTAINER" "$@"; }
+
+# Each check runs in the container under a shell whose pid it notes, so that a stop can end it and what it started.
+PIDFILE=/tmp/stack-run.pid
+stop_box() {
+  in_box sh -c 'tree() { for c in $(ps -o pid= -o ppid= | awk -v p="$1" "\$2==p{print \$1}"); do tree "$c"; done; kill -TERM "$1" 2>/dev/null; }
+    [ -f '"$PIDFILE"' ] && tree "$(cat '"$PIDFILE"')"; rm -f '"$PIDFILE" </dev/null && say "stopped the check in $CONTAINER."
+}
+
+clear_main() {
+  git -C "$MAIN" reset -q --hard
+  git -C "$MAIN" clean -qfd
+}
+
+# The packages follow the lock file, and refresh (the autoloader, for genai-api) follows the tree.
+sync_install() {
+  local lockfile lock tree install refresh
+  lockfile=$(field .install.lock) install=$(field .install.run) refresh=$(field .refresh)
+  tree=$(git -C "$MAIN" rev-parse 'HEAD^{tree}')
+  lock=$([[ -n $lockfile && -f $MAIN/$lockfile ]] && sha1sum "$MAIN/$lockfile" | cut -d' ' -f1)
+  if [[ -n $install && $lock != $(cat "$VENDOR_FOR" 2>/dev/null) ]]; then
+    say "$lockfile moved: installing in main."
+    in_box sh -c "$install" >&2 || return 1
+    echo "$lock" > "$VENDOR_FOR"
+  elif [[ -n $refresh && $tree != $(cat "$TREE_FOR" 2>/dev/null) ]]; then
+    in_box sh -c "$refresh" >&2 || return 1
+  fi
+  echo "$tree" > "$TREE_FOR"
+}
+
+give_back() {
+  [[ -f $ORIGIN ]] || return 0
+  clear_main
+  git -C "$MAIN" checkout -q "$(cat "$ORIGIN")" && rm -f "$ORIGIN"
+  sync_install || say "main is back on its branch, but its packages did not follow; the next run tries again."
+}
+
+give_back # a run that was killed left main on its snapshot
+
+if [[ -n $(git -C "$MAIN" status --porcelain) ]]; then
+  say "clearing what was left in main:"
+  git -C "$MAIN" status --short >&2
+  clear_main
+fi
+
+if [[ $(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null) != true ]]; then
+  up=$(field .up)
+  [[ -n $up ]] || { say "$CONTAINER is not running, and $STACK says no way to start it."; exit 1; }
+  say "starting the stack in main."
+  (cd "$MAIN" && sh -c "$up" >&2) || { say "the stack did not start."; exit 1; }
+  for _ in {1..30}; do in_box true 2>/dev/null && break; sleep 1; done
+fi
+
+# A commit of the worktree as it stands, through a scratch index, so the worktree and its own index stay as they are.
+index=$(mktemp)
+cp "$(git -C "$worktree" rev-parse --path-format=absolute --git-path index)" "$index"
+GIT_INDEX_FILE=$index git -C "$worktree" add -A
+tree=$(GIT_INDEX_FILE=$index git -C "$worktree" write-tree)
+rm -f "$index"
+[[ -n $tree ]] || { say "could not snapshot $worktree."; exit 1; }
+# Its parents are the last check's snapshot, the branch stack-run, and the worktree's HEAD: TIA reads a record only when
+# the commit it was made on is an ancestor of HEAD (ChangedFiles.php, shaIsReachable), and then runs the tests the code
+# differing from that commit touches.
+last=$(git -C "$MAIN" rev-parse -q --verify refs/heads/stack-run)
+snapshot=$(git -C "$worktree" commit-tree "$tree" ${last:+-p "$last"} -p HEAD -m "stack-run snapshot of $worktree")
+
+origin=$(git -C "$MAIN" symbolic-ref -q --short HEAD || git -C "$MAIN" rev-parse HEAD)
+echo "$origin" > "$ORIGIN"
+
+git -C "$MAIN" checkout -q -B stack-run "$snapshot" || { say "could not check the snapshot out in main."; exit 1; }
+sync_install || { say "installing in main failed, so no check ran."; exit 1; }
+
+status=0
+while IFS=$'\t' read -r name command; do
+  echo "== $name"
+  if in_box sh -c 'echo $$ > '"$PIDFILE"'; exec sh -c "$1"' _ "$command" 8>&- </dev/null 2>&1; then
+    printf '\n== %s: passed\n' "$name" # Pint's agent format ends with no newline
+  else
+    printf '\n== %s: failed\n' "$name"
+    status=1
+  fi
+done < <(jq -r '.checks[] | [.name, .run] | @tsv' "$STACK")
+
+# What the checks wrote in main (Pint's fixes) goes back to the worktree, since main's copy goes when the run ends.
+git -C "$MAIN" add -A
+if ! git -C "$MAIN" diff --cached --quiet "$snapshot"; then
+  files=$(git -C "$MAIN" diff --cached --name-only "$snapshot")
+  if git -C "$MAIN" diff --cached --binary "$snapshot" | git -C "$worktree" apply --binary; then
+    echo "== written back to the worktree:"
+    echo "$files"
+  else
+    say "could not apply what the checks wrote to $worktree."
+    status=1
+  fi
+fi
+in_box rm -f "$PIDFILE" </dev/null
+exit "$status"

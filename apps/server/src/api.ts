@@ -17,6 +17,10 @@
 //     POST   /api/issues/<slug>/test    a test desk for its branch, {"branch": ...}: its address, or its place in line
 //                                       (pool.ts); 8790 keeps running main
 //     DELETE /api/issues/<slug>/test    give it back, or leave the line, handing the desk to the next in line
+//     POST   /api/issues/<slug>/check   a check of its worktree on the repo's one stack, {"worktree": ...}: runs now
+//                                       or waits in line, and desk messages the session the result (stacks.ts)
+//     DELETE /api/issues/<slug>/check   leave the line, or stop the check that runs
+//     GET    /api/stacks                who runs and who waits on each repo's stack
 //     GET    /api/teams                 list teams (state=active|archived|all); /api/issues takes team=<slug>
 //     GET    /api/teams/<slug>          one team, with its description and issues
 //     POST   /api/teams                 create one: title, body
@@ -56,6 +60,7 @@ import * as store from "./issues.ts";
 import { byRank, type Issue } from "./issues.ts";
 import * as periods from "./periods.ts";
 import * as pool from "./pool.ts";
+import * as stacks from "./stacks.ts";
 import { HttpError } from "./pages.ts";
 import * as updates from "./updates.ts";
 import * as listed from "./listed.ts";
@@ -875,4 +880,23 @@ export function routes(app: FastifyInstance) {
     if (TEST) throw new HttpError(403, "A test desk hands out no test desks: ask 8790.");
     return { message: await pool.release(req.params.slug) };
   });
+
+  // A check of the issue's worktree on its repo's one stack, in line behind any other there (stacks.ts): desk messages
+  // the session the result.
+  app.post("/api/issues/:slug/check", async (req: Req) => {
+    const worktree = ((req.body ?? {}) as Record<string, unknown>).worktree;
+    if (typeof worktree !== "string" || !worktree) throw new HttpError(400, 'Name the worktree to check: {"worktree": "<its folder>"}.');
+    try {
+      return await stacks.ask(await loadIssue(req.params.slug), worktree);
+    } catch (error) {
+      if (error instanceof stacks.Refused) throw new HttpError(409, error.message);
+      throw error;
+    }
+  });
+
+  // The issue leaves the line, or stops its check that runs.
+  app.delete("/api/issues/:slug/check", async (req: Req) => ({ message: await stacks.release(req.params.slug) }));
+
+  // Who runs and who waits on each repo's stack.
+  app.get("/api/stacks", async () => stacks.lines());
 }

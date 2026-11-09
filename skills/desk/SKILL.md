@@ -214,3 +214,13 @@ curl -s "http://127.0.0.1:8790/api/chats/<chat id>/terminal" -X POST
 ~/.claude/skills/interactive-terminal/scripts/tt send <chat id> 'pnpm dev'
 ~/.claude/skills/interactive-terminal/scripts/tt read <chat id>
 ```
+
+## A repo's stack
+
+A repo whose main checkout holds `.claude/desk-stack.json`, such as genai-api, has one stack, where its checks run: an issue's session codes in a worktree with nothing installed and runs no check there, and once its code is done asks desk for a check of the worktree, which runs in the main checkout, one at a time ("while coding, the agent should only do the coding. after finishing everything in code that it runs all the tests and pints at once", the user, 9 Nov). The file names the checks: genai-api's are Pint, which fixes what it can, PHPStan and the TIA tests. desk checks the worktree's code as it stands, uncommitted files included, behind any check before it on the same stack, then messages the chat what passed and what failed, with the failures' lines and the whole output's path; files a check changed, such as Pint's fixes, are back in the worktree, for you to commit. So end your turn with no call once the answer says checking or queued: the issue shows Waiting on the stack, and the result moves it on. DELETE leaves the line, or stops a check that runs. `GET /api/stacks` shows who runs and who waits.
+
+```bash
+curl -s "http://127.0.0.1:8790/api/issues/<slug>/check" --json '{"worktree": "<the worktree’s folder>"}'
+curl -s "http://127.0.0.1:8790/api/issues/<slug>/check" -X DELETE
+curl -s "http://127.0.0.1:8790/api/stacks"
+```
