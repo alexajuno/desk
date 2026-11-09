@@ -14,8 +14,8 @@
 # ends on "== <name>: passed" or "failed". Exits 0 when all passed, 1 when one failed, 75 when the lock stayed taken.
 #
 # Main is only ever a place to run: whatever is left in it is cleared ("so likely just clear is fine", the user,
-# 5 Nov). Ignored and excluded files stay: .env, vendor, .claude. The lock and the state files keep api-run's names, so
-# that the two take turns while muse's hook still calls api-run.
+# 5 Nov). Ignored and excluded files stay: .env, vendor, .claude. The lock and the state files keep the names api-run gave
+# them, so that a main it left mid-run on 9 Nov is still given back.
 #
 # The code goes onto the branch stack-run in main, never a detached HEAD: Pest's test impact analysis keeps no record
 # on a detached HEAD (its Tia.php, saveGraph), so every check ran the whole suite until 9 Nov. On the branch, each
