@@ -33,6 +33,7 @@ import { query, type HookInput, type HookJSONOutput, type PermissionResult, type
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
 import { WebSocket } from "ws";
+import { guard } from "./guard.ts";
 
 const option = (name: string) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] ?? "" : "");
 const SOCKET = option("--socket");
@@ -41,7 +42,7 @@ const DESK = option("--desk"); // desk, which the host tells what each session d
 // desk compares this with its own copy of the files, and starts a host of the new code beside this one when they differ;
 // this one then drains, taking no new session, and desk asks it to quit once it holds none (hosted.ts, whose CODE lists
 // the same files).
-const VERSION = ["./host.ts"].reduce((h, f) => h.update(readFileSync(fileURLToPath(new URL(f, import.meta.url)))), createHash("sha1"))
+const VERSION = ["./host.ts", "./guard.ts"].reduce((h, f) => h.update(readFileSync(fileURLToPath(new URL(f, import.meta.url)))), createHash("sha1"))
   .digest("hex").slice(0, 12);
 // The user's own Claude Code, the one their terminal runs, rather than the copy the SDK's package carries.
 const CLAUDE = execFileSync("sh", ["-c", "command -v claude"], { encoding: "utf8" }).trim();
@@ -241,7 +242,10 @@ function start(o: StartOptions): Session {
       ...(o.agent ? { agent: o.agent } : {}),
       ...(o.settings ? { settings: o.settings } : {}),
       includePartialMessages: true,
-      hooks: { Stop: [{ hooks: [(input) => listBehind(s, input)] }] },
+      hooks: {
+        Stop: [{ hooks: [(input) => listBehind(s, input)] }],
+        PreToolUse: [{ matcher: "Bash|Edit|Write|NotebookEdit", hooks: [async (input) => guard(input, DESK)] }],
+      },
       pathToClaudeCodeExecutable: CLAUDE,
       env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "desk", BASH_MAX_TIMEOUT_MS: LONGEST_COMMAND },
       // A tool call Claude Code wants a yes for, and every AskUserQuestion, waits here for the user's answer in the panel.

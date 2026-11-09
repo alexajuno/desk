@@ -26,7 +26,7 @@ const socketOf = (version: string) => join(RUN, `desk-host-${PORT}-${version}.so
 const HOST = join(REPO, "apps", "server", "src", "host.ts");
 // The files a host runs, whose content is its version: the same list as host.ts's VERSION, or desk takes every host for
 // an older one and starts another beside it, on the same socket, each time one says hello.
-const CODE = ["host.ts"].map((f) => join(dirname(HOST), f));
+const CODE = ["host.ts", "guard.ts"].map((f) => join(dirname(HOST), f));
 const LOG = join(HOME, ".cache", "desk", `host-${PORT}.log`);
 const UNIT = `desk-host-${PORT}`;
 
