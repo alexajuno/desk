@@ -13,6 +13,7 @@ import * as hosted from "./hosted.ts";
 import * as inbox from "./inbox.ts";
 import * as logins from "./logins.ts";
 import * as firewall from "./firewall.ts";
+import * as jira from "./jira.ts";
 import * as mail from "./mail.ts";
 import * as store from "./issues.ts";
 import * as models from "./models.ts";
@@ -70,6 +71,12 @@ if (!TEST) {
 if (CONNECT) {
   slack.start(); // Slack's messages come in as notices (notices.ts)
   mail.start(); // and Gmail's mail, read each minute
+  jira.followWith(async () => {
+    const ids: string[] = [];
+    for (const t of chats.attached()) if (t.startsWith("jira:") && (await chats.follower(t))) ids.push(t);
+    return ids;
+  });
+  jira.start(); // and the Jira tickets a chat follows, read each minute
   firewall.start(); // and Claude judges what no rule settled, each minute
 }
 
@@ -82,6 +89,7 @@ async function stop() {
   turns.stop();
   slack.stop();
   mail.stop();
+  jira.stop();
   firewall.stop();
   wakes.stop();
   const late = setTimeout(() => process.exit(0), 5000);

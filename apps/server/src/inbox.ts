@@ -33,7 +33,7 @@ export interface Row {
   read: number | null; // when you read it, in seconds
   gone: number | null; // when you deleted it: out of the Inbox until something newer comes
   marked: number | null; // when you marked it unread: it stays so, though you saw the session, until you read it
-  source: "slack" | "mail" | null; // a Slack thread's or a mail thread's row (notices.ts), or null for a session's or an issue's
+  source: "slack" | "mail" | "jira" | null; // a Slack thread's or a mail thread's row (notices.ts), or null for a session's or an issue's
   who: string | null; // who wrote the thread's newest message
 }
 

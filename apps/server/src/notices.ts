@@ -18,7 +18,7 @@ export type Verdict = "now" | "later" | "dropped" | "noted"; // noted: a chat's,
 
 export interface Notice {
   id: string; // slack:<channel>:<ts>, or mail:<Gmail's id>
-  source: "slack" | "mail";
+  source: "slack" | "mail" | "jira";
   thread: string; // its DM, Slack thread or mail thread
   place: string; // #imagenhub, a DM, a group DM, mail
   who: string;

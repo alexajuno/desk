@@ -94,7 +94,7 @@ export async function startChat(thread: string, text: string): Promise<chats.Cha
 // leaves out, a reply in a DM's own thread, stays. What the user sent from desk is Slack's copy, said to be from desk,
 // or, until Slack has it, desk's (replies.ts). A mail thread, and a Slack one Slack does not answer, is its notices.
 export interface Message extends Omit<slack.Shown, "link"> {
-  source: "slack" | "mail";
+  source: "slack" | "mail" | "jira";
   place: string;
   link: string;
   verdict: notices.Verdict | null;

@@ -55,7 +55,7 @@ async function whomOf(thread: string, shown: notices.Notice[]): Promise<string> 
 }
 
 // Where a thread's replies go: its notices', or once desk pruned them (notices.ts, KEEP_DAYS), its id's.
-const sourceOf = (thread: string, shown: notices.Notice[]): Reply["source"] => shown[0]?.source ?? (thread.startsWith("mail:") ? "mail" : "slack");
+const sourceOf = (thread: string, shown: notices.Notice[]): Reply["source"] => (shown[0]?.source ?? thread.split(":")[0]) === "mail" ? "mail" : "slack";
 
 // Claude's draft, put in the user's box on the thread: the unsent one there takes the new text, or a new one comes. A
 // thread whose notices desk pruned has no whom here, the box reading it from the thread (the web's YourReply.tsx).
