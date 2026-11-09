@@ -30,7 +30,7 @@ import type { Effort } from "./settings.ts";
 import * as transcripts from "./transcript.ts";
 import * as turns from "./turns.ts";
 
-const SKILL = join(REPO, "skill", "SKILL.md");
+const SKILL = join(REPO, "skills", "desk", "SKILL.md");
 const SKILL_BASE = "http://127.0.0.1:8790"; // the address SKILL.md is written for; each chat swaps in its own
 
 export interface Chat {
