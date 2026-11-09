@@ -13,7 +13,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { go } from "../app/nav";
 import type { Reply } from "../store/issues";
-import { slackMark } from "../ui/icons";
+import { jiraMark, slackMark } from "../ui/icons";
 import type { Came } from "./live";
 import { sent, whole } from "./time";
 
@@ -32,9 +32,9 @@ export function CameCard({ came, at, reply }: { came: Came; at?: number; reply?:
   const run = came.source === "automation";
   const earlier = run ? 0 : came.said.length - 1;
   const shown = run || open ? came.said : came.said.slice(-1);
-  const icon = run ? CLOCK : came.source === "mail" ? ENVELOPE : slackMark(12);
+  const icon = run ? CLOCK : came.source === "mail" ? ENVELOPE : came.source === "jira" ? jiraMark(12) : slackMark(12);
   const kind = run ? `Automation${at ? ` · ${sent(at)}` : ""}` : `${came.kind} · ${many(came.said.length, came.fresh ? "new message" : "message")}`;
-  const where = run ? "automation" : came.source === "mail" ? "in Gmail" : "in Slack";
+  const where = run ? "automation" : came.source === "mail" ? "in Gmail" : came.source === "jira" ? "in Jira" : "in Slack";
   const out = !came.link ? null : run ? () => go(`/automation/${came.link}`) : () => window.open(came.link, "_blank", "noopener");
   return (
     <div className="came">
@@ -43,7 +43,7 @@ export function CameCard({ came, at, reply }: { came: Came; at?: number; reply?:
         <span className="came-place">{came.name}</span>
         <span className="came-kind">{kind}</span>
         <span className="spacer" />
-        {came.thread && reply && <button className="ghost came-out" type="button" title="Reply as you, in the box above the composer" onClick={() => reply(came.thread!)}>{REPLY}Reply</button>}
+        {came.thread && reply && came.source !== "jira" && <button className="ghost came-out" type="button" title="Reply as you, in the box above the composer" onClick={() => reply(came.thread!)}>{REPLY}Reply</button>}
         {out && <button className="ghost came-out" type="button" onClick={out}>{OUT}Open {where}</button>}
       </div>
       {earlier > 0 && (

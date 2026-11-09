@@ -4,13 +4,13 @@
 // user, 5 Nov, on a thread that kept waking a chat whose job was done). Read each time the details open, and after each
 // switch, so that its count of waiting messages holds.
 import { useCallback, useEffect, useState } from "react";
-import { slackMark } from "../ui/icons";
+import { jiraMark, slackMark } from "../ui/icons";
 import { toast } from "../ui/toast";
 
 interface FollowedThread {
   id: string;
   chat: string;
-  source: "slack" | "mail";
+  source: "slack" | "mail" | "jira";
   name: string;
   kind: string;
   on: boolean;
@@ -38,7 +38,7 @@ export function Threads({ slug }: { slug: string }) {
       <div className="details-label">Threads</div>
       {list.map((t) => (
         <div className="details-thread" key={t.id}>
-          <span className="details-thread-icon">{t.source === "mail" ? ENVELOPE : slackMark(12)}</span>
+          <span className="details-thread-icon">{t.source === "mail" ? ENVELOPE : t.source === "jira" ? jiraMark(12) : slackMark(12)}</span>
           <span className="details-thread-name" title={t.name}>{t.name}</span>
           {t.kind && <span className="details-thread-kind">{t.kind}</span>}
           {!t.on && <span className="details-thread-off">Unsubscribed{t.waiting > 0 && ` · ${t.waiting} ${t.waiting === 1 ? "message" : "messages"} waiting`}</span>}

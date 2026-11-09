@@ -29,7 +29,7 @@ export interface Item {
 // Came), drawn as a card at the chat's top (Came.tsx); or a followed thread's new messages, which woke the chat later
 // in its talk, drawn where they came.
 export interface Came {
-  source: "slack" | "mail" | "automation";
+  source: "slack" | "mail" | "jira" | "automation";
   name: string;
   kind: string;
   link?: string; // the thread in Slack or Gmail, or the automation's slug

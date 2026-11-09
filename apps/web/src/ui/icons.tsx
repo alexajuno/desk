@@ -252,3 +252,8 @@ const SLACK_FILLS = ["var(--slack-red)", "var(--slack-blue)", "var(--slack-green
 export const slackMark = (px: number) => (
   <svg width={px} height={px} viewBox="0 0 24 24">{SLACK_PATHS.map((d, i) => <path key={i} d={d} style={{ fill: SLACK_FILLS[i] }} />)}</svg>
 );
+
+// Jira's mark, three diamonds stepping down: Atlassian's blue, in the one colour so it reads at 10 to 12 px.
+export const jiraMark = (px: number) => (
+  <svg width={px} height={px} viewBox="0 0 24 24" fill="#2684ff"><path d="M11.53 2a4.35 4.35 0 0 0 4.35 4.35h1.78v1.7A4.35 4.35 0 0 0 22 12.4V2.84A.84.84 0 0 0 21.16 2zM6.77 6.8a4.36 4.36 0 0 0 4.35 4.34h1.78v1.72a4.36 4.36 0 0 0 4.34 4.34V7.63a.84.84 0 0 0-.83-.83zM2 11.6a4.35 4.35 0 0 0 4.35 4.35h1.78v1.7A4.35 4.35 0 0 0 12.48 22v-9.57a.84.84 0 0 0-.84-.84z" /></svg>
+);
