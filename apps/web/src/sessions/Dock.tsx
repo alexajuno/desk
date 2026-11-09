@@ -458,6 +458,7 @@ function stepSends(s: LiveSession, slug: string, steps: PlanStep[]): Map<string,
 }
 
 const Conversation = observer(function Conversation({ s, page, slug }: { s: LiveSession; page: IssuePageData | null; slug: string | null }) {
+  const details = usePage<{ command_details: boolean }>("/api/settings").data?.command_details ?? true;
   const sends = s.results.size; // a send shows as what it sent once desk's answer to it is in
   const replied = repliedIn(s.items), went = replied.map((r) => r.id).join();
   const rows = useMemo(() => rowsOf(s.items, s.results, slug, replied), [s.items, sends, slug, went]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -510,10 +511,10 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
           return agent ? <AgentNote key={r.item.key} s={s} note={r.item} /> : <p key={r.item.key} className="convo-note">{r.item.text}</p>;
         }
         const current = tail && n === rows.length - 1;
-        return <Steps key={r.key} s={s} items={r.items} running={current ? liveSteps : []} live={current} />;
+        return <Steps key={r.key} s={s} items={r.items} running={current ? liveSteps : []} live={current} details={details} />;
       })}
       {s.pending.slice(0, starts).map(you)}
-      {liveSteps.length > 0 && !(tail && last?.kind === "steps") && <Steps s={s} items={[]} running={liveSteps} live />}
+      {liveSteps.length > 0 && !(tail && last?.kind === "steps") && <Steps s={s} items={[]} running={liveSteps} live details={details} />}
       {liveText.map((b) => <Reply key={`${b.msg}:${b.index}`} text={b.text} streaming />)}
       {page && lands && <LandsSent slug={page.issue.slug} steps={lands} />}
       {s.pending.slice(starts).map(you)}
@@ -744,8 +745,11 @@ function summed(items: (Item | Block)[]): string {
 
 // Open from the start, one line per step, as Claude Code's terminal shows them (20 Oct: "just don't collapse by
 // default"); each step's input and output stay a click away.
-const Steps = observer(function Steps({ s, items, running, live: isLive }: { s: LiveSession; items: Item[]; running: Block[]; live: boolean }) {
-  const [open, setOpen] = useState(true);
+const Steps = observer(function Steps({ s, items, running, live: isLive, details }: { s: LiveSession; items: Item[]; running: Block[]; live: boolean; details: boolean }) {
+  // details: Settings > Preferences > Show command details. Off, a fold starts shut, on its one line.
+  const [opened, setOpened] = useState<boolean | null>(null); // what a click chose, which outlasts the setting
+  const open = opened ?? details;
+  const setOpen = (to: boolean) => setOpened(to);
   const failed = items.some((i) => i.t === "tool" && s.results.get(i.id!)?.error);
   const now = running[running.length - 1];
   const lastTool = [...items].reverse().find((i) => i.t === "tool");

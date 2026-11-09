@@ -10,6 +10,8 @@
 //                            Claude Code's stash does; off, it waits in its chip for Ctrl S
 //     test_slots             how many test desks run at once (pool.ts), from 1 to 4
 //     compact_over           the tokens a chat holds for a break in its work to compact it (compact.ts)
+//     command_details        whether the chat opens the fold of an agent's steps, its commands and what they printed;
+//                            off, a fold shows its one line ("Ran 2 commands") until clicked
 //
 // Linear keeps the first two in Settings > Team > Workflow (linear.app/docs/parent-and-sub-issues#status-automation);
 // desk has no teams, so they are Settings > Workflow. The sessions' three, the steps card and the stash are Settings > Preferences.
@@ -28,6 +30,7 @@ export interface Settings {
   stash_back_on_send: boolean;
   test_slots: number;
   compact_over: number;
+  command_details: boolean;
 }
 
 // Sub-issue auto-close is on from the start, as the user asked for it (17 Oct); Parent auto-close is off, Linear's default.
@@ -35,10 +38,11 @@ export interface Settings {
 // the user asked with the setting ("set it to collapse by default", 1 Nov). One test desk runs at a time, as the user
 // asked ("my machine's resource likely won't be able to handle that... likely just start at one", 2 Nov). The stash comes
 // back on the next message, as Claude Code's does ("mirror claude's stash msg", 4 Nov). A chat compacts at a break only
-// over 300k ("i don't think 150k is valid. higher i suppose. 300k", 6 Nov).
+// over 300k ("i don't think 150k is valid. higher i suppose. 300k", 6 Nov). The chat shows its steps' commands open, as it
+// always did (20 Oct); the setting is for hiding them ("a config in desk's chat to show/not show detail of commands", 9 Nov).
 export const DEFAULTS: Settings = {
   sub_issue_auto_close: true, parent_auto_close: false, chat_model: "opus", chat_effort: "xhigh", chat_pick: true,
-  stash_back_on_send: true, test_slots: 1, compact_over: 300_000,
+  stash_back_on_send: true, test_slots: 1, compact_over: 300_000, command_details: true,
 };
 export const MAX_SLOTS = 4;
 // A compacted chat reads about 70k on its next turn, so a floor under this would compact it again at almost every break.

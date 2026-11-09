@@ -27,6 +27,7 @@ interface Settings {
   stash_back_on_send: boolean;
   test_slots: number;
   compact_over: number;
+  command_details: boolean;
 }
 
 const PAGES: { group: string; pages: { slug: string; title: string; icon: ReactNode }[] }[] = [
@@ -49,6 +50,8 @@ export const SETTINGS = [
     about: "How many sessions may test a branch at once, each on its own copy of your data, while more than 4 GB of memory is free" },
   { page: "preferences", section: "Sessions", id: "compact_over", title: "Compact a chat over",
     about: "A chat this long compacts as a turn ends on a step done, or when it marks a break itself" },
+  { page: "preferences", section: "Sessions", id: "command_details", title: "Show command details",
+    about: "A chat opens the steps its agent took, with each command and what it printed. Off, they fold to one line, such as “Ran 2 commands”, until you click it" },
   { page: "workflow", section: "Auto-close automations", id: "parent_auto_close", title: "Auto-close parent issues",
     about: "Automatically close an open parent issue when its last sub-issue is closed" },
   { page: "workflow", section: "Auto-close automations", id: "sub_issue_auto_close", title: "Auto-close sub-issues",
@@ -220,6 +223,9 @@ function Sessions() {
           {thousands(shown.compact_over)}
           {CHEVRON_DOWN}
         </button>
+      </Row>
+      <Row id="command_details">
+        <Switch id="command_details" on={shown.command_details} change={(on) => change({ command_details: on })} />
       </Row>
     </Section>
   );
