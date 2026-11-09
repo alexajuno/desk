@@ -115,14 +115,6 @@ function moveFocus(step: number) {
   next.scrollIntoView({ block: "nearest" });
 }
 
-// Esc on an issue goes back to where you came from, or up to its parent or the issues.
-function goBack() {
-  const from = document.referrer, idx = (history.state as { idx?: number } | null)?.idx ?? 0;
-  const cameFrom = from.startsWith(location.origin) && new URL(from).pathname !== location.pathname && history.length > 1;
-  if (idx > 0 || cameFrom) history.back();
-  else go(page()?.parent ? `/issue/${page()!.parent}` : "/issues");
-}
-
 let gPressed = 0, nPressed = 0, oPressed = 0;
 
 function onKeyDown(e: KeyboardEvent) {
@@ -353,8 +345,7 @@ function onKeyDown(e: KeyboardEvent) {
   else if (e.key === "[") toggleSide();
   else if (e.key === "Escape") {
     if (document.querySelector(".inbox") && page()) go("/inbox");
-    else if (page() || location.pathname.startsWith("/sessions/")) goBack(); // a chat with no issue too, read and left
-    else ui.focus(null);
+    else if (!page() && !location.pathname.startsWith("/sessions/")) ui.focus(null); // on an issue or a chat Esc has nothing left to close, so it stays
   }
 }
 
