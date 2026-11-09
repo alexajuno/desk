@@ -28,7 +28,7 @@ const LINE_GRACE = 120; // seconds a slot stays its session's after it was told,
 const NEED = 4 * 1024 ** 3; // bytes of memory free, at least, for a slot to open (2 Nov, "depends on the current machine state")
 const RECHECK = 60; // seconds between looks while one waits on memory
 
-// Where a slot's copy lives, in the cache, out of the data repo and out of the user's way.
+// Where a slot's copy lives, in the cache, out of the data folder and out of the user's way.
 export const dataOf = (port: number) => join(HOME, ".cache", "desk", `test-${port}`);
 // The copy of 8790's database the slot's desk starts on (db.ts, DESK_DB_FROM).
 export const dumpOf = (port: number) => join(dataOf(port), ".db", "copy.sqlite");

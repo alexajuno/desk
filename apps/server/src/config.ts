@@ -14,7 +14,7 @@ export const TEAMS_DIR = join(DATA_DIR, "teams");
 export const PROJECTS_DIR = join(DATA_DIR, "projects"); // Linear's projects, which finish (projects.ts), since 20 Oct
 export const AUTOMATIONS_DIR = join(DATA_DIR, "automations");
 export const UPLOADS_DIR = join(DATA_DIR, "uploads"); // the files attached in a composer, by session (uploads.ts)
-// The database, beside the data it holds, in DATA_DIR/.db, which git leaves alone (db.ts writes its .gitignore): SQLite's
+// The database, beside the data it holds, in DATA_DIR/.db: SQLite's
 // file since 8 Nov, and PGlite's folder before it, which desk reads in once and keeps as it was.
 export const DB_FILE = resolve(expand(process.env.DESK_DB ?? join(DATA_DIR, ".db", "desk.sqlite")));
 export const DB_DIR = join(DATA_DIR, ".db", "pg");

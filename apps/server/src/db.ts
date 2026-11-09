@@ -19,7 +19,7 @@
 // An issue, a team and a project live in their rows alone: no file holds a copy of them ("issue.md and team.md and
 // whatever markdown files. to db", the user, 8 Nov).
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, openSync, readSync, closeSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, openSync, readSync, closeSync, renameSync, rmSync } from "node:fs";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { dirname, join } from "node:path";
 import { DB_DIR, DB_FILE } from "./config.ts";
@@ -315,9 +315,6 @@ create trigger ${table}_changed after update on ${table} when ${columns.map((c) 
 export async function open(): Promise<Db> {
   if (db) return outside;
   mkdirSync(dirname(DB_FILE), { recursive: true });
-  // The data folder is a git repo of its own, for the issues: the database stays out of it.
-  const ignore = join(dirname(DB_FILE), ".gitignore");
-  if (!existsSync(ignore)) writeFileSync(ignore, "*\n");
   if (!existsSync(DB_FILE)) await made();
   const opened = new DatabaseSync(DB_FILE);
   // A write waits on the disk only at checkpoints, and a read never waits on a write; like matches case, as Postgres's.
