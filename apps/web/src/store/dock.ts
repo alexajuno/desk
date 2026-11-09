@@ -57,7 +57,7 @@ class Dock {
     makeObservable(this, {
       session: observable, center: observable, details: observable, pill: observable, halves: observable, chatWidth: observable,
       reading: observable, picked: observable, pickRow: action, layout: computed, arrange: action, setDetails: action, dismiss: action, setHalf: action,
-      setChatWidth: action, read: action, showStep: action, showChanges: action,
+      setChatWidth: action, read: action, showStep: action,
     });
   }
 
@@ -143,15 +143,6 @@ class Dock {
     if (!this.once(`${session} ${at}`)) return;
     this.pickRow(session, title, now);
     if (parts && !this.halves[session] && !oneScreen()) this.setHalf(session, "steps");
-  }
-
-  // A step ticked with its commit: the half opens on Changes, once for each commit, so that the step's diff is
-  // there beside its report ("we have diff show while coding, allowing user to catches the problem early", the user, 28
-  // Oct). It takes the place of the steps, which the work has moved on from, but never of the terminal or the browser,
-  // where you may be typing, nor, where the half would take the chat's place (frame/oneScreen.ts), the chat.
-  showChanges(session: string, commit: string) {
-    const now = this.halves[session];
-    if (this.once(`${session} commit ${commit}`) && (!now || now === "steps") && !oneScreen()) this.setHalf(session, "changes");
   }
 
   // Whether this is the first time key opens its chat's half: the 50 last are kept.

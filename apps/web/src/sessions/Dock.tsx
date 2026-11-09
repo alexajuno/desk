@@ -27,7 +27,7 @@ import { isDrawn, StepParts, type PlanStep, stepOpenNow, stepTitled } from "../i
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { CameCard, RepliedLine } from "./Came";
-import { anyCommit, lastCommit } from "./Changes";
+import { anyCommit } from "./Changes";
 import { rising } from "./glide";
 import { clock, sent, whole } from "./time";
 import { Half } from "./Half";
@@ -168,9 +168,6 @@ export const SessionView = observer(function SessionView({ id }: { id: string })
   const side = { can: Boolean(docked && m?.chat && !phone.matches), open: inHalf };
   const beside = useRef(false); // the list follows the part being read as the chat scrolls or grows
   beside.current = Boolean(inHalf && stepTitled(stepsHere, inHalf)?.parts?.length);
-  // A step ticked with its commit opens the half on its Changes, once, while the issue is open (store/dock.ts).
-  const commit = here && !["done", "dropped"].includes(here.issue.state) ? lastCommit(here.plan_steps) : null;
-  useEffect(() => { if (commit && side.can) dock.showChanges(id, commit); }, [id, commit, side.can]);
 
   // Only the reader scrolling up lets go of the end, and coming back near it takes it again. A chat opened cold grows
   // as its pictures load, between a scroll to its end and that scroll's own event, which then finds it far from the
