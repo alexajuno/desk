@@ -17,9 +17,6 @@ export function attach(session: string, text: string, files: Upload[]): string {
   if (!files.length) return text;
   const dir = join(UPLOADS_DIR, session);
   mkdirSync(dir, { recursive: true });
-  // The data folder is a git repo of its own, for the issues: what the user attaches stays out of it.
-  const ignore = join(UPLOADS_DIR, ".gitignore");
-  if (!existsSync(ignore)) writeFileSync(ignore, "*\n");
   const paths = files.map((f) => {
     const name = f.name.replace(/[\\/\0]/g, "_").slice(-120);
     const path = free(dir, name.replace(/^\.+$/, "") || "file");
