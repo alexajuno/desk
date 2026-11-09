@@ -476,7 +476,7 @@ export async function create(): Promise<FastifyInstance> {
   app.post("/api/logins", async (req: Req) => {
     if (!TEST) throw new HttpError(403, "Only a test desk takes a made-up login.");
     const b = (req.body ?? {}) as { source?: string; ended?: boolean; why?: string };
-    const source = b.source === "mail" ? "mail" : "slack";
+    const source = b.source === "mail" ? "mail" : b.source === "jira" ? "jira" : "slack";
     if (b.ended === false) await logins.holds(source);
     else await logins.end(source, typeof b.why === "string" && b.why ? b.why : "made up, on a test desk");
     return { ended: logins.of(source) };
@@ -512,10 +512,10 @@ export async function create(): Promise<FastifyInstance> {
     if (!TEST) throw new HttpError(403, "Only a test desk takes made-up notices.");
     const b = (req.body ?? {}) as Record<string, unknown>;
     const text = (k: string) => (typeof b[k] === "string" ? (b[k] as string) : "");
-    const source = b.source === "mail" ? "mail" : "slack";
+    const source = b.source === "mail" ? "mail" : b.source === "jira" ? "jira" : "slack";
     const id = text("id") || `${source}:test:${Date.now()}`;
     const verdict = ["now", "later", "dropped"].includes(text("verdict")) ? (text("verdict") as notices.Verdict) : null;
-    const n = { id, source, thread: text("thread") || id, place: text("place") || (source === "mail" ? "mail" : "DM"), who: text("who") || "someone",
+    const n = { id, source, thread: text("thread") || id, place: text("place") || (source === "mail" ? "mail" : source === "jira" ? "IGH-333" : "DM"), who: text("who") || "someone",
       text: text("text"), link: text("link"), at: typeof b.at === "number" ? b.at : Date.now() / 1000, verdict, why: text("why") } as const;
     // Its made-up reactions and files, for the thread's pane, which reads them from Slack on 8790 (threads.ts, pane)
     const list = (k: string) => (Array.isArray(b[k]) ? (b[k] as Record<string, unknown>[]).filter((x) => x && typeof x === "object") : []);
