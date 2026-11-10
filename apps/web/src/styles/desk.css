@@ -1518,3 +1518,7 @@ button.nav-team .glyph { flex: none; width: 14px; height: 14px; color: var(--tex
 button.nav-team > svg:last-child { flex: none; margin-left: -5px; fill: var(--text-5); transform: rotate(90deg); transition: transform 0.15s; }
 button.nav-team[aria-expanded="false"] > svg:last-child { transform: none; }
 .nav-item.nav-sub { margin-left: 19px; }
+
+/* The compact threshold's field: a number in thousands of tokens, with its unit beside it ("entered number", the user, 10 Nov). */
+.set-input#compact_over { width: 72px; text-align: right; }
+.set-unit { flex: none; width: 56px; font-size: 13px; color: var(--text-3); }

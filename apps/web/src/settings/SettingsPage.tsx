@@ -49,7 +49,7 @@ export const SETTINGS = [
   { page: "preferences", section: "Sessions", id: "test_slots", title: "Test desks at once",
     about: "How many sessions may test a branch at once, each on its own copy of your data, while more than 4 GB of memory is free" },
   { page: "preferences", section: "Sessions", id: "compact_over", title: "Compact a chat over",
-    about: "A chat this long compacts as a turn ends on a step done, or when it marks a break itself" },
+    about: "A chat this long compacts as a turn ends on a step done, or when it marks a break itself. Type the size in thousands of tokens, such as 300, or 0 to never compact" },
   { page: "preferences", section: "Sessions", id: "command_details", title: "Show command details",
     about: "A chat opens the steps its agent took, with each command and what it printed. Off, they fold to one line, such as “Ran 2 commands”, until you click it" },
   { page: "workflow", section: "Auto-close automations", id: "parent_auto_close", title: "Auto-close parent issues",
@@ -153,8 +153,6 @@ export function TextField({ id, value, save, clean = (typed) => typed }: {
 
 const THEMES: [string, string][] = [["system", "System preference"], ["light", "Light"], ["dark", "Dark"]];
 const SLOTS = [1, 2, 3, 4]; // settings.ts, MAX_SLOTS
-const COMPACTS = [100_000, 150_000, 200_000, 300_000, 400_000, 500_000];
-const thousands = (tokens: number) => `${Math.round(tokens / 1000)}k`;
 
 const CHEVRON_DOWN = <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>;
 
@@ -216,13 +214,9 @@ function Sessions() {
         </button>
       </Row>
       <Row id="compact_over">
-        <button id="compact_over" type="button" className="set-pick" onClick={(e) => {
-          if (toggled(e.currentTarget)) return;
-          openMenu({ anchor: e.currentTarget, items: () => COMPACTS.map((n) => ({ label: thousands(n), current: n === shown.compact_over, run: () => change({ compact_over: n }) })) });
-        }}>
-          {thousands(shown.compact_over)}
-          {CHEVRON_DOWN}
-        </button>
+        <TextField id="compact_over" value={String(shown.compact_over / 1000)} clean={(typed) => typed.replace(/\D/g, "")}
+          save={async (typed) => { await change({ compact_over: Number(typed) * 1000 }); return true; }} />
+        <span className="set-unit">{shown.compact_over === 0 ? "never" : "k tokens"}</span>
       </Row>
       <Row id="command_details">
         <Switch id="command_details" on={shown.command_details} change={(on) => change({ command_details: on })} />
