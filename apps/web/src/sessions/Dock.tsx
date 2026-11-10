@@ -1073,18 +1073,29 @@ function tokenAt(text: string, caret: number): { kind: "/" | "@"; start: number;
 // shows one in blue. The textarea can't colour a word, so its text turns clear and the layer under it draws the text
 // again, with each known name marked; null when nothing is known, and the textarea draws its own text.
 const SLASHED = /(^|\s)\/([\w:-]+(?:\.[\w:-]+)*)(?![\w/])/g;
+// `code` in what is typed: the layer tints the span, backticks kept, with no padding or font change, so that its text
+// keeps the textarea's widths and the caret stays on its letters.
+const TICKED = /`[^`\n]+`/g;
 
 function marked(text: string, known: Set<string> | null) {
-  if (!known) return null;
+  const found: { start: number; end: number; node: React.ReactNode }[] = [];
+  if (known) {
+    for (const m of text.matchAll(SLASHED)) {
+      if (!known.has(m[2])) continue;
+      const start = m.index + m[1].length;
+      found.push({ start, end: start + 1 + m[2].length, node: <span key={start} className="skill"><span className="skill-slash">/</span>{m[2]}</span> });
+    }
+  }
+  for (const m of text.matchAll(TICKED)) {
+    const start = m.index;
+    if (found.some((f) => start < f.end && f.start < start + m[0].length)) continue;
+    found.push({ start, end: start + m[0].length, node: <span key={start} className="tick">{m[0]}</span> });
+  }
+  if (!found.length) return null;
+  found.sort((x, y) => x.start - y.start);
   const out: React.ReactNode[] = [];
   let from = 0;
-  for (const m of text.matchAll(SLASHED)) {
-    if (!known.has(m[2])) continue;
-    const start = m.index + m[1].length;
-    out.push(text.slice(from, start), <span key={start} className="skill"><span className="skill-slash">/</span>{m[2]}</span>);
-    from = start + 1 + m[2].length;
-  }
-  if (!out.length) return null;
+  for (const f of found) out.push(text.slice(from, f.start), f.node), (from = f.end);
   out.push(text.slice(from) + (text.endsWith("\n") ? " " : "")); // a last empty line, which a div drops and a textarea keeps
   return out;
 }

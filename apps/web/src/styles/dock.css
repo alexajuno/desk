@@ -482,6 +482,7 @@ button.cmd-more:hover { background: none; color: var(--text-2); }
 .composer textarea.marked { color: transparent; caret-color: var(--text-1); }
 .composer textarea.marked::selection { color: HighlightText; background: Highlight; }
 .skill { color: var(--skill-text); }
+.composer-marks .tick { background: var(--bg-app); border-radius: 4px; box-shadow: 0 0 0 1px var(--border-3); }
 .skill-slash { opacity: 0.5; }
 .composer-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
 /* Beside the right half the composer is too narrow for the model's whole name and its effort, which pushed Send past its
