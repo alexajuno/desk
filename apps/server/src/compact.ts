@@ -55,6 +55,7 @@ export async function atBreak(session: string) {
   if (!i || i.state === "done" || i.state === "dropped") return;
   if (i.state === "review" && (i.review_of === "question" || i.review_of === "result")) return;
   const tokens = await hosted.context(session).then((c) => c.tokens, () => 0); // no process holds it: nothing to compact
-  if (tokens <= settings.load().compact_over) return;
+  const over = settings.load().compact_over;
+  if (over === 0 || tokens <= over) return; // 0 is "never", the user's, 10 Nov
   await agents.tell(session, `/compact ${at.focus}`).catch((error) => { if (!(error instanceof agents.Busy)) throw error; });
 }

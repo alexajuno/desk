@@ -9,7 +9,7 @@
 //     stash_back_on_send     what Ctrl S put away comes back into the composer as the next message is entered, as
 //                            Claude Code's stash does; off, it waits in its chip for Ctrl S
 //     test_slots             how many test desks run at once (pool.ts), from 1 to 4
-//     compact_over           the tokens a chat holds for a break in its work to compact it (compact.ts)
+//     compact_over           the tokens a chat holds for a break in its work to compact it, 0 for never (compact.ts)
 //     command_details        whether the chat opens the fold of an agent's steps, its commands and what they printed;
 //                            off, a fold shows its one line ("Ran 2 commands") until clicked
 //
@@ -55,7 +55,7 @@ function wrong(name: keyof Settings, value: unknown): string {
   if (typeof DEFAULTS[name] === "boolean") return typeof value === "boolean" ? "" : `${name} must be true or false.`;
   if (name === "chat_effort") return EFFORTS.includes(value as Effort) ? "" : `chat_effort must be one of ${EFFORTS.join(", ")}.`;
   if (name === "test_slots") return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= MAX_SLOTS ? "" : `test_slots must be a whole number from 1 to ${MAX_SLOTS}.`;
-  if (name === "compact_over") return Number.isInteger(value) && (value as number) >= MIN_COMPACT ? "" : `compact_over must be a whole number of tokens, ${MIN_COMPACT} or more.`;
+  if (name === "compact_over") return Number.isInteger(value) && (value === 0 || (value as number) >= MIN_COMPACT) ? "" : `compact_over must be 0 (never) or a whole number of tokens, ${MIN_COMPACT} or more.`;
   return typeof value === "string" && MODEL.test(value) ? "" : `${name} must be a model's alias or id, such as opus or sonnet.`;
 }
 
