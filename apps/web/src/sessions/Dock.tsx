@@ -78,6 +78,11 @@ const chatPage = observable.box<IssuePageData | null>(null, { deep: false });
 // after a third of a second's glide (25 Oct). A chat's views change in place, with no move.
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 let moving: Promise<void> | null = null; // the move on screen, which the issue's own slide in waits for
+/** Draws `code` in a message as <code>, leaving the rest as the plain text it was. */
+function inlineCode(text: string) {
+  return text.split(/(`[^`\n]+`)/g).map((p, i) => (i % 2 ? <code key={i}>{p.slice(1, -1)}</code> : p));
+}
+
 function move(next: Layout, change: () => void) {
   if (next === dock.layout || !document.startViewTransition || still.matches || splashUp()) return change();
   const t = document.startViewTransition(() => flushSync(change));
@@ -618,7 +623,7 @@ function You({ text, thumbs, files, when, queued, lost, onSend, onSendNow }: { t
           </span>
         ) : null}
         {files?.length ? <span className="you-images">{files.join(" · ")}</span> : null}
-        {text}
+        {inlineCode(text)}
       </div>
       {big && createPortal(
         <div className="lightbox" role="dialog" onClick={() => setBig(null)} onKeyDown={(e) => e.key === "Escape" && setBig(null)} tabIndex={-1} ref={(el) => el?.focus()}>

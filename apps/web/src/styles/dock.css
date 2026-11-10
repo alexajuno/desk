@@ -648,3 +648,5 @@ button.steps-row-fold:hover { background: var(--btn-ghost-hover); color: var(--t
   .session-view, .convo > *, .ask, .running, .running-dot, .live-dot.working, .spark { animation: none; }
   html.one-screen .session-split > .half, html.one-screen .session-split[data-back] > .session-view > :not(.dock-head) { animation: none; }
 }
+.you-bubble code, .reply code, .context-body code { font: 12.5px/1.5 var(--mono); padding: 1px 5px; border-radius: 5px; border: 1px solid var(--border-3); background: var(--bg-app); color: var(--text-1); }
+.reply pre code { border: 0; background: none; }
