@@ -1090,14 +1090,46 @@ const INLINE = /^image\/(png|jpeg|gif|webp)$/;
 // What one message may carry, short of the server's 32 MB for a request once base64 has made it a third bigger.
 const MAX_ATTACHED = 22 * 1024 * 1024;
 
+// Claude Code shrinks every image before it sends it, to 2000 px a side and about 500 KB; a 4K screenshot sent as it
+// is runs to several MB, which base64 then makes a third bigger. desk does the same here, in the browser, so that the
+// upload is small too. GIFs stay as they are, as a canvas would keep only their first frame.
+const IMAGE_SIDE = 2000;
+const IMAGE_BYTES = 500 * 1024;
+
+const dataUrl = (blob: Blob) => new Promise<string>((resolve) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result));
+  r.readAsDataURL(blob);
+});
+
+// The image scaled to IMAGE_SIDE and, when it is still over IMAGE_BYTES, as a JPEG at falling quality; the file itself
+// when it is small enough already or cannot be decoded.
+async function shrink(file: File): Promise<Blob> {
+  if (file.type === "image/gif") return file;
+  let bitmap: ImageBitmap;
+  try { bitmap = await createImageBitmap(file); } catch { return file; }
+  const scale = Math.min(1, IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+  if (scale === 1 && file.size <= IMAGE_BYTES) return file;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const to = (type: string, quality?: number) => new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
+  let out = file.type === "image/png" ? await to("image/png") : null; // a PNG stays one when the scaling is enough
+  if (out && out.size <= IMAGE_BYTES) return out;
+  for (const quality of [0.85, 0.7, 0.55, 0.4]) {
+    out = await to("image/jpeg", quality);
+    if (out && out.size <= IMAGE_BYTES) break;
+  }
+  return out && out.size < file.size ? out : file;
+}
+
 async function readFile(file: File): Promise<Attachment> {
-  const url = await new Promise<string>((resolve) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.readAsDataURL(file);
-  });
   const type = file.type || "application/octet-stream";
-  return { name: file.name || "file", media_type: type, data: url.slice(url.indexOf(",") + 1), size: file.size, ...(INLINE.test(type) ? { url } : {}) };
+  const blob = INLINE.test(type) ? await shrink(file) : file;
+  const url = await dataUrl(blob);
+  return { name: file.name || "file", media_type: blob.type || type, data: url.slice(url.indexOf(",") + 1), size: blob.size, ...(INLINE.test(type) ? { url } : {}) };
 }
 
 const megabytes = (n: number) => `${Math.round(n / 1024 / 1024)} MB`;
