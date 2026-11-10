@@ -250,7 +250,9 @@ export class LiveSession {
 
   // A message now in the transcript is sent: one pending message, or several in a row that Claude Code read as one,
   // joined by line breaks.
-  private arrived(text: string) {
+  private arrived(text: string, key?: string) {
+    const same = this.pending.findIndex((p) => p.key === key); // sent with its uuid, which the transcript keeps
+    if (same >= 0) return void this.pending.splice(same, 1);
     const want = words(text);
     for (let i = 0; i < this.pending.length; i++) {
       let joined = "";
@@ -277,7 +279,7 @@ export class LiveSession {
         const done = this.partial.find((b) => b.msg === item.msg && b.kind === kind);
         if (done) this.partial = this.partial.filter((b) => b.msg !== item.msg || b.index > done.index);
       }
-      if (item.t === "you") this.arrived(item.text ?? "");
+      if (item.t === "you") this.arrived(item.text ?? "", item.key);
     }
     if (kept.length) this.items = [...this.items, ...kept];
   }

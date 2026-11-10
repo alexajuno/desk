@@ -349,7 +349,9 @@ const resultText = (content: unknown): string =>
 const NOTHING_ADDED = "List unchanged.";
 
 function typed(text: string): string {
-  const t = text.replace(THREAD, "").trim();
+  // Claude Code names an attached image in a text block of its own, "[Image: source: /tmp/…]": not what the user typed,
+  // and it kept the chat's queued message from ever matching its transcript line.
+  const t = text.replace(THREAD, "").replace(/\[Image: source: [^\]]*\]/g, "").trim();
   const command = /^<command-name>(\/?[^<]*)<\/command-name>/.exec(t) ?? /<command-name>(\/?[^<]*)<\/command-name>/.exec(t);
   if (command) {
     const args = /<command-args>([\s\S]*?)<\/command-args>/.exec(t)?.[1]?.trim();
