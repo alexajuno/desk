@@ -113,3 +113,16 @@ function StepRow({ s }: { s: PlanStep }) {
     </li>
   );
 }
+
+// A step's number in its list, as 2 or 2.1: the places the session writes a step's draft to, so "step 2.1" in the talk
+// and on its card is the same step ("steps can grow indefinitely and i can't know which step is which number", the user, 11 Nov).
+export function placeOf(steps: PlanStep[], step: PlanStep | null, prefix = ""): string | null {
+  if (!step) return null;
+  for (let i = 0; i < steps.length; i++) {
+    const place = `${prefix}${i + 1}`;
+    if (steps[i] === step) return place;
+    const inner = placeOf(steps[i].kids ?? [], step, `${place}.`);
+    if (inner) return inner;
+  }
+  return null;
+}

@@ -23,7 +23,7 @@ import { issues, type Reply as SentReply } from "../store/issues";
 import { oneScreen } from "../frame/oneScreen";
 import { toggleSide as toggleSidebar } from "../frame/side";
 import { CHEVRON, GLYPH, SIDE_ICON, StateIcon } from "../ui/icons";
-import { isDrawn, StepParts, type PlanStep, stepOpenNow, stepTitled } from "../issues/Steps";
+import { isDrawn, placeOf, StepParts, type PlanStep, stepOpenNow, stepTitled } from "../issues/Steps";
 import { openMenu, toggled } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { CameCard, RepliedLine } from "./Came";
@@ -509,7 +509,7 @@ const Conversation = observer(function Conversation({ s, page, slug }: { s: Live
         if (r.kind === "sent") return <Sent key={r.key} at={r.key} page={page} section={r.section} latest={n === latest[r.section]} />;
         if (r.kind === "step") {
           const step = stepNamed(steps, r);
-          return <StepSent key={r.key} at={r.key} session={s.id} step={step} top={steps[Number(r.place.split(".")[0]) - 1]?.title ?? null} latest={latestStep.get(step?.title ?? r.place) === n} />;
+          return <StepSent key={r.key} at={r.key} session={s.id} step={step} top={steps[Number(r.place.split(".")[0]) - 1]?.title ?? null} num={placeOf(steps, step)} latest={latestStep.get(step?.title ?? r.place) === n} />;
         }
         if (r.kind === "note") {
           const agent = r.item.id ? s.items.find((i) => i.t === "tool" && i.id === r.item.id && (i.name === "Agent" || i.name === "Task")) : undefined;
@@ -585,16 +585,18 @@ function stepNamed(steps: PlanStep[], r: { place: string; title: string | null }
 // each step drawn, an earlier one a line, since desk keeps only the step's latest. The list of steps brings
 // it here, the one place a step is read in its chat. A step written as parts shows them, read from the top down, each
 // part's diagram in the list beside it while its row is open, which follows the part being read (StepHalf.tsx).
-const StepSent = observer(function StepSent({ at, session, step, top, latest }: { at: string; session: string; step: PlanStep | null; top: string | null; latest: boolean }) {
+const StepSent = observer(function StepSent({ at, session, step, top, num, latest }: { at: string; session: string; step: PlanStep | null; top: string | null; num: string | null; latest: boolean }) {
   const side = useContext(StepSide), reading = dock.reading[session];
   const name = step?.title ?? "A step";
-  const inHalf = Boolean(step && side.open === step.title);
+  // The result is read here, in the chat; the list beside it only tracks progress ("send the result directly within the
+  // chat so i don't have to open the steps tab", the user, 11 Nov). It opens a step there only to follow its diagram.
+  const inHalf = false;
   if (!latest || !step || !isDrawn(step) || (inHalf && !step.parts?.length)) {
-    return <p className="sent-line" data-at={at}>{GLYPH.file}<span>{name}</span><span className="sent-when">{!latest ? "an earlier diagram, sent" : inHalf ? "beside the chat" : "sent"}</span></p>;
+    return <p className="sent-line" data-at={at}>{GLYPH.file}{num && <span className="step-sent-num">{num}</span>}<span>{name}</span><span className="sent-when">{!latest ? "an earlier diagram, sent" : inHalf ? "beside the chat" : "sent"}</span></p>;
   }
   return (
     <div className="sent step-sent" data-at={at} data-step={inHalf ? step.title : undefined}>
-      <div className="sent-head"><StateIcon state={step.state} /><span>{name}</span>{top && top !== name && <span className="step-sent-where">{top}</span>}</div>
+      <div className="sent-head"><StateIcon state={step.state} />{num && <span className="step-sent-num">{num}</span>}<span>{name}</span>{top && top !== name && <span className="step-sent-where">{top}</span>}</div>
       {step.parts?.length ? (
         <StepParts parts={step.parts} said={step.said_html} beside={inHalf} now={reading?.title === step.title ? reading.part : undefined} body="reply body" />
       ) : (

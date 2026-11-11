@@ -12,7 +12,7 @@ import { observer } from "mobx-react-lite";
 import { useEffect, useRef, useState } from "react";
 import { dock } from "../store/dock";
 import { CHEVRON, GLYPH, StateIcon } from "../ui/icons";
-import { isDrawn, isHere, StepOpen, stepNow, stepOpenNow, type PlanStep } from "../issues/Steps";
+import { isDrawn, isHere, placeOf, StepOpen, stepNow, stepOpenNow, type PlanStep } from "../issues/Steps";
 import { StepBeside, StepHeld } from "./StepHalf";
 
 const phone = matchMedia("(max-width: 640px)"); // where the half takes the chat's place (phone.css)
@@ -45,7 +45,7 @@ export function StepsLine({ steps }: { steps: PlanStep[] }) {
   return (
     <div className="steps-line">
       <span className="steps-row-icon"><StateIcon state={now.step.state} /></span>
-      <span className="steps-line-now">{now.step.title}</span>
+      <span className="steps-line-now"><span className="steps-row-num">{placeOf(steps, now.step)}</span>{now.step.title}</span>
       {now.part && <span className="steps-line-at">{now.part} · {now.n} of {now.of}</span>}
     </div>
   );
@@ -62,13 +62,13 @@ export const StepsHalf = observer(function StepsHalf({ session, steps, sent }: {
 // now: the step being worked on that holds something to read; open: the row open under its title.
 type Rows = { session: string; sent: Sent; now: string | null; open: string | null };
 
-function StepsRows({ steps, ...rows }: Rows & { steps: PlanStep[] }) {
-  return <ul className="steps-rows">{steps.map((s, n) => <StepsRow key={n} s={s} {...rows} />)}</ul>;
+function StepsRows({ steps, prefix = "", ...rows }: Rows & { steps: PlanStep[]; prefix?: string }) {
+  return <ul className="steps-rows">{steps.map((s, n) => <StepsRow key={n} s={s} place={`${prefix}${n + 1}`} {...rows} />)}</ul>;
 }
 
 const holds = (s: PlanStep, title: string | null): boolean => (s.kids ?? []).some((k) => k.title === title || holds(k, title));
 
-function StepsRow({ s, ...rows }: Rows & { s: PlanStep }) {
+function StepsRow({ s, place, ...rows }: Rows & { s: PlanStep; place: string }) {
   const { session, sent, now } = rows;
   const kids = s.kids ?? [];
   const [open, fold] = useFold(s.state === "running" || holds(s, rows.open));
@@ -83,6 +83,7 @@ function StepsRow({ s, ...rows }: Rows & { s: PlanStep }) {
   const words = (
     <>
       <span className="steps-row-icon"><StateIcon state={s.state} /></span>
+      <span className="steps-row-num">{place}</span>
       <span className="steps-row-title">{s.title}</span>
       {s.note && <span className="steps-row-note">{s.note}</span>}
     </>
@@ -103,7 +104,7 @@ function StepsRow({ s, ...rows }: Rows & { s: PlanStep }) {
         </span>
       </div>
       {held && <div ref={opened}>{!s.parts?.length ? <StepHeld s={s} /> : phone.matches ? <StepOpen s={s} /> : <StepBeside session={session} step={s} />}</div>}
-      {kids.length > 0 && open && <StepsRows steps={kids} {...rows} />}
+      {kids.length > 0 && open && <StepsRows steps={kids} prefix={`${place}.`} {...rows} />}
     </li>
   );
 }

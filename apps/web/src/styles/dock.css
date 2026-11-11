@@ -651,3 +651,7 @@ button.steps-row-fold:hover { background: var(--btn-ghost-hover); color: var(--t
 }
 .you-bubble code, .reply code, .context-body code { font: 12.5px/1.5 var(--mono); padding: 1px 5px; border-radius: 5px; border: 1px solid var(--border-3); background: var(--bg-app); color: var(--text-1); }
 .reply pre code { border: 0; background: none; }
+
+/* A step's number, as 2.1, before its title in the list, the line above the composer and the chat's card. */
+.steps-row-num, .step-sent-num { flex: none; font: 450 12px/20px var(--font); font-variant-numeric: tabular-nums; color: var(--text-4); }
+.steps-line-now .steps-row-num { margin-right: 6px; }
