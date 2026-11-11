@@ -11,6 +11,7 @@ import * as api from "./api.ts";
 import * as chats from "./chats.ts";
 import { HOME, TEST } from "./config.ts";
 import * as fields from "./fields.ts";
+import * as github from "./github.ts";
 import * as store from "./issues.ts";
 import { byRank, CLOSED } from "./issues.ts";
 import * as land from "./land.ts";
@@ -267,6 +268,7 @@ export async function create(): Promise<FastifyInstance> {
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ detail: "Not Found" }));
 
   api.routes(app);
+  github.routes(app);
 
   // Changes whenever an issue's file is added, removed or edited.
   app.get("/version", async (_req, reply) => reply.type("text/plain; charset=utf-8").send(pages.version()));
