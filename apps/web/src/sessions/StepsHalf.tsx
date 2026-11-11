@@ -83,8 +83,7 @@ function StepsRow({ s, place, ...rows }: Rows & { s: PlanStep; place: string }) 
   const words = (
     <>
       <span className="steps-row-icon"><StateIcon state={s.state} /></span>
-      <span className="steps-row-num">{place}</span>
-      <span className="steps-row-title">{s.title}</span>
+      <span className="steps-row-title"><span className="steps-row-num">{place}</span>{s.title}</span>
       {s.note && <span className="steps-row-note">{s.note}</span>}
     </>
   );
