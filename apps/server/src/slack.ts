@@ -130,9 +130,20 @@ async function readCookie(): Promise<string | null> {
   }
 }
 
-// Signed in, or SignedOut when the login ended, which the Inbox then says once (logins.ts). Slack down, or no network, is
-// a plain Error: the login may still hold.
+// Whether the login keyring, which holds Chrome's cookie key, says it is open; it is locked from boot until the user logs
+// in. Asked for a secret while locked, it tries to show its password prompt, which fails with no screen and leaks a file
+// in gnome-keyring-daemon each time: once a minute, until at 1024 the next login hung on a black screen (10 Nov).
+// Reading the Locked property shows no prompt. Only "b false" counts as open: when the event loop is busy past the
+// timeout, execFile resolves with empty output rather than failing, as on a test desk's first start.
+const keyringOpen = () =>
+  promisify(execFile)("busctl", ["--user", "get-property", "org.freedesktop.secrets", "/org/freedesktop/secrets/collection/login",
+    "org.freedesktop.Secret.Collection", "Locked"], { timeout: 5000 }).then((r) => r.stdout.trim() === "b false", () => false);
+
+// Signed in, or SignedOut when the login ended, which the Inbox then says once (logins.ts), or while the keyring is not
+// open, which it does not, since the user's login opens it and the next try then signs in. Slack down, or no network,
+// is a plain Error: the login may still hold.
 async function signIn() {
+  if (!(await keyringOpen())) throw new SignedOut("the login keyring is not open, as until the user logs in");
   const cookie = await readCookie();
   if (!cookie) throw ended(new SignedOut("no Slack cookie in Chrome"));
   // The page as a tab loads it, the redirects followed by hand so that the cookie goes along each
