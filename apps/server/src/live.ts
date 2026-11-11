@@ -301,6 +301,7 @@ function compactsFirst(id: string, m: Sent): boolean {
 // mid-turn: the message waits here until its turn ends, then the host takes the session in with it.
 export async function send(id: string, sent: Sent): Promise<{ queued: boolean }> {
   const { files = [], ...m } = sent;
+  if (switches(m.text ?? "")) throw new Error("/clear starts a new session, which this chat can’t follow: start a new chat instead.");
   m.text = uploads.attach(id, m.text ?? "", files);
   // A new chat's first message: @name as its first words makes it that agent's (chats.ts, becomeAgent), and the chip
   // set to Chat makes it bare (becomeBare).
@@ -433,12 +434,19 @@ const COMPOSERS: Command[] = [
   { name: "effort", description: "Set effort level for model usage" },
 ];
 
+// Claude Code's /clear, with its other names /new and /reset, starts a new session in a new transcript, which the chat,
+// kept on its session's id, never reads: the messages after it showed Not sent, and their replies nowhere (11 Nov). A
+// desk chat is its issue's whole conversation, so a fresh start is a new chat: the composer leaves them out, and a
+// message that runs one is refused.
+const SWITCHES = new Set(["clear", "new", "reset"]);
+const switches = (text: string) => SWITCHES.has(/^\s*\/([\w-]+)(?:\s|$)/.exec(text)?.[1] ?? "");
+
 // The slash commands and skills the session takes: the host's own list while it holds the session, else the skills on
 // disk, the user's and the folder's, with the composer's own /model and /effort and /compact.
 export async function commands(id: string): Promise<Command[]> {
   if (await hosted.holds(id)) {
     try {
-      return (await hosted.commands(id)).map((c) => ({ name: c.name, description: c.description }));
+      return (await hosted.commands(id)).filter((c) => !SWITCHES.has(c.name)).map((c) => ({ name: c.name, description: c.description }));
     } catch {
       // closed meanwhile
     }
