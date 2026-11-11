@@ -291,8 +291,11 @@ export class LiveSession {
     return p;
   }
 
+  // A refused message leaves the chat, and the turn it drew at once with it: none started.
   sent(p: Pending, ok: boolean) {
-    if (!ok) this.pending = this.pending.filter((x) => x.key !== p.key);
+    if (ok) return;
+    this.pending = this.pending.filter((x) => x.key !== p.key);
+    if (!p.mid) this.setWorking(false);
   }
 
   async send(text: string, attached: Attachment[], now = false) {
